@@ -1,21 +1,24 @@
 #ifndef RL_CORE_TRAINER_H
 #define RL_CORE_TRAINER_H
-// rl_core · RLTrainer 纯核心：自博弈训练主循环（零 Godot 依赖；绑定见 rl_trainer_gd.cpp）
+// rl_core · RLTrainer 纯核心 v2（对齐 tests/dev/rl/selfplay_trainer.gd 训练协议真相源）
 //
-// 一次 iteration = 一对正反局：
-//   局 1：攻方编制 A / 守方编制 B（env.reset(seed1) 内部抽样）；
-//   局 2：编制互换（攻 B / 守 A，seed2 独立抽），同一直播网络执掌双方。
-//   每决策步双方各取 47 维观察（己方视角）→ 网络前向 → 3 班各采样 1 意图
-//   （采样流：A 班0..2 → B 班0..2，共用 trainer 主 RNG 流）。
-//   梯度：REINFORCE，A = R_side − baseline（R_side = 该局该侧奖励）；
-//   一对局的所有 (s,a) 记录累积梯度后按记录数取均值 → Adam 一步。
-//   baseline 每 episode 收尾后滚动更新（b += (R−b)/min(count,100)）。
+// ── 训练协议（创始人 2026-09-30 修正版，逐项对齐 selfplay_trainer.gd）──
+//   种子：全局种子 + 迭代数 → rng.seed(hash("20260930|iter"))（hash = Godot djb2）；
+//   对阵：gen_matchup（总兵力 {16,32,48}、35%~65% 不对称、5 兵种 Dirichlet² 配比、
+//         最大余数法、SQUAD_SPLIT 拆班、占位独立随机）；正反两局整体换边；
+//   奖励：±1 + 0.5×(己存活比−敌存活比) + 0.5×(己夺点−敌夺点)/3（4 视角进同一批）；
+//   REINFORCE：优势 = (R−baseline) 跨批标准化（零均值/max(std,1e-4)）；
+//     dlogits = (−adv·(onehot−π) + β·π·(H+logπ)) / T（β=0.02，只填活动班切片）；
+//     SGD lr = max(0.002, 0.02×0.995^iter)，全局范数裁剪 5.0；
+//   温度：T = max(0.7, 1.1×0.995^iter)；baseline：4 视角均值 R 的 EMA 0.05；
+//   checkpoint：每 10 轮（阿尔法 JSON 契约）；评估：每 50 轮，NN greedy vs 军师
+//   规划器镜像，3 组 ×（正局+反局）组间换边，胜 1 平 0.5 负 0；
+//   CSV：train_log.csv / eval_log.csv 追加（读-改-写，格式与 GDScript 版一致）。
 //
-// 吞吐设计：train(n_iterations) 在 C++ 内跑完整 episode 循环，GDScript 只调大颗粒
-// 接口（init/train/save/load/get_metrics），零跨语言每步调用。
-//
-// 【诚实预期】见 rl_env.h 头注释——吞吐引擎不是真相源。
+// 文件 I/O 经 FileHooks 注入（绑定层用 Godot FileAccess 实现——中文路径由 Godot
+// 处理，纯核心零 WinAPI/编码依赖）。路径语义由绑定层 translate（user:// → 绝对）。
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -24,51 +27,98 @@
 
 namespace rl {
 
-struct TrainerMetrics {
-	long iterations = 0;
-	long episodes = 0;
-	double mean_return_recent = 0.0;   // 最近 50 episode 的攻方视角奖励均值
-	double attacker_win_rate_recent = 0.0; // 最近 50 episode 攻方胜率（平局记 0.5）
-	double baseline = 0.0;
-	long baseline_count = 0;
-	double grad_norm_last = 0.0;
-	double episodes_per_sec = 0.0;     // 全程平均
-	double elapsed_sec = 0.0;
+struct FileHooks {
+	// 读全文本（不存在返回 false）；写全文本（覆盖）
+	std::function<bool(const std::string &, std::string *)> read;
+	std::function<bool(const std::string &, const std::string &)> write;
+};
+
+struct IterRecord {
+	long iter = 0;
+	double rewards[4] = { 0, 0, 0, 0 }; // r_f1_g1, r_f2_g1, r_f1_g2, r_f2_g2
+	double mean_r = 0, baseline = 0, entropy = 0, temp = 0, grad_norm = 0;
+	int winner_g1 = 0, winner_g2 = 0;
+	double dur_g1 = 0, dur_g2 = 0;
+	int n_a = 0, n_b = 0;
+	double wall_s = 0;
+};
+
+struct EvalRecord {
+	long iter = 0;
+	int games = 0;
+	double score = 0, win_rate = 0;
+	std::vector<double> detail;
 };
 
 class RLTrainer {
 public:
+	// 超参（对齐 selfplay_trainer.gd 常量区；可被 config 覆盖）
+	double lr_start = 0.02, lr_decay = 0.995, lr_floor = 0.002;
+	double grad_clip = 5.0;
+	double entropy_beta = 0.02;
+	double temp_start = 1.1, temp_decay = 0.995, temp_min = 0.7;
+	double baseline_ema = 0.05;
+	long checkpoint_every = 10, eval_every = 50;
+	int eval_groups = 3;
+	uint64_t global_seed = 20260930;
+
 	RLNet net;
 	BattleEnv env;
-	RngXs32 rng;
-	double lr = 3e-3;
-	int recent_window = 50;
+	FileHooks hooks;
 
-	TrainerMetrics metrics;
+	long iteration = 0;
+	double baseline = 0.0;
 
-	void init(uint32_t seed, const JsonPtr &config); // config 可为 null → 全默认
+	// 路径（绝对路径或 user:// 语义由绑定层保证；hooks 实际读写）
+	std::string checkpoint_path, train_csv_path, eval_csv_path;
 
-	// 主循环：n_iterations 对正反局；progress_out 非空则每 iteration 后回调（进度用）
+	// 进度回调（每轮一行 stdout 由绑定层接管时用；可空）
+	std::function<void(const IterRecord &)> on_iteration;
+	std::function<void(const EvalRecord &)> on_evaluation;
+
+	void configure(const JsonPtr &config); // null = 全默认
+	void apply_checkpoint_state(long iter, double base);
+
 	void train(long n_iterations);
 
-	// 单 episode 无梯度跑法（吞吐基准用；训练路径在 train() 内）
-	// swap_sides=false：reset(seed) 抽编制；true：同种子但攻守编制互换无意义（同 seed
-	// 抽样序列一致），故 true 时 seed^0x9E3779B9 错开。返回该局攻方奖励。
-	double run_episode(uint32_t seed, bool swap_sides, int *winner_out);
+	// 评估（独立可调；协议同 _run_evaluation）
+	EvalRecord run_evaluation();
 
-	// checkpoint：net + baseline + rng + 进度计数（JSON）
-	JsonPtr checkpoint_json() const;
-	bool load_checkpoint_json(const JsonPtr &j, std::string *err_out = nullptr);
+	// checkpoint（阿尔法 JSON 契约；load 只取 net/iteration/baseline/超参指纹）
+	bool save_checkpoint() const;
+	bool load_checkpoint(); // 无文件/损坏/维度不符 → false（调用方决定从头训）
+	bool has_checkpoint_file() const;
+
+	// 吞吐基准用：单 episode 无梯度（greedy 或采样）
+	struct EpisodeOut {
+		double reward_f1;
+		int winner;
+		double duration;
+		int decisions;
+	};
+	EpisodeOut run_episode_bench(uint32_t seed, bool swap, bool greedy);
+
+	IterRecord last_record;
 
 private:
-	struct Rec {
+	struct TrajStep {
 		std::vector<double> obs;
 		int actions[3];
-		double advantage;
+		int mask[3];
 	};
-	std::vector<Rec> batch;
-	std::vector<double> recent_returns;
-	std::vector<int> recent_wins; // 1 攻胜 2 守胜 0 平
+	struct AgentTraj {
+		std::vector<TrajStep> steps;
+		double entropy_sum = 0.0;
+		int entropy_beats = 0;
+		RngPcg rng;
+		double temp = 1.0;
+		bool greedy = false;
+	};
+
+	void play_battle(const Matchup &m, bool swap, AgentTraj &ag1, AgentTraj &ag2,
+			EnvResult *res_out);
+	double train_batch(const std::vector<double> &rewards, const std::vector<AgentTraj *> &agents, double temp);
+	void append_csv_line(const std::string &path, const std::string &header, const std::string &line) const;
 };
 
 } // namespace rl

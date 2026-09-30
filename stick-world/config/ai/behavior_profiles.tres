@@ -16,7 +16,7 @@ variables = {
 		{
 			"id": "baseline",
 			"decision_interval": 0.3,
-			"decision_variance": 0.0,
+			"decision_variance": 0.1,
 			"burst_shots": 0,
 			"burst_wait": Vector2(1.2, 1.8),
 			"night_hesitate_mult": 1.8,
@@ -38,6 +38,11 @@ variables = {
 			"id": "bow",
 			"burst_shots": 3,
 			"description": "GK-1 开闸（兵种覆盖档）：弓手连发 3 发后插入 burst_wait 停顿再射——RWR burst_time 0.3±0.2 的计数化改编，3 发为保守初值；点射只开在远程兵种（近战无此语义），故落兵种行不落 baseline 行"
+		},
+		{
+			"id": "staff",
+			"kite_range": 480.0,
+			"description": "灵动性开闸：法师保距（施法射程 600>480 无死锁；锚点弓手 500 档下浮，待实测校准）"
 		}
 	]
 }

@@ -35,6 +35,11 @@ func run() -> void:
 	f.store_line("t,alive_a,alive_d,routed,near80,near80_run,mutual_pair,dens_cv,mean_nn,churn_flip")
 	for s in TOTAL_SAMPLES:
 		await _frames(SAMPLE_EVERY)
+		# 溃散收敛（9k-2）：战斗可能提前结算、实例 queue_free——收敛即止，
+		# 摘要按已采样本算（血鹰批次兼容补丁：原实现对已释放实例取名册会崩）
+		if not is_instance_valid(battle) or not battle.is_active():
+			print("[ArenaMetrics] 战斗已于第 %d 次采样前收敛结束，采样提前止步（溃散收敛新语义）" % s)
+			break
 		var row := _sample(battle, s * SAMPLE_EVERY / 60.0, s)
 		f.store_line(row["csv"])
 	f.flush()
@@ -78,7 +83,7 @@ func _sample(battle: Node, t: float, idx: int) -> Dictionary:
 				best = d
 				best_u = ot["u"]
 		near_d[it["u"].get_instance_id()] = {"d": best, "e": best_u}
-		var key := it["u"].get_instance_id()
+		var key: int = it["u"].get_instance_id()
 		if _prev_pos.has(key):
 			speed[key] = (it["pos"] as Vector2).distance_to(_prev_pos[key]) / (SAMPLE_EVERY / 60.0)
 		else:

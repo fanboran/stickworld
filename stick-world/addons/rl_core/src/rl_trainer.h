@@ -75,13 +75,17 @@ struct IterRecord {
 
 struct EvalRecord {
 	long iter = 0;
-	// 旧列语义（向后兼容）：games/score/win_rate/detail = vs 军师镜像组
+	// 旧列语义（向后兼容）：games/score/win_rate/detail = vs 军师镜像组（主档）
 	int games = 0;
 	double score = 0, win_rate = 0;
 	std::vector<double> detail;
 	// v3 分组报告：vs 军师镜像（泛化）与 vs 历史池（真实策略进步）两组胜率分列
 	int games_mirror = 0, games_pool = 0;
 	double win_rate_mirror = 0, win_rate_pool = 0;
+	// v2.1 断层修复：逐场档位记录（归因用）+ 8 班小队档抽查组（vs 规划器，正反 2 场）
+	int games_small = 0;
+	double win_rate_small = 0;
+	std::vector<int> detail_tiers; // 逐场档位（17/49/97/49 小档），mirror+pool+small 顺序
 };
 
 class RLTrainer {

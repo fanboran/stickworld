@@ -61,11 +61,11 @@ static int test_smoke() {
 			RngPcg rng;
 			rng.seed(777);
 			BattleEnv env0;
-			env0.curriculum_tier = tier;
+			env0.eval_lock_tier = tier;
 			Matchup m = env0.gen_matchup(rng);
 			BattleEnv e1, e2;
-			e1.curriculum_tier = tier;
-			e2.curriculum_tier = tier;
+			e1.eval_lock_tier = tier;
+			e2.eval_lock_tier = tier;
 			e1.reset(m, false);
 			e2.reset(m, false);
 			std::vector<double> o1, o2;
@@ -95,7 +95,7 @@ static int test_smoke() {
 		BattleEnv env;
 		RngPcg rng;
 		rng.seed(1);
-		env.curriculum_tier = 0;
+		env.eval_lock_tier = 0; // 17 档
 		Matchup m = env.gen_matchup(rng);
 		env.reset(m, false);
 		std::vector<double> o;
@@ -201,9 +201,9 @@ static int test_mirror(int games_per_tier) {
 	int mask1[NS], mask2[NS], acts1[NS], acts2[NS];
 	double logits[BattleEnv::N_ACTIONS];
 	std::vector<double> obs;
-	for (int tier = 0; tier < 3; tier++) {
+	for (int tier = 0; tier < 4; tier++) { // 0..3 含 tier3 8班小队档（8 头全激活的最强对称检验）
 		BattleEnv env;
-		env.curriculum_tier = tier;
+		env.eval_lock_tier = tier;
 		double score = 0.0;
 		int draws = 0;
 		auto t0 = std::chrono::steady_clock::now();
@@ -234,8 +234,8 @@ static int test_mirror(int games_per_tier) {
 		double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 		char buf[192];
 		std::snprintf(buf, sizeof(buf),
-				"%d 档 %d 局同策略自博弈：胜率=%.3f（平局 %d，门 [0.45,0.55]）%.1fs",
-				ARMY_TIERS[tier], games_per_tier, wr, draws, secs);
+				"tier%d（%d 档）%d 局同策略自博弈：胜率=%.3f（平局 %d，门 [0.45,0.55]）%.1fs",
+				tier, ARMY_TIERS[tier], games_per_tier, wr, draws, secs);
 		ok &= check(wr >= 0.45 && wr <= 0.55, buf);
 	}
 	std::printf("mirror %s\n", ok ? "ALL PASS" : "HAS FAILURES");
@@ -251,7 +251,7 @@ static int test_decap() {
 		BattleEnv env;
 		RngPcg rng;
 		rng.seed(42);
-		env.curriculum_tier = 0; // 17 档
+		env.eval_lock_tier = 0; // 17 档 // 17 档
 		Matchup m = env.gen_matchup(rng);
 		env.reset(m, false);
 		int c2 = env.find_commander(2);
@@ -278,7 +278,7 @@ static int test_decap() {
 		BattleEnv env;
 		RngPcg rng;
 		rng.seed(7);
-		env.curriculum_tier = 0;
+		env.eval_lock_tier = 0; // 17 档
 		Matchup m = env.gen_matchup(rng);
 		env.reset(m, false);
 		// 守方排长直接判死（rank2 阵亡 → 缺口拍 + 存活差双重差分信号）

@@ -36,12 +36,18 @@ void RLTrainer::configure(const JsonPtr &config) {
 	if (config->has("env")) env.load_config(config->get("env"));
 }
 
-// 课程阶段 → 档位（0=17 / 1=49 / 2=97；-1 = 关闭随机抽档）
-static int curriculum_tier_for(long iteration, long c1_end, long c2_end) {
+// 课程阶段（v2.1 断层修复采样见 rl_env.h curriculum_stage 注释）：
+// iter < c1_end → 0（C1）；< c2_end → 1（C2）；否则 2（C3）；阈值负值 = 关闭
+static int curriculum_stage_for(long iteration, long c1_end, long c2_end) {
 	if (c1_end < 0 || c2_end < 0) return -1;
 	if (iteration < c1_end) return 0;
 	if (iteration < c2_end) return 1;
 	return 2;
+}
+
+// 阶段主档（评估锁档用）：C1=17 / C2=49 / C3=97
+static int stage_main_tier(int stage) {
+	return stage <= 0 ? 0 : (stage == 1 ? 1 : 2);
 }
 
 void RLTrainer::apply_checkpoint_state(long iter, double base) {
@@ -172,8 +178,9 @@ void RLTrainer::train(long n_iterations) {
 	while (iteration < end) {
 		RngPcg rng;
 		rng.seed(hash_djb2(std::to_string(global_seed) + "|" + std::to_string(iteration)));
-		// 课程学习锁档（C1=17 / C2=49 / C3=97；关闭 = -1 随机三档）
-		env.curriculum_tier = curriculum_tier_for(iteration, curriculum_c1_end, curriculum_c2_end);
+		// 课程学习（v2.1 断层修复）：训练抽档按阶段占比（env.pick_curriculum_tier 内实现）
+		env.curriculum_stage = curriculum_stage_for(iteration, curriculum_c1_end, curriculum_c2_end);
+		env.eval_lock_tier = -1;
 		Matchup m = env.gen_matchup(rng);
 		double temp = temp_start * std::pow(temp_decay, (double)iteration);
 		if (temp < temp_min) temp = temp_min;
@@ -264,8 +271,8 @@ void RLTrainer::train(long n_iterations) {
 		rec.winner_g2 = w2;
 		rec.dur_g1 = d1;
 		rec.dur_g2 = d2;
-		rec.n_a = ARMY_TIERS[m.side_a.tier];
-		rec.n_b = ARMY_TIERS[m.side_b.tier];
+		rec.n_a = m.total; // 实际总实体（tier3 = Σ班 5~6 人 + 指挥官，41~49 浮动）
+		rec.n_b = m.total;
 		std::string opp_tag = opp_kind == 0 ? "self"
 				: (opp_kind == 2 ? "planner" : "pool" + std::to_string(pool_slot));
 		rec.opp_g1 = opp_tag;
@@ -316,13 +323,16 @@ EvalRecord RLTrainer::run_evaluation() {
 	er.iter = iteration;
 	RngPcg rng;
 	rng.seed(hash_djb2(std::to_string(global_seed) + "|eval|" + std::to_string(iteration)));
-	// 评估随训练所在课程阶段同档（课程关闭 = -1 随机三档）
-	env.curriculum_tier = curriculum_tier_for(iteration, curriculum_c1_end, curriculum_c2_end);
+	// 评估随训练所在课程阶段，恒锁阶段主档（win_rate 口径与历史连续：C1=17/C2=49/C3=97）
+	int stage = curriculum_stage_for(iteration, curriculum_c1_end, curriculum_c2_end);
+	env.curriculum_stage = stage;
+	env.eval_lock_tier = stage_main_tier(stage);
 	// ── 第 1 组：NN greedy vs 军师规划器镜像（协议不变：3 组 ×（正局+反局）换边）──
 	double score = 0.0;
 	for (int g = 0; g < eval_groups; g++) {
 		int nn_faction = (g % 2 == 0) ? 1 : 2;
 		Matchup m = env.gen_matchup(rng);
+		er.detail_tiers.push_back(m.side_a.tier);
 		for (int swap_i = 0; swap_i < 2; swap_i++) {
 			double s = eval_one_game(m, swap_i == 1, nn_faction, nullptr);
 			score += s;
@@ -343,6 +353,7 @@ EvalRecord RLTrainer::run_evaluation() {
 		for (int g = 0; g < eval_pool_groups; g++) {
 			int nn_faction = (g % 2 == 0) ? 1 : 2;
 			Matchup m = env.gen_matchup(rng);
+			er.detail_tiers.push_back(m.side_a.tier);
 			int slot = valid[rng.randi_range(0, nvalid - 1)]; // 每组一份池对手，组内正反共用
 			for (int swap_i = 0; swap_i < 2; swap_i++) {
 				double s = eval_one_game(m, swap_i == 1, nn_faction, &pool[slot]);
@@ -352,6 +363,19 @@ EvalRecord RLTrainer::run_evaluation() {
 		}
 		er.win_rate_pool = er.games_pool > 0 ? score_pool / (double)er.games_pool : 0.0;
 	}
+	// ── 第 3 组（v2.1 断层修复）：8 班小队档抽查（vs 军师规划器，1 组 × 正反 2 场）——
+	//    8 个班动作头/排长层的独立裁判曲线，归因“主档胜率是否因班槽欠开发被拖累”
+	double score_small = 0.0;
+	env.eval_lock_tier = 3;
+	for (int swap_i = 0; swap_i < 2; swap_i++) {
+		Matchup m = env.gen_matchup(rng);
+		er.detail_tiers.push_back(m.side_a.tier);
+		double s = eval_one_game(m, swap_i == 1, 1, nullptr);
+		score_small += s;
+		er.games_small++;
+	}
+	er.win_rate_small = er.games_small > 0 ? score_small / (double)er.games_small : 0.0;
+	env.eval_lock_tier = -1;
 	if (!eval_csv_path.empty() && hooks.write) {
 		std::string det = "[";
 		for (size_t i = 0; i < er.detail.size(); i++) {
@@ -360,13 +384,20 @@ EvalRecord RLTrainer::run_evaluation() {
 			det += v == 0.5 ? "0.5" : (v == 1.0 ? "1" : "0");
 		}
 		det += "]";
-		char line[256];
-		// 旧 5 列语义不变（= 军师镜像组）；行尾追加两组胜率分列（改造1/改造6）
-		std::snprintf(line, sizeof(line), "%ld,%d,%.1f,%.4f,%s,%.4f,%.4f,%d",
+		std::string tiers = "[";
+		for (size_t i = 0; i < er.detail_tiers.size(); i++) {
+			if (i > 0) tiers += ",";
+			tiers += std::to_string(ARMY_TIERS[er.detail_tiers[i]]);
+		}
+		tiers += "]";
+		char line[512];
+		// 旧 8 列语义不变（mirror 组）；行尾追加逐场档位 + 小档抽查组（v2.1）
+		std::snprintf(line, sizeof(line), "%ld,%d,%.1f,%.4f,%s,%.4f,%.4f,%d,%s,%.4f,%d",
 				er.iter, er.games, er.score, er.win_rate, det.c_str(),
-				er.win_rate_mirror, er.win_rate_pool, er.games_pool);
+				er.win_rate_mirror, er.win_rate_pool, er.games_pool,
+				tiers.c_str(), er.win_rate_small, er.games_small);
 		append_csv_line(eval_csv_path,
-				"iter,games,score,win_rate,detail,mirror_wr,pool_wr,pool_games",
+				"iter,games,score,win_rate,detail,mirror_wr,pool_wr,pool_games,tier_detail,small_wr,small_games",
 				line);
 	}
 	return er;

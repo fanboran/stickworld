@@ -96,9 +96,9 @@ struct TierDef {
 	int squad_weapons[8][12]; // WeaponType 逐班
 };
 
-// 档位定义（tier 0/1/2 → 17/49/97）
+// 档位定义（tier 0/1/2/3 → 17/49/97/8班小队）
 const TierDef &tier_def(int idx);
-extern const int ARMY_TIERS[3]; // {17, 49, 97} 含指挥官
+extern const int ARMY_TIERS[4]; // {17, 49, 97, 49} 含指挥官；tier 3 逐班 5~6 人（41~49 浮动）
 
 // 旗点世界 y（真镜像布位）：f0(−500,−200) / f1(0,0) / f2(+500,−200)。
 // x 镜射对称（x→−x 时 f0↔f2、f1 不动）。
@@ -109,11 +109,12 @@ inline double flag_world_x(int world_flag) {
 	return (double)(world_flag - 1) * 500.0;
 }
 
-// 一侧编制 = 档位 + 占位随机（编制本体查 TierDef 表，两侧共用 → 真镜像）
+// 一侧编制 = 档位 + 逐班人数 + 占位随机（编制本体查 TierDef 表，两侧共用 → 真镜像）
 struct SideComp {
 	int tier = 0;
 	double band_x = 0, side_y = 0;
 	double squad_x[8] = { 0 }, squad_y[8] = { 0 }; // 班错位随机
+	int squad_n[8] = { 0 }; // 逐班人数（gen_matchup 时定：定稿档查表 / tier3 逐班 5~6 随机）
 };
 
 struct Matchup {
@@ -183,7 +184,12 @@ public:
 	int officer_death_beat[2][N_PLATOONS]; // 排长阵亡拍号（-1 在世；缺口拍数 = 终局拍−此值）
 	int decap_winner = 0;                  // 斩首胜者（0=未发生；同拍双斩 → 0=平局）
 	double officer_pen_accum[2] = { 0, 0 }; // 排长贴敌罚累计（拍级累积，result 读出）
-	int curriculum_tier = -1;              // 课程锁定档（-1 = 随机三档；trainer 每轮设置）
+	// 课程学习（v2.1 断层修复：班数×人数解耦——
+	//   C1 恒 17 档；C2 = 35% 17 档 / 35% 49 档 / 30% 8 班小队档（8 个班动作头 +
+	//   排长层在低复杂度下先开学）；C3 = 80% 97 档 / 10% 17 档 / 10% 8 班小队档
+	//   （小档回访防遗忘）。评估走 eval_lock_tier 恒锁所在阶段主档。）
+	int curriculum_stage = -1;             // 课程阶段（-1 = 关闭随机旧三档 / 0=C1 / 1=C2 / 2=C3）
+	int eval_lock_tier = -1;               // 评估锁档（非 -1 时 gen_matchup 恒用该档）
 
 	// 伤害双相结算缓冲（真镜像配套：同 tick 内双方伤害基于同一快照统一生效，
 	// 先手方"先扣血"的击杀抢跑从根上消失；tick 末 flush_pending_damage 结算）
@@ -202,7 +208,7 @@ public:
 
 	void load_config(const JsonPtr &j);
 
-	// 随机对阵（真镜像：只抽一套编制/占位，两侧共用；档位可被课程锁定）
+	// 随机对阵（真镜像：只抽一套编制/占位，两侧共用；课程阶段采样见 curriculum_stage 注释）
 	Matchup gen_matchup(RngPcg &rng) const;
 	void reset(const Matchup &m, bool swap);
 
@@ -229,6 +235,7 @@ public:
 private:
 	void spawn_side(const SideComp &comp, int faction);
 	void spawn_commander(int faction);
+	int pick_curriculum_tier(RngPcg &rng) const;
 	void capture_beat();
 	void physics_tick();
 	void internal_tick();

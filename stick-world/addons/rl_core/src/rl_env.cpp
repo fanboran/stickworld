@@ -10,9 +10,9 @@ namespace rl {
 //   17 档：2 班×8   ＝ 矛8 ／ 剑4杖1弓2祭1，1 排
 //   49 档：4 班×12 ＝ 矛12 ／ 矛4剑8 ／ 剑12 ／ 杖4弓8，2 排
 //   97 档：8 班×12 ＝ 矛12×2 ／ 矛4剑8 ／ 剑12×3 ／ 杖4弓8×2，4 排
-const int ARMY_TIERS[3] = { 17, 49, 97 }; // 含指挥官
+const int ARMY_TIERS[4] = { 17, 49, 97, 49 }; // 含指挥官；tier 3 逐班 5~6 人（41~49 浮动）
 
-static const TierDef kTierDefs[3] = {
+static const TierDef kTierDefs[4] = {
 	// 17 档：班0 矛×8；班1 剑4 杖1 弓2 祭1
 	{ 16, 2, 1,
 		{ 8, 8, 0, 0, 0, 0, 0, 0 },
@@ -42,11 +42,26 @@ static const TierDef kTierDefs[3] = {
 			{ 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2 },
 			{ 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2 },
 		} },
+	// tier 3 = 8 班小队档（v2.1 课程断层修复）：97 档结构逐班砍到 6 人模板
+	//（实际逐班 5~6 人在 gen_matchup 随机定，存 SideComp.squad_n）——
+	// 8 个班动作头 + 4 排排长层全激活，复杂度 ≈ 49 档，供 C2 预热/C3 回访
+	{ 48, 8, 4,
+		{ 6, 6, 6, 6, 6, 6, 6, 6 },
+		{
+			{ 1, 1, 1, 1, 1, 1 },
+			{ 1, 1, 1, 1, 1, 1 },
+			{ 1, 1, 0, 0, 0, 0 },
+			{ 0, 0, 0, 0, 0, 0 },
+			{ 0, 0, 0, 0, 0, 0 },
+			{ 0, 0, 0, 0, 0, 0 },
+			{ 4, 4, 2, 2, 2, 2 },
+			{ 4, 4, 2, 2, 2, 2 },
+		} },
 };
 
 const TierDef &tier_def(int idx) {
 	if (idx < 0) idx = 0;
-	if (idx > 2) idx = 2;
+	if (idx > 3) idx = 3;
 	return kTierDefs[idx];
 }
 
@@ -83,21 +98,38 @@ void BattleEnv::load_config(const JsonPtr &j) {
 	cfg = EnvConfig::from_json(j);
 }
 
-// ── 随机对阵（真镜像：一套编制/占位两侧共用；课程可锁档）──
-// 随机性保留：档位抽取（curriculum_tier<0 时三档均匀）、出生带、班错位——
-// 兵种配比按编制定稿表固定（87c2c110 唯一输入），不随轮漂移。
+// 课程阶段采样（v2.1 断层修复，见 rl_env.h curriculum_stage 注释）
+int BattleEnv::pick_curriculum_tier(RngPcg &rng) const {
+	if (eval_lock_tier >= 0) return eval_lock_tier; // 评估锁档恒主档
+	if (curriculum_stage < 0) return rng.randi_range(0, 2);
+	if (curriculum_stage == 0) return 0; // C1：恒 17 档
+	double roll = rng.randf();
+	if (curriculum_stage == 1) // C2：30% 8班小档 / 35% 49 / 35% 17
+		return roll < 0.30 ? 3 : (roll < 0.65 ? 1 : 0);
+	// C3：80% 97 / 10% 17 / 10% 8班小档（小档回访防遗忘）
+	return roll < 0.10 ? 0 : (roll < 0.20 ? 3 : 2);
+}
+
+// ── 随机对阵（真镜像：一套编制/占位两侧共用；课程阶段采样）──
+// 随机性保留：档位抽取（按阶段占比）、出生带、班错位——兵种配比按编制定稿
+// 表固定（tier 3 逐班 5~6 人数随机、班型取 6 人模板前缀）。
 Matchup BattleEnv::gen_matchup(RngPcg &rng) const {
 	Matchup m;
-	int tier = curriculum_tier >= 0 ? curriculum_tier : rng.randi_range(0, 2);
-	m.total = ARMY_TIERS[tier];
+	int tier = pick_curriculum_tier(rng);
+	const TierDef &td = tier_def(tier);
 	m.side_a.tier = tier;
-	// 出生带收窄 [800,1100]：97 档 4 排纵深（3×240 + 行 110）最深 ≈1930 ≤ arena 2000
+	// 出生带收窄 [800,1100]：8 班 4 排纵深（3×240 + 行 110）最深 ≈1930 ≤ arena 2000
 	m.side_a.band_x = rng.randf_range(800.0, 1100.0);
 	m.side_a.side_y = rng.randf_range(-350.0, 350.0);
-	for (int si = 0; si < N_SQUADS; si++) {
+	int total = 0;
+	for (int si = 0; si < td.n_squads; si++) {
 		m.side_a.squad_x[si] = rng.randf_range(-60.0, 60.0);
 		m.side_a.squad_y[si] = rng.randf_range(-80.0, 80.0);
+		// tier 3 逐班人数 5~6 随机（其余档查定稿表）；总人数 = Σ班 + 指挥官
+		m.side_a.squad_n[si] = (tier == 3) ? rng.randi_range(5, 6) : td.squad_n[si];
+		total += m.side_a.squad_n[si];
 	}
+	m.total = total + 1;
 	m.side_b = m.side_a;
 	return m;
 }
@@ -118,7 +150,8 @@ void BattleEnv::spawn_side(const SideComp &comp, int faction) {
 		double sx = side_sign * (comp.band_x + comp.squad_x[si]) + depth;
 		double sy = clampd(comp.side_y + col_off + comp.squad_y[si],
 				-cfg.band_half_y + 80.0, cfg.band_half_y - 80.0);
-		int n = td.squad_n[si];
+		// 逐班人数以 SideComp.squad_n 为准（gen_matchup 时定：定稿档查表 / tier3 随机 5~6）
+		int n = comp.squad_n[si] > 0 ? comp.squad_n[si] : td.squad_n[si];
 		bool is_lead_squad = (si % 2 == 0); // 排首班 = 排长所在班
 		for (int k = 0; k < n; k++) {
 			int row = k / 8, col = k % 8;
@@ -704,6 +737,8 @@ EnvResult BattleEnv::result() const {
 	if (decap_winner != 0) {
 		r.winner = decap_winner;
 		r.reason = 1; // 斩首（结算优先级最高）
+	} else if (r.alive[0] == 0 && r.alive[1] == 0) {
+		r.winner = 0; // 同归于尽 → 平局（v1 遗留 tie-break 判 f2 是真镜像下的系统性偏向，已修）
 	} else if (r.alive[0] == 0 || r.alive[1] == 0) {
 		r.winner = r.alive[0] == 0 ? 2 : 1;
 	} else if (r.timeout || t >= cfg.time_limit) {
@@ -949,6 +984,7 @@ JsonPtr BattleEnv::dump_obs_fixture(uint32_t seed, int sample_every, int max_fra
 	root->set("n_squads_actual", Json::num_of((double)tmp.n_squads));
 	root->set("n_platoons_actual", Json::num_of((double)tmp.n_platoons));
 	root->set("army_tier", Json::num_of((double)ARMY_TIERS[m.side_a.tier]));
+	root->set("tier", Json::num_of((double)m.side_a.tier)); // 0/1/2/3（tier3 与 tier1 同 49 典型值）
 	root->set("time_limit", Json::num_of(cfg.time_limit));
 	root->set("mid_x", Json::num_of(0.0));
 	root->set("spawn_y", Json::num_of(0.0));

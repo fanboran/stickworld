@@ -49,6 +49,9 @@ const PLATOON_BASE: int = 107
 const COMMANDER_BASE: int = 123
 ## checkpoint 路径（rl_core C++ 训练循环落档处，训练中持续更新）
 const CHECKPOINT_PATH: String = "user://rl/checkpoint_cpp.json"
+## 实际装载路径（ctx.checkpoint_path 可覆盖——实机演示/评测用快照，
+## 防与训练器写盘竞态读到半截 JSON 退化启发式）
+var _checkpoint_load_path: String = CHECKPOINT_PATH
 
 ## 网络（checkpoint 加载失败 / 非 v2 维度 = null → 启发式退化）
 var _net: RefCounted = null
@@ -88,10 +91,11 @@ func brain_name() -> String:
 func setup() -> void:
 	_my_faction = int(ctx.faction) + 1
 	_mir = 1.0 if _my_faction == 1 else -1.0
+	_checkpoint_load_path = String(ctx.get("checkpoint_path", CHECKPOINT_PATH))
 	# 网络：v2 checkpoint 装载（缺失/维度非 125→64→40 → null，beat 走启发式）
 	_net = null
-	if FileAccess.file_exists(CHECKPOINT_PATH):
-		var f := FileAccess.open(CHECKPOINT_PATH, FileAccess.READ)
+	if FileAccess.file_exists(_checkpoint_load_path):
+		var f := FileAccess.open(_checkpoint_load_path, FileAccess.READ)
 		if f != null:
 			var parsed: Variant = JSON.parse_string(f.get_as_text())
 			f.close()

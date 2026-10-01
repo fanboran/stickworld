@@ -1,67 +1,61 @@
 extends RefCounted
-## 班内聚拢/对齐（Boids 三力裁剪的第二、三力）——static 函数库（无实例状态）。
+## 班内一次性归队状态机（SWL 跟随直译：FormationPositionIsStable 到位滞回
+## + lastFollowUpdate 重算节流）——static 函数库（无实例状态）。
 ##
-## 三力分工（创始人裁决）：分离力（防挤，units 侧椭圆分离，另行施工）｜
-## 聚拢弹簧（本文件，防散伙）｜对齐（本文件轻量版，防排头狂奔排尾散步）。
+## 模型（创始人裁决：跟随 =「和队长拉开一定距离后才生效一次」）：
+##   - 距班锚点 > JOIN_DIST → 进入归队态，此后持续给出指向锚点的移动建议；
+##     距锚点 < SETTLE_DIST → 落定退出，回到之前的任务。
+##   - 非归队态零施力：不打扰正在执行任务的单位（站桩不拉、行军不扰、
+##     接战不吸）——不是持续弹簧拉扯，旧 Boids 回拉/对齐就此退役。
+##   - JOIN > SETTLE 滞回带防边界振荡（SWL FormationPositionIsStable 同构）。
+##   - 触发判定低频节流 COHESION_RECHECK_MS（SWL lastFollowUpdate 语义：
+##     跟随重算不是每帧）；归队态下的移动建议逐帧刷新（锚点实时读），
+##     移动执行本身不受节流影响。落定即时退出（到位即站定不抖）。
+##   - 战斗优先（生效前持续完成手头任务）：接战（attack）不触发归队；
+##     避战（retreat/seek_cover）豁免同理；已处归队态遇战斗则挂起施力，
+##     状态保留——战毕若仍超 SETTLE_DIST 继续归队。
 ##
-## 聚拢弹簧核心 = 死区设计（防沙丁鱼的关键）：单位距本班质心 ≤ 班散布半径时
-## **零施力**（不吸站好的），超出到质心距离才产生回拉力，随超出距离线性增强、
-## 上限封顶（防磁铁）。质心/班均速按 400ms 节流缓存（挂宿主 squad 字典），
-## 消费方逐帧查询不重算。
+## 锚点 = 班长实时位置；班长亡/缺 = 班质心（400ms 节流缓存 refresh_cache）。
+## 归队状态挂宿主 squad["catchup_state"]（iid -> {"catching": bool, "at": ms}；
+## 单位死亡后残留条目无害——iid 不参与判定，班解散随字典整体丢弃）。
 ##
-## 门控（战斗走位优先）：
-##   - 接战中（behavior == "attack"）回拉减半（COHESION_ENGAGED_SCALE）；
-##   - 撤退/避战中（"retreat"/"seek_cover"）不受聚拢不对齐（避战优先）；
-##   - 班均速低于死区（站桩）不对齐，防站桩抖动。
-##
-## 输出 = 转向建议（Vector2，加速度量纲），消费方（entity_motion 集成，见收线
-## 报告清单）叠加到既有转向通道，**不直改位置**。数值全部【提案/待定·待实测校准】，
-## 单一真相源在 api.gd（本库经 api 读，api 不回引本库，无环）。
+## 输出 = 指向锚点的单位方向向量（消费方 entity_motion 归一混入移动意图，
+## 不直改位置）。数值全部【提案/待定·待实测校准】，单一真相源在 api.gd
+## （本库经 api 读，api 不回引本库，无环）。
 
 const _Api := preload("res://modules/formation/api.gd")
 
-## 缓存节流（ms）：质心/班均速刷新间隔
-const CACHE_TTL_MS: int = 400
-## 避战态行为名（不受聚拢不对齐；口径见 ai_controller 行为注册）
+## 避战态行为名（不触发归队、归队中挂起；口径见 ai_controller 行为注册）
 const AVOID_BEHAVIORS: Array = ["retreat", "seek_cover"]
-## 接战态行为名（回拉减半）
+## 接战态行为名（战斗优先：不触发、归队中挂起）
 const ENGAGED_BEHAVIOR: String = "attack"
+## 状态字典初始时戳（久远过去 → 首次判定必跑，不受节流窗挡；
+## 纯数值字面量——GDScript const 不认 `-1 << 30` 这类负数移位表达式）
+const _STATE_AT_NEVER: int = -1073741824
 
 
-## 班散布半径（px）：按班现有人数线性放宽——8 人班取基准，班越大越宽
-static func squad_spread_radius(members: int) -> float:
-	var base: float = _Api.COHESION_SPREAD_RADIUS_BASE
-	var per: float = _Api.COHESION_SPREAD_RADIUS_PER_MEMBER
-	return base + per * float(maxi(members - 8, 0))
-
-
-## 刷新（节流）并取班聚拢缓存：{"centroid", "avg_vel", "members"}；
-## 班不存在/无存活成员返回 {}。缓存留宿主 squad["cohesion_cache"]。
+## 质心缓存（班长亡/缺时的兜底锚点）：400ms 节流，缓存留宿主 squad["cohesion_cache"]。
+## 班不存在/无存活成员返回 {}。
 static func refresh_cache(host, squad_id: String) -> Dictionary:
 	if not host._squads.has(squad_id):
 		return {}
 	var squad: Dictionary = host._squads[squad_id]
 	var now: int = Time.get_ticks_msec()
 	var cache: Dictionary = squad.get("cohesion_cache", {})
-	if not cache.is_empty() and now - int(cache.get("at", -10000)) < CACHE_TTL_MS:
+	if not cache.is_empty() and now - int(cache.get("at", -10000)) < _Api.COHESION_CACHE_TTL_MS:
 		return cache
 	var centroid := Vector2.ZERO
-	var avg_vel := Vector2.ZERO
 	var members: Array = []
 	for u in squad["units"]:
 		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
 			centroid += u.global_position
-			if "velocity" in u:
-				avg_vel += u.velocity
 			members.append(u)
 	var n: int = members.size()
 	if n == 0:
 		return {}
 	centroid /= float(n)
-	avg_vel /= float(n)
 	cache = {
 		"centroid": centroid,
-		"avg_vel": avg_vel,
 		"members": n,
 		"at": now,
 	}
@@ -69,32 +63,77 @@ static func refresh_cache(host, squad_id: String) -> Dictionary:
 	return cache
 
 
-## 单位聚拢-对齐合成转向建议：Vector2.ZERO = 无施力（死区内/避战中/无班）。
-static func squad_steer(host, squad_id: String, unit: Node) -> Vector2:
+## 取（惰性建）单位的归队状态条目（挂宿主 squad 字典）。
+static func _catchup_state(squad: Dictionary, unit: Node) -> Dictionary:
+	var states: Dictionary = squad.get("catchup_state", {})
+	var iid: int = unit.get_instance_id()
+	if not states.has(iid):
+		states[iid] = {"catching": false, "at": _STATE_AT_NEVER}
+	squad["catchup_state"] = states
+	return states[iid]
+
+
+## 解析归队锚点：班长在场 = 班长实时位置；否则班质心（缓存）。无锚返回 {}。
+static func _resolve_anchor(host, squad_id: String, squad: Dictionary) -> Dictionary:
+	var leader: Node = squad.get("leader", null)
+	if leader != null and is_instance_valid(leader) \
+			and not (leader.has_method("is_dead") and leader.is_dead()):
+		return {"anchor": (leader as Node2D).global_position}
 	var cache := refresh_cache(host, squad_id)
-	if cache.is_empty() or unit == null or not is_instance_valid(unit):
+	if cache.is_empty():
+		return {}
+	return {"anchor": cache["centroid"]}
+
+
+## 单位归队转向建议：Vector2.ZERO = 非归队态/战斗挂起/无锚（无施力）；
+## 归队态 = 指向锚点的单位方向向量。
+static func squad_steer(host, squad_id: String, unit: Node) -> Vector2:
+	if unit == null or not is_instance_valid(unit):
 		return Vector2.ZERO
-	# 行为门控：避战/溃散优先，聚拢与对齐全部让位
+	if not host._squads.has(squad_id):
+		return Vector2.ZERO
+	var squad: Dictionary = host._squads[squad_id]
+	var state: Dictionary = _catchup_state(squad, unit)
+	# 行为门控：接战/避战 = 战斗优先（生效前持续完成手头任务）
 	var behavior := ""
 	if unit.has_method("get_current_behavior"):
 		behavior = String(unit.get_current_behavior())
-	if behavior in AVOID_BEHAVIORS:
+	var combat_busy: bool = behavior == ENGAGED_BEHAVIOR or behavior in AVOID_BEHAVIORS
+
+	# ── 归队态：持续给出归队建议（执行不受节流影响），落定即时退出 ──
+	if bool(state["catching"]):
+		if combat_busy:
+			return Vector2.ZERO  # 战斗挂起，状态保留：战毕若仍超距继续归队
+		var r := _resolve_anchor(host, squad_id, squad)
+		if r.is_empty():
+			return Vector2.ZERO
+		var to_anchor: Vector2 = r["anchor"] - unit.global_position
+		if to_anchor.length() < _Api.COHESION_SETTLE_DIST:
+			state["catching"] = false  # 到位即站定（不等节流，防过冲折返）
+			return Vector2.ZERO
+		return to_anchor.normalized()
+
+	# ── 非归队态：触发判定低频重估（SWL lastFollowUpdate：跟随重算不是每帧）──
+	var now: int = Time.get_ticks_msec()
+	if now - int(state["at"]) < _Api.COHESION_RECHECK_MS:
 		return Vector2.ZERO
-	var steer := Vector2.ZERO
-	# ── 聚拢弹簧：死区外线性回拉、上限封顶 ──
-	var centroid: Vector2 = cache["centroid"]
-	var to_centroid: Vector2 = centroid - unit.global_position
-	var dist: float = to_centroid.length()
-	var spread: float = squad_spread_radius(int(cache["members"]))
-	var over: float = dist - spread
-	if over > 0.0 and dist > 0.001:
-		var pull: float = minf(over * _Api.COHESION_PULL_PER_PX, _Api.COHESION_PULL_MAX)
-		if behavior == ENGAGED_BEHAVIOR:
-			pull *= _Api.COHESION_ENGAGED_SCALE  # 接战中减半：战斗走位优先
-		steer += to_centroid / dist * pull
-	# ── 对齐（轻量）：行军速度向班均值收敛（站桩不对齐防抖；接战不对齐保走位）──
-	var avg_vel: Vector2 = cache["avg_vel"]
-	if behavior != ENGAGED_BEHAVIOR and avg_vel.length() > _Api.COHESION_AVG_SPEED_DEADZONE \
-			and "velocity" in unit:
-		steer += (avg_vel - unit.velocity) * _Api.ALIGNMENT_STEER_SCALE
-	return steer
+	state["at"] = now
+	if combat_busy:
+		return Vector2.ZERO  # 接战/避战中不触发自动归队
+	var r2 := _resolve_anchor(host, squad_id, squad)
+	if r2.is_empty():
+		return Vector2.ZERO
+	var to2: Vector2 = r2["anchor"] - unit.global_position
+	if to2.length() > _Api.COHESION_JOIN_DIST:
+		state["catching"] = true  # 一次性触发：超距才归队，落定前不重判
+		return to2.normalized()
+	return Vector2.ZERO
+
+
+## 归队态查询（is_unit_catching_up 出口的内核）：超距触发后、落定/挂起前为 true。
+static func is_catching_up(host, squad_id: String, unit: Node) -> bool:
+	if unit == null or not is_instance_valid(host) or not host._squads.has(squad_id):
+		return false
+	var states: Dictionary = host._squads[squad_id].get("catchup_state", {})
+	var entry: Variant = states.get(unit.get_instance_id())
+	return entry != null and bool(entry.get("catching", false))

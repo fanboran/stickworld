@@ -45,7 +45,7 @@ extends Node
 ##   squad_follow_director.gd   编队动态跟队（锚定落点维持/号令下发/锚定链防环）
 ##   squad_report_hooks.gd      信息上报挂点（§4.4 contact/casualty 上报 + 征用互斥）
 ##   squad_snapshot.gd          跨图快照/恢复 + BalanceConfig 装载收敛（load_overrides）
-##   squad_cohesion.gd          班内聚拢/对齐（Boids 二三力转向建议；常量在 api.gd）
+##   squad_cohesion.gd          班内一次性归队状态机（SWL 滞回+节流；常量在 api.gd）
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 小队对应的组织层级（L1 = 最低层，排级）
@@ -872,13 +872,14 @@ func _exit_tree() -> void:
 		FormationAPI.set_active_host(null)
 
 
-# ──────────────────────── 班内聚拢（Boids 式，转向建议出口）────────────────────────────────
-## 聚拢弹簧 + 轻量对齐（分离力归 units 侧椭圆分离）：内核在 squad_cohesion.gd
-## （死区外线性回拉封顶/接战减半/避战让位/班均速对齐，400ms 节流缓存挂
-## squad["cohesion_cache"]）。本系统只做消费出口——返回转向建议（加速度量纲），
-## 消费方（entity_motion 集成）叠加到既有转向通道，不直改位置。
+# ──────────────────────── 班内一次性归队（SWL 滞回+节流，转向建议出口）────────────────────────────────
+## 归队状态机内核在 squad_cohesion.gd（JOIN/SETTLE 滞回进/出 + 0.4s 触发节流
+## + 接战/避战战斗优先 + 班长/质心锚点，状态挂 squad["catchup_state"]）。
+## 本系统只做消费出口——返回指向锚点的单位方向向量（消费方 entity_motion
+## 归一混入移动意图，不直改位置），非归队态 ZERO = 零施力。
 
-## 单位聚拢-对齐合成转向建议：Vector2.ZERO = 无施力（死区内/避战中/无班）。
+## 单位归队转向建议：归队态 = 指向锚点的单位方向向量；
+## ZERO = 非归队态/战斗挂起/无班（零施力，不打扰任务执行）。
 func get_unit_cohesion_steer(u: Node) -> Vector2:
 	if u == null or not is_instance_valid(u):
 		return Vector2.ZERO
@@ -888,11 +889,14 @@ func get_unit_cohesion_steer(u: Node) -> Vector2:
 	return ScriptSquadCohesion.squad_steer(self, squad_id, u)
 
 
-## 班散布半径（px；聚拢死区口径，按班现有人数放宽）。
-func get_squad_spread_radius(squad_id: String) -> float:
-	if not _squads.has(squad_id):
-		return FormationAPI.COHESION_SPREAD_RADIUS_BASE
-	return ScriptSquadCohesion.squad_spread_radius(get_squad_size(squad_id))
+## 单位是否处于归队态（一次性归队状态机状态面）：超距触发后、落定前为 true。
+func is_unit_catching_up(u: Node) -> bool:
+	if u == null or not is_instance_valid(u):
+		return false
+	var squad_id := get_unit_squad(u)
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return false
+	return ScriptSquadCohesion.is_catching_up(self, squad_id, u)
 
 
 ## 班离排（班解散/移编时清理归属；排内班空自动解散排）。

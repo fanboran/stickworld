@@ -44,7 +44,7 @@ const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X
 const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
 ## 椭圆外接圆扫描半径（=max 两轴）：邻域查询用圆盒不漏人，逐对判定再走椭圆
 const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
-## 聚拢转向混入系数（Boids 第二/三力，死区内零施力；待实测校准）
+## 聚拢转向混入系数（班内一次性归队方向向量的混入权重；待实测校准）
 const COHESION_STEER_FORCE: float = 0.8
 ## 分离推力系数（叠加到 AI 移动方向）
 const SEPARATION_FORCE: float = 1.6
@@ -163,9 +163,11 @@ func _sep_ellipse_d(offset: Vector2) -> float:
 	return sqrt(ex * ex + ey * ey)
 
 
-## 班内聚拢（Boids 第二/三力；内核 formation/squad_cohesion——死区外线性回拉
-## 封顶/接战减半/避战豁免/400ms 节流缓存全在内核门控）。本侧只把转向建议归一
-## 混入移动方向；掉队站桩（无移动意图）也被拉回班簇——死区内零施力不吸站好的。
+## 班内一次性归队（SWL 滞回+节流直译；内核 formation/squad_cohesion——
+## JOIN/SETTLE 滞回进/出判定、0.4s 触发节流、接战/避战战斗优先全在内核门控）。
+## 非归队态内核返回 ZERO（零施力：不打扰任务执行——站桩不拉、行军不扰、
+## 接战不吸）；归队态返回指向锚点的方向向量，此处归一混入移动意图
+## （掉队站桩单位由此获得一次归队移动，落定后回原任务）。
 func _apply_cohesion(dir: Vector2) -> Vector2:
 	var host: Node = _FormationAPI.get_active_host()
 	if host == null or not is_instance_valid(host):

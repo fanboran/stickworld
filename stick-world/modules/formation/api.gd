@@ -20,10 +20,11 @@
 ##   has_squad_command_chain(squad_id) -> bool（排长缺口 → false）
 ##   信号：platoon_created(platoon_id, squad_ids) / platoon_leader_lost(platoon_id)
 ##
-## 班内聚拢出口（Boids 式裁剪，常量见本文件 COHESION_/ALIGNMENT_ 段）：
-##   get_unit_cohesion_steer(unit) -> Vector2（转向建议，加速度量纲；消费方
-##   entity_motion 叠加到既有转向通道，不直改位置。ZERO = 死区内/避战中/无班）
-##   get_squad_spread_radius(squad_id) -> float（聚拢死区半径，按班人数放宽）
+## 班内一次性归队出口（SWL 滞回+节流直译，常量见本文件 COHESION_ 段）：
+##   get_unit_cohesion_steer(unit) -> Vector2（归队态 = 指向锚点的单位方向向量；
+##   消费方 entity_motion 归一混入既有移动通道，不直改位置。
+##   ZERO = 非归队态/战斗挂起/无班——非归队态零施力，不打扰任务执行）
+##   is_unit_catching_up(unit) -> bool（归队态查询：超距触发后、落定前为 true）
 ##
 ## 边界（与 tactics / combat 模块的分工）：号令的语义与目标选择（TargetFinder /
 ## TacticalOrders）属 tactics，号令的下发链（CommandChain）属 combat——本模块只回答
@@ -83,22 +84,19 @@ const FOLLOW_DEADZONE: float = _Spacing.FOLLOW_DEADZONE
 ## 相位计划到位容差默认值（px；config/ai/squad_phase_plan.tres 覆盖）
 const ARRIVE_TOLERANCE: float = _Spacing.ARRIVE_TOLERANCE
 
-## ── 班内聚拢（Boids 式裁剪）常量【提案/待定·待实测校准】──
-## 消费出口：FormationSystem.get_unit_cohesion_steer(unit)（转向建议，加速度量纲，
-## 消费方叠加到既有转向通道、不直改位置）；分离力不在此——分离是 units 侧
-## 椭圆分离（SEPARATION_RADIUS_X/Y 口径）。
-## 班散布半径基准（px，8 人班）：质心超出此距离才回拉（死区内零施力——
-## 只拉掉队的，不吸站好的，防沙丁鱼的关键）
-const COHESION_SPREAD_RADIUS_BASE: float = 140.0
-## 每增 1 人的散布半径增量（px）：班越大越宽
-const COHESION_SPREAD_RADIUS_PER_MEMBER: float = 6.0
-## 回拉强度斜率（px/s² 每超出 1px，线性段）
-const COHESION_PULL_PER_PX: float = 6.0
-## 回拉强度上限（px/s²；防磁铁）
-const COHESION_PULL_MAX: float = 220.0
-## 接战衰减系数：接战中（behavior == "attack"）回拉 × 此值（战斗走位优先）
-const COHESION_ENGAGED_SCALE: float = 0.5
-## 班均速死区（px/s）：班均速低于此值不对齐（站桩不抖）
-const COHESION_AVG_SPEED_DEADZONE: float = 20.0
-## 对齐收敛权重（1/s）：行军速度向班均速收敛（转向建议 = Δv × 此值）
-const ALIGNMENT_STEER_SCALE: float = 2.0
+## ── 班内一次性归队状态机常量【提案/待定·待实测校准】──
+## 消费出口：FormationSystem.get_unit_cohesion_steer(unit)（归队态 = 指向锚点的
+## 单位方向向量，消费方叠加到既有移动通道、不直改位置；非归队态 ZERO）。
+## 模型（SWL 直译）：距锚点 > JOIN_DIST 触发一次归队、< SETTLE_DIST 落定退出，
+## 滞回带（JOIN > SETTLE）防边界振荡——非归队态零施力，不是持续弹簧。
+## 锚点 = 班长实时位置（班长亡/缺 = 班质心）；接战/避战不触发（战斗优先）。
+## 归队触发距离（px）：超过才进入归队态
+const COHESION_JOIN_DIST: float = 260.0
+## 归队落定距离（px）：低于即退出归队态（旧 Boids 死区基准值转世——
+## 班内正常散布尺度不变，落定后回到原任务）
+const COHESION_SETTLE_DIST: float = 140.0
+## 归队触发判定节流（ms；SWL Ai.lastFollowUpdate 语义：跟随重算不是每帧。
+## 仅作用于进/出状态判定，归队移动执行本身不受节流）
+const COHESION_RECHECK_MS: int = 400
+## 班质心缓存 TTL（ms）：班长亡/缺时兜底锚点的重算间隔
+const COHESION_CACHE_TTL_MS: int = 400

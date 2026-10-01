@@ -415,6 +415,14 @@ func set_weapon_type(wt: int) -> void:
 	if _pure_sim or wt == _weapon_type_cached:
 		return
 	_weapon_type_cached = wt
+	# 武器走姿分层（2026-09-30 实机验收：持弓行走要有脚步+持弓姿态）：
+	# walk state 资源换装（盾姿态分层同款机制）。镜像层读实体的 _current_anim
+	# 字符串驱动（"walk" 无武器语义），换装挂在本处随武器类型落位——BOW →
+	# walk_bow（Archidon-Walk，下肢走步 + 上肢保持持弓），其余恢复通用走姿。
+	# 实体侧 2D rig 的同款换装在 WeaponMount._reload_weapons（该图型下 rig 为 null）。
+	if rig != null and rig.has_method("set_state_anim"):
+		var Anims: GDScript = preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
+		rig.set_state_anim("walk", Anims.walk_for_weapon(wt))
 	if _weapon_instance != null and is_instance_valid(_weapon_instance):
 		_weapon_instance.queue_free()
 		_weapon_instance = null

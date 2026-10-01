@@ -218,6 +218,22 @@ var _hit_event_time: float = -1.0
 ## Hit 事件时间是否已解析（换武器时重置）
 var _hit_time_resolved: bool = false
 
+# ── 弓手瞄准表现窗（2026-09-30 实机验收：持瞄要有拉弓动作、移动要有脚步）──
+## true = 持瞄表现窗激活：站定播拉弓保持段（attack_bow_hold，定格拉满），
+## 移动让位走姿（镜像层按武器换 walk_bow）。出手（perform_attack）即关窗。
+var _aim_visual_active: bool = false
+## 表现窗截止时刻（_now() 秒）。AI 路径 = 瞄准开始 + 超时兜底（点射停顿 +
+## 冷却残段最长 ~4.9s，超时收弓防行为切换后残窗把人钉在拉满姿态）；
+## 玩家蓄力路径 = 无穷大（松手才收弓）+ 附身丢失守卫（cancel_charge 不经过
+## 本挂载，附身退出/死亡时靠 _process 的 is_possessed 检查收弓）。
+var _aim_visual_until: float = -1.0e9
+## 表现窗来源：true = 玩家蓄力路径（无超时，靠附身守卫收口）；false = AI 持瞄（超时兜底）
+var _aim_visual_player: bool = false
+## 瞄准表现窗超时（s）：burst 瞄准上限（0.9×3.2≈2.9）+ 冷却残段（≤2.0）再留余量
+const BOW_AIM_VISUAL_TIMEOUT: float = 5.0
+## 移动判定阈值（速度平方）：与 hd2d 镜像的 moving 口径一致（25 = 5px/s）
+const BOW_MOVE_SQ_THRESHOLD: float = 25.0
+
 # ── 治疗能力族（P7 批次 7b：Meric 实体层 CastHeal/CanCastHeal/IsCastingHeal 直译）──
 ## 当前治疗动画名（dump healingAnimation 字段直译，运行时经 StickmanAnims.pick_heal_anim 随机注入）
 var healing_animation: String = ""
@@ -417,6 +433,14 @@ func _reload_weapons() -> void:
 	# P5 数值校准（批次 2）：按武器类型从 BalanceConfig 读 SWL 真值覆盖默认
 	# （本体下沉 weapon_balance.gd）
 	WeaponBalance.apply(self)
+	# 武器走姿分层（2026-09-30 实机验收：持弓行走要有脚步+持弓姿态）：
+	# walk state 资源换装（盾姿态分层同款机制）。BOW → walk_bow（Archidon-Walk，
+	# 下肢走步 + 上肢保持持弓），其余兵种恢复通用走姿。HD-2D 镜像侧同步换装在
+	# char_sprite_3d.set_weapon_type（本实体侧 rig 在该图型下为 null）。
+	if owner_entity != null and "rig" in owner_entity:
+		var rig: Node = owner_entity.get("rig")
+		if rig != null and rig.has_method("set_state_anim"):
+			rig.set_state_anim("walk", Anims.walk_for_weapon(weapon_type))
 
 
 ## HP 校准只做一次（出生满血基线）；换武器只迁移伤害/冷却/爆头加值，
@@ -474,6 +498,83 @@ func _physics_process(delta: float) -> void:
 				_pending_ranged_target = null
 		else:
 			_pending_ranged_target = null
+
+
+# ─────────────────────────────── 弓手瞄准表现窗 ────────────────────────────────
+## 持瞄拉弓 / 移动让位的逐帧仲裁。挂 _process 而非 _physics_process：
+## sim 模式（BattleSim 默认开）下本节点 _physics_process 早退，而表现仲裁是
+## 渲染率关注、且 AI 侧（behavior_attack）照常在实体上跑——_process 两模通吃。
+
+func _process(_delta: float) -> void:
+	if not _aim_visual_active:
+		return
+	if weapon_type != WeaponType.BOW:
+		_aim_visual_active = false
+		return
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	# 玩家蓄力窗的收口守卫：附身取消（cancel_charge 不经过本挂载）/ 附身丢失 /
+	# 死亡，都会让"按住全程"的无限窗失去归属——立刻收弓回站姿，别钉在拉满
+	if _aim_visual_player:
+		var possessed: bool = owner_entity != null \
+				and owner_entity.has_method("is_possessed") and owner_entity.is_possessed() \
+				and not (owner_entity.has_method("is_dead") and owner_entity.is_dead())
+		if not possessed:
+			_end_bow_aim_visual(true)
+			return
+	# 超时收弓（玩家蓄力路径无超时）：窗残而行为已切走时，别把人钉在拉满姿态
+	var now: float = _now()
+	if now > _aim_visual_until:
+		_end_bow_aim_visual(true)
+		return
+	if owner_entity == null:
+		return
+	var current: String = str(owner_entity.get("_current_anim"))
+	var moving: bool = owner_entity.velocity.length_squared() > BOW_MOVE_SQ_THRESHOLD
+	if moving:
+		# 移动让位走姿：attack_bow_hold 前缀会被 entity_motion 的攻击动画守卫
+		# 拦住 walk 切换（滑步定腿）——这里显式交还移动表现（镜像层按武器换
+		# walk_bow，脚步动作由该变体提供）
+		if current == Anims.ANIM_ATTACK_BOW_HOLD:
+			_play_via_visual(Anims.ANIM_WALK)
+	else:
+		# 站定即拉弓绷住：motion 减速到 0 时会把状态写回 idle（表现窗拦不住
+		# 那一次写入），这里检测到待机/走姿残留就重新拉起拉弓保持段
+		if current == "idle" or current == Anims.ANIM_WALK or current == "run":
+			_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
+
+
+## 持瞄开始 → 起拉弓表现窗（拉弓保持段由 _process 仲裁落位）
+func _mark_bow_aim_started() -> void:
+	if weapon_type != WeaponType.BOW:
+		return
+	_aim_visual_active = true
+	_aim_visual_player = false  # AI 持瞄窗（超时兜底）；玩家窗只在 begin_player_draw 置位
+	_aim_visual_until = _now() + BOW_AIM_VISUAL_TIMEOUT
+
+
+## 收瞄准表现窗。return_to_idle=true 且当前停在拉弓保持段时回站姿
+## （出手路径传 false——release 动画随后接管，不必插一脚 idle）。
+func _end_bow_aim_visual(return_to_idle: bool) -> void:
+	_aim_visual_active = false
+	_aim_visual_player = false
+	if not return_to_idle:
+		return
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	if str(owner_entity.get("_current_anim")) == Anims.ANIM_ATTACK_BOW_HOLD:
+		_play_via_visual("idle")
+
+
+## 经实体 VisualController 播动画（_current_anim 状态先行 + rig/HD-2D 镜像同走，
+## 死亡/动作锁定守卫在 play 内侧）。武器挂载不直写实体状态字段。
+func _play_via_visual(anim_name: String) -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	var visual: Node = owner_entity.get("_visual")
+	if visual != null and visual.has_method("play"):
+		visual.play(anim_name)
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -540,7 +641,12 @@ func get_cooldown_remaining() -> float:
 
 
 ## RWR sustained_fire 散布热度（0..1.2；behavior_attack 的点射停顿判定源）
+## ⚠ 双职责：behavior_attack._update_aim_rhythm 在**每次持瞄开始**恰好调用本函数
+## 一次（2026-09-30 核对为全库唯一调用点），弓手据此感知"持瞄开始"并拉起拉弓
+## 表现窗——AI 侧零改动（aim/** 归军师）。若该调用点挪走/新增别的调用方，
+## 必须同步迁走/摘除 _mark_bow_aim_started，否则拉弓时机会错。
 func get_sustained_fire_heat() -> float:
+	_mark_bow_aim_started()
 	return _sustained_fire_heat
 
 
@@ -569,7 +675,20 @@ func perform_attack(target: Node) -> Dictionary:
 		return result
 	# 弓：发射箭矢（命中由箭矢决定）；杖：延迟施法结算（本体下沉 weapon_ranged.gd）
 	if weapon_type == WeaponType.BOW or weapon_type == WeaponType.STAFF:
-		return _ranged.attack_ranged(target)
+		var ranged_result: Dictionary = _ranged.attack_ranged(target)
+		# 弓出手成功 → 收瞄准表现窗并播释放段（"绷住→放"衔接；拉弓保持段是
+		# 持瞄期的事，出手这拍不再回撤重拉）。kite 分支不调 play_attack，
+		# 释放段由这里兜底触发；in-range 分支随后 entity.play_attack() 重播
+		# 同名动画（镜像层按名去重，实体侧重播同帧同起点，无感）。
+		# 移动中出手（风筝还击）不播释放段：attack_* 前缀会触发 entity_motion
+		# 的攻击守卫拦住 walk 切换，1.33s 定腿滑步比无动作更糟——移动射击保持
+		# 裸发射，脚步表现交给走姿。
+		if weapon_type == WeaponType.BOW and str(ranged_result.get("reason")) == "fired":
+			_end_bow_aim_visual(false)
+			var shooter: CharacterBody2D = get_owner_entity()
+			if shooter == null or shooter.velocity.length_squared() <= BOW_MOVE_SQ_THRESHOLD:
+				_play_swing()
+		return ranged_result
 	var health: Node = _get_health(target)
 	if health == null or health.is_dead():
 		result["reason"] = "no_health_or_dead"
@@ -627,11 +746,18 @@ func perform_swing() -> bool:
 
 # ─────────────────────────────── 玩家蓄力操控（SWL ArcherControls PC 翻译）───
 
-## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：仅播攻击动画——不进冷却、
-## 不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
-## 蓄满 1000ms × 瞄准慢放 0.5 恰使 attack_bow 走到 Drawn@0.5 拉满帧。
+## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：弓播拉弓保持段（举弓-拉弦-
+## 绷住，定格拉满陪按住全程）；其余武器维持旧行为（播攻击动画）。
+## 不进冷却、不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
+## 蓄满 1000ms × 瞄准慢放 0.5 恰使拉弦动作走到 Drawn@0.5 拉满帧。
 func begin_player_draw() -> void:
-	_play_swing()
+	if weapon_type != WeaponType.BOW:
+		_play_swing()
+		return
+	_aim_visual_active = true
+	_aim_visual_player = true
+	_aim_visual_until = 1.0e9  # 玩家按住全程无超时，松手/附身丢失才收弓
+	_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
 
 
 ## 玩家松手放箭（SWL AimReleased → UserControlledArrowReleased）：
@@ -639,8 +765,15 @@ func begin_player_draw() -> void:
 ## 返回箭矢实例（无出手为 null；箭矢镜头消费）。
 func release_player_shot(aim_dir: Vector2, power: float) -> Node2D:
 	if not can_attack():
+		_end_bow_aim_visual(true)  # 出手被拒也要收弓，别把玩家钉在拉满姿态
 		return null
 	var arrow: Node2D = _ranged.fire_arrow_manual(aim_dir, power)
+	# 松手 = 释放段（绷住→放）；出手被守卫拦下时 _end 已回站姿。
+	# 移动中松手不播释放段（同 perform_attack：定腿滑步比无动作更糟）
+	_end_bow_aim_visual(false)
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null or owner_entity.velocity.length_squared() <= BOW_MOVE_SQ_THRESHOLD:
+		_play_swing()
 	_cooldown_after_player_action()
 	return arrow
 

@@ -27,7 +27,7 @@ extends Node
 ##   - 生成动画名对齐 stickman_anims 使用的名字，覆盖旧程序化动画。
 
 const OUTPUT_DIR := "res://modules/stick_rig/animations/"
-const SPINE_FILE := "F:/VSCode/game-2-aux/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
+const SPINE_FILE := "F:/VSCode/game-2/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
 
 ## 实际输出目录（--out-dir 覆盖；缺省 = OUTPUT_DIR，保持现行为不动）
 var _out_dir: String = OUTPUT_DIR
@@ -68,6 +68,9 @@ const ANIM_MAP: Dictionary = {
 	"idle_staff":  {"spine": "Magikill-Stand",         "loop": true},
 	"walk":       {"spine": "Swordwrath-Walk",         "loop": true},
 	"run":        {"spine": "Swordwrath-Run",          "loop": true},
+	# 持弓行走（Archidon-Walk）：下肢走步 + 上肢不列通道 = 保持持弓 setup 姿态，
+	# 与 idle_bow（Archidon-Stand1，同样无臂通道）同源——"举弓行走"真数据变体
+	"walk_bow":   {"spine": "Archidon-Walk",           "loop": true},
 	"attack":     {"spine": "Swordwrath-Attack1",      "loop": false},
 	"block":      {"spine": "Swordwrath-Block",       "loop": false},
 	# 盾姿态分层（计划 5，SWL Spearton 持盾形态组）：端盾行军/待命/三连刺
@@ -84,6 +87,13 @@ const ANIM_MAP: Dictionary = {
 	"attack_pickaxe":{"spine": "Miner-Attack1",        "loop": false},
 	"attack_staff":  {"spine": "Magikill-Spell1",      "loop": false},
 	"attack_bow":    {"spine": "Archidon-Draw",        "loop": false},
+	# 弓手射击表现两段拆分（2026-09-30 实机验收指正：持瞄没拉弓动作、放箭无绷住节奏）。
+	#   hold_pose_from/trim_after/freeze_after 为本导入器的分段变换（见 _convert_one）：
+	"attack_bow_hold":    {"spine": "Archidon-Draw", "loop": false, "freeze_after": 0.5},
+	#   release = 拉满姿态定格 0~0.5（持瞄已绷住，出手零回撤）+ 原放箭/余韵
+	#   （Hit@0.5333 位置不变——放箭延迟读事件真值，战斗时序零变化），1.3333s 截断余韵
+	#   （原 2.0s 全长尾巴会让移动中的弓手定腿滑步，实机验收指正第二项）
+	"attack_bow_release": {"spine": "Archidon-Draw", "loop": false, "hold_pose_from": 0.5, "trim_after": 1.3333},
 	"dead":       {"spine": "Death1",                  "loop": false},
 	"dead_headshot": {"spine": "Death-Headshot",       "loop": false},
 	# 死亡变体池（2026-08-31 直译 legacy 受击/死亡体系：Death 组 ×10 / Hit 组 ×12
@@ -173,7 +183,7 @@ func _ready() -> void:
 			printerr("  缺 Spine 动画: %s（-> %s）" % [spine_name, godot_name])
 			err += 1
 			continue
-		if _convert_one(animations[spine_name], godot_name, cfg["loop"]):
+		if _convert_one(animations[spine_name], godot_name, cfg):
 			ok += 1
 		else:
 			err += 1
@@ -197,8 +207,15 @@ static func _parse_out_dir_arg() -> String:
 	return ""
 
 
-## 转换单个 Spine 动画为 .tres
-func _convert_one(spine_anim: Dictionary, godot_name: String, loop: bool) -> bool:
+## 转换单个 Spine 动画为 .tres。cfg 除 spine/loop 外支持分段变换（弓手射击表现
+## 拆分用，互斥使用、events 同步裁剪）：
+##   hold_pose_from=H：H 之前的键替换为"t=0 定格 H 时刻姿态"单键——释放段前缀
+##                     （持瞄已绷住，出手不再回撤重拉）
+##   freeze_after=F  ：F 之后的键裁掉，姿态定格在 F（拉弦到位即绷住）；
+##                     配合 "length" 显式指定定格保持时长
+##   trim_after=T    ：T 之后的键裁掉（余韵截断）
+func _convert_one(spine_anim: Dictionary, godot_name: String, cfg: Dictionary) -> bool:
+	var loop: bool = bool(cfg.get("loop", false))
 	var bones_data: Dictionary = spine_anim.get("bones", {})
 	var tracks: Array = []
 	var max_time: float = 0.0
@@ -250,11 +267,78 @@ func _convert_one(spine_anim: Dictionary, godot_name: String, loop: bool) -> boo
 	if tracks.is_empty():
 		printerr("  %s: 无可映射骨骼" % godot_name)
 		return false
+	# 分段变换（hold_pose_from/freeze_after/trim_after，见函数头注释）
+	var seg_events := _extract_events(spine_anim)
+	var hold_from := float(cfg.get("hold_pose_from", -1.0))
+	var freeze_after := float(cfg.get("freeze_after", -1.0))
+	var trim_after := float(cfg.get("trim_after", -1.0))
+	if hold_from > 0.0 or freeze_after > 0.0 or trim_after > 0.0:
+		tracks = _apply_segment_transforms(tracks, hold_from, freeze_after, trim_after)
+		var ev_cut := trim_after if trim_after > 0.0 else freeze_after
+		if ev_cut > 0.0:
+			seg_events = seg_events.filter(func(e): return float(e["time"]) <= ev_cut)
 	var length: float = max_time
+	# 截断优先于采样时长（trim 后动画到截断点为止）；显式 length 最高
+	if trim_after > 0.0:
+		length = minf(length, trim_after)
+	if cfg.has("length"):
+		length = float(cfg["length"])
 	if length <= 0.0:
 		length = 1.0
 	var loop_mode: int = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
-	return _save_anim(godot_name, tracks, length, loop_mode, _extract_events(spine_anim))
+	return _save_anim(godot_name, tracks, length, loop_mode, seg_events)
+
+
+## 分段变换本体：对每条 flat 键序列 [t0,v0,t1,v1,...] 做 前缀定格 / 后缀定格 / 截断
+## （参数含义见 _convert_one 头注释）
+func _apply_segment_transforms(tracks: Array, hold_from: float, freeze_after: float, trim_after: float) -> Array:
+	var out: Array = []
+	for track_data in tracks:
+		var flat: Array = track_data[1]
+		if hold_from > 0.0:
+			# H 时刻姿态定格为起始帧（t=0 单键），H 之后的原键保留（放箭段原样）
+			var kept: Array = [0.0, _sample_flat(flat, hold_from)]
+			for i in range(0, flat.size(), 2):
+				if float(flat[i]) > hold_from:
+					kept.append(flat[i])
+					kept.append(flat[i + 1])
+			flat = kept
+		if freeze_after > 0.0:
+			# 裁掉 F 之后的键，末键补到 F 时刻 → 价值轨道末端钳制，姿态定格在 F
+			var kept2: Array = []
+			for i in range(0, flat.size(), 2):
+				if float(flat[i]) <= freeze_after:
+					kept2.append(flat[i])
+					kept2.append(flat[i + 1])
+			if kept2.is_empty() or float(kept2[kept2.size() - 2]) < freeze_after:
+				kept2.append(freeze_after)
+				kept2.append(_sample_flat(flat, freeze_after))
+			flat = kept2
+		if trim_after > 0.0:
+			var kept3: Array = []
+			for i in range(0, flat.size(), 2):
+				if float(flat[i]) <= trim_after:
+					kept3.append(flat[i])
+					kept3.append(flat[i + 1])
+			flat = kept3
+		out.append([track_data[0], flat])
+	return out
+
+
+## flat 键序列在 t 时刻的线性插值采样（t 越界钳到端点值）
+func _sample_flat(flat: Array, t: float) -> float:
+	if t <= float(flat[0]):
+		return float(flat[1])
+	var i := 0
+	while i + 2 < flat.size() and float(flat[i + 2]) <= t:
+		i += 2
+	if i + 2 >= flat.size():
+		return float(flat[flat.size() - 1])
+	var t0 := float(flat[i])
+	var t1 := float(flat[i + 2])
+	if t1 <= t0:
+		return float(flat[i + 3])
+	return lerpf(float(flat[i + 1]), float(flat[i + 3]), (t - t0) / (t1 - t0))
 
 
 ## 归一化 Spine 螺旋角：与前一帧取最短角差（避免跨圈线性插值）。

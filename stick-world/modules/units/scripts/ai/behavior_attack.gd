@@ -219,6 +219,14 @@ func update(delta: float) -> void:
 				"ignore_current_attackers": true,
 				"prefer_large": _p("prefer_large", 0.0),
 			})
+		# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
+		# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选
+		# 不追 → finish 待命，敌人近身（进入 leash）后自然选中自卫。只作用指挥官，
+		# 普通单位的追击语义不变（leash 对他们仍只作换靶触发）。
+		if _target != null and entity != null and is_instance_valid(entity) \
+				and entity.has_method("is_commander") and entity.is_commander() \
+				and _is_beyond_leash():
+			_target = null
 		# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
 		_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
 		if _target == null:

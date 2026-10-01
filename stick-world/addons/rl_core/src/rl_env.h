@@ -184,10 +184,11 @@ public:
 	int officer_death_beat[2][N_PLATOONS]; // 排长阵亡拍号（-1 在世；缺口拍数 = 终局拍−此值）
 	int decap_winner = 0;                  // 斩首胜者（0=未发生；同拍双斩 → 0=平局）
 	double officer_pen_accum[2] = { 0, 0 }; // 排长贴敌罚累计（拍级累积，result 读出）
-	// 课程学习（v2.1 断层修复：班数×人数解耦——
+	// 课程学习（v2.1 断层修复 + v2.2 抗遗忘再平衡：班数×人数解耦——
 	//   C1 恒 17 档；C2 = 35% 17 档 / 35% 49 档 / 30% 8 班小队档（8 个班动作头 +
-	//   排长层在低复杂度下先开学）；C3 = 80% 97 档 / 10% 17 档 / 10% 8 班小队档
-	//   （小档回访防遗忘）。评估走 eval_lock_tier 恒锁所在阶段主档。）
+	//   排长层在低复杂度下先开学）；C3 = 40% 97 档 / 25% 49 档 / 15% 17 档 /
+	//   20% 8 班小队档（小档升主力回访——同型档位技能抗遗忘 + 大规模形态保留）。
+	//   评估走 eval_lock_tier 恒锁所在阶段主档。）
 	int curriculum_stage = -1;             // 课程阶段（-1 = 关闭随机旧三档 / 0=C1 / 1=C2 / 2=C3）
 	int eval_lock_tier = -1;               // 评估锁档（非 -1 时 gen_matchup 恒用该档）
 
@@ -223,6 +224,13 @@ public:
 
 	// 评估对手（军师规划器打分逻辑的 C++ 镜像，见 squad_intent_planner._choose_intent）
 	void planner_intents(int faction, int *intents8);
+	// 规划器 handicap 版（v2.2 药一·对手难度天梯）：训练陪练用、评估恒全强度。
+	//   score_noise 打分噪声幅度（加在各候选分上，均匀 0..noise，量级 ~85 满分）
+	//   epsilon   意图随机率（活班以该概率完全随机选 0..4）
+	void planner_intents_handicap(int faction, int *intents8, double score_noise,
+			double epsilon, RngPcg &rng);
+	void planner_intents_impl(int faction, int *intents8, double score_noise,
+			double epsilon, RngPcg *rng);
 
 	// 指挥官单位下标（斩首冒烟/调试用；无 = -1）
 	int find_commander(int faction) const;

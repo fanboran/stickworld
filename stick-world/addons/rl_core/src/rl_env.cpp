@@ -106,8 +106,11 @@ int BattleEnv::pick_curriculum_tier(RngPcg &rng) const {
 	double roll = rng.randf();
 	if (curriculum_stage == 1) // C2：30% 8班小档 / 35% 49 / 35% 17
 		return roll < 0.30 ? 3 : (roll < 0.65 ? 1 : 0);
-	// C3：80% 97 / 10% 17 / 10% 8班小档（小档回访防遗忘）
-	return roll < 0.10 ? 0 : (roll < 0.20 ? 3 : 2);
+	// C3（v2.2 抗遗忘再平衡）：40% 97 / 25% 49 / 15% 17 / 20% 8班小队主力回访
+	if (roll < 0.15) return 0;
+	if (roll < 0.35) return 3;
+	if (roll < 0.60) return 1;
+	return 2;
 }
 
 // ── 随机对阵（真镜像：一套编制/占位两侧共用；课程阶段采样）──
@@ -785,6 +788,18 @@ double BattleEnv::faction_reward(const EnvResult &r, int faction) const {
 //   argmax 严格大于（基线 0，全负不动）；翻译：CAPTURE→意图0/1/2（自视角），
 //   GARRISON→3，INTERCEPT→4。
 void BattleEnv::planner_intents(int faction, int *intents8) {
+	planner_intents_impl(faction, intents8, 0.0, 0.0, nullptr);
+}
+
+// handicap 版（v2.2 药一·对手难度天梯）：score_noise 打分噪声（均匀 0..noise 加到
+// 各候选分）、epsilon 活班意图随机率。训练陪练用；评估走 planner_intents 全强度。
+void BattleEnv::planner_intents_handicap(int faction, int *intents8, double score_noise,
+		double epsilon, RngPcg &rng) {
+	planner_intents_impl(faction, intents8, score_noise, epsilon, &rng);
+}
+
+void BattleEnv::planner_intents_impl(int faction, int *intents8, double score_noise,
+		double epsilon, RngPcg *rng) {
 	const double SCORE_CAPTURE = 85.0, SCORE_INTERCEPT = 90.0, SCORE_GARRISON = 50.0;
 	const double INERTIA = 30.0, DUP = 40.0, DECAY = 3000.0, TRIGGER = 600.0;
 	const double RATIO_FLOOR = 0.1, RATIO_CEIL = 2.0, DF_FLOOR = 0.05, STACK = 0.3;
@@ -878,6 +893,9 @@ void BattleEnv::planner_intents(int faction, int *intents8) {
 				nc++;
 			}
 		}
+		// 打分噪声（天梯难度旋钮 1）：均匀 0..score_noise 加到各候选分
+		if (score_noise > 0.0 && rng != nullptr)
+			for (int c = 0; c < nc; c++) cands[c].score += score_noise * rng->randf();
 		// argmax 严格大于（基线 0）
 		double best_score = 0.0;
 		Cand best;
@@ -891,6 +909,9 @@ void BattleEnv::planner_intents(int faction, int *intents8) {
 		}
 		if (!has) continue;
 		intents8[si] = best.intent;
+		// 意图随机化（天梯难度旋钮 2）：以 epsilon 概率完全随机选 0..4
+		if (epsilon > 0.0 && rng != nullptr && rng->randf() < epsilon)
+			intents8[si] = rng->randi_range(0, N_ACTIONS_PER_SQUAD - 1);
 		if (best.intent <= 2) assigned_flag[best.target]++;
 		else if (best.intent == 3) assigned_flag[best.target]++;
 		else assigned_enemy[best.target]++;

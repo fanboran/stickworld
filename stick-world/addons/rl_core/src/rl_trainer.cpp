@@ -67,11 +67,25 @@ void RLTrainer::play_battle(const Matchup &m, bool swap, AgentTraj &ag1, AgentTr
 	int acts1[BattleEnv::N_SQUADS], acts2[BattleEnv::N_SQUADS];
 	double logits[BattleEnv::N_ACTIONS];
 	const int NS = BattleEnv::N_SQUADS;
+	int beat = 0;
 	while (!env.done) {
 		// faction 1
 		env.active_mask(1, mask1);
 		if (ag1.planner) {
-			env.planner_intents(1, acts1);
+			// 天梯陪练（v2.2 药一）：每 every_n_beats 拍重新决策，其余拍沿用缓存
+			double noise = 0.0;
+			double eps = 0.0;
+			int every_n = 1;
+			if (ag1.planner_level >= 0) handicap_knobs(ag1.planner_level, noise, every_n, eps);
+			if (beat % every_n == 0) {
+				if (ag1.planner_level >= 0)
+					env.planner_intents_handicap(1, acts1, noise, eps, ag1.rng);
+				else
+					env.planner_intents(1, acts1);
+				for (int k = 0; k < NS; k++) ag1.last_planner_intents[k] = acts1[k];
+			} else {
+				for (int k = 0; k < NS; k++) acts1[k] = ag1.last_planner_intents[k];
+			}
 		} else {
 			env.observe(1, obs);
 			ag1.net->forward(obs.data(), logits, nullptr);
@@ -97,7 +111,19 @@ void RLTrainer::play_battle(const Matchup &m, bool swap, AgentTraj &ag1, AgentTr
 		// faction 2
 		env.active_mask(2, mask2);
 		if (ag2.planner) {
-			env.planner_intents(2, acts2);
+			double noise = 0.0;
+			double eps = 0.0;
+			int every_n = 1;
+			if (ag2.planner_level >= 0) handicap_knobs(ag2.planner_level, noise, every_n, eps);
+			if (beat % every_n == 0) {
+				if (ag2.planner_level >= 0)
+					env.planner_intents_handicap(2, acts2, noise, eps, ag2.rng);
+				else
+					env.planner_intents(2, acts2);
+				for (int k = 0; k < NS; k++) ag2.last_planner_intents[k] = acts2[k];
+			} else {
+				for (int k = 0; k < NS; k++) acts2[k] = ag2.last_planner_intents[k];
+			}
 		} else {
 			env.observe(2, obs);
 			ag2.net->forward(obs.data(), logits, nullptr);
@@ -121,6 +147,7 @@ void RLTrainer::play_battle(const Matchup &m, bool swap, AgentTraj &ag1, AgentTr
 			}
 		}
 		env.step(acts1, acts2);
+		beat++;
 	}
 	*res_out = env.result();
 }
@@ -217,15 +244,17 @@ void RLTrainer::train(long n_iterations) {
 		make_agent(ag[0], &net, true, false); // 正局 faction1 = 当前网
 		if (opp_kind == 1)
 			make_agent(ag[1], &pool[pool_slot], false, false); // 正局 faction2 = 池对手
-		else if (opp_kind == 2)
-			make_agent(ag[1], &net, false, true); // 正局 faction2 = 军师规划器镜像
-		else
+		else if (opp_kind == 2) {
+			make_agent(ag[1], &net, false, true); // 正局 faction2 = 军师规划器陪练（天梯档）
+			ag[1].planner_level = handicap_level[m.side_a.tier];
+		} else
 			make_agent(ag[1], &net, true, false); // 正局 faction2 = 当前网（镜像自博弈）
 		if (opp_kind == 1)
 			make_agent(ag[2], &pool[pool_slot], false, false); // 反局 faction1 = 池对手
-		else if (opp_kind == 2)
-			make_agent(ag[2], &net, false, true); // 反局 faction1 = 军师规划器镜像
-		else
+		else if (opp_kind == 2) {
+			make_agent(ag[2], &net, false, true); // 反局 faction1 = 军师规划器陪练（天梯档）
+			ag[2].planner_level = handicap_level[m.side_a.tier];
+		} else
 			make_agent(ag[2], &net, true, false); // 反局 faction1 = 当前网
 		make_agent(ag[3], &net, true, false); // 反局 faction2 = 当前网
 		int w1 = 0, w2 = 0;
@@ -277,6 +306,13 @@ void RLTrainer::train(long n_iterations) {
 				: (opp_kind == 2 ? "planner" : "pool" + std::to_string(pool_slot));
 		rec.opp_g1 = opp_tag;
 		rec.opp_g2 = opp_tag;
+		// 天梯窗口更新（v2.2 药一）：planner 局按 NN 视角计分并判升降
+		if (opp_kind == 2) {
+			double s1 = r1.winner == 1 ? 1.0 : (r1.winner == 0 ? 0.5 : 0.0); // 正局 NN=f1
+			double s2 = r2.winner == 2 ? 1.0 : (r2.winner == 0 ? 0.5 : 0.0); // 反局 NN=f2
+			update_handicap(m.side_a.tier, s1);
+			update_handicap(m.side_a.tier, s2);
+		}
 		// baseline EMA（训练视角均值；池局只计本人轨迹）
 		baseline += baseline_ema * (rec.mean_r - baseline);
 		rec.baseline = baseline;
@@ -522,6 +558,36 @@ void RLTrainer::adapt_entropy(double mean_entropy) {
 	}
 }
 
+// ── 对手难度天梯（v2.2 药一，self-paced 教师课表）──
+// 档 0 最弱：打分噪声 60（候选分满级 ~85）/ 3 拍一决策（1.5s）/ ε0.35
+// 档 1：40 / 2 拍 / 0.20    档 2：20 / 2 拍 / 0.10    档 3：全强度
+void RLTrainer::handicap_knobs(int level, double &score_noise, int &every_n_beats, double &epsilon) {
+	switch (level) {
+	case 0: score_noise = 60.0; every_n_beats = 3; epsilon = 0.35; break;
+	case 1: score_noise = 40.0; every_n_beats = 2; epsilon = 0.20; break;
+	case 2: score_noise = 20.0; every_n_beats = 2; epsilon = 0.10; break;
+	default: score_noise = 0.0; every_n_beats = 1; epsilon = 0.0; break;
+	}
+}
+
+void RLTrainer::update_handicap(int tier, double nn_score) {
+	if (tier < 0 || tier >= 4) return;
+	auto &h = handicap_hist[tier];
+	h.push_back(nn_score);
+	while ((int)h.size() > handicap_window) h.erase(h.begin());
+	if ((int)h.size() < handicap_window / 2) return; // 样本不足不动
+	double mean = 0.0;
+	for (double v : h) mean += v;
+	mean /= (double)h.size();
+	if (mean > handicap_promote && handicap_level[tier] < 3) {
+		handicap_level[tier] += 1;
+		h.clear(); // 升降后重开窗口（新档位重新积累）
+	} else if (mean < handicap_demote && handicap_level[tier] > 0) {
+		handicap_level[tier] -= 1;
+		h.clear();
+	}
+}
+
 // ── checkpoint（阿尔法 JSON 契约 + v2 增量键；旧档语义不变）──
 
 bool RLTrainer::save_checkpoint() const {
@@ -536,6 +602,9 @@ bool RLTrainer::save_checkpoint() const {
 	hyper->set("beta", Json::num_of(entropy_beta)); // v2：自适应后的当前值
 	root->set("hyper", hyper);
 	root->set("pool_count", Json::num_of((double)pool_count)); // v2：池滚动游标
+	auto harr = Json::make(Json::ARR); // v2.2：天梯档位（续训衔接）
+	for (int t = 0; t < 4; t++) harr->arr.push_back(Json::num_of((double)handicap_level[t]));
+	root->set("handicap", harr);
 	root->set("net", net.net_to_json());
 	return hooks.write(checkpoint_path, root->dump());
 }
@@ -564,6 +633,11 @@ bool RLTrainer::load_checkpoint() {
 		if (b > 0.0) entropy_beta = b;
 	}
 	pool_count = (long)root->get_num("pool_count", 0.0);
+	// v2.2：天梯档位读回（旧档无键走默认全强度）
+	JsonPtr harr = root->get("handicap");
+	if (harr && harr->type == Json::ARR && (int)harr->arr.size() == 4)
+		for (int t = 0; t < 4; t++)
+			handicap_level[t] = (int)harr->arr[t]->num;
 	load_pool();
 	// 池游标兜底：主档无 pool_count 时按已装载的最大槽位推进，避免回卷覆写
 	for (int s = 0; s < (int)pool_iter.size(); s++)

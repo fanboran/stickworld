@@ -117,6 +117,16 @@ public:
 	//   评估随训练所在阶段同档。维度不变，跨阶段连续训同一网络。
 	long curriculum_c1_end = 5000;  // C1：17 档期
 	long curriculum_c2_end = 15000; // C2：49 档期（之后 C3 = 97 档至终）
+	// ── 对手难度天梯（v2.2 药一，self-paced 教师课表）──
+	//   训练侧规划器陪练按 per-tier handicap 档位 0..3 注入三旋钮
+	//  （打分噪声/决策降频/epsilon 随机化，见 handicap_knobs）；评估裁判恒全强度。
+	//   档位自动升降：NN 对该档最近 handicap_window 场训练局均分 >promote 升一档、
+	//   <demote 降一档（0/3 封底/顶）。状态随 checkpoint 存取（续训衔接）。
+	int handicap_level[4] = { 3, 3, 3, 3 }; // 初始全强度，弱档自动降
+	double handicap_promote = 0.55;
+	double handicap_demote = 0.35;
+	int handicap_window = 20; // 滑动窗口（场，planner 训练局 0/0.5/1 计分）
+	std::vector<double> handicap_hist[4]; // per-tier 最近窗口（NN 视角得分）
 	uint64_t global_seed = 20260930;
 
 	RLNet net;
@@ -188,6 +198,10 @@ private:
 		RLNet *net = nullptr;
 		bool planner = false;
 		bool record = false;
+		// 规划器陪练天梯（v2.2 药一）：-1 = 全强度（评估裁判）；0..3 = 训练天梯档。
+		// 降频下发：每 every_n_beats 拍重新决策，其余拍沿用 last_planner_intents。
+		int planner_level = -1;
+		int last_planner_intents[BattleEnv::N_SQUADS] = { 0 };
 	};
 
 	void play_battle(const Matchup &m, bool swap, AgentTraj &ag1, AgentTraj &ag2,
@@ -198,6 +212,10 @@ private:
 	double eval_one_game(const Matchup &m, bool swap, int nn_faction, const RLNet *opp_net);
 	// 熵目标自适应（可选）：按本轮平均熵调 β（翻倍/减半/不动，夹上下限）
 	void adapt_entropy(double mean_entropy);
+	// 天梯旋钮查表（v2.2 药一）：档 0 最弱（噪声 60/3 拍一决策/ε0.35）→ 3 全强度
+	static void handicap_knobs(int level, double &score_noise, int &every_n_beats, double &epsilon);
+	// 训练局后更新 per-tier 天梯窗口并判升降（planner 局才计入；NN 视角得分 0/0.5/1）
+	void update_handicap(int tier, double nn_score);
 	std::string pool_slot_path(int slot) const;
 	void append_csv_line(const std::string &path, const std::string &header, const std::string &line) const;
 };

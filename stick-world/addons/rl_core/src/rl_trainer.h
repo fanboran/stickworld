@@ -86,6 +86,9 @@ struct EvalRecord {
 	int games_small = 0;
 	double win_rate_small = 0;
 	std::vector<int> detail_tiers; // 逐场档位（17/49/97/49 小档），mirror+pool+small 顺序
+	// v2.2 审计补装：vs 纯随机下界组（主档，正反 2 场；NN 应 ≥0.5，低于 = argmax 策略烂过随机）
+	int games_rand = 0;
+	double win_rate_rand = 0;
 };
 
 class RLTrainer {

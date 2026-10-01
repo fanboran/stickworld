@@ -412,6 +412,46 @@ EvalRecord RLTrainer::run_evaluation() {
 	}
 	er.win_rate_small = er.games_small > 0 ? score_small / (double)er.games_small : 0.0;
 	env.eval_lock_tier = -1;
+	// ── 第 4 组（v2.2 审计补装·下界裁判）：NN greedy vs 纯随机（主档，1 组 × 正反 2 场）——
+	//    实测规划器镜像在 8 班档位弱于随机（随机 0.70 胜它），mirror_wr 已不能单独
+	//    定性 NN 战力；本组 NN 应 ≥0.5，低于 = argmax 收敛到了烂过随机的恒定策略。
+	double score_rand = 0.0;
+	env.eval_lock_tier = stage_main_tier(stage > 0 ? stage : 0);
+	RngPcg rrng;
+	rrng.seed((uint64_t)(hash_djb2(std::to_string(global_seed) + "|rand|" + std::to_string(iteration))));
+	for (int swap_i = 0; swap_i < 2; swap_i++) {
+		Matchup m = env.gen_matchup(rng);
+		er.detail_tiers.push_back(m.side_a.tier);
+		int nn_faction = swap_i == 0 ? 1 : 2;
+		env.reset(m, false);
+		const int NS = BattleEnv::N_SQUADS;
+		int mask1[NS], mask2[NS], acts1[NS], acts2[NS];
+		double logits[BattleEnv::N_ACTIONS];
+		std::vector<double> obs;
+		while (!env.done) {
+			env.active_mask(1, mask1);
+			env.observe(1, obs);
+			if (nn_faction == 1) {
+				net.forward(obs.data(), logits, nullptr);
+				net.greedy_actions(logits, mask1, acts1);
+			} else
+				for (int k = 0; k < NS; k++) acts1[k] = mask1[k] ? rrng.randi_range(0, 4) : 0;
+			env.active_mask(2, mask2);
+			env.observe(2, obs);
+			if (nn_faction == 2) {
+				net.forward(obs.data(), logits, nullptr);
+				net.greedy_actions(logits, mask2, acts2);
+			} else
+				for (int k = 0; k < NS; k++) acts2[k] = mask2[k] ? rrng.randi_range(0, 4) : 0;
+			env.step(acts1, acts2);
+		}
+		EnvResult res = env.result();
+		double sc = res.winner == nn_faction ? 1.0 : (res.winner == 0 ? 0.5 : 0.0);
+		score_rand += sc;
+		er.games_rand++;
+	}
+	er.win_rate_rand = er.games_rand > 0 ? score_rand / (double)er.games_rand : 0.0;
+	env.eval_lock_tier = -1;
 	if (!eval_csv_path.empty() && hooks.write) {
 		std::string det = "[";
 		for (size_t i = 0; i < er.detail.size(); i++) {
@@ -426,14 +466,15 @@ EvalRecord RLTrainer::run_evaluation() {
 			tiers += std::to_string(ARMY_TIERS[er.detail_tiers[i]]);
 		}
 		tiers += "]";
-		char line[512];
-		// 旧 8 列语义不变（mirror 组）；行尾追加逐场档位 + 小档抽查组（v2.1）
-		std::snprintf(line, sizeof(line), "%ld,%d,%.1f,%.4f,%s,%.4f,%.4f,%d,%s,%.4f,%d",
+		char line[560];
+		// 旧 8 列语义不变（mirror 组）；行尾追加逐场档位 + 小档抽查组（v2.1）+ 随机下界组（v2.2）
+		std::snprintf(line, sizeof(line), "%ld,%d,%.1f,%.4f,%s,%.4f,%.4f,%d,%s,%.4f,%d,%.4f,%d",
 				er.iter, er.games, er.score, er.win_rate, det.c_str(),
 				er.win_rate_mirror, er.win_rate_pool, er.games_pool,
-				tiers.c_str(), er.win_rate_small, er.games_small);
+				tiers.c_str(), er.win_rate_small, er.games_small,
+				er.win_rate_rand, er.games_rand);
 		append_csv_line(eval_csv_path,
-				"iter,games,score,win_rate,detail,mirror_wr,pool_wr,pool_games,tier_detail,small_wr,small_games",
+				"iter,games,score,win_rate,detail,mirror_wr,pool_wr,pool_games,tier_detail,small_wr,small_games,rand_wr,rand_games",
 				line);
 	}
 	return er;

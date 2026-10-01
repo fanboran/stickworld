@@ -124,7 +124,7 @@ Godot --headless --path . res://addons/rl_core/tests/train_driver.tscn -- --iter
   mirror_wr,pool_wr,pool_games）。
 - 真实系统侧裁判不变：C++ checkpoint 换入 `user://rl/checkpoint.json`（先备份！）
   → `nn_brain_bench.tscn` 实测 → 恢复。注意 nn_brain/policy_net 是 57→24→15
-  旧维度，**装不进 v2 checkpoint——真实战场通路需按 v2 契约改造 nn_brain**（后续工作项）。
+  旧维度——已随 nn_brain v2 改造落地（125 维 checkpoint 自适应装载，真实战场对打验证通过）。
 - 装车精度：纯核心 double；跨 GDScript 边界观察/权重走 PackedFloat32Array
   （f32 舍入 ~1e-7；对拍与衔接验证都在此精度门内）。
 - GDScript `tests/dev/rl/**` 只读（旧 57 维真相源），本插件未改其一；

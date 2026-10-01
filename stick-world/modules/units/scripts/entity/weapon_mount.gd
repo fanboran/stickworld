@@ -86,16 +86,18 @@ var BLOCK_DAMAGE_FACTOR: float = 0.15
 var BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
 var BLOCK_FRONT_DOT: float = 0.25
-## 各武器攻击射程（像素，含手臂长度）
-## STAFF 600 = SWL Magikill 施法距离（半屏级；原 90 是"法杖敲击"值，会造成
-## kite_range > 射程死锁：敌人一进保距圈就永远后撤永不还手）
-## BOW 1400 = SWL 弓手观感射程（约全屏宽）——抛物线弹道下站后排越顶抛射
+## 各武器攻击射程（像素，含手臂长度）——**取整十口径，唯一真相源 =
+## 观察场编制设计值**（tests/dev/battle_arena.gd 头注释：矛 120 卡线 / 剑 80 /
+## 杖 280 施法 / 弓 300 压制，见 docs/设计/命名与数值口径.md）。
+## 弓不再用 1400 全屏抛射——超远距抛物线落点散布吃掉命中率，火力压制造
+## 就"看着满天花雨实际没人中箭"；杖 280 对齐火力班编制（原 600 半屏施法
+## 与观察场纵深布阵脱节；kite 死锁警示仍成立：射程不得小于行为档案 kite_range）。
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
-	WeaponType.SPEAR: 200.0,
-	WeaponType.BOW: 1400.0,
+	WeaponType.SPEAR: 120.0,
+	WeaponType.BOW: 300.0,
 	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 600.0,
+	WeaponType.STAFF: 280.0,
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
 }
 ## HitStop 参数（命中顿帧）
@@ -275,7 +277,7 @@ func _mount_weapons() -> void:
 		return
 	# HD-2D 图（billboard 视觉）：2D 骨架树不创建（entity.rig 为 null），武器/盾
 	# 模型由 billboard 宿主 set_weapon_type 镜像挂载，此处只保战斗数据——
-	# 射程按武器类型照常生效（此前随挂骨失败一并早退，弓 1400/矛 200/杖 600
+	# 射程按武器类型照常生效（此前随挂骨失败一并早退，WEAPON_RANGE 各档
 	# 在 HD-2D 图全员退化为默认 80，行为层交战距离全错）
 	if owner_entity.get("rig") == null:
 		attack_range = 0.0 if weapon_type == WeaponType.NONE \

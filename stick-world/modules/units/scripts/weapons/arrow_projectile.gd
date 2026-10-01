@@ -5,15 +5,30 @@ extends Area2D
 ## 复刻 SWL Arrow 类特性：
 ## - **抛物线弹道**（SWL Arrow.launchY/AimAngle）：固定重力积分，近距离平射、
 ##   远距高弧越顶——弓手站后排抛射不被友军前排挡箭
+## - **单体碰撞命中**（SWL OnTriggerEnter2D，无范围伤害字段——见
+##   docs/技术/参考/SWL-单位行为完整翻译.md §7）：箭碰谁谁中，一箭一人。
+##   本作纵深轴压缩（视觉近≠逻辑近）用**加宽 y 容差**等效原作"擦到就中"
+##   的观感，命中仍是纯单体碰撞语义，不引入范围伤害
 ## - 爆头判定 causesHeadShotAnimation：命中点在目标上部 1/4 → 爆头（管线加值+爆头死亡动画）
 ## - 插身 doesStickIn：命中后箭钉在受击者身上，随其移动，停留一段时间后淡出
+##   （宿主死亡即脱离冻结，见 _freeze_stuck_arrow——死亡动画抖动不再甩箭）
 ## - 对雕像减伤 0.3 / 对巨人减伤 0.66（DamagePipeline 内处理）
 ## - 伤害走 DamagePipeline 单入口（复刻 Unit.Damage 语义）
 ## - 拉弓力度 drawPower 决定伤害（WeaponMount 传入）
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 命中判定半径（px）：箭到目标碰撞体中心的距离小于此值即命中
+## 命中判定半径（px）：箭到目标碰撞体中心的横向（x）容差
 const HIT_RADIUS: float = 25.5
+## 纵深压缩系数：HD-2D 俯角投影把画布域地面纵深压进视觉域，压缩率
+## k = sin(俯角)（hd2d_projection.gd：TILT_DEG=26.0 → squash_k ≈ 0.4384，
+## FxLibrary.remap_pos → Hd2dMapBase.remap_fx_pos 的同一地面线协议）。
+## 视觉近 ≠ 逻辑近——屏幕上 1px 纵深差对应画布域 1/k ≈ 2.28px（"约 2.3 倍
+## 俯角压带"）。命中判定在画布域进行，y 容差按 k 的倒数放宽。
+const DEPTH_SQUASH_K: float = 0.4384
+## 命中判定纵向（y）容差 = HIT_RADIUS ÷ k ≈ 58.2px：视觉上与横向 25.5px
+## 同宽的"擦到就中"判定带。SWL 原作没有范围命中（§7 实装要点对照表），
+## 此容差是纵深轴换算的等效实现，不是 AOE。
+const HIT_Y_TOLERANCE: float = HIT_RADIUS / DEPTH_SQUASH_K
 ## 击退力度系数（与近战一致：伤害 × KNOCKBACK_PER_DAMAGE）
 const KNOCKBACK_PER_DAMAGE: float = 12.0
 ## 爆头判定：命中点相对目标碰撞体中心向上超过此比例 × 身高 → 爆头
@@ -32,13 +47,6 @@ const NEAR_MISS_QUERY_MASK: int = 2
 
 ## 兵种行为档案（压制键族；同模块 preload，与 status_effects/ai_controller 同款消费口径）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
-## RWR 击杀概率飞行时间衰减（ak47.weapon kill_decay_start_time=0.33/end=0.68 直译、
-## 按 HP 制与箭速 850px/s 换算）：命中≠全额伤害——贴脸（飞行 ≤0.35s ≈ 300px）满伤，
-## 0.35~0.75s 线性衰减到远距 0.5 倍下限（≈640px 外）。远程压制不等于远程狙杀，
-## 贴脸必杀、远距轻伤的距离感核心。
-const KILL_DECAY_START: float = 0.35
-const KILL_DECAY_END: float = 0.75
-const KILL_DECAY_FLOOR: float = 0.5
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 飞行速度矢量（px/s；vel.y 每帧 += gravity×delta = 抛物线）
@@ -85,6 +93,10 @@ var near_miss_candidates_override: Array = []
 ## 目标 Collider 引用缓存（setup 时解析一次）：箭雨场景每物理帧数百次
 ## 目标身体位置查询免 get_node 路径解析；引用失效时回落实时查找
 var _target_collider: Node2D = null
+## 本箭碰撞形状节点（_ready 缓存）：Area2D 判定带的形状真相源（见 _ready）
+var _collision_shape: CollisionShape2D = null
+## 插身宿主（_stick_into_deferred 换父后记录）：宿主死亡时箭脱离冻结（修乱飞）
+var _stuck_host: Node = null
 
 
 ## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）、
@@ -117,6 +129,28 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	_launch_y = global_position.y
 	_wrap_visual_root()
+	_setup_collision_shape()
+
+
+## 碰撞形状真相源（脚本，场景 tscn 里的形状只是编辑器占位——箭/矛两个场景
+## 共用本脚本，形状口径不允许各自漂移）：**竖直胶囊**（长轴沿世界 y），
+## 半径 = HIT_RADIUS（x 容差）、半长 = HIT_Y_TOLERANCE（y 纵深容差），
+## 与手动锁定路径的椭圆判定（x 25.5 / y 58.2）同口径。胶囊随根节点旋转会
+## 跟着弹道歪斜，_physics_process 每帧反旋把它钉在世界系竖直方向——
+## 纵深容差永远作用在纵深轴上。
+func _setup_collision_shape() -> void:
+	for ch in get_children():
+		if ch is CollisionShape2D:
+			_collision_shape = ch
+			break
+	if _collision_shape == null:
+		_collision_shape = CollisionShape2D.new()
+		add_child(_collision_shape)
+	var cap := CapsuleShape2D.new()
+	cap.radius = HIT_RADIUS
+	cap.height = 2.0 * HIT_Y_TOLERANCE
+	_collision_shape.shape = cap
+	_collision_shape.rotation = -rotation
 
 
 ## ── HD-2D 视觉域偏移 ──────────────────────────────────────────────
@@ -177,6 +211,11 @@ func _physics_process(delta: float) -> void:
 		delta = TimeManager.sim_delta(delta)
 	_apply_visual_offset()
 	if _stuck:
+		# 宿主死亡冻结（修"乱飞"）：插身箭钉在宿主骨骼上随宿主走，宿主死亡
+		# 动画（倒地/抖动）会带着箭乱甩——宿主一死立即脱离回场景根，就地
+		# 冻结姿态沿用既有淡出计时（计时不清零，插身多久就淡出多久）
+		if _stuck_host != null and is_instance_valid(_stuck_host) and _host_is_dead(_stuck_host):
+			_freeze_stuck_arrow()
 		# 插地淡出（SWL fadeOutOver）
 		_stuck_timer += delta
 		if _stuck_timer >= STUCK_LIFETIME:
@@ -191,11 +230,18 @@ func _physics_process(delta: float) -> void:
 	_traveled += step.length()
 	_flight_time += delta
 	rotation = _vel.angle()
-	# 手动命中检测（近战同款：不依赖物理碰撞）：箭到目标碰撞体距离 < HIT_RADIUS。
+	# 碰撞形状反旋钉世界系竖直（见 _setup_collision_shape 注释）：纵深容差
+	# 只作用于纵深轴，不随弹道角歪斜
+	if _collision_shape != null:
+		_collision_shape.rotation = -rotation
+	# 手动命中检测（近战同款：不依赖物理碰撞）：**椭圆容差**——x 半轴
+	# HIT_RADIUS、y 半轴 HIT_Y_TOLERANCE（纵深轴按 1/k 加宽，见常量注释）。
 	# _target 是发射时锁定的敌方目标，无需阵营复查
 	if _target != null and is_instance_valid(_target):
-		var body_pos: Vector2 = _target_body_pos(_target)
-		if global_position.distance_to(body_pos) <= HIT_RADIUS:
+		var d: Vector2 = global_position - _target_body_pos(_target)
+		var nx: float = d.x / HIT_RADIUS
+		var ny: float = d.y / HIT_Y_TOLERANCE
+		if nx * nx + ny * ny <= 1.0:
 			_hit(_target)
 			return
 	# 落地判定（两条路径）：
@@ -285,23 +331,13 @@ func _is_headshot(target: Node, hit_pos: Vector2) -> bool:
 	return hit_pos.y < body_pos.y - BODY_HEIGHT * HEADSHOT_Y_RATIO
 
 
-## 飞行时间衰减系数（RWR kill_decay 线性带：贴脸 1.0 → 远距 KILL_DECAY_FLOOR）
-static func _flight_decay(t: float) -> float:
-	if t <= KILL_DECAY_START:
-		return 1.0
-	if t >= KILL_DECAY_END:
-		return KILL_DECAY_FLOOR
-	var k: float = (t - KILL_DECAY_START) / (KILL_DECAY_END - KILL_DECAY_START)
-	return 1.0 + (KILL_DECAY_FLOOR - 1.0) * k
-
-
 func _hit(target: Node) -> void:
 	# 箭矢终态：扣减在飞伤害估计（无论实际命中者是否登记目标——估计口径允许偏差）
 	_clear_incoming()
 	# ── 伤害走 DamagePipeline 单入口（SWL Unit.Damage 复刻）──
-	# RWR 飞行时间衰减乘在基础伤上（远距轻伤，见 KILL_DECAY_* 注释）
-	var p := DamagePipeline.Params.new(
-			_damage * _flight_decay(_flight_time) * (0.6 + 0.4 * _draw_power), _shooter)
+	# SWL 箭伤 = drawPower 一次算定，无飞行时间衰减（RWR kill_decay 私货已回退：
+	# 命中即全额结算，远近同伤——射程内的每一箭都是等威胁的）
+	var p := DamagePipeline.Params.new(_damage * (0.6 + 0.4 * _draw_power), _shooter)
 	p.direction = _vel.normalized()
 	p.type = DamagePipeline.DAMAGE_TYPE.RANGED
 	# 爆头：箭命中点在目标上部（causesHeadShotAnimation 语义）
@@ -350,6 +386,34 @@ func _stick_into_deferred(target: Node) -> void:
 	if parent != null:
 		parent.remove_child(self)
 	target.add_child(self)
+	global_transform = xf
+	_stuck_host = target
+
+
+## 宿主死亡判定：有 is_dead() 的实体按其真值；测试桩等无此方法的宿主
+## 永不触发冻结（保持旧行为，兼容）
+func _host_is_dead(host: Node) -> bool:
+	return host.has_method("is_dead") and bool(host.is_dead())
+
+
+## 宿主死亡冻结（修"落地后乱飞"）：插身箭 reparent 在宿主骨骼下，宿主死亡
+## 动画（倒地/翻滚/消散抖动）会带着箭满屏甩——宿主一死立即脱离回场景根，
+## 就地冻结插身瞬间的世界位姿，沿用既有淡出计时（_stuck_timer 不重置）。
+## SWL 对照：原作箭挂受击者骨骼（UpdateStuckInArrow），尸体被 Remove 时箭
+## 一并回收，不存在"钉在乱动尸体上"的观感；本作死亡动画期较长，脱离冻结
+## 是等效语义。调用点在 _physics_process（非物理回调），可直接改树。
+func _freeze_stuck_arrow() -> void:
+	_stuck_host = null
+	var xf: Transform2D = global_transform
+	# 先取场景根再拔箭：remove_child 后本节点不在树上，get_tree() 会是 null
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root: Node = tree.current_scene if tree.current_scene != null else tree.root
+	var parent: Node = get_parent()
+	if parent != null:
+		parent.remove_child(self)
+	root.add_child(self)
 	global_transform = xf
 
 

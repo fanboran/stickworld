@@ -863,6 +863,15 @@ func has_squad_command_chain(squad_id: String) -> bool:
 	return not (leader.has_method("is_dead") and leader.is_dead())
 
 
+func _enter_tree() -> void:
+	FormationAPI.set_active_host(self)
+
+
+func _exit_tree() -> void:
+	if FormationAPI.get_active_host() == self:
+		FormationAPI.set_active_host(null)
+
+
 # ──────────────────────── 班内聚拢（Boids 式，转向建议出口）────────────────────────────────
 ## 聚拢弹簧 + 轻量对齐（分离力归 units 侧椭圆分离）：内核在 squad_cohesion.gd
 ## （死区外线性回拉封顶/接战减半/避战让位/班均速对齐，400ms 节流缓存挂

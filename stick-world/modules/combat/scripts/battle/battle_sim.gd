@@ -28,7 +28,13 @@ extends RefCounted
 ##     strike 表/网格 cell）用普通 Array/Dictionary
 
 ## 分离检测半径：与实体链同源（formation 模块单一真相源——批模拟不再抄副本）
-const SEPARATION_RADIUS: float = preload("res://modules/formation/api.gd").SEPARATION_RADIUS
+## 椭圆双轴口径（创始人 2026-09-30 观感裁决）：横向 X / 纵深 Y（竖长卡纵深加大），
+## 判定已椭圆化；网格扫描用外接圆半径（两轴取大）不漏人
+const _FormationAPI := preload("res://modules/formation/api.gd")
+const SEPARATION_RADIUS: float = _FormationAPI.SEPARATION_RADIUS
+const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X
+const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
+const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
 ## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
 const MAX_SEPARATION_CORRECTION: float = 3.0
 ## 击退衰减（与 KNOCKBACK_DECAY 同值）
@@ -240,6 +246,46 @@ func separation_push(sid: int, radius: float) -> Vector2:
 	return Vector2(total_x, total_y)
 
 
+## 椭圆分离推力查询（X/Y 双轴口径，实体链 _apply_separation 的 sim 消费端）：
+## 邻域扫描用外接圆半径，逐对判定走椭圆归一距离（<1 过近，权重 1-ed）。
+func separation_push_ellipse(sid: int) -> Vector2:
+	var px: float = pos_x[sid]
+	var py: float = pos_y[sid]
+	var total_x: float = 0.0
+	var total_y: float = 0.0
+	var radius: float = SEPARATION_SCAN_RADIUS
+	var inv_rx: float = 1.0 / SEPARATION_RADIUS_X
+	var inv_ry: float = 1.0 / SEPARATION_RADIUS_Y
+	var min_cx := floori((px - radius) / GRID_CELL)
+	var max_cx := floori((px + radius) / GRID_CELL)
+	var min_cy := floori((py - radius) / GRID_CELL)
+	var max_cy := floori((py + radius) / GRID_CELL)
+	for cy in range(min_cy, max_cy + 1):
+		for cx in range(min_cx, max_cx + 1):
+			var cell: Variant = _grid.get(Vector2i(cx, cy))
+			if cell == null:
+				continue
+			for oid_v: int in cell:
+				var oid: int = oid_v
+				if oid == sid or not _sid_alive(oid):
+					continue
+				var dx: float = px - pos_x[oid]
+				var dy: float = py - pos_y[oid]
+				var d_sq: float = dx * dx + dy * dy
+				if d_sq <= 0.0:
+					continue
+				var ex: float = dx * inv_rx
+				var ey: float = dy * inv_ry
+				var e_sq: float = ex * ex + ey * ey
+				if e_sq >= 1.0:
+					continue
+				var dist: float = sqrt(d_sq)
+				var w: float = 1.0 - sqrt(e_sq)
+				total_x += dx / dist * w
+				total_y += dy / dist * w
+	return Vector2(total_x, total_y)
+
+
 ## 读邻居阵营（批量感知用）
 func get_faction(sid: int) -> int:
 	return faction[sid]
@@ -328,8 +374,9 @@ func _tick_separation() -> void:
 	if _sep_px_x.size() < n_active:
 		_sep_px_x.resize(n_active)
 		_sep_px_y.resize(n_active)
-	var radius: float = SEPARATION_RADIUS
-	var radius_sq: float = radius * radius
+	var radius: float = SEPARATION_SCAN_RADIUS
+	var inv_rx: float = 1.0 / SEPARATION_RADIUS_X
+	var inv_ry: float = 1.0 / SEPARATION_RADIUS_Y
 	for sid in n:
 		if not _sid_alive(sid):
 			continue
@@ -357,15 +404,21 @@ func _tick_separation() -> void:
 					var dx: float = px - ox
 					var dy: float = py - oy
 					var d_sq: float = dx * dx + dy * dy
-					if d_sq >= radius_sq:
+					if d_sq <= 0.0:
+						continue
+					var ex: float = dx * inv_rx
+					var ey: float = dy * inv_ry
+					var e_sq: float = ex * ex + ey * ey
+					if e_sq >= 1.0:
 						continue
 					var dist: float = sqrt(d_sq)
 					if dist <= 0.001:
-						# 完全重叠：固定向上推开（旧链同语义）
-						total_y -= radius * 0.5
+						# 完全重叠：固定向上推开（旧链同语义；纵深轴为名义尺度）
+						total_y -= SEPARATION_RADIUS_Y * 0.5
 						continue
-					# 重叠量的一半推给自己（对方同刻也推自己，双向合计推开重叠量）
-					var w: float = (radius - dist) * 0.5 / dist
+					# 重叠量的一半推给自己（对方同刻也推自己，双向合计推开重叠量）；
+					# 深度按椭圆归一折算（纵深轴名义尺度）
+					var w: float = (1.0 - sqrt(e_sq)) * SEPARATION_RADIUS_Y * 0.5 / dist
 					total_x += dx * w
 					total_y += dy * w
 		if total_x != 0.0 or total_y != 0.0:

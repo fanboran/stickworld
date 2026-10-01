@@ -58,6 +58,20 @@ const SEPARATION_RADIUS_X: float = _Spacing.SEPARATION_RADIUS_X
 const SEPARATION_RADIUS_Y: float = _Spacing.SEPARATION_RADIUS_Y
 ## 分离半径兼容别名（= 横向轴 X）：消费方未改椭圆判定前自动跟随横向口径
 const SEPARATION_RADIUS: float = _Spacing.SEPARATION_RADIUS
+
+## ── 在役 FormationSystem 宿主注册（units 侧消费聚拢转向建议的合规通道）──
+## FormationSystem._enter_tree/_exit_tree 登记注销（单战场单实例，后进先出）；
+## units 侧（entity_motion）经 get_active_host() 拿实例调 get_unit_cohesion_steer，
+## 不跨模块 get_node（模块边界纪律：units 只 preload 本 api）。
+static var _active_host: Node = null
+
+
+static func set_active_host(host: Node) -> void:
+	_active_host = host
+
+
+static func get_active_host() -> Node:
+	return _active_host
 ## 横向间距默认值（px；调参表 var_spread_spacing 覆盖）
 const SPREAD_SPACING_DEFAULT: float = _Spacing.SPREAD_SPACING_DEFAULT
 ## 列间距默认值（px；调参表 var_row_gap 覆盖）

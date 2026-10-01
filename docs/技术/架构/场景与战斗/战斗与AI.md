@@ -365,3 +365,39 @@ modules/combat/
 - **层级数本身不产生延迟**——同层远距两节点可以比跨层相邻两节点更慢
 - 玩家附身某指挥官亲自下令 → 该环节无传播（玩家的话已在那个人嘴里）
 - 信使实体化（真实跑动/可截杀/阵亡丢令）为后续信使任务，接口见 [`组织系统架构.md §4.2`](../组织系统架构.md)
+
+### 8.6 最高指挥单位与军衔体系（斩首规则）
+
+**军衔数据层**（`StickmanEntity.rank`，0/1/2/3 int，任命链写、渲染方消费）：
+
+| rank | 称谓 | 层级语义 |
+|------|------|---------|
+| 0 | 士兵 | 大头兵，无标记 |
+| 1 | 班长 | **战术轮转层**——阵亡免费无缝继任（组织侧 `_run_succession` 现链：班内存活按 personnel 序，cmd 属性平局按插入序稳定排序），无延迟无惩罚，军衔点跟职务走 |
+| 2 | 排长 | **指挥链层**——阵亡无法现场补员 = 该排持续指挥链缺口（非一次性扣减，是持续状态；行为影响挂 RL/后续批次） |
+| 3 | 指挥官 | 战场最高（连长级兼任）——**斩首规则载体** |
+
+**斩首规则**（结算：`battle_instance._check_victory` 斩首分支，先于全灭判定）：
+
+- 指挥官阵亡 = 该方**立即战败**（reason=`decapitation`，收束原因表见 [02-战斗系统.md §八-A](../../../设计/系统/02-战斗系统.md)）——哪怕还有兵也是败：指挥链崩就是战败，不用打到全灭。
+- 登记：`add_unit` 自动扫描 rank>=3（生产战场零接线；单位进战斗前 rank 须已设置），`register_commander` 供后设 rank/测试桩手动补登；同阵营后到覆盖（"战场最高"唯一）。无登记的战斗斩首分支恒跳过（既有战斗零回归）。
+- **指挥官行为守卫**（`ai_controller`）：rank>=3 拒推进/撤离类号令（move/retreat/seek_cover；idle 放行）——留守后方，任何来路的号令都拉不走他；避战豁免（C6 概率调制对指挥官恒不触发，`is_disengaging` 恒 false）——被近身就地自卫反击（行为层追击 LEASH 内迎击，敌远不追；低血找掩体保留——就近掩体仍属还击）。
+- 双方指挥官同殁 = 平局（复用 `mutual` 口径）。
+
+观察场接线（`battle_arena.gd`）：双方阵列后方各生成 1 名指挥官（rank3、佩剑、不编班不下令）；
+生产战场的指挥官生成与 UI 接入挂后续批次。军衔标记（血条军衔点）渲染为独立批次。
+### 8.7 排聚合层（现实军衔体系重排，formation 侧实现）
+
+**编制结构**：班 squad（8~12 人小班、硬顶 15，班长 rank 1）→ 排 platoon（2~3 班 + 排长 1 名 rank 2）→ 连/战场（2~4 排 + 连长或指挥官 rank 3，挂载点 = platoon 的 `company_id` 预留字段，指挥官批次接入）。班是组织侧 L1 节点；**排是 FormationSystem 战斗域本地聚合（不入组织树）**——组织侧继任/补位只认班的指挥官，排长阵亡天然无继任，"屏蔽继任"由构造保证。
+
+**排层 API**（`FormationSystem` 实例方法）：`create_platoon(squad_ids, name)` / `assign_platoon_leader(pid, unit)`（排长须为排内班成员，随班行军占编队槽位）/ `get_platoon_leader` / `get_platoon_squads` / `get_platoon_of_squad` / `get_unit_platoon` / `get_platoon_units` / `disband_platoon`（班保留转独立）/ `has_squad_command_chain(squad_id)`；信号 `platoon_created` / `platoon_leader_lost`。
+
+**缺口语义**：排长阵亡 = 该排指挥链缺口——该排全部班**失去集火号令**（共享目标决策权归排长，`_decide_squad_targets` 按排查权属：排内班 rep=排长、缺口即 erase 不退化；独立班保留旧口径：班长决策、失效退化首个存活队员）与**排长士气光环**（排长存活 → 排内全员恢复；独立班保留班长光环旧口径），到战斗结束无法补员。班长轮转（组织侧补位回写 `commander_assigned` → 重写 squad.leader + 重算军衔）不受排长缺口影响。一人多职（如排长被补位选中兼任班长）军衔按现任职务取最高（`_recompute_unit_rank`）。
+
+**观察场编成**（`battle_arena.gd` PRESETS，`platoons` = 班下标分组建排）：遭遇战·16 = 1 排（2 班 ×8）；标准战役·48 = 2 排 ×2 班（4 班 ×12）；大军压境·96 = 4 排 ×2 班（8 班 ×12）。兵种结构落到班级（矛先锋/剑中坚/火力压制），出生纵深分排矛前→剑→杖→弓后。
+
+### 8.8 阵列间距椭圆口径与班内聚拢（Boids 式裁剪）
+
+**分离椭圆口径**（单一真相源 `formation_spacing.gd`，经 `FormationAPI` 转发）：旧圆形 `SEPARATION_RADIUS=40.5` 拆双轴——`SEPARATION_RADIUS_X=48`（横向）/ `SEPARATION_RADIUS_Y=72`（纵深，约横向 1.5 倍；billboard 竖长卡纵深视觉重叠是"排列太密集"主因）；`SEPARATION_RADIUS` 保留为兼容别名（=X）。数值【提案/待定·待实测校准】。不变式：碰撞体宽 < X ≤ 横向间距 < Y ≤ 列间距。**椭圆判定的消费方改造**（entity_motion `_apply_separation`/`_apply_static_separation`、battle_sim 分离循环，位置见收线报告清单）由集成批次落，改前消费方经别名自动跟随横向口径（圆 48）。编队列间距 `ROW_GAP_DEFAULT` 56→80（≥ Y+余量，调参表 `var_row_gap` 同步）。
+
+**班内聚拢**（`squad_cohesion.gd`，Boids 三力裁剪的二、三力；分离力归椭圆分离）：聚拢弹簧 = 单位距本班质心超过班散布半径（8 人班 140px、每增 1 人 +6）才回拉，随超出距离线性增强、上限封顶（220）——**死区内零施力，只拉掉队的不吸站好的**；对齐 = 行军速度向班均速收敛（班均速 > 20 才生效，站桩不抖）。门控：接战中（behavior=attack）回拉减半；撤退/避战（retreat/seek_cover）全零。消费出口 `FormationSystem.get_unit_cohesion_steer(unit)`（转向建议，加速度量纲）——**力的施加经消费方转向通道（entity_motion 集成清单见收线报告），不直改位置**。

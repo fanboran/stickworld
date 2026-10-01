@@ -17,13 +17,25 @@ const WeaponMountScript := preload("res://modules/units/scripts/entity/weapon_mo
 const PossessionScript := preload("res://modules/units/scripts/entity/entity_possession.gd")
 const BehaviorProfilesScript := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
-## 桩宿主实体：CharacterBody2D 外壳 + play_attack 计数（拉弓动画起播断言）
+## 桩宿主实体：CharacterBody2D 外壳 + play_attack 计数（攻击动画起播断言）
+## + _visual 表现写入面桩（WeaponMount._play_via_visual 的消费口，拉弓保持段
+## 等直推 VisualController 的动画在此记账）
 ## + entity_possession 消费的接口面（is_carrying/weapon_mount/朝向族）
+class StubVisual:
+	extends Node
+
+	var plays: Array = []
+
+	func play(anim_name: String) -> void:
+		plays.append(anim_name)
+
+
 class StubOwner:
 	extends CharacterBody2D
 
 	var attack_plays: int = 0
 	var weapon_mount: Node = null
+	var _visual: Node = StubVisual.new()
 
 	func play_attack() -> void:
 		attack_plays += 1
@@ -160,7 +172,9 @@ func _test_begin_draw_no_cooldown() -> void:
 	var wm: Node = kit["wm"]
 	var owner: StubOwner = kit["owner"]
 	wm.begin_player_draw()
-	_runner.assert_equal(owner.attack_plays, 1, "拉弓起手应播放攻击动画（DrawBow）")
+	var plays: Array = (owner._visual as Node).plays
+	_runner.assert_equal(plays, ["attack_bow_hold"] as Array,
+			"拉弓起手应播拉弓保持段（attack_bow_hold：举弓-拉弦-绷住陪按住全程）")
 	_runner.assert_approx(wm.get_cooldown_remaining(), 0.0, 0.001,
 			"起手不进冷却（冷却在松手出手时刻判）")
 	kit["box"].queue_free()

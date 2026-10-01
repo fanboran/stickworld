@@ -1,21 +1,26 @@
 extends Node
-## 战斗演练场（观察用，非 CI 测试）：按预设双方各 16~96 人、3 小队按武器分排编队推进互殴。
+## 战斗演练场（观察用，非 CI 测试）：按预设双方各 16~96 人、多班多排按武器分排编队推进互殴。
 ##
 ## 用途：肉眼观察战斗画面自然度——编队推进/站姿/走姿/挥砍/受击/死亡/血条/阵营对抗。
 ## 入口：项目主场景（F5 直进）或主菜单「战斗演练」→「大乱斗观察场」。
 ## 控制面板（底部居中）：预设按钮（遭遇战·16 / 标准战役·48 / 大军压境·96，点按或
 ## 1/2/3 切换并立即重开，static _preset_idx 跨重开保持）+「重开 (R)」按钮。
 ##
-## 编制（融合本作 FormationSystem 编制系统，审计 P1-1/P1-2；每班人数随预设缩放）：
-##   每方 3 个战斗小队（fp_combat_squad 预设 + 任命排长）：
-##     矛兵班（先锋，射程 120 卡线，1~4 排 ×8）
-##     剑士班（中坚，锚定跟随矛班 gap 150，1~4 排 ×4~10）
-##     火力班（杖+弓，射程 300 压制，锚定跟随剑班 gap 150，1~3 排）
-##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排/列间距 ≥ 分离半径 42px。
-##   开战矛班下 ADVANCE_ALL（formation row/col 列阵）压至中线交战；剑/火班由编队动态跟队
-##   （set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
+## 编制（现实军衔体系重排，融合 FormationSystem 排聚合层）：
+##   班 squad = 8~12 人小班（硬顶 15），班长 1 名（rank 1，阵亡经组织侧补位免费无缝轮转）；
+##   排 platoon = 2~3 个班 + 排长 1 名（rank 2）——排长阵亡 = 该排指挥链缺口：
+##   失去集火号令与排长士气光环，到战斗结束无法补员（班长轮转不受影响）。
+##   兵种结构落到班级：矛兵班（先锋，射程 120 卡线）→ 剑士班（中坚）→
+##   火力班（杖+弓，射程 300 压制）。三档编成（"platoons" = 班下标分组建排）：
+##     遭遇战·16 = 1 排（矛兵班 8 + 中坚火力班 8，2 班 ×8 人）
+##     标准战役·48 = 2 排 ×2 班（矛 12 + 矛剑混编 12 ｜ 剑 12 + 火 12，4 班 ×12 人）
+##     大军压境·96 = 4 排 ×2 班（矛×2 ｜ 混编+剑 ｜ 剑×2 ｜ 火×2，8 班 ×12 人）
+##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排间距 140 ≥ 椭圆纵深半径 72
+##   （分离口径见 formation_spacing，排距待实测校准）。
+##   开战先锋班下 ADVANCE_ALL（formation row/col 列阵）压至中线交战；后队班由编队动态
+##   跟队（set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
 ##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
-##   兵种行为档案（冲脸/持阵/风筝）接管。
+##   兵种行为档案（冲脸/持阵/风筝）接管；排长阵亡该排失去集火但班仍执行规划器号令。
 ##
 ## 夺点模式（CAPTURE_ENABLED 默认开）：中线布 3 个夺点（左/中/右，y 错开），双方各一台
 ##   班级意图规划器（tactics SquadIntentPlanner，0.5s 节拍）按打分给每班选意图
@@ -51,6 +56,8 @@ const W_MERIC: int = 5
 ## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**；
 ## follow_gap > 0 = 锚定跟随前一班（编队动态跟队），不下推进号令）：
 ## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、剑锚矛 gap150、火力锚剑 gap150
+## platoons = 班下标分组建排（排聚合层，2~3 班/排），每排任命排长（rank 2）。
+## 班间纵深推链：下一班 front_x = 上一班 front_x − 上一班行数×ROW_GAP − 班间余量 50。
 ##
 ## 对战预设（控制面板 1/2/3 切换，重开保持所选档位）：
 const PRESETS: Array = [
@@ -62,67 +69,85 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
-				"rows": [{ "weapon": W_SWORD, "count": 4 }],
-			},
-			{
-				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
-				"rows": [{ "weapon": W_STAFF, "count": 1 }, { "weapon": W_BOW, "count": 3 }, { "weapon": W_MERIC, "count": 1 }],
+				"name": "中坚火力班", "front_x": -40.0, "follow_gap": 150.0,
+				"rows": [
+					{ "weapon": W_SWORD, "count": 4 }, { "weapon": W_STAFF, "count": 1 },
+					{ "weapon": W_BOW, "count": 2 }, { "weapon": W_MERIC, "count": 1 },
+				],
 			},
 		],
+		# 1 排 ×2 班（每班 8 人 = 16）
+		"platoons": [[0, 1]],
 	},
 	{
 		"name": "标准战役·48",
 		"squads": [
 			{
 				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
-				"rows": [{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 }],
+				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
-				"rows": [{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 }],
+				"name": "矛剑混编班", "front_x": -40.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SPEAR, "count": 4 }, { "weapon": W_SWORD, "count": 8 }],
 			},
 			{
-				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
+				"name": "剑士班", "front_x": -370.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SWORD, "count": 12 }],
+			},
+			{
+				"name": "火力班", "front_x": -560.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
+		# 2 排 ×2 班（每班 12 人 = 48）
+		"platoons": [[0, 1], [2, 3]],
 	},
 	{
 		"name": "大军压境·96",
 		"squads": [
 			{
-				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
-				"rows": [
-					{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 },
-					{ "weapon": W_SPEAR, "count": 8 }, { "weapon": W_SPEAR, "count": 8 },
-				],
+				"name": "矛兵一班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "剑士班", "front_x": 85.0, "follow_gap": 150.0,
-				"rows": [
-					{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 },
-					{ "weapon": W_SWORD, "count": 10 }, { "weapon": W_SWORD, "count": 10 },
-				],
+				"name": "矛兵二班", "front_x": -40.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "火力班", "front_x": -45.0, "follow_gap": 150.0,
-				"rows": [
-					{ "weapon": W_STAFF, "count": 8 },
-					{ "weapon": W_BOW, "count": 8 }, { "weapon": W_BOW, "count": 8 },
-				],
+				"name": "矛剑混编班", "front_x": -230.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SPEAR, "count": 4 }, { "weapon": W_SWORD, "count": 8 }],
 			},
 			{
-				"name": "治疗班", "front_x": -135.0, "follow_gap": 150.0,
-				"rows": [{ "weapon": W_MERIC, "count": 2 }],
+				"name": "剑士一班", "front_x": -560.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SWORD, "count": 12 }],
+			},
+			{
+				"name": "剑士二班", "front_x": -750.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SWORD, "count": 12 }],
+			},
+			{
+				"name": "剑士三班", "front_x": -940.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_SWORD, "count": 12 }],
+			},
+			{
+				"name": "火力一班", "front_x": -1130.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
+			},
+			{
+				"name": "火力二班", "front_x": -1460.0, "follow_gap": 150.0,
+				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
+		# 4 排 ×2 班（每班 12 人 = 96）：矛排 ｜ 混编+剑排 ｜ 剑排 ｜ 火排
+		"platoons": [[0, 1], [2, 3], [4, 5], [6, 7]],
 	},
 ]
 ## 当前预设下标（static：场景 reload 重开/切预设后保持所选档位）
 static var _preset_idx: int = 1
-## 排间距（px，SWL 队列：单位间约 1 个身位余量，此前 58 贴脸）
-const ROW_GAP: float = 110.0
+## 出生排间距（px）：分离改椭圆口径（纵深半径 72，见 formation_spacing）后纵向
+## 疏朗化——110 压着旧圆形分离线站，视觉立面叠罗汉；140 ≈ 纵深半径 2 倍，
+## 【待实测校准】
+const ROW_GAP: float = 140.0
 ## 排内左右间距（px）
 const LINE_GAP: float = 90.0
 ## 左右两团出生中心 x 相对地图中线的偏移。观战缩放 0.75（缩放条 100% 档）下
@@ -145,6 +170,16 @@ const CAPTURE_Y_MARGIN: float = 100.0
 ## 旗点状态行用方位标签（与布点顺序一一对应：左/中/右）
 const CAPTURE_POINT_LABELS: Array = ["左", "中", "右"]
 
+## ── 指挥官（斩首规则）：双方后方各 1 名，阵亡 = 该方立即战败 ──
+const COMMANDER_ENABLED: bool = true
+## 指挥官出生在本方阵列中心再后退的纵深（px；越界由实体地面约束钳到图缘）
+const COMMANDER_REAR_OFFSET: float = 200.0
+## 指挥官出生 y 相对带中心的错开（px；避开编队出生带中位，防出生重叠遭分离推挤
+## 把指挥官挤离留守位）
+const COMMANDER_Y_OFFSET: float = 300.0
+## 指挥官武器（佩剑；持旗视觉后议，机制先行）
+const COMMANDER_WEAPON: int = W_SWORD
+
 var _game_root: Node = null
 var _left_alive_label: Label = null
 var _right_alive_label: Label = null
@@ -163,6 +198,8 @@ var _capture_points: Array = []
 var _planners: Dictionary = {}
 ## 编队系统引用（单位快照 provider 取班号用）
 var _arena_formation: Node = null
+## 双方指挥官（faction -> 单位；斩首规则 HUD 消费）
+var _arena_commanders: Dictionary = {}
 ## 相机跟随代理（camera_rig 居中模式目标；每帧 lerp 到存活质心）
 var _cam_proxy: Marker2D = null
 ## 战斗开始后开启质心跟随
@@ -265,19 +302,60 @@ func _spawn_and_start() -> void:
 		squads_left.append(l_units)
 		squads_right.append(r_units)
 		await get_tree().process_frame
+	# 指挥官（斩首规则）：双方后方各 1 名——留守后方，不编班不下推进令，
+	# 被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）；阵亡 = 斩首 =
+	# 该方立即战败（BattleInstance.add_unit 自动扫描 rank 登记，进战斗前先 set_rank）。
+	# 纵深随预设编成推导（军衔重排后多班纵深分排，阵列深达 ~1450px，固定 rear
+	# 会把指挥官埋进队列中部挨打）——取最深一排再后退 COMMANDER_REAR_OFFSET。
+	if COMMANDER_ENABLED:
+		var rear_x: float = 0.0
+		for si in squad_defs.size():
+			var sdef: Dictionary = squad_defs[si]
+			rear_x = minf(rear_x, float(sdef["front_x"]) - (float(sdef["rows"].size()) - 1.0) * ROW_GAP)
+		rear_x -= COMMANDER_REAR_OFFSET
+		# 图内钳制：站位 = |TEAM_OFFSET_X + rear_x|（rear_x 为负，两段相加），
+		# 不得越过图缘贴边站——离图缘至少 500px。超深阵列推导触此限时，指挥官会
+		# 落到阵列纵深中部（图幅不够的无解退化），属预设几何与图幅的匹配问题，
+		# 归编制侧调预设纵深，不在此放大 offset 硬顶。
+		var half_width: float = (map.map_right - map.map_left) * 0.5
+		rear_x = maxf(rear_x, -(half_width - TEAM_OFFSET_X - 500.0))
+		# y 相对带中心错开：编队出生带沿 y 展开占满中位区，同 y 出生会遭分离推挤
+		var cmd_y: float = spawn_y + COMMANDER_Y_OFFSET
+		var l_cmd := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + rear_x, cmd_y), COMMANDER_WEAPON, fs)
+		var r_cmd := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - rear_x, cmd_y), COMMANDER_WEAPON, fs)
+		if l_cmd != null:
+			l_cmd.set_rank(3)
+			_attacker.append(l_cmd)
+			_arena_commanders[1] = l_cmd
+		if r_cmd != null:
+			r_cmd.set_rank(3)
+			_defender.append(r_cmd)
+			_arena_commanders[2] = r_cmd
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
 	print("[Arena] 预设[%s] 战斗开始: battle=%s 左 %d 人 vs 右 %d 人" % [PRESETS[_preset_idx]["name"], battle, _attacker.size(), _defender.size()])
 	# 开战自动暂停豁免（TimeManager._on_battle_started，game/auto_pause_battle 默认
 	# true 会把全局时间置 PAUSED）：观察场要直接开演，自动恢复 X1；空格仍可手动暂停
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(TimeManager.Speed.X1)
-	# 编队注入（审计 P1-1）：每方 3 小队（fp_combat_squad 预设）+ 任命排长——
-	# 排长每 0.5s 决策共享集火目标，formation 列阵位随号令生效
+	# 编队注入（审计 P1-1）：每方按预设建班（fp_combat_squad 预设）+ 任命班长——
+	# 班长 rank 1，阵亡经组织侧补位免费无缝轮转
 	var left_squad_ids: Array = []
 	var right_squad_ids: Array = []
 	for si in squad_defs.size():
 		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % squad_defs[si]["name"]))
 		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % squad_defs[si]["name"]))
+	# 排聚合层编成（现实军衔体系重排）：按预设 platoons 分组建排 + 任命排长
+	#（rank 2；排长 = 排内第一班的队首成员，班长取队列中位，两者不重合互不挤占）。
+	# 排长阵亡 = 该排指挥链缺口（失去集火/光环），班照常执行规划器号令。
+	for platoon_def_v in PRESETS[_preset_idx].get("platoons", []):
+		var members: Array = platoon_def_v
+		var l_ids: Array = []
+		var r_ids: Array = []
+		for mi in members.size():
+			l_ids.append(left_squad_ids[int(members[mi])])
+			r_ids.append(right_squad_ids[int(members[mi])])
+		var _l_pid: String = _make_platoon(fs, l_ids, squads_left, members)
+		var _r_pid: String = _make_platoon(fs, r_ids, squads_right, members)
 	# 开战推进接管权分流：夺点模式 = 意图规划器（布点 + 双方各一台，0.5s 节拍
 	# 自主攻点/驻防/接火）；关闭 = 完整回退旧开战逻辑（下 else 分支，逐行原样）
 	var to: Node = _game_root.get_tactical_orders()
@@ -349,7 +427,8 @@ func _reveal() -> void:
 	)
 
 
-## 创建小队并任命排长（排长 = 队列中间成员）。返回 squad_id（失败返回 ""）。
+## 创建小队并任命班长（班长 = 队列中间成员，rank 1 由 formation 侧写入）。
+## 返回 squad_id（失败返回 ""）。
 func _make_squad(fs: Node, units: Array, squad_name: String) -> String:
 	if fs == null or not is_instance_valid(fs) or units.is_empty():
 		return ""
@@ -362,6 +441,22 @@ func _make_squad(fs: Node, units: Array, squad_name: String) -> String:
 	if fs.has_method("assign_leader"):
 		fs.assign_leader(sid, leader)
 	return sid
+
+
+## 建排并任命排长（排长 = 排内第一班的队首成员，rank 2 由 formation 侧写入；
+## 班长固定取队列中位，队首 ≠ 中位，两职不重合）。返回 platoon_id（失败返回 ""）。
+func _make_platoon(fs: Node, squad_ids: Array, squads_units: Array, squad_indices: Array) -> String:
+	if fs == null or not is_instance_valid(fs) or squad_ids.is_empty():
+		return ""
+	if not fs.has_method("create_platoon"):
+		return ""
+	var pid: String = fs.create_platoon(squad_ids)
+	if pid.is_empty():
+		return ""
+	var lead_units: Array = squads_units[int(squad_indices[0])]
+	if not lead_units.is_empty() and fs.has_method("assign_platoon_leader"):
+		fs.assign_platoon_leader(pid, lead_units[0])
+	return pid
 
 
 ## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器。
@@ -628,8 +723,29 @@ func _update_hud() -> void:
 	_right_alive_label.text = "红方（守）存活 %d / %d" % [ra, _defender.size()]
 	if la == 0 or ra == 0:
 		_hint_label.text = "战斗结束：%s 获胜 —— R 重开 / 换预设" % ("蓝方" if ra == 0 else "红方")
+	elif _commander_down_text() != "":
+		# 斩首提示（指挥官阵亡 = 该方立即战败；结算由战斗实例斩首分支收束，
+		# 存活数不清零 → 全灭文案不会出现，斩首文案常驻到重开）
+		_hint_label.text = _commander_down_text()
 	else:
 		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
+
+
+## 斩首提示文案（任一方指挥官阵亡返回提示；无指挥官/都活着返回空串）。
+func _commander_down_text() -> String:
+	if not COMMANDER_ENABLED or _arena_commanders.is_empty():
+		return ""
+	if _is_unit_down(_arena_commanders.get(1)):
+		return "蓝方指挥官阵亡——斩首！红方获胜 —— R 重开"
+	if _is_unit_down(_arena_commanders.get(2)):
+		return "红方指挥官阵亡——斩首！蓝方获胜 —— R 重开"
+	return ""
+
+
+## 单位是否已阵亡（null/失效/死亡都算——指挥官不会凭空消失）。
+func _is_unit_down(u) -> bool:
+	return u == null or not is_instance_valid(u) \
+			or (u.has_method("is_dead") and u.is_dead())
 
 
 func _count_alive(units: Array) -> int:

@@ -289,18 +289,39 @@ func call_airstrike(battle_id: String, target: Vector2) -> Dictionary  # 巫师�
 
 ```gdscript
 # 间距/物理分离单一真相源（常量；units 实体链与 combat 批模拟同源读取）
-const SEPARATION_RADIUS: float          # 分离检测半径
+const SEPARATION_RADIUS_X: float        # 分离半径·横向轴（椭圆口径，提案待实测）
+const SEPARATION_RADIUS_Y: float        # 分离半径·纵深轴（约横向 1.5 倍，提案待实测）
+const SEPARATION_RADIUS: float          # 兼容别名（=X；消费方改椭圆判定前自动跟随横向）
 const SPREAD_SPACING_DEFAULT: float     # 横向间距默认值（balance.variables var_spread_spacing 覆盖）
-const ROW_GAP_DEFAULT: float            # 列间距默认值（balance.variables var_row_gap 覆盖）
-const UNITS_PER_COLUMN: int             # 每列人数
+const ROW_GAP_DEFAULT: float            # 列间距默认值（balance.variables var_row_gap 覆盖；≥ Y+余量）
+const UNITS_PER_COLUMN: int             # 每列人数基准档（班级现役列高按人数 4~6 自适应）
 const FOLLOW_DEADZONE: float            # 跟队/落定死区
 const ARRIVE_TOLERANCE: float           # 相位计划到位容差默认值（config/ai/squad_phase_plan.tres 覆盖）
+const COHESION_SPREAD_RADIUS_BASE: float      # 班散布半径基准（8 人班，聚拢死区）
+const COHESION_SPREAD_RADIUS_PER_MEMBER: float  # 每增 1 人半径增量
+const COHESION_PULL_PER_PX: float       # 聚拢回拉斜率（线性段）
+const COHESION_PULL_MAX: float          # 聚拢回拉上限（防磁铁）
+const COHESION_ENGAGED_SCALE: float     # 接战回拉衰减系数
+const COHESION_AVG_SPEED_DEADZONE: float  # 班均速死区（站桩不对齐）
+const ALIGNMENT_STEER_SCALE: float      # 对齐收敛权重（1/s）
+# （聚拢/间距数值全部提案待实测校准）
 
 # 运行期实例（FormationSystem，class_name 全局）：由装配层创建并注入，消费方 duck 调用
 # create_squad / assign_leader / add_unit / get_squad_units / get_squad_leader
 # get_squad_dest(squad_id, unit, base_pos, mode)   # mode: "formation" / "line" / "rally"
 # set_squad_follow_squad / get_squad_target / is_unit_in_formation
 # notify_squad_order / notify_org_order            # 号令触发相位计划（推进类枚举 = tactics Orders.OrderType）
+# ── 排聚合层（现实军衔体系重排：班 rank1 → 排 rank2 → 连挂载点 company_id 预留）──
+# create_platoon(squad_ids, name="") -> platoon_id   # 班聚合为排（未属他排）
+# assign_platoon_leader(pid, unit) -> bool           # 排长须为排内班成员（rank 2）
+# get_platoon_leader / get_platoon_squads / get_platoon_of_squad / get_unit_platoon
+# get_platoon_units / get_all_platoons / get_platoon_count
+# disband_platoon(pid)                               # 班保留转独立
+# has_squad_command_chain(squad_id) -> bool          # 排长缺口 → false（该排失去集火）
+# 信号 platoon_created / platoon_leader_lost          # 排长阵亡 = 指挥链缺口（无补位）
+# ── 班内聚拢（Boids 式裁剪；力经消费方转向通道，不直改位置）──
+# get_unit_cohesion_steer(unit) -> Vector2           # 聚拢+对齐转向建议（ZERO=死区内/避战/无班）
+# get_squad_spread_radius(squad_id) -> float         # 聚拢死区半径（按班人数放宽）
 ```
 
 > 实现全在 `scripts/`（编队总成/间距真相源/槽位几何/跟队/相位计划/快照/权威值/上报）与 `ui/`（编制窗口/L1 班组卡）；

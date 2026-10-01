@@ -19,6 +19,14 @@ static func member_facing(u: Node) -> Vector2:
 	return Vector2.RIGHT
 
 
+## 班级每列人数（8~12 人小班紧凑队形）：8~12 人取基准档 4（2~3 纵列），
+## 超编 13~15 取 5、16~18 取 6（班硬顶 15，6 列高为余量兜底）；
+## base = FormationSpacing.UNITS_PER_COLUMN 基准档（小班/不满编回落基准，
+## 横展中心化口径见 slot_world）。
+static func squad_units_per_column(members: int, base: int) -> int:
+	return clampi(ceili(float(members) / 3.0), maxi(base, 1), 6)
+
+
 ## 槽位世界坐标（SWL GetFormationXOffset 的列位移等价）：
 ## 前列贴 base_pos，后列沿行进方向反侧退 row_gap×col；
 ## 同列以 base_pos 为中心沿垂直方向展开（间距 spread_spacing）。
@@ -32,13 +40,16 @@ static func slot_world(slot: Vector2i, base_pos: Vector2, facing: Vector2,
 ## 编队槽位分配/重算（核心入口，成员增减/死亡时调用；host = FormationSystem 宿主）：
 ##   - Add/Remove 等价：全队槽位重算，索引序 = 入队序（小队单兵种同质，
 ##     入队序即 SWL formationOrder 组序等价）
-##   - FilterDownARandomRow 等价：列数 = ceil(人数/units_per_column) 随减员自动
+##   - 班级列高自适应（8~12 人小班口径）：现役 units_per_column 按班人数 4~6
+##     取值（squad_units_per_column），落盘 squad["upc"]——槽位落点/落定判定
+##     同源取数，防两端口径漂移
+##   - FilterDownARandomRow 等价：列数 = ceil(人数/现役列高) 随减员自动
 ##     收缩、不留空列（SWL 按随机整行滤除；此处确定性重排，观感待实测校准）
 ##   - ShouldSwitchUnitsInFormation 直译：贪心互换——互换两成员槽位后"人到槽"
 ##     总行走距离缩短则换（前排让给更近的人，减少行军穿插）；锚 = 小队质心，
 ##     朝向 = 平均面向（经宿主 _squad_anchor 取统一参考系）
 static func assign_formation_slots(host, squad_id: String,
-		units_per_column: int, spread_spacing: float, row_gap: float) -> void:
+		base_units_per_column: int, spread_spacing: float, row_gap: float) -> void:
 	if not host._squads.has(squad_id):
 		return
 	var squad: Dictionary = host._squads[squad_id]
@@ -50,33 +61,45 @@ static func assign_formation_slots(host, squad_id: String,
 		squad["slots"] = {}
 		return
 
+	# 班级现役列高（随班人数 4~6 自适应）并落盘，槽位落点/落定判定同源
+	var upc: int = squad_units_per_column(alive.size(), base_units_per_column)
+	squad["upc"] = upc
+
 	var slots: Dictionary = {}
 	for i in alive.size():
 		slots[alive[i].get_instance_id()] = Vector2i(
-				floori(float(i) / float(units_per_column)), i % units_per_column)
-	# ShouldSwitchUnitsInFormation 直译：贪心互换（锚/朝向以当前参考系评估）
-	var anch: Dictionary = host._squad_anchor(squad_id)
-	var centroid: Vector2 = anch["centroid"]
-	var facing: Vector2 = anch["facing"]
-	var improved: bool = true
-	var guard: int = 0
-	while improved and guard < 8:  # 人数 ≤12，两两互换最多数轮收敛
-		guard += 1
-		improved = false
-		for a in range(alive.size()):
-			for b in range(a + 1, alive.size()):
-				var ua: Node = alive[a]
-				var ub: Node = alive[b]
-				var sa: Vector2i = slots[ua.get_instance_id()]
-				var sb: Vector2i = slots[ub.get_instance_id()]
-				var cost_before: float = \
-						ua.global_position.distance_to(slot_world(sa, centroid, facing, units_per_column, spread_spacing, row_gap)) \
-						+ ub.global_position.distance_to(slot_world(sb, centroid, facing, units_per_column, spread_spacing, row_gap))
-				var cost_after: float = \
-						ua.global_position.distance_to(slot_world(sb, centroid, facing, units_per_column, spread_spacing, row_gap)) \
-						+ ub.global_position.distance_to(slot_world(sa, centroid, facing, units_per_column, spread_spacing, row_gap))
-				if cost_after + 1.0 < cost_before:  # 1px 门槛防等距抖动
-					slots[ua.get_instance_id()] = sb
-					slots[ub.get_instance_id()] = sa
-					improved = true
+				floori(float(i) / float(upc)), i % upc)
+	# ShouldSwitchUnitsInFormation 直译：贪心互换（锚/朝向以当前参考系评估）。
+	# 互换成本 = 成员世界位置到槽位落点距离——纯 Node 桩（单测惯例）无位置，
+	# 无从评估成本：跳过互换保持索引序（槽位照常落盘）。
+	var has_pos: bool = false
+	for u in alive:
+		if "global_position" in u:
+			has_pos = true
+			break
+	if has_pos:
+		var anch: Dictionary = host._squad_anchor(squad_id)
+		var centroid: Vector2 = anch["centroid"]
+		var facing: Vector2 = anch["facing"]
+		var improved: bool = true
+		var guard: int = 0
+		while improved and guard < 8:  # 人数 ≤15，两两互换最多数轮收敛
+			guard += 1
+			improved = false
+			for a in range(alive.size()):
+				for b in range(a + 1, alive.size()):
+					var ua: Node = alive[a]
+					var ub: Node = alive[b]
+					var sa: Vector2i = slots[ua.get_instance_id()]
+					var sb: Vector2i = slots[ub.get_instance_id()]
+					var cost_before: float = \
+							ua.global_position.distance_to(slot_world(sa, centroid, facing, upc, spread_spacing, row_gap)) \
+							+ ub.global_position.distance_to(slot_world(sb, centroid, facing, upc, spread_spacing, row_gap))
+					var cost_after: float = \
+							ua.global_position.distance_to(slot_world(sb, centroid, facing, upc, spread_spacing, row_gap)) \
+							+ ub.global_position.distance_to(slot_world(sa, centroid, facing, upc, spread_spacing, row_gap))
+					if cost_after + 1.0 < cost_before:  # 1px 门槛防等距抖动
+						slots[ua.get_instance_id()] = sb
+						slots[ub.get_instance_id()] = sa
+						improved = true
 	squad["slots"] = slots

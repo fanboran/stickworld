@@ -133,6 +133,14 @@ var _construction_manager: Node = null
 # ─────────────────────────────── 战斗（§7.1 / §8）────────────────────────────────
 ## 阵营 ID（0=未参战，1/2=敌对双方，由 BattleInstance 分配）
 var faction_id: int = 0
+## 军衔（现实军衔体系数据层；任命链 formation 侧写、渲染方经血条消费）：
+##   0 = 士兵（大头兵，默认）
+##   1 = 班长（战术轮转层：阵亡免费无缝继任，军衔点跟职务走）
+##   2 = 排长（指挥链层：阵亡无法现场补员 = 持续指挥链缺口）
+##   3 = 指挥官（战场最高，连长级兼任；阵亡 = 斩首 = 该方立即战败）
+## 消费方：BattleInstance.add_unit 斩首登记 / AIController 号令守卫与避战豁免 /
+## 血条军衔点渲染（set_rank 已做转发挂点，渲染侧未接线时静默跳过）。
+var rank: int = 0
 ## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
 ## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
 ## 实体保留不销毁（溃兵视觉）；BattleInstance add_unit/_end 复位。
@@ -1375,6 +1383,27 @@ func set_faction(fid: int) -> void:
 	if _health_bar != null and is_instance_valid(_health_bar) \
 			and _health_bar.has_method("set_faction"):
 		_health_bar.set_faction(fid)
+
+
+## 设置军衔（0=士兵 / 1=班长 / 2=排长 / 3=指挥官，口径见 rank 字段注释）。
+## 同步转发头顶血条（军衔点渲染挂点；血条侧未接线时 has_method 静默跳过）。
+func set_rank(r: int) -> void:
+	rank = clampi(r, 0, 3)
+	if _health_bar != null and is_instance_valid(_health_bar) \
+			and _health_bar.has_method("set_rank"):
+		_health_bar.set_rank(rank)
+
+
+## 获取军衔。
+func get_rank() -> int:
+	return rank
+
+
+## 是否指挥官（斩首规则的语义判定口：rank 3，战场最高）。
+## 消费方：AIController 号令守卫（不接推进/撤离类号令）与避战豁免（永不脱离接火）、
+## BattleInstance.add_unit 斩首登记。
+func is_commander() -> bool:
+	return rank >= 3
 
 
 ## 获取阵营 ID

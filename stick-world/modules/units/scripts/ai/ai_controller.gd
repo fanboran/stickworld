@@ -402,6 +402,11 @@ func _try_combat() -> bool:
 ## withdraw 档保留为命令路径语义（可下令的 RETREAT / TeamAi ROUT 撤离），C6 不再下发。
 ## 返回 true 表示已切入避战行为。
 func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bool:
+	# 指挥官避战豁免（斩首规则）：永不脱离接火——is_disengaging 恒 false，
+	# 指挥官跑不了，被近身就地还击（_seek_cover 低血分支保留：就近掩体仍属还击）。
+	if _entity != null and is_instance_valid(_entity) \
+			and _entity.has_method("is_commander") and _entity.is_commander():
+		return false
 	var profile: Dictionary = _get_behavior_profile()
 	if not bool(profile.get("retreat_mod_enabled", false)):
 		return false
@@ -942,6 +947,13 @@ func get_state_machine() -> BehaviorStateMachine:
 func set_order(behavior_name: String, params: Dictionary = {}) -> void:
 	if _state_machine != null and not _state_machine.has_behavior(behavior_name):
 		push_warning("[AIController] 拒绝未注册行为命令: %s" % behavior_name)
+		return
+	# 指挥官守卫（斩首规则）：rank>=3 不接推进/撤离类号令——指挥官留守后方，
+	# 只做被近身自卫（行为层 LEASH 内迎击），任何来路的号令都拉不走他。
+	# idle（HOLD_POSITION）放行——留守语义兼容。
+	if _entity != null and is_instance_valid(_entity) \
+			and _entity.has_method("is_commander") and _entity.is_commander() \
+			and behavior_name in ["move", "retreat", "seek_cover"]:
 		return
 	_ordered_behavior = behavior_name
 	_ordered_params = params

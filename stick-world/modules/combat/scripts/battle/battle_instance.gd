@@ -79,10 +79,15 @@ var _casualties_defender: int = 0
 ## 相持超时上限（秒；<= 0 = 不限）——超时按剩余兵力判（多者胜，平局按守方胜），
 ## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；由开战调用方按需设置）
 var duration_limit: float = 0.0
-## 收束原因（"annihilation" / "rout" / "mutual" / "timeout"；结算摘要与测试用）：
-## annihilation=全灭（含撤离离场）、rout=有效战力溃散归零（9k 溃逃收敛）、
-## mutual=双方同时归零、timeout=相持超时
+## 收束原因（"annihilation" / "rout" / "mutual" / "timeout" / "decapitation"；
+## 结算摘要与测试用）：annihilation=全灭（含撤离离场）、rout=有效战力溃散归零
+## （9k 溃逃收敛，已退役）、mutual=双方同时归零、timeout=相持超时、
+## decapitation=斩首（指挥官阵亡 = 该方立即战败，rank 口径见 StickmanEntity.rank）
 var _end_reason: String = ""
+## 斩首登记（指挥官实体）：faction -> Node（rank>=3；add_unit 自动扫描登记，
+## register_commander 供测试桩/后设 rank 场景手动补登）。无登记 = 无指挥官战斗，
+## 斩首分支恒跳过（既有战斗零回归）。
+var _commanders: Dictionary = {}
 ## 收束瞬间双方存活数（_end 清空列表前快照，供结算摘要；监听方不必回查已释放实例）
 var _final_alive_attacker: int = 0
 var _final_alive_defender: int = 0
@@ -167,6 +172,27 @@ func add_unit(unit: Node, faction: int) -> void:
 		_units_attacker.append(unit)
 	else:
 		_units_defender.append(unit)
+	# 斩首登记（指挥官实体自动扫描）：rank>=3 即登记为本方指挥官——生产战场接入
+	# 零接线（单位进战斗前 rank 须已设置）；后设 rank 场景走 register_commander 手动补登
+	if unit.has_method("get_rank") and int(unit.get_rank()) >= 3:
+		register_commander(unit, faction)
+
+
+## 登记指挥官（斩首判定口；同阵营重复登记 = 后者覆盖，"战场最高"唯一）。
+## unit 需暴露 is_dead()（StickmanEntity 原生满足；测试桩可用带脚本的 Node）。
+func register_commander(unit: Node, faction: int) -> void:
+	_commanders[faction] = unit
+
+
+## 指挥官是否已阵亡（斩首判定谓词）：未登记 = 无指挥官（false，不触发斩首）；
+## 登记后引用失效（freed 清场竞态）按阵亡算——指挥官不会凭空消失。
+func _is_commander_down(faction: int) -> bool:
+	if not _commanders.has(faction):
+		return false
+	var cmd: Node = _commanders[faction]
+	if cmd == null or not is_instance_valid(cmd):
+		return true
+	return cmd.has_method("is_dead") and cmd.is_dead()
 
 
 ## 开始战斗（PREPARING -> ENGAGED）
@@ -503,10 +529,25 @@ func get_player_faction() -> int:
 ## 退役删除：避战是战术行为不改变有效战力，避战中的单位被打仍还手，战斗照常
 ## 由歼灭/撤离/超时收束。
 func _check_victory() -> void:
+	# 存活快照先行（斩首分支同样消费：结算摘要 alive 字段任何收束路径都齐备）
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
 	_final_alive_attacker = a_alive
 	_final_alive_defender = b_alive
+	# 斩首判定（最高优先，先于全灭）：指挥官阵亡 = 该方立即战败——哪怕还有兵
+	# 也是败（斩首规则：指挥链崩 = 战败，不用打到全灭）。双方指挥官同殁 = 同归
+	# （复用全灭同归的 mutual 口径，结算摘要 reason 仍可区分胜负方向）。
+	var attacker_commander_down: bool = _is_commander_down(FACTION_ATTACKER)
+	var defender_commander_down: bool = _is_commander_down(FACTION_DEFENDER)
+	if attacker_commander_down and defender_commander_down:
+		_end(State.DRAW, "mutual")
+		return
+	if attacker_commander_down:
+		_end(State.DEFENDER_WIN, "decapitation")
+		return
+	if defender_commander_down:
+		_end(State.ATTACKER_WIN, "decapitation")
+		return
 	if a_alive == 0 and b_alive == 0:
 		_end(State.DRAW, "mutual")
 	elif a_alive == 0:
@@ -591,6 +632,7 @@ func _end(result: State, reason: String = "annihilation") -> void:
 		if tai != null:
 			tai.dispose()
 	_team_ai.clear()
+	_commanders.clear()
 	if EventBus != null:
 		# 先发结算载荷再发胜负（battle_settled → battle_ended）：监听方的据点战
 		# 状态机在 battle_ended 处理里就清掉了战役登记，结算数据须先到

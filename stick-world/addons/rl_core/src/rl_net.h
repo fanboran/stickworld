@@ -2,8 +2,8 @@
 #define RL_CORE_NET_H
 // rl_core · RLPolicyNet 纯核心 v2（对齐 tests/dev/rl/policy_net.gd 真相源；零 Godot 依赖）
 //
-// ── 网络规格（与 GDScript 版逐字一致，改一处必改两处）──
-//   结构：MLP 57 → 24(ReLU) → 15 logits（3 班 × 5 意图，按班组内 softmax）。
+// ── 网络规格（改一处必改两处：C++ 默认值 ↔ trainer/测试的 alloc 调用）──
+//   结构：MLP 125 → 64(ReLU) → 40 logits（8 班 × 5 意图，按班组内 softmax）。
 //   前向：h = relu(b1 + W1·x)；logits = b2 + W2·h。W1 行主序 [24][57]，W2 行主序 [15][24]。
 //   softmax 带温度：p = softmax((logits−max)/T)，T = max(temp, 0.05)；sum≤0 → 均匀。
 //   采样：roll = rng.randf()；acc 累加，roll <= acc 即取（初始兜底 = 4）——与
@@ -19,10 +19,10 @@
 //    policy_net.to_dict；nn_brain.gd 按此装载——两版互操作的生命线）──
 //   {
 //     "iteration": N, "seed": GLOBAL_SEED, "baseline": f,
-//     "hyper": {"lr_decay":0.995,"temp_decay":0.995,"beta":0.02},
+//     "hyper": {"lr_decay":0.995,"temp_decay":0.995,"beta":0.005},
 //     "saved_at": "...",
-//     "net": {"input_dim":57,"hidden_dim":24,"out_dim":15,
-//             "w1":[平铺 24×57],"b1":[24],"w2":[平铺 15×24],"b2":[15]}
+//     "net": {"input_dim":125,"hidden_dim":64,"out_dim":40,
+//             "w1":[平铺 64×125],"b1":[64],"w2":[平铺 40×64],"b2":[40]}
 //   }
 //   注意：权重是平铺一维数组（旧 rl_core 的二维嵌套格式已废弃）。
 //   存取浮点直存十进制文本（GDScript JSON.stringify 同形）。
@@ -36,9 +36,10 @@
 namespace rl {
 
 struct RLNet {
-	int input_dim = 57, hidden_dim = 24, out_dim = 15;
-	static const int N_SQUADS = 3;
-	static const int N_ACTIONS = 5;
+	// v2 定稿维度：MLP 125 → 64(ReLU) → 40 logits（8 班 × 5 意图，按班组内 softmax）
+	int input_dim = 125, hidden_dim = 64, out_dim = 40;
+	static const int N_SQUADS = 8;
+	static const int N_ACTIONS = 5; // 每班动作数（意图词汇 5）
 
 	std::vector<double> w1, b1, w2, b2;
 

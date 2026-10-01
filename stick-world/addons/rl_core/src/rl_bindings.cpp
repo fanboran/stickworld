@@ -76,14 +76,15 @@ PackedFloat32Array RLPolicyNet::forward(const PackedFloat32Array &obs) const {
 
 Array RLPolicyNet::sample_actions(const PackedFloat32Array &logits, double temp, const PackedInt32Array &mask_active) {
 	Array out;
-	if ((int)logits.size() != net.out_dim || mask_active.size() < 3) return out;
+	const int NS = rl::BattleEnv::N_SQUADS;
+	if ((int)logits.size() != net.out_dim || mask_active.size() < NS) return out;
 	std::vector<double> lg = pfa_to_vec(logits);
-	int mask[3] = { mask_active[0], mask_active[1], mask_active[2] };
-	int actions[3];
+	int mask[NS], actions[NS];
+	for (int k = 0; k < NS; k++) mask[k] = mask_active[k];
 	double lp = 0, ent = 0;
 	int na = 0;
 	net.sample_actions(lg.data(), temp, mask, rng, actions, &lp, &ent, &na);
-	for (int g = 0; g < 3; g++) out.push_back(actions[g]);
+	for (int g = 0; g < NS; g++) out.push_back(actions[g]);
 	out.push_back(lp);
 	out.push_back(ent);
 	out.push_back(na);
@@ -92,14 +93,15 @@ Array RLPolicyNet::sample_actions(const PackedFloat32Array &logits, double temp,
 
 PackedInt32Array RLPolicyNet::greedy_actions(const PackedFloat32Array &logits, const PackedInt32Array &mask_active) const {
 	PackedInt32Array out;
-	if ((int)logits.size() != net.out_dim || mask_active.size() < 3) return out;
+	const int NS = rl::BattleEnv::N_SQUADS;
+	if ((int)logits.size() != net.out_dim || mask_active.size() < NS) return out;
 	std::vector<double> lg = pfa_to_vec(logits);
-	int actions[3];
-	int mask[3] = { mask_active[0], mask_active[1], mask_active[2] };
+	int actions[NS], mask[NS];
+	for (int k = 0; k < NS; k++) mask[k] = mask_active[k];
 	net.greedy_actions(lg.data(), mask, actions);
-	out.resize(3);
+	out.resize(NS);
 	int *w = out.ptrw();
-	for (int g = 0; g < 3; g++) w[g] = actions[g];
+	for (int g = 0; g < NS; g++) w[g] = actions[g];
 	return out;
 }
 
@@ -165,20 +167,11 @@ Dictionary RLBattleEnv::gen_matchup(int64_t seed) {
 	rng.seed((uint64_t)seed);
 	rl::Matchup m = env.gen_matchup(rng);
 	Dictionary d;
-	d["total"] = m.total;
-	Array sa, sb;
-	for (int k = 0; k < 3; k++) {
-		Array w1, w2;
-		for (int w : m.side_a.squad_weapons[k]) w1.push_back(w);
-		for (int w : m.side_b.squad_weapons[k]) w2.push_back(w);
-		sa.push_back(w1);
-		sb.push_back(w2);
-	}
-	d["squad_weapons_f1"] = sa;
-	d["squad_weapons_f2"] = sb;
-	d["n_f1"] = m.side_a.n_total;
-	d["n_f2"] = m.side_b.n_total;
-	return d;
+	d["total"] = m.total; // 含指挥官（17/49/97）
+	d["tier"] = m.side_a.tier;
+	d["n_squads"] = rl::tier_def(m.side_a.tier).n_squads;
+	d["n_platoons"] = rl::tier_def(m.side_a.tier).n_platoons;
+	return d; // 真镜像：两侧同编制（side_b = side_a），不再分列
 }
 
 void RLBattleEnv::reset(int64_t seed, bool swap) {
@@ -202,7 +195,8 @@ void RLBattleEnv::reset_fixed_comp(const Dictionary &comp_f1, const Dictionary &
 }
 
 void RLBattleEnv::step(const PackedInt32Array &actions_f1, const PackedInt32Array &actions_f2) {
-	if (actions_f1.size() < 3 || actions_f2.size() < 3) return;
+	const int NS = rl::BattleEnv::N_SQUADS;
+	if (actions_f1.size() < NS || actions_f2.size() < NS) return;
 	env.step(actions_f1.ptr(), actions_f2.ptr());
 }
 
@@ -213,12 +207,12 @@ PackedFloat32Array RLBattleEnv::observe(int faction) const {
 }
 
 PackedInt32Array RLBattleEnv::active_mask(int faction) const {
-	int m[3];
+	int m[rl::BattleEnv::N_SQUADS];
 	env.active_mask(faction, m);
 	PackedInt32Array out;
-	out.resize(3);
+	out.resize(rl::BattleEnv::N_SQUADS);
 	int *w = out.ptrw();
-	for (int k = 0; k < 3; k++) w[k] = m[k];
+	for (int k = 0; k < rl::BattleEnv::N_SQUADS; k++) w[k] = m[k];
 	return out;
 }
 
@@ -237,6 +231,9 @@ Dictionary RLBattleEnv::get_result() const {
 	d["flags_f2"] = r.flags_owned[1];
 	d["duration"] = r.duration;
 	d["timeout"] = r.timeout;
+	d["reason"] = r.reason; // 0 正常 1 斩首
+	d["officer_alive_f1"] = r.officer_alive[0];
+	d["officer_alive_f2"] = r.officer_alive[1];
 	return d;
 }
 
@@ -244,12 +241,12 @@ bool RLBattleEnv::is_done() const { return env.done; }
 int RLBattleEnv::get_decisions_made() const { return env.decisions_made; }
 
 PackedInt32Array RLBattleEnv::planner_intents(int faction) {
-	int intents[3];
+	int intents[rl::BattleEnv::N_SQUADS];
 	env.planner_intents(faction, intents);
 	PackedInt32Array out;
-	out.resize(3);
+	out.resize(rl::BattleEnv::N_SQUADS);
 	int *w = out.ptrw();
-	for (int k = 0; k < 3; k++) w[k] = intents[k];
+	for (int k = 0; k < rl::BattleEnv::N_SQUADS; k++) w[k] = intents[k];
 	return out;
 }
 
@@ -276,7 +273,7 @@ void RLTrainer::setup(int64_t seed, const String &config_json) {
 		if (!j) j = nullptr;
 	}
 	trainer.configure(j);
-	trainer.net.alloc(57, 24, 15);
+	trainer.net.alloc(125, 64, 40); // v2 定稿维度（8 班 × 5 意图）
 	trainer.net.init_weights((uint64_t)seed);
 	trainer.iteration = 0;
 	trainer.baseline = 0.0;

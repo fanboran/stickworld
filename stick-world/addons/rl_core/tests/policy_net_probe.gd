@@ -1,24 +1,29 @@
 extends Node
-## 权重衔接探针（GDScript 侧）：装 user://rl/checkpoint.json（阿尔法 420/426 轮档）
-## → policy_net.gd 原版 forward 出 logits → probe_out.json。
-## C++ 侧 test_core.exe verify-net 装同一 checkpoint 对同 obs 比对 logits。
-## policy_net.gd 零依赖（RefCounted 纯算子），-s 模式可跑。
+## 权重衔接探针（GDScript 侧，v2 定稿维度）：
+## 装 checkpoint（125→64→40 平铺权重）→ gdscript_mirror/mirror_net.gd 独立前向
+## 出 logits → net_probe_out.json。C++ 侧 test_core.exe gen-net-probe 产出
+## checkpoint 与确定性观察输入（门第 1 步）、verify-net 比对两侧 logits（第 3 步）。
 ##
-## 运行：godot --headless --path . -s res://addons/rl_core/tests/policy_net_probe.gd -- --ckpt=<绝对路径>
+## 运行：godot --headless --path . res://addons/rl_core/tests/policy_net_probe.tscn --
+##       --ckpt=<绝对路径> --input=<绝对路径>
 
-const PolicyNetScript: GDScript = preload("res://tests/dev/rl/policy_net.gd")
+const MirrorNet: GDScript = preload("res://addons/rl_core/tests/gdscript_mirror/mirror_net.gd")
 const OUT := "res://temp/rl_core_mirror/net_probe_out.json"
 
 
 func _ready() -> void:
 	var ckpt_path := ""
+	var input_path := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--ckpt="):
 			ckpt_path = a.substr(7)
-	if ckpt_path.is_empty():
-		push_error("[net_probe] 需要 --ckpt=<绝对路径>")
+		elif a.begins_with("--input="):
+			input_path = a.substr(8)
+	if ckpt_path.is_empty() or input_path.is_empty():
+		push_error("[net_probe] 需要 --ckpt=<绝对路径> --input=<绝对路径>")
 		get_tree().quit(1)
 		return
+	# checkpoint（v2 定稿契约：net 平铺权重 125→64→40）
 	var f := FileAccess.open(ckpt_path, FileAccess.READ)
 	if f == null:
 		push_error("[net_probe] checkpoint 打不开: " + ckpt_path)
@@ -30,26 +35,24 @@ func _ready() -> void:
 		push_error("[net_probe] checkpoint 无 net 字段")
 		get_tree().quit(1)
 		return
-	var net = PolicyNetScript.new()
-	if not net.from_dict(data["net"]):
-		push_error("[net_probe] from_dict 维度不符")
+	var net = MirrorNet.new()
+	if not net.from_json(data["net"]):
+		push_error("[net_probe] from_json 维度/形状不符")
 		get_tree().quit(1)
 		return
-	# 确定性观察 8 组（sin 公式；值随 dump 传给 C++，不要求两侧 sin 逐位一致）
+	# 观察输入（C++ gen-net-probe 产出的确定性 sin 组）
+	var fi := FileAccess.open(input_path, FileAccess.READ)
+	if fi == null:
+		push_error("[net_probe] input 打不开: " + input_path)
+		get_tree().quit(1)
+		return
+	var input_data: Dictionary = JSON.parse_string(fi.get_as_text())
+	fi.close()
 	var probes: Array = []
-	for pi in 8:
-		var x := PackedFloat32Array()
-		x.resize(57)
-		for j in 57:
-			x[j] = sin(float(pi * 13 + j * 7) * 0.37) * 0.9
-		var logits: PackedFloat32Array = net.forward(x)
-		var obs_arr: Array = []
-		var lg_arr: Array = []
-		for j in 57:
-			obs_arr.append(x[j])
-		for k in 15:
-			lg_arr.append(logits[k])
-		probes.append({"obs": obs_arr, "logits": lg_arr})
+	for p_v in input_data["probes"]:
+		var x: Array = p_v["obs"]
+		var logits: Array = net.forward(x)
+		probes.append({"obs": x, "logits": logits})
 	var out := {
 		"iteration": int(data.get("iteration", -1)),
 		"net": data["net"],
@@ -63,5 +66,5 @@ func _ready() -> void:
 		return
 	of.store_string(JSON.stringify(out))
 	of.close()
-	print("[net_probe] 写出 %s（iter=%s，probes=%d）" % [OUT, str(data.get("iteration", -1)), probes.size()])
+	print("[net_probe] 写出 %s（probes=%d，%d→%d→%d）" % [OUT, probes.size(), net.input_dim, net.hidden_dim, net.out_dim])
 	get_tree().quit(0)

@@ -1,7 +1,9 @@
 #include "rl_trainer.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 
 namespace rl {
 
@@ -12,6 +14,10 @@ void RLTrainer::configure(const JsonPtr &config) {
 	lr_floor = config->get_num("lr_floor", lr_floor);
 	grad_clip = config->get_num("grad_clip", grad_clip);
 	entropy_beta = config->get_num("entropy_beta", entropy_beta);
+	// v2 防退化超参
+	entropy_target = config->get_num("entropy_target", entropy_target);
+	entropy_beta_min = config->get_num("entropy_beta_min", entropy_beta_min);
+	entropy_beta_max = config->get_num("entropy_beta_max", entropy_beta_max);
 	temp_start = config->get_num("temp_start", temp_start);
 	temp_decay = config->get_num("temp_decay", temp_decay);
 	temp_min = config->get_num("temp_min", temp_min);
@@ -19,8 +25,23 @@ void RLTrainer::configure(const JsonPtr &config) {
 	checkpoint_every = config->get_int("checkpoint_every", (int)checkpoint_every);
 	eval_every = config->get_int("eval_every", (int)eval_every);
 	eval_groups = config->get_int("eval_groups", eval_groups);
+	pool_every = config->get_int("pool_every", (int)pool_every);
+	pool_size = config->get_int("pool_size", pool_size);
+	pool_prob = config->get_num("pool_prob", pool_prob);
+	eval_pool_groups = config->get_int("eval_pool_groups", eval_pool_groups);
+	// 课程学习（17→49→97 三阶段阈值；负值 = 关闭随机抽档）
+	curriculum_c1_end = config->get_int("curriculum_c1_end", (int)curriculum_c1_end);
+	curriculum_c2_end = config->get_int("curriculum_c2_end", (int)curriculum_c2_end);
 	global_seed = (uint64_t)(int64_t)config->get_num("global_seed", (double)(int64_t)global_seed);
 	if (config->has("env")) env.load_config(config->get("env"));
+}
+
+// 课程阶段 → 档位（0=17 / 1=49 / 2=97；-1 = 关闭随机抽档）
+static int curriculum_tier_for(long iteration, long c1_end, long c2_end) {
+	if (c1_end < 0 || c2_end < 0) return -1;
+	if (iteration < c1_end) return 0;
+	if (iteration < c2_end) return 1;
+	return 2;
 }
 
 void RLTrainer::apply_checkpoint_state(long iter, double base) {
@@ -29,53 +50,69 @@ void RLTrainer::apply_checkpoint_state(long iter, double base) {
 }
 
 // ── 一场（正局/反局；两个指挥视角轨迹）──
+// 每视角三选一：ag.net 执掌（当前 self 或池成员）/ ag.planner=true 走军师规划器
+// 镜像；ag.record=false 的视角（对手）只产对局，不记轨迹不计熵——不进梯度批。
 
 void RLTrainer::play_battle(const Matchup &m, bool swap, AgentTraj &ag1, AgentTraj &ag2,
 		EnvResult *res_out) {
 	env.reset(m, swap);
 	std::vector<double> obs;
-	int mask1[3], mask2[3], acts1[3], acts2[3];
-	double logits[15];
+	int mask1[BattleEnv::N_SQUADS], mask2[BattleEnv::N_SQUADS];
+	int acts1[BattleEnv::N_SQUADS], acts2[BattleEnv::N_SQUADS];
+	double logits[BattleEnv::N_ACTIONS];
+	const int NS = BattleEnv::N_SQUADS;
 	while (!env.done) {
 		// faction 1
 		env.active_mask(1, mask1);
-		env.observe(1, obs);
-		net.forward(obs.data(), logits, nullptr);
-		if (ag1.greedy) {
-			net.greedy_actions(logits, mask1, acts1);
+		if (ag1.planner) {
+			env.planner_intents(1, acts1);
 		} else {
-			double lp, ent;
-			int na;
-			net.sample_actions(logits, ag1.temp, mask1, ag1.rng, acts1, &lp, &ent, &na);
-			ag1.entropy_sum += ent;
-			ag1.entropy_beats++;
-			TrajStep st;
-			st.obs = obs;
-			for (int k = 0; k < 3; k++) {
-				st.actions[k] = acts1[k];
-				st.mask[k] = mask1[k];
+			env.observe(1, obs);
+			ag1.net->forward(obs.data(), logits, nullptr);
+			if (ag1.greedy) {
+				ag1.net->greedy_actions(logits, mask1, acts1);
+			} else {
+				double lp, ent;
+				int na;
+				ag1.net->sample_actions(logits, ag1.temp, mask1, ag1.rng, acts1, &lp, &ent, &na);
+				if (ag1.record) {
+					ag1.entropy_sum += ent;
+					ag1.entropy_beats++;
+					TrajStep st;
+					st.obs = obs;
+					for (int k = 0; k < NS; k++) {
+						st.actions[k] = acts1[k];
+						st.mask[k] = mask1[k];
+					}
+					ag1.steps.push_back(std::move(st));
+				}
 			}
-			ag1.steps.push_back(std::move(st));
 		}
 		// faction 2
 		env.active_mask(2, mask2);
-		env.observe(2, obs);
-		net.forward(obs.data(), logits, nullptr);
-		if (ag2.greedy) {
-			net.greedy_actions(logits, mask2, acts2);
+		if (ag2.planner) {
+			env.planner_intents(2, acts2);
 		} else {
-			double lp, ent;
-			int na;
-			net.sample_actions(logits, ag2.temp, mask2, ag2.rng, acts2, &lp, &ent, &na);
-			ag2.entropy_sum += ent;
-			ag2.entropy_beats++;
-			TrajStep st;
-			st.obs = obs;
-			for (int k = 0; k < 3; k++) {
-				st.actions[k] = acts2[k];
-				st.mask[k] = mask2[k];
+			env.observe(2, obs);
+			ag2.net->forward(obs.data(), logits, nullptr);
+			if (ag2.greedy) {
+				ag2.net->greedy_actions(logits, mask2, acts2);
+			} else {
+				double lp, ent;
+				int na;
+				ag2.net->sample_actions(logits, ag2.temp, mask2, ag2.rng, acts2, &lp, &ent, &na);
+				if (ag2.record) {
+					ag2.entropy_sum += ent;
+					ag2.entropy_beats++;
+					TrajStep st;
+					st.obs = obs;
+					for (int k = 0; k < NS; k++) {
+						st.actions[k] = acts2[k];
+						st.mask[k] = mask2[k];
+					}
+					ag2.steps.push_back(std::move(st));
+				}
 			}
-			ag2.steps.push_back(std::move(st));
 		}
 		env.step(acts1, acts2);
 	}
@@ -98,18 +135,20 @@ double RLTrainer::train_batch(const std::vector<double> &rewards,
 	for (double v : raw) var_sum += (v - mean) * (v - mean);
 	double stdv = std::sqrt(var_sum / (double)n_ep);
 	std::vector<RLNet::Sample> samples;
-	std::vector<double> obs_f(57), logits(15), probs(5), dlogits(15);
+	const int OBS_D = net.input_dim, OUT_D = net.out_dim, NS = RLNet::N_SQUADS, NA = RLNet::N_ACTIONS;
+	std::vector<double> logits(OUT_D), probs(NA), dlogits(OUT_D);
 	for (size_t ei = 0; ei < n_ep; ei++) {
 		double adv = (raw[ei] - mean) / (stdv > 1e-4 ? stdv : 1e-4);
 		for (const TrajStep &st : agents[ei]->steps) {
 			net.forward(st.obs.data(), logits.data(), nullptr);
-			dlogits.assign(15, 0.0);
-			for (int s = 0; s < 3; s++) {
+			dlogits.assign(OUT_D, 0.0);
+			for (int s = 0; s < NS; s++) {
 				if (st.mask[s] == 0) continue;
 				net.softmax_slice(logits.data(), s, temp, probs.data());
 				double h = entropy5(probs.data());
-				int base = s * 5;
-				for (int a = 0; a < 5; a++) {
+				int base = s * NA;
+				for (int a = 0; a < NA; a++) {
+					// β = entropy_beta（v2：熵目标自适应演化，见 adapt_entropy）
 					double g = -adv * ((a == st.actions[s] ? 1.0 : 0.0) - probs[a])
 							+ entropy_beta * probs[a] * (h + std::log(probs[a] > 1e-9 ? probs[a] : 1e-9));
 					dlogits[base + a] = g / temp;
@@ -133,19 +172,55 @@ void RLTrainer::train(long n_iterations) {
 	while (iteration < end) {
 		RngPcg rng;
 		rng.seed(hash_djb2(std::to_string(global_seed) + "|" + std::to_string(iteration)));
+		// 课程学习锁档（C1=17 / C2=49 / C3=97；关闭 = -1 随机三档）
+		env.curriculum_tier = curriculum_tier_for(iteration, curriculum_c1_end, curriculum_c2_end);
 		Matchup m = env.gen_matchup(rng);
 		double temp = temp_start * std::pow(temp_decay, (double)iteration);
 		if (temp < temp_min) temp = temp_min;
-		// 正局：a 攻西 / b 守东；反局整体交换（每局独立建 agent，独立子 RNG）
-		auto make_agent = [&](AgentTraj &ag) {
-			ag.steps.clear();
-			ag.entropy_sum = 0.0;
-			ag.entropy_beats = 0;
-			ag.greedy = false;
-			ag.temp = temp;
-			ag.rng.seed(rng.next());
+		// ── 对手抽签（v3 诊断修订）：每轮抽一种对手，正反两局同一种对手下成对打。
+		//    [0, pool_prob) 历史池随机一份（池空回落规划器）→
+		//    [pool_prob, pool_prob+planner_prob) 军师规划器镜像 → 其余镜像自博弈。
+		//    抽签走本轮种子 rng，确定性可复现。──
+		int valid[16], nvalid = 0;
+		for (int s = 0; s < (int)pool.size() && nvalid < 16; s++)
+			if (pool_iter[s] >= 0) valid[nvalid++] = s;
+		double roll = rng.randf();
+		int opp_kind = 0; // 0=self 1=pool 2=planner
+		int pool_slot = -1;
+		if (nvalid > 0 && roll < pool_prob) {
+			opp_kind = 1;
+			pool_slot = valid[rng.randi_range(0, nvalid - 1)];
+		} else if (roll < pool_prob + planner_prob) {
+			opp_kind = 2;
+		}
+		// 正局：a 攻西 / b 守东；反局整体交换（每局独立建 agent，独立子 RNG）。
+		// 对手局中当前网络在正局执 faction1、反局执 faction2——换边结构保持
+		// （当前网仍体验己方编制的西/东两侧点位），对手补位另一侧。
+		auto make_agent = [&](AgentTraj &a, RLNet *net_ptr, bool record, bool is_planner) {
+			a.steps.clear();
+			a.entropy_sum = 0.0;
+			a.entropy_beats = 0;
+			a.greedy = false;
+			a.temp = temp;
+			a.rng.seed(rng.next());
+			a.net = net_ptr;
+			a.record = record;
+			a.planner = is_planner;
 		};
-		for (int i = 0; i < 4; i++) make_agent(ag[i]);
+		make_agent(ag[0], &net, true, false); // 正局 faction1 = 当前网
+		if (opp_kind == 1)
+			make_agent(ag[1], &pool[pool_slot], false, false); // 正局 faction2 = 池对手
+		else if (opp_kind == 2)
+			make_agent(ag[1], &net, false, true); // 正局 faction2 = 军师规划器镜像
+		else
+			make_agent(ag[1], &net, true, false); // 正局 faction2 = 当前网（镜像自博弈）
+		if (opp_kind == 1)
+			make_agent(ag[2], &pool[pool_slot], false, false); // 反局 faction1 = 池对手
+		else if (opp_kind == 2)
+			make_agent(ag[2], &net, false, true); // 反局 faction1 = 军师规划器镜像
+		else
+			make_agent(ag[2], &net, true, false); // 反局 faction1 = 当前网
+		make_agent(ag[3], &net, true, false); // 反局 faction2 = 当前网
 		int w1 = 0, w2 = 0;
 		double d1 = 0, d2 = 0;
 		EnvResult r1, r2;
@@ -155,20 +230,30 @@ void RLTrainer::train(long n_iterations) {
 		w2 = r2.winner;
 		d1 = r1.duration;
 		d2 = r2.duration;
-		std::vector<AgentTraj *> agents = { &ag[0], &ag[1], &ag[2], &ag[3] };
-		double grad_norm = train_batch({ r1.reward_f1, r1.reward_f2, r2.reward_f1, r2.reward_f2 }, agents, temp);
+		// 梯度批只收当前网轨迹（record=true）；池对手视角不进批
+		AgentTraj *all[4] = { &ag[0], &ag[1], &ag[2], &ag[3] };
+		double rews4[4] = { r1.reward_f1, r1.reward_f2, r2.reward_f1, r2.reward_f2 };
+		std::vector<AgentTraj *> trained;
+		std::vector<double> rews;
+		for (int i = 0; i < 4; i++) {
+			if (all[i]->record) {
+				trained.push_back(all[i]);
+				rews.push_back(rews4[i]);
+			}
+		}
+		double grad_norm = train_batch(rews, trained, temp);
 		// 记录
 		IterRecord rec;
 		rec.iter = iteration;
-		rec.rewards[0] = r1.reward_f1;
-		rec.rewards[1] = r1.reward_f2;
-		rec.rewards[2] = r2.reward_f1;
-		rec.rewards[3] = r2.reward_f2;
-		rec.mean_r = (rec.rewards[0] + rec.rewards[1] + rec.rewards[2] + rec.rewards[3]) / 4.0;
+		for (int i = 0; i < 4; i++) rec.rewards[i] = rews4[i];
+		double mean_r = 0.0;
+		for (double v : rews) mean_r += v;
+		mean_r /= (double)rews.size();
+		rec.mean_r = mean_r;
 		rec.baseline = baseline;
 		double ent_sum = 0;
 		int ent_beats = 0;
-		for (auto *a : agents) {
+		for (auto *a : trained) { // 熵只计当前网（池对手熵与本策略无关）
 			ent_sum += a->entropy_sum;
 			ent_beats += a->entropy_beats;
 		}
@@ -179,31 +264,43 @@ void RLTrainer::train(long n_iterations) {
 		rec.winner_g2 = w2;
 		rec.dur_g1 = d1;
 		rec.dur_g2 = d2;
-		rec.n_a = m.side_a.n_total;
-		rec.n_b = m.side_b.n_total;
-		// baseline EMA（4 视角均值）
+		rec.n_a = ARMY_TIERS[m.side_a.tier];
+		rec.n_b = ARMY_TIERS[m.side_b.tier];
+		std::string opp_tag = opp_kind == 0 ? "self"
+				: (opp_kind == 2 ? "planner" : "pool" + std::to_string(pool_slot));
+		rec.opp_g1 = opp_tag;
+		rec.opp_g2 = opp_tag;
+		// baseline EMA（训练视角均值；池局只计本人轨迹）
 		baseline += baseline_ema * (rec.mean_r - baseline);
 		rec.baseline = baseline;
+		// 熵目标自适应（改造3）：本轮熵喂给 β，下一轮生效
+		adapt_entropy(rec.entropy);
+		rec.entropy_beta = entropy_beta;
 		iteration += 1;
 		auto t1 = std::chrono::steady_clock::now();
 		rec.wall_s = std::chrono::duration<double>(t1 - t0).count();
 		last_record = rec;
-		// CSV 追加（格式对齐 _log_iteration）
+		// CSV 追加（旧 15 列语义不变；行尾追加对手类型标记，改造6）
 		if (!train_csv_path.empty() && hooks.write) {
-			char line[512];
+			char line[640];
 			std::snprintf(line, sizeof(line),
-					"%ld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%d,%d,%.1f,%.1f,%.4f,%.1f",
+					"%ld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%d,%d,%.1f,%.1f,%.4f,%.1f,%s,%s",
 					rec.iter, rec.rewards[0], rec.rewards[1], rec.rewards[2], rec.rewards[3],
 					rec.mean_r, rec.baseline, rec.entropy, rec.temp,
-					rec.winner_g1, rec.winner_g2, rec.dur_g1, rec.dur_g2, rec.grad_norm, rec.wall_s);
+					rec.winner_g1, rec.winner_g2, rec.dur_g1, rec.dur_g2, rec.grad_norm, rec.wall_s,
+					rec.opp_g1.c_str(), rec.opp_g2.c_str());
 			append_csv_line(train_csv_path,
 					"iter,r_f1_g1,r_f2_g1,r_f1_g2,r_f2_g2,mean_r,baseline,entropy,temp,"
-					"winner_g1,winner_g2,dur_g1,dur_g2,grad_norm,wall_s",
+					"winner_g1,winner_g2,dur_g1,dur_g2,grad_norm,wall_s,opp_g1,opp_g2",
 					line);
 		}
 		if (on_iteration) on_iteration(rec);
 		if (checkpoint_every > 0 && iteration % checkpoint_every == 0 && !checkpoint_path.empty()) {
 			save_checkpoint();
+		}
+		// 对手池快照（改造1）：每 pool_every 轮一份，滚动覆盖（池上限 pool_size）
+		if (pool_every > 0 && iteration % pool_every == 0 && !checkpoint_path.empty()) {
+			save_pool_snapshot();
 		}
 		if (eval_every > 0 && iteration % eval_every == 0) {
 			EvalRecord er = run_evaluation();
@@ -212,55 +309,49 @@ void RLTrainer::train(long n_iterations) {
 	}
 }
 
-// ── 评估（NN greedy vs 军师规划器镜像；协议对齐 _run_evaluation）──
+// ── 评估（两组对手分列：vs 军师镜像 = 泛化裁判；vs 历史池 = 真实策略进步裁判）──
 
 EvalRecord RLTrainer::run_evaluation() {
 	EvalRecord er;
 	er.iter = iteration;
 	RngPcg rng;
 	rng.seed(hash_djb2(std::to_string(global_seed) + "|eval|" + std::to_string(iteration)));
+	// 评估随训练所在课程阶段同档（课程关闭 = -1 随机三档）
+	env.curriculum_tier = curriculum_tier_for(iteration, curriculum_c1_end, curriculum_c2_end);
+	// ── 第 1 组：NN greedy vs 军师规划器镜像（协议不变：3 组 ×（正局+反局）换边）──
 	double score = 0.0;
-	AgentTraj nn_agent;
 	for (int g = 0; g < eval_groups; g++) {
 		int nn_faction = (g % 2 == 0) ? 1 : 2;
 		Matchup m = env.gen_matchup(rng);
 		for (int swap_i = 0; swap_i < 2; swap_i++) {
-			bool swap = swap_i == 1;
-			nn_agent.steps.clear();
-			nn_agent.greedy = true;
-			nn_agent.temp = 1.0;
-			// NN 在 nn_faction；对侧 = 规划器（env.step 时由本类产规划器意图）
-			env.reset(m, swap);
-			while (!env.done) {
-				int mask1[3], mask2[3], acts1[3], acts2[3];
-				double logits[15];
-				std::vector<double> obs;
-				env.active_mask(1, mask1);
-				env.observe(1, obs);
-				net.forward(obs.data(), logits, nullptr);
-				if (nn_faction == 1) net.greedy_actions(logits, mask1, acts1);
-				else net.greedy_actions(logits, mask1, acts1);
-				env.active_mask(2, mask2);
-				env.observe(2, obs);
-				net.forward(obs.data(), logits, nullptr);
-				if (nn_faction == 2) net.greedy_actions(logits, mask2, acts2);
-				else net.greedy_actions(logits, mask2, acts2);
-				// 对侧 = 军师规划器意图
-				if (nn_faction == 1) env.planner_intents(2, acts2);
-				else env.planner_intents(1, acts1);
-				env.step(acts1, acts2);
-			}
-			EnvResult res = env.result();
-			double s = 0.5;
-			if (res.winner == nn_faction) s = 1.0;
-			else if (res.winner == 3 - nn_faction) s = 0.0;
+			double s = eval_one_game(m, swap_i == 1, nn_faction, nullptr);
 			score += s;
 			er.games++;
+			er.games_mirror++;
 			er.detail.push_back(s);
 		}
 	}
 	er.score = score;
 	er.win_rate = er.games > 0 ? score / (double)er.games : 0.0;
+	er.win_rate_mirror = er.win_rate;
+	// ── 第 2 组：NN greedy vs 历史池（池空跳过；同一份 rng 续抽，确定性）──
+	int valid[16], nvalid = 0;
+	for (int s = 0; s < (int)pool.size() && nvalid < 16; s++)
+		if (pool_iter[s] >= 0) valid[nvalid++] = s;
+	if (nvalid > 0) {
+		double score_pool = 0.0;
+		for (int g = 0; g < eval_pool_groups; g++) {
+			int nn_faction = (g % 2 == 0) ? 1 : 2;
+			Matchup m = env.gen_matchup(rng);
+			int slot = valid[rng.randi_range(0, nvalid - 1)]; // 每组一份池对手，组内正反共用
+			for (int swap_i = 0; swap_i < 2; swap_i++) {
+				double s = eval_one_game(m, swap_i == 1, nn_faction, &pool[slot]);
+				score_pool += s;
+				er.games_pool++;
+			}
+		}
+		er.win_rate_pool = er.games_pool > 0 ? score_pool / (double)er.games_pool : 0.0;
+	}
 	if (!eval_csv_path.empty() && hooks.write) {
 		std::string det = "[";
 		for (size_t i = 0; i < er.detail.size(); i++) {
@@ -269,15 +360,138 @@ EvalRecord RLTrainer::run_evaluation() {
 			det += v == 0.5 ? "0.5" : (v == 1.0 ? "1" : "0");
 		}
 		det += "]";
-		char line[128];
-		std::snprintf(line, sizeof(line), "%ld,%d,%.1f,%.4f,%s",
-				er.iter, er.games, er.score, er.win_rate, det.c_str());
-		append_csv_line(eval_csv_path, "iter,games,score,win_rate,detail", line);
+		char line[256];
+		// 旧 5 列语义不变（= 军师镜像组）；行尾追加两组胜率分列（改造1/改造6）
+		std::snprintf(line, sizeof(line), "%ld,%d,%.1f,%.4f,%s,%.4f,%.4f,%d",
+				er.iter, er.games, er.score, er.win_rate, det.c_str(),
+				er.win_rate_mirror, er.win_rate_pool, er.games_pool);
+		append_csv_line(eval_csv_path,
+				"iter,games,score,win_rate,detail,mirror_wr,pool_wr,pool_games",
+				line);
 	}
 	return er;
 }
 
-// ── checkpoint（阿尔法 JSON 契约）──
+double RLTrainer::eval_one_game(const Matchup &m, bool swap, int nn_faction, const RLNet *opp_net) {
+	env.reset(m, swap);
+	const int NS = BattleEnv::N_SQUADS;
+	int mask1[NS], mask2[NS], acts1[NS], acts2[NS];
+	double logits[BattleEnv::N_ACTIONS];
+	std::vector<double> obs;
+	while (!env.done) {
+		env.active_mask(1, mask1);
+		if (nn_faction == 1 || opp_net != nullptr) env.observe(1, obs);
+		// faction 1 = NN 时走当前网 greedy；faction 1 = 对手时走对手网 greedy 或规划器
+		if (nn_faction == 1) {
+			net.forward(obs.data(), logits, nullptr);
+			net.greedy_actions(logits, mask1, acts1);
+		} else if (opp_net != nullptr) {
+			opp_net->forward(obs.data(), logits, nullptr);
+			opp_net->greedy_actions(logits, mask1, acts1);
+		} else {
+			for (int k = 0; k < NS; k++) acts1[k] = 0; // 军师镜像在下面统一下发
+		}
+		env.active_mask(2, mask2);
+		if (nn_faction == 2 || opp_net != nullptr) env.observe(2, obs);
+		if (nn_faction == 2) {
+			net.forward(obs.data(), logits, nullptr);
+			net.greedy_actions(logits, mask2, acts2);
+		} else if (opp_net != nullptr) {
+			opp_net->forward(obs.data(), logits, nullptr);
+			opp_net->greedy_actions(logits, mask2, acts2);
+		} else {
+			for (int k = 0; k < NS; k++) acts2[k] = 0;
+		}
+		// 对侧 = 军师规划器意图（仅镜像组）
+		if (opp_net == nullptr) {
+			if (nn_faction == 1) env.planner_intents(2, acts2);
+			else env.planner_intents(1, acts1);
+		}
+		env.step(acts1, acts2);
+	}
+	EnvResult res = env.result();
+	if (res.winner == nn_faction) return 1.0;
+	if (res.winner == 3 - nn_faction) return 0.0;
+	return 0.5;
+}
+
+// ── 对手池（改造1，fictitious self-play）──
+
+int RLTrainer::pool_occupied() const {
+	int n = 0;
+	for (int s = 0; s < (int)pool_iter.size(); s++)
+		if (pool_iter[s] >= 0) n++;
+	return n;
+}
+
+std::string RLTrainer::pool_slot_path(int slot) const {
+	// checkpoint 同目录：checkpoint_pool_<槽>.json（主档语义不变，改造6）
+	std::string dir = checkpoint_path;
+	size_t p = dir.find_last_of("/\\");
+	dir = (p == std::string::npos) ? std::string() : dir.substr(0, p + 1);
+	return dir + "checkpoint_pool_" + std::to_string(slot) + ".json";
+}
+
+bool RLTrainer::save_pool_snapshot() {
+	if (pool_size <= 0) return false;
+	if (pool.empty()) { // 首次快照：按池上限建槽（全部标记无效）
+		pool.resize(pool_size);
+		pool_iter.assign(pool_size, -1);
+	}
+	if (!hooks.write || checkpoint_path.empty()) return false;
+	int slot = (int)(pool_count % (long)pool_size);
+	if (slot < 0) slot = 0;
+	pool[slot] = net; // 拷贝当前网络快照
+	pool_iter[slot] = iteration;
+	pool_count++;
+	// 落盘（同阿尔法 JSON 契约 → 旧工具可读；仅文件名不同）
+	auto root = Json::make(Json::OBJ);
+	root->set("iteration", Json::num_of((double)iteration));
+	root->set("seed", Json::num_of((double)(int64_t)global_seed));
+	root->set("baseline", Json::num_of(baseline));
+	root->set("pool_slot", Json::num_of((double)slot));
+	auto hyper = Json::make(Json::OBJ);
+	hyper->set("lr_decay", Json::num_of(lr_decay));
+	hyper->set("temp_decay", Json::num_of(temp_decay));
+	hyper->set("beta", Json::num_of(entropy_beta));
+	root->set("hyper", hyper);
+	root->set("net", net.net_to_json());
+	return hooks.write(pool_slot_path(slot), root->dump());
+}
+
+void RLTrainer::load_pool() {
+	pool.clear();
+	pool_iter.clear();
+	if (!hooks.read || pool_size <= 0) return;
+	pool.resize(pool_size);
+	pool_iter.assign(pool_size, -1);
+	for (int s = 0; s < pool_size; s++) {
+		std::string text;
+		if (!hooks.read(pool_slot_path(s), &text) || text.empty()) continue;
+		std::string err;
+		JsonPtr root = Json::parse(text, &err);
+		if (!root || root->type != Json::OBJ) continue;
+		RLNet tmp;
+		if (!tmp.net_from_json(root->get("net"), &err)) continue;
+		pool[s] = tmp;
+		pool_iter[s] = (long)root->get_num("iteration", 0.0);
+	}
+}
+
+// ── 熵目标自适应（改造3，entropy target regularization）──
+// H < 目标 → β 翻倍（加强熵奖励把策略分布推回目标）；
+// H > 目标×1.1 → β 减半（探索够用就放松）；
+// 目标 ~ 目标×1.1 之间不动。β 夹在 [beta_min, beta_max] 防爆炸/消失。
+
+void RLTrainer::adapt_entropy(double mean_entropy) {
+	if (mean_entropy < entropy_target) {
+		entropy_beta = std::min(entropy_beta * 2.0, entropy_beta_max);
+	} else if (mean_entropy > entropy_target * 1.1) {
+		entropy_beta = std::max(entropy_beta * 0.5, entropy_beta_min);
+	}
+}
+
+// ── checkpoint（阿尔法 JSON 契约 + v2 增量键；旧档语义不变）──
 
 bool RLTrainer::save_checkpoint() const {
 	if (!hooks.write) return false;
@@ -288,8 +502,9 @@ bool RLTrainer::save_checkpoint() const {
 	auto hyper = Json::make(Json::OBJ);
 	hyper->set("lr_decay", Json::num_of(lr_decay));
 	hyper->set("temp_decay", Json::num_of(temp_decay));
-	hyper->set("beta", Json::num_of(entropy_beta));
+	hyper->set("beta", Json::num_of(entropy_beta)); // v2：自适应后的当前值
 	root->set("hyper", hyper);
+	root->set("pool_count", Json::num_of((double)pool_count)); // v2：池滚动游标
 	root->set("net", net.net_to_json());
 	return hooks.write(checkpoint_path, root->dump());
 }
@@ -310,6 +525,18 @@ bool RLTrainer::load_checkpoint() {
 	if (!net.net_from_json(root->get("net"), &err)) return false;
 	iteration = root->get_int("iteration", 0);
 	baseline = root->get_num("baseline", 0.0);
+	// v2 增量（旧档无这些键 → 走当前默认，语义不变）：
+	// β 读回自适应值（续训不重置熵维护）；pool_count 读回滚动游标。
+	JsonPtr hyper = root->get("hyper");
+	if (hyper && hyper->type == Json::OBJ && hyper->has("beta")) {
+		double b = hyper->get_num("beta", entropy_beta);
+		if (b > 0.0) entropy_beta = b;
+	}
+	pool_count = (long)root->get_num("pool_count", 0.0);
+	load_pool();
+	// 池游标兜底：主档无 pool_count 时按已装载的最大槽位推进，避免回卷覆写
+	for (int s = 0; s < (int)pool_iter.size(); s++)
+		if (pool_iter[s] >= 0 && pool_iter[s] + 1 > pool_count) pool_count = pool_iter[s] + 1;
 	return true;
 }
 
@@ -321,6 +548,7 @@ RLTrainer::EpisodeOut RLTrainer::run_episode_bench(uint32_t seed, bool swap, boo
 	AgentTraj a1, a2;
 	a1.greedy = a2.greedy = greedy;
 	a1.temp = a2.temp = 1.0;
+	a1.net = a2.net = &net;
 	RngPcg rng;
 	rng.seed(seed);
 	Matchup m = env.gen_matchup(rng);

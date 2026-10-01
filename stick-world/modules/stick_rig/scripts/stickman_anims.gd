@@ -179,6 +179,10 @@ static func idle_for_weapon(weapon_type: int) -> String:
 ## 消费方（weapon_mount 实体侧换装 / char_sprite_3d 镜像层换装）经 walk_for_weapon
 ## 取名，走 set_state_anim 换 walk state 资源（盾姿态分层同款机制，不增状态节点）。
 const ANIM_WALK_BOW := "walk_bow"
+## 持弓行走·拉弓保持变体（烘焙合并资产，tools/baking/bake_walk_bow_hold.gd 生成）：
+## walk_bow 腿轨 ∪ attack_bow_hold 上身轨按 Drawn@0.5 拉满帧定格——持瞄窗内移动
+## 时上身保持拉满姿态（腿走弓不收）。消费接线（walk state 资源换装）由后续批次接。
+const ANIM_WALK_BOW_HOLD := "walk_bow_hold"
 
 const WEAPON_WALK_ANIM: Dictionary = {
 	2: ANIM_WALK_BOW,        # BOW：持弓行走（Archidon-Walk）
@@ -217,6 +221,8 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_RUN)
 	# 持弓行走变体（武器走姿分层，walk state 资源换装用）
 	_load_anim(lib, ANIM_WALK_BOW)
+	# 持弓行走·拉弓保持变体（烘焙合并资产，上身定格拉满+腿走步态，机制同上）
+	_load_anim(lib, ANIM_WALK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK)
 	_load_anim(lib, ANIM_ATTACK_SPEAR)
 	_load_anim(lib, ANIM_ATTACK_SPEAR_2)

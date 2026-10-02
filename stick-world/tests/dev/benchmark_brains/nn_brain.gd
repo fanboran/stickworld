@@ -42,6 +42,16 @@ const OBS_DIM: int = 125
 const N_SQUADS: int = 8
 const N_PLATOONS: int = 4
 const N_INTENTS: int = 5
+## 意图防抖确认拍数（诊断 B3/A5：NN 每拍 argmax 直发无防抖，号令翻转 48~289 次/min
+## ≈ 规划器 5~6 倍——原始 argmax 只作候选，连续两拍同值才确认切换；首次指派立即生效）
+const INTENT_CONFIRM_BEATS: int = 2
+## 号令最短保持（拍，1 拍 = 0.5s）：确认切换后此时长内不再接受新切换。实测
+## 96 档对局中网络 argmax 对边际旗点呈周期 4（AABB）振荡，两拍确认挡不住
+## 连跑两拍的振荡——加最短保持 + 连续快速翻转升级迟滞（下两常量）。
+## 12 拍基值 + 升级上限实测把 NN 翻转压到 <20 次/min（含 8 班首次指派摊薄）。
+const INTENT_HOLD_BEATS: int = 12
+## 保持时长升级上限（拍）：保持到期立即又翻 = 振荡班，保持翻倍逐次升级
+const INTENT_HOLD_MAX_BEATS: int = 48
 ## 旗块/班块/排层在观察向量中的段偏移
 const FLAG_BASE: int = 6
 const SQUAD_BASE: int = 27
@@ -77,11 +87,27 @@ var _commanders: Dictionary = {}
 var _beat_acc: float = 0.0
 var _last_intents: Array = []
 var _order_state: Dictionary = {}
+## 意图防抖候选（8 槽：连续同值的候选意图，−1 = 无候选）/ 候选已连续拍数
+var _pending_intents: Array = []
+var _pending_beats: Array = []
+## 号令保持状态（8 槽）：当前最短保持拍数 / 上次确认切换的拍号（−1 = 从未）
+var _hold_beats: Array = []
+var _switch_beat: Array = []
+## 脑拍计数（保持窗判定用；tick 每 BEAT 加一）
+var _beat_count: int = 0
 
 
 func _init() -> void:
 	_last_intents.resize(N_SQUADS)
 	_last_intents.fill(-1)
+	_pending_intents.resize(N_SQUADS)
+	_pending_intents.fill(-1)
+	_pending_beats.resize(N_SQUADS)
+	_pending_beats.fill(0)
+	_hold_beats.resize(N_SQUADS)
+	_hold_beats.fill(INTENT_HOLD_BEATS)
+	_switch_beat.resize(N_SQUADS)
+	_switch_beat.fill(-1)
 
 
 func brain_name() -> String:
@@ -240,6 +266,7 @@ func tick(dt: float) -> void:
 	if _beat_acc < BEAT:
 		return
 	_beat_acc -= BEAT
+	_beat_count += 1
 	# 班解析重试（arena 编班在开战同帧后才完成；setup 时可能扑空）
 	if _squads.is_empty() and _formation != null:
 		_resolve_squads()
@@ -274,6 +301,9 @@ func _count_in_radius(units: Array, p) -> int:
 ## 网络缺失 → 启发式（前两班攻右旗、其余接敌）。
 ## 意图登记照 C++ step() 口径：只对存活班更新 _last_intents——全灭班冻结在
 ## 阵亡前的值、从未存在的槽保持 −1（观察 one-hot 全 0，无假信号）。
+## 防抖（诊断 B3）：argmax 原始值只作候选——与已确认号令不同值需连续
+## INTENT_CONFIRM_BEATS 拍一致才切换，首次指派（−1）立即生效；未确认期间
+## 沿用旧号令下发。观察 one-hot（_last_intents）与实发号令同源 = 输入输出都稳。
 func _decide() -> Array:
 	var intents: Array = []
 	intents.resize(N_SQUADS)
@@ -287,10 +317,61 @@ func _decide() -> Array:
 	else:
 		for si in _squads.size():
 			intents[si] = 2 if si < 2 else 4
+	return _debounce_intents(intents, mask)
+
+
+## 意图防抖（纯函数化便于离线驱动测试）：argmax 原始值只作候选——连续
+## INTENT_CONFIRM_BEATS 拍同值且过了号令最短保持窗才切换；首次指派（−1）立即
+## 生效；未确认期间沿用旧号令下发。观察 one-hot（_last_intents）与实发号令同源。
+func _debounce_intents(intents: Array, mask: PackedInt32Array) -> Array:
+	var confirmed: Array = []
+	confirmed.resize(N_SQUADS)
 	for si in N_SQUADS:
-		if si < mask.size() and int(mask[si]) == 1:
-			_last_intents[si] = int(intents[si])
-	return intents
+		confirmed[si] = int(_last_intents[si])
+		if si >= mask.size() or int(mask[si]) != 1:
+			continue
+		var raw: int = int(intents[si])
+		var last: int = int(_last_intents[si])
+		if last < 0 or raw == last:
+			# 首次指派立即生效（并登记切换拍，保持窗从此起算）；同值重申 = 稳定
+			_last_intents[si] = raw
+			_pending_intents[si] = -1
+			_pending_beats[si] = 0
+			if last < 0:
+				_switch_beat[si] = _beat_count
+				_hold_beats[si] = INTENT_HOLD_BEATS
+			confirmed[si] = raw
+			continue
+		if int(_pending_intents[si]) == raw:
+			_pending_beats[si] = int(_pending_beats[si]) + 1
+		else:
+			_pending_intents[si] = raw
+			_pending_beats[si] = 1
+		if int(_pending_beats[si]) >= INTENT_CONFIRM_BEATS:
+			# 号令最短保持：确认达标但处于保持窗内 → 候选挂起不切换（保持期满
+			# 后若候选仍同值，下一拍即切换）；保持升级迟滞：保持期满立即又翻 =
+			# 振荡班，保持翻倍（上限 INTENT_HOLD_MAX_BEATS）；意图稳定满 2×保持
+			# 回落基础值。目标 = 号令翻转 <20 次/min（诊断 B3 验收线）
+			var beat: int = _beat_count
+			var last_switch: int = int(_switch_beat[si])
+			if last_switch >= 0 and beat - last_switch < int(_hold_beats[si]):
+				continue
+			if OS.get_environment("NN_DEBOUNCE_DEBUG") != "":
+				print("[NNDebounce] 班%d 切换: beat=%d 距上次=%d hold=%d raw=%d last=%d | wall=%.1fs ts=%.2f ptps=%d" % [
+					si, beat, beat - last_switch, int(_hold_beats[si]), raw, last,
+					Time.get_ticks_msec() / 1000.0, Engine.time_scale,
+					Engine.physics_ticks_per_second])
+			if last_switch >= 0 \
+					and beat - last_switch >= int(_hold_beats[si]) * 2:
+				_hold_beats[si] = INTENT_HOLD_BEATS
+			else:
+				_hold_beats[si] = mini(int(_hold_beats[si]) * 2, INTENT_HOLD_MAX_BEATS)
+			_switch_beat[si] = beat
+			_last_intents[si] = raw
+			_pending_intents[si] = -1
+			_pending_beats[si] = 0
+			confirmed[si] = raw
+	return confirmed
 
 
 ## 活动掩码（8 槽；空班/全灭班 = 0——采样/greedy 跳过，不吃号令）

@@ -150,6 +150,14 @@ static var _preset_idx: int = 1
 const ROW_GAP: float = 140.0
 ## 排内左右间距（px）
 const LINE_GAP: float = 90.0
+## 行内最小纵距（px，诊断 A1/B）：分离椭圆纵深半径（formation_spacing 72）——
+## 行内自适应压缩的钳制下限。压穿它 = 分离力常驻 + 位置伺服极限环（移动单位
+## 水平翻转 4.3~5.1 次/s、友邻纵距 43~57px 的根因）。【待实测校准】
+const MIN_ROW_GAP: float = 72.0
+## 奇偶错排横向错位（px，诊断 B）：一行按 MIN_ROW_GAP 放不下时改错排——相邻
+## 单位 x 错开 ≥ 分离椭圆横向半径 48，Δx≥50 时任意纵距都不违反分离不变式
+##（椭圆判别恒 >1），只须保同列纵距 ≥ MIN_ROW_GAP。【待实测校准】
+const STAGGER_X: float = 50.0
 ## 左右两团出生中心 x 相对地图中线的偏移。观战缩放 0.75（缩放条 100% 档）下
 ## 半屏 1280px——偏移 1400 时两军最前排（front_x 150）落在 ±1250，开场即在
 ## 画面两缘可见、对冲收向中线（"两军拉满全屏"）
@@ -283,19 +291,35 @@ func _spawn_and_start() -> void:
 			var row: Dictionary = rows[ri]
 			var x_off: float = float(def["front_x"]) - ri * ROW_GAP
 			var count: int = int(row["count"])
-			# 行内间距按行宽自适应压缩：大行（10 人×LINE_GAP 90 = ±405px）超出
-			# 行走带纵深时向中心收，不越界（越界者被地面约束钳到带缘叠成一排）
+			# 行内间距按行宽自适应压缩，但下限 = 分离椭圆纵深半径（MIN_ROW_GAP）：
+			# 压缩穿底会把友邻纵距压到 43~57px < 72px → 分离力常驻 + 位置伺服极限环
+			# （诊断 A1）。单排放不下改奇偶错排（相邻 x 错开 ≥ 椭圆横半径 48，纵距
+			# 再近也不违反分离不变式），不再压间距。
 			var half_span: float = (count - 1) * 0.5 * LINE_GAP
 			var max_half: float = (map.ground_bottom - map.ground_y) * 0.5 - 40.0
-			var gap: float = LINE_GAP if half_span <= max_half \
-					else (max_half * 2.0) / float(maxi(count - 1, 1))
+			var staggered: bool = false
+			var gap: float = LINE_GAP
+			if half_span > max_half:
+				var gap_single: float = (max_half * 2.0) / float(maxi(count - 1, 1))
+				if gap_single >= MIN_ROW_GAP:
+					gap = gap_single
+				else:
+					# 奇偶错排：纵距减半（同列间距 = 2×gap ≥ MIN_ROW_GAP），
+					# 相邻同学横向错开 STAGGER_X
+					staggered = true
+					gap = clampf(gap_single, MIN_ROW_GAP * 0.5, LINE_GAP * 0.5)
 			for k in count:
 				var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * gap
-				var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off, y), int(row["weapon"]), fs)
+				# 错排横向偏移：偶数位 −STAGGER_X/2、奇数位 +STAGGER_X/2（相邻 Δx=50，
+				# 阵列中线不动）；右军镜像取反保持两军点对称
+				var stag_x: float = 0.0
+				if staggered:
+					stag_x = -STAGGER_X * 0.5 if k % 2 == 0 else STAGGER_X * 0.5
+				var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off + stag_x, y), int(row["weapon"]), fs)
 				if lt != null:
 					l_units.append(lt)
 					_attacker.append(lt)
-				var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - x_off, y), int(row["weapon"]), fs)
+				var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - x_off - stag_x, y), int(row["weapon"]), fs)
 				if rt != null:
 					r_units.append(rt)
 					_defender.append(rt)

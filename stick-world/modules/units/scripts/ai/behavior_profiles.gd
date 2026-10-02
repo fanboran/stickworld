@@ -154,7 +154,7 @@ const BASELINE: Dictionary = {
 	"suppression_morale_per_tick": 2.0,     ## 压制期士气流失（点/0.5s tick，语义推断待实测校准；经 lose_morale 只损士气不伤血，与伤害士气损失叠加可推向溃逃）
 	"suppression_immune": false,            ## 豁免规则（兵种级：英雄/巨人类置 true；已溃逃/已死亡/玩家附身恒豁免，不占此键）
 	"suppression_near_miss_enabled": false,  ## 箭矢近失压制开关（false=只有命中才压制=既有语义；受 suppression_enabled 总门约束，由箭矢侧消费）
-	"suppression_near_miss_radius": 80.0,   ## 近失判定半径（px，箭矢非命中终态落点到单位身体中心的距离；须 > 命中半径 34，语义推断待实测校准）
+	"suppression_near_miss_radius": 45.0,   ## 近失判定半径（px，箭矢非命中终态落点到单位身体中心的距离；须 > 命中半径 34）。80px 在 45px 密度战线上等于箭雨钉住全场（停战螺旋主弹药，诊断 B1）→ 收窄到 45px 贴住命中判定；待实测校准
 	# ── W2 · WorldBox 决策冷却错峰（M4/Top2；消费点 ai_controller 决策时钟族。
 	#    冷却记"世界时刻"不记剩余秒数；成批出生预置假偏移，读档按存档相位回填
 	#    （ai_timing），两者共同防群体齐套。全部默认关 = 首次到期 = 装配后
@@ -216,7 +216,10 @@ const CLASS_PROFILES: Dictionary = {
 		"aim_hold": Vector2(0.25, 0.9),
 		"aim_scatter": 0.035,
 		"prefer_large": 1.0,
-		"push_apart": 56.0,
+		# 站桩输出间距（SWL PushApartTolerance）：须低于实战友邻间距（分离压缩后
+		# ~50px），否则站桩期每 0.4s 必推、永不收敛 = 原地高频振动（诊断 A2）；
+		# 44 < 50 → 只在真挤到 44 内才推。待实测校准
+		"push_apart": 44.0,
 		# y 对齐（SWL ArcherAi.IsCloseEnoughToAdjustYTowardsTarget override：收紧调 y 门槛
 		# + adjustYEarly 提前对齐；9p 首个消费者：|Δy| 超容忍先走位不出手。阈值待实测校准）
 		"y_align_early": true,

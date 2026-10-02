@@ -165,9 +165,13 @@ func update(delta: float) -> void:
 	# 禁令影响——惩罚来自模拟因果。duck 查询：组件缺失（测试桩）跳过 = 零回归。
 	var se: Node = entity.get_status_effects() if entity.has_method("get_status_effects") else null
 	if se != null and is_instance_valid(se) and se.has_method("has_suppressed") and se.has_suppressed():
-		if entity.has_method("ai_stop"):
-			entity.ai_stop()
-		return
+		# 避战还击窗口放行（诊断 B2 带打带跑）：决策层开窗（避战态+近身有敌）时
+		# 在途 attack 继续正常攻击流程——否则还击行为会被本段立即按停（决策放行
+		# 与兜底停滞打架）；窗口外维持压制停滞既有语义。
+		if not _counter_window_open():
+			if entity.has_method("ai_stop"):
+				entity.ai_stop()
+			return
 	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
 	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）
 	var stunned: bool = _cap_hit_stun and entity.is_in_hit_stun()
@@ -770,6 +774,18 @@ func _spawn_minidons(count: int) -> Array:
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
+
+## 避战还击窗口查询（duck ai_controller.is_counter_attack_window，先例
+## behavior_retreat._set_disengaging 的 duck 姿态；组件缺失/查询不可用返回
+## false = 既有压制停滞语义零回归）
+func _counter_window_open() -> bool:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_ai_controller"):
+		return false
+	var ai: Node = entity.get_ai_controller()
+	if ai == null or not is_instance_valid(ai) or not ai.has_method("is_counter_attack_window"):
+		return false
+	return bool(ai.is_counter_attack_window())
+
 
 ## 读取兵种档案参数（缺省回落 fallback——对应原硬编码常量）。
 func _p(key: String, fallback: float) -> float:

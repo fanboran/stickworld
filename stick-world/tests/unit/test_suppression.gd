@@ -37,6 +37,8 @@ func _ready() -> void:
 	_runner.add_test("士气流失：压制期 tick 经 lose_morale，不伤血", _test_morale_drain)
 	_runner.add_test("ai_controller 压制避战：脱离接火 + 号令挂起，解除后续行", _test_ban_stall_order)
 	_runner.add_test("压制避战幂等：已在避战不重 travel", _test_suppress_disengage_idempotent)
+	_runner.add_test("避战还击：避战态被贴脸切 attack，敌脱离收窗（带打带跑）", _test_disengage_counterattack)
+	_runner.add_test("避战还击豁免：撤离档（evacuate）被压继续撤离不回头", _test_counter_gate_command_path)
 	_runner.add_test("零回归：无状态效果组件实体决策原样", _test_no_component_regression)
 	_runner.add_test("behavior_attack 兜底：压制期在途行为立即停", _test_attack_segment)
 	_runner.add_test("squad_phase_plan 替换点：压制成员跳过/未压制走代理", _test_phase_plan)
@@ -64,7 +66,8 @@ func _test_near_miss_defaults() -> void:
 	var radius: float = float(p.get("suppression_near_miss_radius", 0.0))
 	_runner.assert_true(radius > ScriptArrowProjectile.HIT_RADIUS,
 			"近失半径须大于命中半径 34（实测 %.1f）" % radius)
-	_runner.assert_approx(radius, 80.0, 0.001, "近失半径档案初值 80px")
+	# 停战治理收窄（诊断 B1）：80px 在 45px 密度战线上等于箭雨钉住全场 → 收窄贴命中判定
+	_runner.assert_approx(radius, 45.0, 0.001, "近失半径档案初值 45px")
 	_reset_profile_cache()
 
 
@@ -326,17 +329,57 @@ func _test_ban_stall_order() -> void:
 
 
 func _test_suppress_disengage_idempotent() -> void:
-	# 压制避战幂等：已在避战行为（retreat 进行中）时，压制期决策拍不重 travel
-	# （重 travel 会重播 enter/清避战计时——幂等保持是"压制结束自动续行"的前提）
+	# 压制避战幂等：已在避战行为（retreat 进行中）且**无敌贴脸**时，压制期决策拍
+	# 不重 travel（重 travel 会重播 enter/清避战计时——幂等保持是"压制结束自动
+	# 续行"的前提；贴脸还击走 _test_disengage_counterattack 的新语义）
 	var ctx := _make_ai_ctx({"suppression_enabled": true})
 	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
 	ctx.ai._make_decision()
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制期切入避战")
+	# 敌挪出近战范围（> COUNTER_RANGE 200）：还击窗不开，纯避战幂等场景
+	ctx.battle.enemies[0].global_position = Vector2(1500, 300)
 	ctx.ai.get_state_machine()._current_behavior._timer = 3.0  # 白盒：避战进行中
 	ctx.ai._make_decision()
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "已在避战保持（不重 travel）")
 	_runner.assert_approx(ctx.ai.get_state_machine()._current_behavior._timer, 3.0, 0.001,
 			"避战计时未被重置（enter 未重播）")
+	ctx.teardown()
+
+
+func _test_disengage_counterattack() -> void:
+	# 诊断 B2 带打带跑：避战态被敌人贴进近战范围（COUNTER_RANGE 200）→ 开还击窗
+	# 切 attack 就地迎击（窗口带闩，压制期敌不出范围不收回）；敌拉开后收窗回避战
+	var ctx := _make_ai_ctx({"suppression_enabled": true})
+	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制先切入避战")
+	_runner.assert_true(ctx.ai.is_disengaging(), "避战行为态置位")
+	ctx.ai._make_decision()  # 夹具敌在 100px < COUNTER_RANGE 200：开窗还击
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "避战态被贴脸 → 切 attack 还击")
+	_runner.assert_true(ctx.ai.is_counter_attack_window(), "还击窗口开启")
+	# 窗口带闩：敌仍在近战范围，下一拍保持还击不抖回避战
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "窗口带闩：敌未脱离保持还击")
+	# 敌拉开出近战范围：收窗回避战（带打带跑后半拍）
+	ctx.battle.enemies[0].global_position = Vector2(1500, 300)
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "敌脱离近战范围 → 收窗回避战")
+	_runner.assert_false(ctx.ai.is_counter_attack_window(), "还击窗口已收")
+	ctx.teardown()
+
+
+func _test_counter_gate_command_path() -> void:
+	# 命令路径撤离豁免：retreat 的 evacuate 档（C3 撤仗/可下令撤退）被压不开
+	# 还击窗——带打带跑只作用于自主避战（fallback），命令撤离一路撤到边缘
+	var ctx := _make_ai_ctx({"suppression_enabled": true})
+	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	ctx.ai._make_decision()  # 先入 fallback 避战
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "先入避战")
+	# 白盒翻 evacuate 档（TeamAi ROUT 撤仗同款行为形态）+ 敌仍贴脸
+	ctx.ai.get_state_machine()._current_behavior._evacuate = true
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "撤离档被压继续撤离（不回头还击）")
+	_runner.assert_false(ctx.ai.is_counter_attack_window(), "撤离档不开还击窗")
 	ctx.teardown()
 
 
@@ -579,6 +622,7 @@ class _AiCtx:
 			entity.se = se
 		ai = AIController.new()
 		ai._entity = entity  # 不进树直接注入（_ready cast 等价物，batch 准入：不进场景树）
+		entity.ai_controller = ai  # 避战行为态回写面（behavior_retreat._set_disengaging 消费）
 		ai._setup_state_machine()
 
 	func teardown() -> void:
@@ -616,6 +660,7 @@ class _SupEntity extends CharacterBody2D:
 	var possessed: bool = false
 	var dead: bool = false
 	var faction: int = 1
+	var ai_controller: Node = null  # AIController（避战行为态回写面，_AiCtx.setup 注入）
 
 	func get_weapon() -> Node:
 		return weapon
@@ -625,6 +670,9 @@ class _SupEntity extends CharacterBody2D:
 
 	func get_battle_instance() -> Node:
 		return battle
+
+	func get_ai_controller() -> Node:
+		return ai_controller
 
 	func is_possessed() -> bool:
 		return possessed

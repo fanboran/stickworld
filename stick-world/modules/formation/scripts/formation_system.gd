@@ -22,6 +22,14 @@ extends Node
 ##   - 连/战场层（2~4 排 + 连长或指挥官 rank 3）由指挥官批次接入，挂载点 =
 ##     _platoons[].company_id 预留字段（排列表的归属结构）。
 ##
+## 火力组层（班内指挥分组，RL v3 编制地基【提案/待定】）：组 = 班内成员子集 +
+## 组寻址 id，不占军衔不入组织树（组长 = 组内首员，无标记）；只作号令寻址粒度
+##（TacticalOrders.issue 对 ft_id 下令），不拆散班聚结（归队锚点仍是班长）；
+## 组随成员阵亡收缩、空组自动消亡；战斗域本地聚合（同排口径，不进跨图快照）。
+## API 面：create_fireteam / get_squad_fireteams / get_fireteam_units /
+## get_unit_fireteam / get_fireteam_squad / is_fireteam / get_fireteam_leader /
+## disband_fireteam。
+##
 ## 队伍级目标决策（反编译参考实装 D-B）：本系统每 SQUAD_DECISION_INTERVAL 秒为每个
 ## 战斗小队选一个**共享攻击目标**（决策 → 队员执行），队员在攻击行为里优先用
 ## 队伍目标（集火），否则各自寻敌。参考遗产 TeamAi / 传奇单位组目标同步。
@@ -144,6 +152,13 @@ var _platoons: Dictionary = {}
 var _squad_to_platoon: Dictionary = {}
 ## 排 id 自增计数
 var _platoon_counter: int = 0
+## ── 火力组层（班内指挥分组，RL v3 编制地基【提案/待定】）──
+## ft_id -> {"squad_id": String, "units": Array[Node], "name": String}
+var _fireteams: Dictionary = {}
+## unit iid -> ft_id（快速反查）
+var _unit_to_fireteam: Dictionary = {}
+## 火力组 id 自增计数
+var _fireteam_counter: int = 0
 ## 编制预设：preset_id -> {"id", "name", "tag", "work_types", "default_role"}
 var _presets: Dictionary = {}
 ## 预设是否已加载
@@ -253,6 +268,7 @@ func _process(_delta: float) -> void:
 				break
 			if u.has_method("is_dead") and u.is_dead():
 				_unit_to_squad.erase(u.get_instance_id())
+				_remove_unit_from_fireteam(u)  # 阵亡即离组（组随成员阵亡收缩）
 				units.remove_at(i)
 				changed = true
 				# 伤亡上报挂点（§4.4）：每次死亡评估一次存活比（跌破沿只报首次，档位门控归组织侧）
@@ -421,6 +437,9 @@ func disband_squad(squad_id: String) -> void:
 	if not _squads.has(squad_id):
 		return
 	var squad: Dictionary = _squads[squad_id]
+	# 火力组先散（组是班内子集，班亡组不存；成员映射逐组清）
+	for ft_id_v in get_squad_fireteams(squad_id):
+		disband_fireteam(String(ft_id_v))
 	# 清除单位映射与编队派生角色（2026-08 审计修复：disband 也要清 role，与 disband_all_squads 一致）
 	for u in squad["units"]:
 		if is_instance_valid(u):
@@ -455,6 +474,9 @@ func disband_all_squads() -> void:
 	# 排聚合层一并清空（排是战斗域本地聚合，跨图携带只走班快照）
 	_platoons.clear()
 	_squad_to_platoon.clear()
+	# 火力组层一并清空（同口径：班内指挥分组不跨图携带）
+	_fireteams.clear()
+	_unit_to_fireteam.clear()
 
 
 ## 任命小队长（班长，rank 1）。返回是否成功。
@@ -863,6 +885,143 @@ func has_squad_command_chain(squad_id: String) -> bool:
 	return not (leader.has_method("is_dead") and leader.is_dead())
 
 
+# ─────────────────────────────── 火力组（班内指挥分组）────────────────────────────────
+## 火力组 = 班内成员子集的指挥分组（RL 层级指挥训练 v3 §一编制的地基层：班长以
+## 火力组为单位细分命令——「一号攻 X、二号攻 Y」，火力组是最小指挥单元）。
+## 设计边界（v3 §一定案）：
+##   - 只是命令的粒度，不是组织树节点/编制实体——不动组织模块、不占军衔
+##    （组长 = 组内首员，无任何标记）；战斗中组随成员阵亡收缩，不重组不跳槽；
+##   - 不拆散班聚结：一次性归队锚点仍是班长（squad_cohesion 零改动），班内
+##     槽位/集火/士气全按班走——火力组只回答「号令发给谁」（TacticalOrders.issue
+##     对 ft_id 寻址分流，按班下令原语义不变）；
+##   - 战斗域本地聚合（同排 platoon 口径）：不入组织树、不进跨图快照，
+##     disband_all_squads 一并清空。
+
+## 创建火力组：把班内若干成员编为一组。units 须全部是该班在册存活成员（无效/
+## 阵亡者滤除，重复成员去重）；已在本班其他火力组的成员自动移入新组（班长重劈
+## 组常用）。返回 ft_id（失败返回 ""）。
+func create_fireteam(squad_id: String, units: Array, ft_name: String = "") -> String:
+	if not _squads.has(squad_id):
+		push_warning("[FormationSystem] 创建火力组失败：班不存在 %s" % squad_id)
+		return ""
+	var squad: Dictionary = _squads[squad_id]
+	var members: Array = []
+	for u in units:
+		if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
+			continue
+		if u not in squad["units"]:
+			push_warning("[FormationSystem] 创建火力组失败：单位不在该班 %s 中" % squad_id)
+			return ""
+		if u in members:
+			continue
+		members.append(u)
+	if members.is_empty():
+		push_warning("[FormationSystem] 创建火力组失败：无有效成员")
+		return ""
+	_fireteam_counter += 1
+	var ft_id: String = "fireteam_%d" % _fireteam_counter
+	_fireteams[ft_id] = {
+		"squad_id": squad_id,
+		"units": members,
+		"name": ft_name if not ft_name.is_empty() else ft_id,
+	}
+	for u in members:
+		# 从旧组移入新组（仅同班可能——异班单位通不过上面的成员校验）
+		var old := String(_unit_to_fireteam.get(u.get_instance_id(), ""))
+		if not old.is_empty() and _fireteams.has(old):
+			(_fireteams[old]["units"] as Array).erase(u)
+		_unit_to_fireteam[u.get_instance_id()] = ft_id
+	_purge_empty_fireteams(squad_id)
+	return ft_id
+
+
+## 班内火力组 id 列表（编组序）。
+func get_squad_fireteams(squad_id: String) -> Array:
+	var out: Array = []
+	for ft_id_v in _fireteams.keys():
+		var ft_id := String(ft_id_v)
+		if String(_fireteams[ft_id]["squad_id"]) == squad_id:
+			out.append(ft_id)
+	return out
+
+
+## 全场火力组数（调试/测试观测位；同 get_platoon_count 口径）。
+func get_fireteam_count() -> int:
+	return _fireteams.size()
+
+
+## 火力组成员（值拷贝；含阵亡者——死亡清理由 _process 逐出，口径同 get_squad_units）。
+func get_fireteam_units(ft_id: String) -> Array:
+	if not _fireteams.has(ft_id):
+		return []
+	return (_fireteams[ft_id]["units"] as Array).duplicate()
+
+
+## 单位所属火力组 id（未入组返回 ""）。
+func get_unit_fireteam(unit: Node) -> String:
+	if unit == null or not is_instance_valid(unit):
+		return ""
+	return String(_unit_to_fireteam.get(unit.get_instance_id(), ""))
+
+
+## 火力组父班 id（ft_id 无效返回 ""）。
+func get_fireteam_squad(ft_id: String) -> String:
+	if not _fireteams.has(ft_id):
+		return ""
+	return String(_fireteams[ft_id]["squad_id"])
+
+
+## id 是否为火力组（TacticalOrders 寻址分流用；班 id 返回 false）。
+func is_fireteam(id: String) -> bool:
+	return _fireteams.has(id)
+
+
+## 火力组组长（组内首员，无军衔无标记——纯语义寻址；首员阵亡/失效顺延下一位）。
+func get_fireteam_leader(ft_id: String) -> Node:
+	if not _fireteams.has(ft_id):
+		return null
+	for u in _fireteams[ft_id]["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			return u
+	return null
+
+
+## 解散火力组（成员留班不散；组无存续价值时班长重劈用）。
+func disband_fireteam(ft_id: String) -> void:
+	if not _fireteams.has(ft_id):
+		return
+	for u in _fireteams[ft_id]["units"]:
+		if is_instance_valid(u):
+			_unit_to_fireteam.erase(u.get_instance_id())
+	_fireteams.erase(ft_id)
+
+
+## 清扫某班的空组（成员死绝/被移走的火力组自动消亡——组随成员阵亡收缩，
+## 空组无指挥粒度）。
+func _purge_empty_fireteams(squad_id: String) -> void:
+	for ft_id_v in _fireteams.keys().duplicate():
+		var ft_id := String(ft_id_v)
+		if String(_fireteams[ft_id]["squad_id"]) != squad_id:
+			continue
+		if (_fireteams[ft_id]["units"] as Array).is_empty():
+			disband_fireteam(ft_id)
+
+
+## 单位移出其所在火力组（离班/阵亡共用；空组随之消亡）。
+func _remove_unit_from_fireteam(unit: Node) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	var iid: int = unit.get_instance_id()
+	var ft_id := String(_unit_to_fireteam.get(iid, ""))
+	if ft_id.is_empty():
+		return
+	_unit_to_fireteam.erase(iid)
+	if not _fireteams.has(ft_id):
+		return
+	(_fireteams[ft_id]["units"] as Array).erase(unit)
+	_purge_empty_fireteams(String(_fireteams[ft_id]["squad_id"]))
+
+
 func _enter_tree() -> void:
 	FormationAPI.set_active_host(self)
 
@@ -988,6 +1147,7 @@ func _remove_unit_from_squad(unit: Node) -> void:
 	var squad: Dictionary = _squads[squad_id]
 	(squad["units"] as Array).erase(unit)
 	_unit_to_squad.erase(iid)
+	_remove_unit_from_fireteam(unit)  # 离班即离组（火力组是班内子集）
 	if squad["leader"] == unit:
 		squad["leader"] = null
 	# 排长被移出其班 = 卸任（手动移编非阵亡，不发缺口信号，可另行任命）

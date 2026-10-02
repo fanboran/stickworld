@@ -4,8 +4,10 @@ extends Node
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §8.3、§8.4、组织系统架构.md §4.2.4。
 ## 两条下达路径：
-##   issue(order, squad_id, ...)            对 L1 小队直令（玩家框选微操/team_ai 现场指挥，
-##                                          不吃传播——战场现场电台）：
+##   issue(order, target_id, ...)           对编制直令（玩家框选微操/team_ai 现场指挥，
+##                                          不吃传播——战场现场电台）：target_id =
+##                                          L1 小队 id 或班内火力组 id（火力组寻址，
+##                                          RL v3 班长细分的号令通道，按班下令不变）：
 ##   -> command_chain.deliver(...) 即时送达 -> 各单位 AIController.set_order 执行
 ##   issue_to_org(org_id, order_type, ...)  对组织（任意层级）下令（§4.2.4 逐层接力）：
 ##   -> OrgApi.build_dispatch_plan 生成 hop 计划（玩家跳 + BFS 层序，同令透传）
@@ -53,26 +55,37 @@ func setup(formation_system: Node, command_chain: Node, org_api: Node = null) ->
 
 # ─────────────────────────────── 核心 API ────────────────────────────────
 
-## 对指定小队下达号令。
+## 对指定编制下达号令。
 ## order_type: OrderType 枚举值
-## squad_id: 目标小队 ID
+## target_id: 目标编制 id——L1 小队 squad_id 或班内火力组 ft_id（火力组寻址：
+##   RL v3「班长以火力组为单位细分命令」的地基；号令成员 = 组员，战斗职责沿父班，
+##   相位计划不触发——班粒度决策不被火力组细分整班重置。按班下令原语义不变）
 ## target_pos: 目标位置（世界坐标，ADVANCE/RALLY 用）
 ## source_tier: 发令者层级（0=玩家直接指挥，延迟为 0）
 ## extra_params: 行为参数增量（合并进 _order_to_params；如 RETREAT 的 evacuate=true
 ## 战役撤离标记，TeamAi ROUT 姿态消费——出征与领地架构 §4.2）
-## 返回是否成功下达（小队存在且有有效单位）。
-func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO,
+## 返回是否成功下达（编制存在且有有效单位）。
+func issue(order_type: int, target_id: String, target_pos: Vector2 = Vector2.ZERO,
 		source_tier: int = 0, extra_params: Dictionary = {}) -> bool:
 	if _formation_system == null or _command_chain == null:
 		push_warning("[TacticalOrders] 未注入 formation_system 或 command_chain")
 		return false
-	var units: Array = _formation_system.get_squad_units(squad_id)
+	# 寻址分流：火力组 id → 取组员、职责沿父班；班 id → 原路径
+	var units: Array = []
+	var duty_squad_id: String = target_id
+	var is_ft: bool = _formation_system.has_method("is_fireteam") \
+			and _formation_system.is_fireteam(target_id)
+	if is_ft:
+		units = _formation_system.get_fireteam_units(target_id)
+		duty_squad_id = _formation_system.get_fireteam_squad(target_id)
+	else:
+		units = _formation_system.get_squad_units(target_id)
 	if units.is_empty():
-		push_warning("[TacticalOrders] 小队 %s 无有效单位" % squad_id)
+		push_warning("[TacticalOrders] 编制 %s 无有效单位" % target_id)
 		return false
-	# 战斗号令仅限战斗职责小队（建造队/劳工队/运输队拒绝）
-	if _formation_system.has_method("is_combat_squad") and not _formation_system.is_combat_squad(squad_id):
-		push_warning("[TacticalOrders] 小队 %s 无战斗职责，拒绝号令" % squad_id)
+	# 战斗号令仅限战斗职责小队（建造队/劳工队/运输队拒绝；火力组沿父班职责判定）
+	if _formation_system.has_method("is_combat_squad") and not _formation_system.is_combat_squad(duty_squad_id):
+		push_warning("[TacticalOrders] 编制 %s 无战斗职责，拒绝号令" % target_id)
 		return false
 	var behavior_name: String = _order_to_behavior(order_type)
 	var params: Dictionary = _order_to_params(order_type, target_pos)
@@ -80,15 +93,15 @@ func issue(order_type: int, squad_id: String, target_pos: Vector2 = Vector2.ZERO
 	# 队伍级目标点分配模式（反编译参考实装 D）：推进/冲刺横排散开，RALLY 围圈集合
 	var spread_mode: String = _order_to_spread(order_type)
 	# 通过指挥链下达（P0 source_tier=0 时无延迟）
-	_command_chain.deliver(order_type, squad_id, units, behavior_name, params, source_tier, 1, spread_mode)
-	# A5 相位计划触发点（C8）：号令下发成功后回查编队系统——推进类号令激活
-	# 小队相位计划，其余号令撤销（开关关闭时编队侧静默忽略，零回归）
-	if _formation_system != null and _formation_system.has_method("notify_squad_order"):
-		_formation_system.notify_squad_order(order_type, squad_id, target_pos)
+	_command_chain.deliver(order_type, target_id, units, behavior_name, params, source_tier, 1, spread_mode)
+	# A5 相位计划触发点（C8）：仅班号令回查编队系统——火力组号令是班内细分，
+	# 不得整班重置相位计划（军师规划器按班下令的决策权不受细分扰动）
+	if not is_ft and _formation_system.has_method("notify_squad_order"):
+		_formation_system.notify_squad_order(order_type, target_id, target_pos)
 	# 发射信号
-	order_issued.emit(order_type, squad_id, source_tier)
+	order_issued.emit(order_type, target_id, source_tier)
 	if EventBus != null and EventBus.has_signal("order_issued"):
-		EventBus.order_issued.emit(order_type, squad_id, source_tier)
+		EventBus.order_issued.emit(order_type, target_id, source_tier)
 	return true
 
 

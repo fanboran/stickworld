@@ -6,7 +6,8 @@
 ## （ui/formation_panel 编制窗口、ui/squad_card 班组卡、ui/squad_member_row 成员行）。
 ##
 ## 编制层级（现实军衔体系重排）：班 squad（8~12 人小班、硬顶 15，班长 rank 1，
-## 阵亡组织侧补位免费轮转）→ 排 platoon（2~3 班 + 排长 1 名 rank 2，战斗域本地
+## 阵亡组织侧补位免费轮转；班内另有火力组指挥分组 = 号令寻址粒度，不占军衔
+## 不入组织树）→ 排 platoon（2~3 班 + 排长 1 名 rank 2，战斗域本地
 ## 聚合不入组织树；排长阵亡 = 指挥链缺口：该排失去集火号令与排长士气光环，
 ## 到战斗结束不补员）→ 连/战场（2~4 排 + 连长或指挥官 rank 3，挂载点 =
 ## platoon 的 company_id 字段，指挥官批次接入）。
@@ -19,6 +20,16 @@
 ##   disband_platoon(platoon_id)（班保留转独立）
 ##   has_squad_command_chain(squad_id) -> bool（排长缺口 → false）
 ##   信号：platoon_created(platoon_id, squad_ids) / platoon_leader_lost(platoon_id)
+##
+## 火力组契约（FormationSystem 实例方法，duck 调用；RL v3 编制地基【提案/待定】）：
+##   create_fireteam(squad_id, units, name="") -> ft_id（组 = 班内成员子集，
+##     不占军衔不入组织树，组长 = 组内首员无标记；异组重劈自动移人）
+##   get_squad_fireteams(squad_id) / get_fireteam_units(ft_id) /
+##   get_unit_fireteam(unit) / get_fireteam_squad(ft_id) / is_fireteam(id) /
+##   get_fireteam_leader(ft_id) / disband_fireteam(ft_id)
+##   火力组只作号令寻址粒度（TacticalOrders.issue 对 ft_id 下令，按班下令不受
+##   影响），不拆散班聚结——一次性归队锚点仍是班长；组随成员阵亡收缩、空组
+##   自动消亡；战斗域本地聚合（同排口径，不进跨图快照，disband_all_squads 清空）。
 ##
 ## 班内一次性归队出口（SWL 滞回+节流直译，常量见本文件 COHESION_ 段）：
 ##   get_unit_cohesion_steer(unit) -> Vector2（归队态 = 指向锚点的单位方向向量；

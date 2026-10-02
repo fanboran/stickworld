@@ -38,6 +38,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_ai_enhance.gd",
 	"res://tests/unit/test_ai_morale.gd",
 	"res://tests/unit/test_ai_arrive.gd",
+	"res://tests/unit/test_behavior_breach.gd",
 	"res://tests/unit/test_combat_fidelity.gd",
 	"res://tests/unit/test_strike_frame.gd",
 	"res://tests/unit/test_possess_charge.gd",
@@ -86,6 +87,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_keymap_registry.gd",
 	"res://tests/unit/test_commander_rules.gd",
 	"res://tests/unit/test_formation_platoon.gd",
+	"res://tests/unit/test_formation_fireteam.gd",
 	"res://tests/unit/test_squad_cohesion.gd",
 ]
 

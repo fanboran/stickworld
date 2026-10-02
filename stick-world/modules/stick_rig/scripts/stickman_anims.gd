@@ -167,6 +167,7 @@ const WEAPON_IDLE_ANIM: Dictionary = {
 	2: ANIM_IDLE_BOW,        # BOW：持弓
 	3: ANIM_IDLE_PICKAXE,    # PICKAXE：持镐
 	4: ANIM_IDLE_STAFF,      # STAFF：持杖
+	5: ANIM_IDLE_STAFF,      # MERIC：持杖（祭司专属站姿资产未转译前的回落——祭司持杖近观感，远好于持剑）
 }
 
 ## 取武器类型对应的站姿动画名（未知类型回落持剑）

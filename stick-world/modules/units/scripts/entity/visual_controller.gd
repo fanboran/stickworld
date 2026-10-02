@@ -149,6 +149,22 @@ func _apply_stance_anim(kind: String) -> void:
 			rig.set_state_anim("idle", _pick_idle_variant())
 
 
+## 当前生效姿态动画观测口（billboard 镜像消费）：2D 侧换装在 _apply_stance_anim
+## （依赖 rig，billboard 图 rig==null 不生效，持盾变体此前因此整体不可见）。
+## HD-2D 镜像 feed 经本口拿当前应生效的 walk/idle 动画名，交
+## char_sprite_3d.set_stance_anims 自行换装——名字解析单一真相源仍在本类
+## （档案键 block_walk_anim/block_idle_anim），镜像层不摸行为档案（L1 不依赖 L2）。
+## 空名 = 无持盾变体/未举盾，镜像侧恢复武器默认动画。
+func get_stance_anims() -> Dictionary:
+	var prof: Dictionary = ScriptBehaviorProfiles.get_profile(_weapon_type())
+	if _blocking:
+		return {
+			"walk": str(prof.get("block_walk_anim", "")),
+			"idle": str(prof.get("block_idle_anim", "")),
+		}
+	return {"walk": "", "idle": ""}
+
+
 ## 挑选站姿变体（9r 站姿池直译）：档案 stand_pool 非空时随机抽取（如矛士
 ## Into-Stand1/2"落定成站姿"），空池回落武器默认站姿（剑士 Stand1/2 变体池）。
 func _pick_idle_variant() -> String:

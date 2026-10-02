@@ -97,6 +97,10 @@ var _target_collider: Node2D = null
 var _collision_shape: CollisionShape2D = null
 ## 插身宿主（_stick_into_deferred 换父后记录）：宿主死亡时箭脱离冻结（修乱飞）
 var _stuck_host: Node = null
+## 插身地面线基线差（画布域 y）：命中瞬间的弹道地面线 − 宿主脚线。插身态的
+## 地面线 = 宿主当前脚线 + 该差——插身瞬间与飞行线连续（零跳变），此后随宿主
+## 脚线逐帧刷新（与宿主 billboard 视觉锚同源同压缩，游移归零）
+var _stuck_line_offset: float = 0.0
 
 
 ## 发射参数：初速度矢量、伤害、射手、目标、拉弓力度（0~1）、重力（缺省 0=直线，兼容旧调用）、
@@ -185,10 +189,19 @@ func _apply_visual_offset() -> void:
 	_visual_root.position = (FxLibrary.remap_pos(get_tree(), ground) - ground).rotated(-rotation)
 
 
-## 弹道地面线（画布域 y）：出弓点脚线 → 瞄准点脚线按飞行进度插值。
-## 出弓点 = 出弓位 + 70 回推脚线（weapon_ranged 的 from = 脚线 − 70）；
-## 瞄准点脚线 = 传入的插地线（aim_point + 65，aim_point 即目标脚线）回退 65。
+## 弹道地面线（画布域 y）：
+## - 插身态：跟宿主当前脚线（每帧重取宿主位置）——此前沿用出弓瞬间冻结的
+##   地面线做纵深换算（k=sin26°），宿主每在画布 y 移动 1px，箭视觉相对宿主
+##   billboard 漂移 (1−k)≈0.56px（诊断实测游移均值 27px / p90 67px，即"插身
+##   箭在身上乱飞"的主因）。基线差在 _stick_into 捕获，插身瞬间与飞行线连续。
+## - 飞行态：出弓点脚线 → 瞄准点脚线按飞行进度插值。
+##   出弓点 = 出弓位 + 70 回推脚线（weapon_ranged 的 from = 脚线 − 70）；
+##   瞄准点脚线 = 传入的插地线（aim_point + 65，aim_point 即目标脚线）回退 65。
 func _ground_line_y() -> float:
+	if _stuck:
+		if _stuck_host != null and is_instance_valid(_stuck_host) and _stuck_host is Node2D:
+			return (_stuck_host as Node2D).global_position.y + _stuck_line_offset
+		return _launch_ground_y  # 宿主已死脱离冻结：线收口在脱离瞬间的宿主位
 	if _solve_time <= 0.0 or _solve_ground_y <= 0.0:
 		return _launch_ground_y
 	return lerpf(_launch_ground_y, _solve_ground_y - 65.0, _ground_progress())
@@ -325,10 +338,14 @@ func _is_enemy(body: Node) -> bool:
 	return f_shooter != f_body
 
 
-## 爆头判定：命中点高于目标身体中心 HEADSHOT_Y_RATIO × BODY_HEIGHT
+## 爆头判定：命中点高于目标身体中心 HEADSHOT_Y_RATIO × BODY_HEIGHT。
+## 命中 y 差先按 1/k 折回视觉域再比阈值（与 HIT_Y_TOLERANCE 同口径换算）：
+## 命中判定带已按纵深轴 1/k 加宽（视觉 1px 纵深 = 画布 2.28px），爆头阈值带
+## 若仍是画布口径，纵深偏移的命中会被误判成爆头。数值待实测校准。
 func _is_headshot(target: Node, hit_pos: Vector2) -> bool:
 	var body_pos := _target_body_pos(target)
-	return hit_pos.y < body_pos.y - BODY_HEIGHT * HEADSHOT_Y_RATIO
+	var dy_visual: float = (body_pos.y - hit_pos.y) / DEPTH_SQUASH_K
+	return dy_visual > BODY_HEIGHT * HEADSHOT_Y_RATIO
 
 
 func _hit(target: Node) -> void:
@@ -371,6 +388,11 @@ func _hit(target: Node) -> void:
 ## 调用链在物理回调内（_on_body_entered）：碰撞开关与换父必须 call_deferred，
 ## 否则报 "Removing a CollisionObject node during a physics callback"。
 func _stick_into(target: Node) -> void:
+	# 插身地面线基线差（先于 _stuck 置位取飞行线）：命中瞬间的弹道地面线与
+	# 宿主脚线的差——此后地面线 = 宿主当前脚线 + 该差（见 _ground_line_y）
+	var host_pos: Vector2 = (target as Node2D).global_position if target is Node2D \
+			else global_position
+	_stuck_line_offset = _ground_line_y() - host_pos.y
 	_stuck = true
 	_stuck_timer = 0.0
 	set_deferred("monitoring", false)
@@ -403,6 +425,9 @@ func _host_is_dead(host: Node) -> bool:
 ## 一并回收，不存在"钉在乱动尸体上"的观感；本作死亡动画期较长，脱离冻结
 ## 是等效语义。调用点在 _physics_process（非物理回调），可直接改树。
 func _freeze_stuck_arrow() -> void:
+	# 冻结线收口：把当前跟随宿主的地面线写回出弓线，再清宿主引用——脱离后
+	# _ground_line_y 回落到该值，视觉偏移不因脱离宿主跳变
+	_launch_ground_y = _ground_line_y()
 	_stuck_host = null
 	var xf: Transform2D = global_transform
 	# 先取场景根再拔箭：remove_child 后本节点不在树上，get_tree() 会是 null

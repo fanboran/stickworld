@@ -282,6 +282,13 @@ func _mount_weapons() -> void:
 	if owner_entity.get("rig") == null:
 		attack_range = 0.0 if weapon_type == WeaponType.NONE \
 				else float(WEAPON_RANGE.get(weapon_type, attack_range))
+		# 盾实例对 billboard 图放行（修"矛兵盾 100% 缺失→格挡从未发生"）：
+		# is_shield_blocking 第一重判定只认 _shield 实例存在，此前本分支早退
+		# 使 blockChance 0.35 在观察场从未掷出。2D 骨架未建 → 盾以隐藏逻辑
+		# 实例挂 WeaponMount 自身（数据与状态留 2D 侧），billboard 视觉由
+		# char_sprite_3d 镜像挂盾（渲染走镜像——HD-2D 铁律）。
+		if shield_visual_enabled():
+			_mount_shield(owner_entity)
 		return
 	var hand: Node2D = _find_hand_bone(owner_entity)
 	if hand == null:
@@ -304,20 +311,36 @@ func _mount_weapons() -> void:
 	# 副手盾牌（**绑定矛兵**：原版也只有 Spearton 持盾，其余兵种无盾——
 	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版；
 	# equipped_shield = 玩家背包副手装备盾，任意武器可配）
-	if (shield_enabled and weapon_type == WeaponType.SPEAR) or equipped_shield:
+	if shield_visual_enabled():
 		_mount_shield(owner_entity)
 	# 订阅动画内嵌事件（命中帧 + 音效钩子）
 	_connect_rig_events(owner_entity)
 
 
+## 盾视觉/逻辑是否应装备（2D 挂骨与 billboard 逻辑盾共用的单一规则出口：
+## 兵种默认盾绑定 SPEAR；equipped_shield = 玩家背包副手装备盾任意武器可配）
+func shield_visual_enabled() -> bool:
+	return (shield_enabled and weapon_type == WeaponType.SPEAR) or equipped_shield
+
+
 func _mount_shield(owner_entity: CharacterBody2D) -> void:
-	var off_hand: Node2D = _find_shield_bone(owner_entity)
-	if off_hand == null:
-		push_warning("[WeaponMount] 未找到副手骨骼（hand_outer），无法挂盾")
-		return
 	var scene: PackedScene = load(SHIELD_SCENE_PATH)
 	if scene == null:
 		push_warning("[WeaponMount] 盾牌场景加载失败: %s" % SHIELD_SCENE_PATH)
+		return
+	var off_hand: Node2D = _find_shield_bone(owner_entity)
+	if off_hand == null:
+		# HD-2D billboard 图（2D 骨架未创建，rig==null）：逻辑盾挂 WeaponMount
+		# 自身并隐藏——格挡判定（weapon_block 只看 _shield 实例存在性）由此
+		# 真实生效；本实例不进任何渲染（billboard 视觉由 char_sprite_3d 镜像
+		# 挂盾，数据与状态留 2D 侧、渲染走镜像）。2D 图走到这里 = 骨骼缺失，仍告警。
+		if owner_entity.get("rig") == null:
+			_shield = scene.instantiate() as Node2D
+			_shield.name = "Shield"
+			_shield.visible = false
+			add_child(_shield)
+		else:
+			push_warning("[WeaponMount] 未找到副手骨骼（hand_outer），无法挂盾")
 		return
 	_shield = _mount_one(scene, off_hand, "Shield")
 
@@ -476,14 +499,17 @@ func _physics_process(delta: float) -> void:
 	# 步长经 sim_delta 携带速度档
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
+	# 格挡重置冷却两模通用（原版 blockResetInterval）：sim 模式冷却/strike/
+	# 放箭计时归 BattleSim 批推进，但本计时 BattleSim 不接管——此前递减放在
+	# sim 早退之后，sim 局一次成功格挡即永久锁死（节流永不过期，盾兵全场
+	# 只挡得成一击）
+	if _block_reset_timer > 0.0:
+		_block_reset_timer = maxf(0.0, _block_reset_timer - delta)
 	# sim 模式（D 刀）：冷却/strike 命中帧/远程放箭计时由 BattleSim 批推进，
 	# 到点回调 sim_strike_now()/sim_fire_now()——本节点 _physics_process 停跑
 	if _sim() != null:
 		return
 	update_cooldown(delta)
-	# 格挡重置冷却（原版 blockResetInterval）
-	if _block_reset_timer > 0.0:
-		_block_reset_timer = maxf(0.0, _block_reset_timer - delta)
 	# 命中帧结算（Saga Strike 模式）
 	if not _strike_fired:
 		_pending_strike_elapsed += delta

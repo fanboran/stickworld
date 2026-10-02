@@ -26,6 +26,7 @@ const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
 const HEALTH_BAR_SCRIPT := preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
+const ANIMS := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
@@ -421,8 +422,10 @@ func set_weapon_type(wt: int) -> void:
 	# walk_bow（Archidon-Walk，下肢走步 + 上肢保持持弓），其余恢复通用走姿。
 	# 实体侧 2D rig 的同款换装在 WeaponMount._reload_weapons（该图型下 rig 为 null）。
 	if rig != null and rig.has_method("set_state_anim"):
-		var Anims: GDScript = preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
-		rig.set_state_anim("walk", Anims.walk_for_weapon(wt))
+		rig.set_state_anim("walk", ANIMS.walk_for_weapon(wt))
+		# 清姿态缓存：上面的换装覆盖了 walk state，下一拍 feed 的
+		# set_stance_anims 需重放举盾变体（缓存命中会跳过）
+		_stance_walk = ""
 	if _weapon_instance != null and is_instance_valid(_weapon_instance):
 		_weapon_instance.queue_free()
 		_weapon_instance = null
@@ -461,6 +464,78 @@ func set_weapon_type(wt: int) -> void:
 ## billboard 武器，不摸 _weapon_instance 私有字段。
 func get_weapon_instance() -> Node2D:
 	return _weapon_instance
+
+
+## 副手盾镜像（HD-2D billboard）：实体侧逻辑盾（weapon_mount._shield，隐藏实例）
+## 只服务格挡判定、不进 billboard 视觉——镜像层按同一规则（WeaponMount.
+## shield_visual_enabled）把 weapon_shield.tscn 挂进本 SubViewport 骨架的
+## hand_outer/shield_hand 骨。挂载机制与主手武器同款：GripPoint 对齐握把，
+## 实例挂 viewport 根（描边 CanvasGroup 之外，盾面不吃白描边），
+## RemoteTransform2D 跟骨变换（缩放/旋转/摆臂逐帧跟随，比例与 2D 挂骨一致）。
+var _shield_instance: Node2D = null
+var _shield_follow: RemoteTransform2D = null
+var _shield_on: bool = false
+
+func set_shield_visible(on: bool) -> void:
+	if _pure_sim or on == _shield_on:
+		return
+	_shield_on = on
+	if _shield_instance != null and is_instance_valid(_shield_instance):
+		_shield_instance.queue_free()
+		_shield_instance = null
+	if _shield_follow != null and is_instance_valid(_shield_follow):
+		_shield_follow.queue_free()
+		_shield_follow = null
+	if not on or rig == null:
+		return
+	var bone: Node2D = rig.get_node_or_null(
+			"hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer/hand_outer/shield_hand") as Node2D
+	if bone == null:
+		return
+	var scene: PackedScene = load(StickRigAPI.WEAPON_SHIELD_PATH)
+	if scene == null:
+		return
+	var instance: Node2D = scene.instantiate()
+	var grip := instance.get_node_or_null("GripPoint") as Marker2D
+	var spr := instance.get_node_or_null("Sprite") as Sprite2D
+	if grip != null and spr != null:
+		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
+	# 挂 viewport 根（描边组之外），机制同主手武器（见 set_weapon_type 注）
+	viewport.add_child(instance)
+	_shield_instance = instance
+	var follow := RemoteTransform2D.new()
+	bone.add_child(follow)
+	follow.remote_path = instance.get_path()
+	_shield_follow = follow
+
+
+## 盾姿态换装镜像（盾姿态分层，计划 5）：walk/idle state 的动画资源替换，
+## 机制同 set_weapon_type 的 walk_bow 换装。动画名由镜像 feed 经
+## VisualController.get_stance_anims() 观测口取（名字解析单一真相源留在实体侧
+## 行为档案），空名 = 恢复该 state 的武器默认动画（walk 走武器走姿变体、
+## idle 走兵种站姿池抽取）。换装后若当前正播 walk/idle 立即重播生效
+## （feed 的 set_anim 变更检测对同名状态不再重发）；attack 等其它状态不打断
+## （命中帧对齐依赖动画进度，重播会把挥砍拉回起点）。
+var _stance_walk: String = ""
+var _stance_idle: String = ""
+
+func set_stance_anims(walk_anim: String, idle_anim: String) -> void:
+	if _pure_sim or (walk_anim == _stance_walk and idle_anim == _stance_idle):
+		return
+	_stance_walk = walk_anim
+	_stance_idle = idle_anim
+	if rig == null or not rig.has_method("set_state_anim"):
+		return
+	if walk_anim.is_empty():
+		rig.set_state_anim("walk", ANIMS.walk_for_weapon(_weapon_type_cached))
+	else:
+		rig.set_state_anim("walk", walk_anim)
+	if idle_anim.is_empty():
+		rig.set_state_anim("idle", ANIMS.pick_stand_variant_for(_weapon_type_cached))
+	else:
+		rig.set_state_anim("idle", idle_anim)
+	if _anim == "walk" or _anim == "idle":
+		rig.play(_anim)
 
 
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。

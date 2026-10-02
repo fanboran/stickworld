@@ -69,11 +69,16 @@ var ARROW_LEAD_FACTOR: float = 0.7
 ## 拉弓动画在 0.5s 拉满（Drawn），0.5333s 放箭（Hit），而不是拍脑袋的 0.75s。
 const BOW_FIRE_DELAY_FALLBACK: float = 0.5333
 ## RWR sustained_fire 连射散布（media/packages ak47.weapon：grow_step=0.40/发）：
-## 每放一箭散布热度 +0.40（上限 1.2），实际散布 σ × (1+热度)；恢复率原值 1.2/s
-## 是 ~10发/s 步枪节奏，我方弓 ~0.5发/s，按射速比缩到 0.10/s——连放 3 箭 σ≈1.6x、
-## 6 箭到顶 2.2x，脱战 ~12s 回满（"连射越打越散、会停火收敛"的距离感）
+## 每放一箭散布热度 +0.40（上限 1.2），实际散布 σ × (1+热度)。
+## 恢复率按"满热度回落全程 ≈ 一个射击间隔"重标定【待实测校准】：弓手实战节奏
+## ~0.26 发/s（间隔 3.85s）→ DIMINISH 0.40/s 下满热度 1.2 回落全程 3.0s < 间隔，
+## 单箭热度增量 0.4 一个间隔内衰减 1.54 ≫ 0.4——两箭之间热度必然可观恢复，
+## 拉弓间隙 σ 乘数回到 1.0 附近（此前 0.10/s：增长 0.104/s ≈ 恢复 0.10/s 且
+## sim 模式恢复链不跑，热度数学必然顶格 1.2 → σ 常驻 ×2.2，见
+## temp/诊断-箭矢弓手与盾.md §1.4 根因三）。极限射速（冷却 2.0s = 0.5 发/s）
+## 下每间隔衰减 0.8 仍 > 0.4，任何可达射速都不再钉顶。
 const SUSTAINED_FIRE_GROW := 0.40
-const SUSTAINED_FIRE_DIMINISH := 0.10
+const SUSTAINED_FIRE_DIMINISH := 0.40
 const SUSTAINED_FIRE_HEAT_MAX := 1.2
 ## 散布热度（0..HEAT_MAX；behavior_attack 据此做 RWR 点射停顿）
 var _sustained_fire_heat: float = 0.0
@@ -505,6 +510,10 @@ func _physics_process(delta: float) -> void:
 	# 只挡得成一击）
 	if _block_reset_timer > 0.0:
 		_block_reset_timer = maxf(0.0, _block_reset_timer - delta)
+	# RWR sustained_fire 停火恢复：**先于 sim 早退**执行（两模通吃）——原先挂在
+	# update_cooldown，而 sim 模式（观察场默认）本函数在此早退、update_cooldown
+	# 永不执行 → 热度只涨不消，叠加上面旧恢复率必然顶格（诊断 §1.4 根因三）
+	_recover_sustained_fire(delta)
 	# sim 模式（D 刀）：冷却/strike 命中帧/远程放箭计时由 BattleSim 批推进，
 	# 到点回调 sim_strike_now()/sim_fire_now()——本节点 _physics_process 停跑
 	if _sim() != null:
@@ -537,7 +546,7 @@ func _process(_delta: float) -> void:
 	if not _aim_visual_active:
 		return
 	if weapon_type != WeaponType.BOW:
-		_aim_visual_active = false
+		_end_bow_aim_visual(false)
 		return
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	# 玩家蓄力窗的收口守卫：附身取消（cancel_charge 不经过本挂载）/ 附身丢失 /
@@ -560,8 +569,9 @@ func _process(_delta: float) -> void:
 	var moving: bool = owner_entity.velocity.length_squared() > BOW_MOVE_SQ_THRESHOLD
 	if moving:
 		# 移动让位走姿：attack_bow_hold 前缀会被 entity_motion 的攻击动画守卫
-		# 拦住 walk 切换（滑步定腿）——这里显式交还移动表现（镜像层按武器换
-		# walk_bow，脚步动作由该变体提供）
+		# 拦住 walk 切换（滑步定腿）——这里显式交还移动表现。walk state 资源
+		# 已被持瞄保持通道换装为 walk_bow_hold（上身拉满+下肢走步，窗开时
+		# _set_bow_aim_walk_override(true)），脚步动作与拉满上身同变体提供
 		if current == Anims.ANIM_ATTACK_BOW_HOLD:
 			_play_via_visual(Anims.ANIM_WALK)
 	else:
@@ -578,6 +588,8 @@ func _mark_bow_aim_started() -> void:
 	_aim_visual_active = true
 	_aim_visual_player = false  # AI 持瞄窗（超时兜底）；玩家窗只在 begin_player_draw 置位
 	_aim_visual_until = _now() + BOW_AIM_VISUAL_TIMEOUT
+	# 持瞄窗 walk 换装：窗内移动走 walk_bow_hold（上身拉满+下肢走步）
+	_set_bow_aim_walk_override(true)
 
 
 ## 收瞄准表现窗。return_to_idle=true 且当前停在拉弓保持段时回站姿
@@ -585,6 +597,8 @@ func _mark_bow_aim_started() -> void:
 func _end_bow_aim_visual(return_to_idle: bool) -> void:
 	_aim_visual_active = false
 	_aim_visual_player = false
+	# 窗关即撤持瞄保持换装：walk state 回武器基础走姿（弓 = walk_bow）
+	_set_bow_aim_walk_override(false)
 	if not return_to_idle:
 		return
 	var owner_entity: CharacterBody2D = get_owner_entity()
@@ -592,6 +606,19 @@ func _end_bow_aim_visual(return_to_idle: bool) -> void:
 		return
 	if str(owner_entity.get("_current_anim")) == Anims.ANIM_ATTACK_BOW_HOLD:
 		_play_via_visual("idle")
+
+
+## 持瞄窗 walk 换装开关（经实体 VisualController 的持瞄保持通道）：2D rig
+## set_state_anim 换装与 billboard 镜像（visual_controller.get_stance_anims
+## 观测口 → char_sprite_3d.set_stance_anims）两处同口径——状态留本挂载，
+## 名字解析与换装执行在 VisualController（walk state 资源替换，state 不增）。
+func _set_bow_aim_walk_override(on: bool) -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	var visual: Node = owner_entity.get("_visual")
+	if visual != null and visual.has_method("set_bow_aim_stance"):
+		visual.set_bow_aim_stance(on)
 
 
 ## 经实体 VisualController 播动画（_current_anim 状态先行 + rig/HD-2D 镜像同走，
@@ -785,6 +812,7 @@ func begin_player_draw() -> void:
 	_aim_visual_active = true
 	_aim_visual_player = true
 	_aim_visual_until = 1.0e9  # 玩家按住全程无超时，松手/附身丢失才收弓
+	_set_bow_aim_walk_override(true)  # 玩家窗同享持瞄保持行走（移动走 walk_bow_hold）
 	_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
 
 
@@ -1089,12 +1117,23 @@ func _resolve_hit_seconds() -> float:
 	return 0.0
 
 
-## 每帧递减冷却（也可由外部调用）
+## 每帧递减冷却（也可由外部调用）。散热恢复不在本函数：见 _recover_sustained_fire
+## （须两模通吃，挂 _physics_process 的 sim 早退之前）。
 func update_cooldown(delta: float) -> void:
 	if _cooldown_timer > 0.0:
 		_cooldown_timer = maxf(0.0, _cooldown_timer - delta)
-	# RWR sustained_fire 停火恢复（diminish_rate）：散布热度随时间回落
+
+
+## RWR sustained_fire 停火恢复（diminish_rate）：散布热度随时间线性回落。
+## 调用位 = _physics_process 的 sim 早退之前（两模通吃；单测直接步进本函数）。
+func _recover_sustained_fire(delta: float) -> void:
 	_sustained_fire_heat = maxf(0.0, _sustained_fire_heat - SUSTAINED_FIRE_DIMINISH * delta)
+
+
+## 连射散热记账（放箭时由 weapon_ranged.fire_arrow 调用）：热度增长 + 封顶。
+## 增长/恢复两个时间常数的唯一入口（单测步进 add/_recover 一对函数复算节奏）。
+func add_sustained_fire_heat() -> void:
+	_sustained_fire_heat = minf(_sustained_fire_heat + SUSTAINED_FIRE_GROW, SUSTAINED_FIRE_HEAT_MAX)
 
 
 ## 获取挂在手部的武器实例（null=未挂载）

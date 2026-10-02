@@ -193,6 +193,19 @@ const WEAPON_WALK_ANIM: Dictionary = {
 static func walk_for_weapon(weapon_type: int) -> String:
 	return WEAPON_WALK_ANIM.get(weapon_type, ANIM_WALK)
 
+## 武器类型 -> 持瞄保持行走变体名（键序对齐 WeaponMount.WeaponType；缺省空串 =
+## 无保持变体，消费方回落 walk_for_weapon 的基础走姿）。持瞄窗（attack_bow_hold
+## 激活期间）内移动时 walk state 换装成本变体——上身保持拉满、下肢照常走步；
+## 窗结束恢复 walk_for_weapon。消费方与盾姿态分层同通道（weapon_mount 瞄准窗
+## 开关 → visual_controller.set_bow_aim_stance 换装 / char_sprite_3d.set_stance_anims 镜像）。
+const WEAPON_WALK_HOLD_ANIM: Dictionary = {
+	2: ANIM_WALK_BOW_HOLD,  # BOW：拉弓保持行走（walk_bow_hold 合并变体）
+}
+
+## 取武器类型对应的持瞄保持行走变体名（无变体的武器返回空串）
+static func walk_hold_for_weapon(weapon_type: int) -> String:
+	return WEAPON_WALK_HOLD_ANIM.get(weapon_type, "")
+
 ## 待机变体池（stand 类别，防全员同帧）
 const STAND_VARIANTS: Array[String] = [ANIM_IDLE, ANIM_IDLE_V2]
 

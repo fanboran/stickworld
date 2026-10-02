@@ -278,7 +278,7 @@ func fire_arrow(target: Node) -> void:
 					int(profile.get("user_control_skill", 1)), 1.0))
 	if scatter > 0.0:
 		vel = vel.rotated(ArrowBallistics.next_gaussian(0.0, scatter, -2.0 * scatter, 2.0 * scatter))
-	_mount._sustained_fire_heat = minf(_mount._sustained_fire_heat + _mount.SUSTAINED_FIRE_GROW, _mount.SUSTAINED_FIRE_HEAT_MAX)
+	_mount.add_sustained_fire_heat()
 	var arrow: Node2D = scene.instantiate()
 	var parent: Node = owner_entity.get_parent()
 	if parent == null:

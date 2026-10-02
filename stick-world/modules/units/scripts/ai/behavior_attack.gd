@@ -50,6 +50,10 @@ const RAGE_PUSH_PROB: float = 0.35
 var _battle: Node = null
 ## 当前目标敌人
 var _target: Node = null
+## 强制目标（遇阻接战"打通"态）：behavior_move/AIController 经 params 注入的
+## 拦路者——路径敌人未必是最近敌，目标选择优先于集火/自主寻敌。死亡/失效/
+## 超追击范围即失效回落正常选敌（打通态生命周期由 AIController 维护）。
+var _forced_target: Node = null
 ## 目标刷新计时器
 var _acquire_timer: float = 0.0
 ## 犹豫检查计时器
@@ -132,6 +136,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	if _battle == null and entity != null and entity.has_method("get_battle_instance"):
 		_battle = entity.get_battle_instance()
 	_rage = params.get("rage", false)
+	_forced_target = params.get("forced_target", null)
 	# 兵种档案解析（按主手武器类型；取不到武器回落空档案 = 全基线）
 	_profile = {}
 	if entity != null and is_instance_valid(entity) and entity.has_method("get_weapon"):
@@ -199,45 +204,50 @@ func update(delta: float) -> void:
 	# 刷新目标
 	_acquire_timer -= delta
 	if _target == null or not is_instance_valid(_target) or (_target.has_method("is_dead") and _target.is_dead()) or _is_beyond_leash() or _acquire_timer <= 0.0:
-		# 队伍级共享目标（反编译参考实装 D-B）：排长决策 → 队员执行（集火）。
-		# 所属小队有共享攻击目标时优先用它，否则回退各自寻敌。
-		var squad_target: Node = _get_squad_target()
-		if squad_target != null:
-			# 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：当前目标仍有效时
-			# 仅当集火目标显著更近才换过去——排长重选节拍（0.5s）与队员扫视节拍
-			# （0.4s）同量级，无条件跟随 = 全队追着排长的"最近敌"来回横跳
-			#（追逐振荡 + 每次换靶重置持瞄 = 弓手永远差一步不放箭）。
-			# 当前目标死亡/失效/超追击范围仍立即换（集火语义保持）。
-			if _should_accept_squad_target(squad_target):
-				_target = squad_target
-		elif _target != null and is_instance_valid(_target) and not (_target.has_method("is_dead") and _target.is_dead()) and not _is_beyond_leash():
-			# 目标切换滞后（行业最佳实践 sticky target）：当前目标仍有效且未超追击范围则锁定保留，
-			# 不因刷新周期重选（避免频繁换目标导致攻击输出丢失）
-			pass
+		# 强制目标（打通态拦路者）：有效且未超追击范围则最高优先锁定——路径敌人
+		# 优先于集火/自主寻敌；失效（死亡/失效/超追击范围）清除回落正常选敌
+		if _refresh_forced_target():
+			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
 		else:
-			# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
-			# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
-			# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
-			_target = ScriptTargetFinder.find_target(entity, {
-				"battle": _battle,
-				"ignore_current_attackers": true,
-				"prefer_large": _p("prefer_large", 0.0),
-			})
-		# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
-		# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选
-		# 不追 → finish 待命，敌人近身（进入 leash）后自然选中自卫。只作用指挥官，
-		# 普通单位的追击语义不变（leash 对他们仍只作换靶触发）。
-		if _target != null and entity != null and is_instance_valid(entity) \
-				and entity.has_method("is_commander") and entity.is_commander() \
-				and _is_beyond_leash():
-			_target = null
-		# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
-		_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
-		if _target == null:
-			if _cap_ai_stop:
-				entity.ai_stop()
-			finish()
-			return
+			# 队伍级共享目标（反编译参考实装 D-B）：排长决策 → 队员执行（集火）。
+			# 所属小队有共享攻击目标时优先用它，否则回退各自寻敌。
+			var squad_target: Node = _get_squad_target()
+			if squad_target != null:
+				# 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：当前目标仍有效时
+				# 仅当集火目标显著更近才换过去——排长重选节拍（0.5s）与队员扫视节拍
+				# （0.4s）同量级，无条件跟随 = 全队追着排长的"最近敌"来回横跳
+				#（追逐振荡 + 每次换靶重置持瞄 = 弓手永远差一步不放箭）。
+				# 当前目标死亡/失效/超追击范围仍立即换（集火语义保持）。
+				if _should_accept_squad_target(squad_target):
+					_target = squad_target
+			elif _target != null and is_instance_valid(_target) and not (_target.has_method("is_dead") and _target.is_dead()) and not _is_beyond_leash():
+				# 目标切换滞后（行业最佳实践 sticky target）：当前目标仍有效且未超追击范围则锁定保留，
+				# 不因刷新周期重选（避免频繁换目标导致攻击输出丢失）
+				pass
+			else:
+				# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
+				# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
+				# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
+				_target = ScriptTargetFinder.find_target(entity, {
+					"battle": _battle,
+					"ignore_current_attackers": true,
+					"prefer_large": _p("prefer_large", 0.0),
+				})
+			# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
+			# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选
+			# 不追 → finish 待命，敌人近身（进入 leash）后自然选中自卫。只作用指挥官，
+			# 普通单位的追击语义不变（leash 对他们仍只作换靶触发）。
+			if _target != null and entity != null and is_instance_valid(entity) \
+					and entity.has_method("is_commander") and entity.is_commander() \
+					and _is_beyond_leash():
+				_target = null
+			# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
+			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
+			if _target == null:
+				if _cap_ai_stop:
+					entity.ai_stop()
+				finish()
+				return
 
 	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
 	# 旧 is_routed/低士气 finish 自检随溃逃退役——低士气单位保持还击，去留由
@@ -902,11 +912,32 @@ func _hit_frame_seconds() -> float:
 ## 追击范围检查（行业最佳实践）：当前目标是否已超出攻击范围 × 追击倍数（兵种档案 leash_mult）。
 ## 超范围视为"追丢了"，触发重新选目标（避免追杀单个敌人到天涯海角）。
 func _is_beyond_leash() -> bool:
-	if _target == null or not is_instance_valid(_target) or entity == null:
+	return _target_leashed(_target)
+
+
+## 追击范围检查（任意目标版，_refresh_forced_target 消费）。
+func _target_leashed(t: Node) -> bool:
+	if t == null or not is_instance_valid(t) or entity == null:
 		return false
 	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
-	return entity.global_position.distance_to(_target.global_position) > attack_range * _p("leash_mult", LEASH_MULT)
+	return entity.global_position.distance_to(t.global_position) > attack_range * _p("leash_mult", LEASH_MULT)
+
+
+## 强制目标（打通态）有效性维护：死亡/失效/超追击范围 → 清除并返回 false；
+## 有效 → 锁定为当前目标并返回 true。
+func _refresh_forced_target() -> bool:
+	if _forced_target == null:
+		return false
+	var valid: bool = is_instance_valid(_forced_target) \
+			and not (_forced_target.has_method("is_dead") and _forced_target.is_dead())
+	if valid and _target_leashed(_forced_target):
+		valid = false
+	if not valid:
+		_forced_target = null
+		return false
+	_target = _forced_target
+	return true
 
 ## 检查附近是否有掩体（用于"重伤找掩体"决策）
 func _has_cover_nearby() -> bool:

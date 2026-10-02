@@ -54,6 +54,9 @@ const THREAT_RANGE: float = 140.0
 ## 矛 200——敌人贴进此范围内，避战单位不再一味后撤而是就地还击；
 ## 超出仍走避战脱离。待实测校准
 const COUNTER_RANGE: float = 200.0
+## 打通态脱离距离（px）【提案/待定·待实测校准】：拦路者跑出此距离视为"已脱离"
+##（不再构成拦路——风筝敌人越拉越远即放弃追打恢复赶路；再拦再触发）
+const BREACH_DROP_DIST: float = 320.0
 ## 被围所需敌对单位数
 const SURROUND_MIN: int = 2
 ## 背墙判定：身后此距离内有掩体视为背墙
@@ -138,6 +141,12 @@ var _disengaging: bool = false
 ## attack_window 查询）。带闩：压制期内敌不出 COUNTER_RANGE 不收回，防逐拍
 ## 避战↔还击 travel 抖动；敌脱离/阵亡或压制结束收窗。
 var _counter_window: bool = false
+## 遇阻接战"打通"态（创始人口径：任务路上被敌拦住且无法简单绕过 → 攻击路径上
+## 的敌人）：由 behavior_move 请求置位（request_breach_engagement），拦路者作为
+## 临时战斗目标。**原号令不清空不降级**——本态是号令的临时插叙，拦路者死亡/
+## 脱离后由 _breach_tick 清态，命令覆盖段自动续行原号令（恢复的目标点仍是原
+## 号令目标）。
+var _breach_target: Node = null
 
 # ─────────────────────────────── 命令覆盖（§8.3 战术号令）────────────────────────────────
 ## 当前下达的命令行为名（空=无命令，由 AI 自主决策）
@@ -237,7 +246,12 @@ func _make_decision() -> void:
 			_suppressed_disengage()
 		return
 	_counter_window = false
-	# 0. 命令覆盖（最高优先级）
+	# 0. 遇阻接战维护（打通态）：拦路者仍有效 → 持续锁定攻击（号令挂起不清不降级；
+	# 被打断后经此重入，如压制解除）。击杀/脱离 → 清态，落回下方正常决策
+	#（有号令走命令覆盖自动续行原 move，恢复目标 = 原号令目标）
+	if _breach_tick():
+		return
+	# 0.5 命令覆盖（最高优先级）
 	if not _ordered_behavior.is_empty():
 		var cur_behavior: String = _state_machine.get_current_behavior_name()
 		if cur_behavior == _ordered_behavior:
@@ -344,7 +358,10 @@ func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
 	_wd_nudge_dir = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
 	_wd_nudge_until = _world_time + 0.25
 	if _state_machine != null and _state_machine.get_current_behavior_name() == "attack":
-		_state_machine.travel("attack")  # enter 清 _target/_aim → 下一拍重选目标
+		# 打通态卡死：重进 attack 保留 forced_target（否则 enter 清目标后自由选敌，
+		# 拦路者插叙失效）；自由战斗卡死维持原样（enter 清目标 = 换目标）
+		var p: Dictionary = {"forced_target": _breach_target} if is_breach_engaged() else {}
+		_state_machine.travel("attack", p)  # enter 清 _target/_aim → 下一拍重选目标
 	if bool(profile.get("stuck_watchdog_log", true)):
 		var behavior: String = _state_machine.get_current_behavior_name() \
 				if _state_machine != null else "?"
@@ -979,6 +996,7 @@ func set_order(behavior_name: String, params: Dictionary = {}) -> void:
 		return
 	_ordered_behavior = behavior_name
 	_ordered_params = params
+	_breach_target = null  # 新号令显式接管：打通插叙作废（粘性只保原号令）
 	if _state_machine != null:
 		_state_machine.travel(behavior_name, params)
 
@@ -987,6 +1005,7 @@ func set_order(behavior_name: String, params: Dictionary = {}) -> void:
 func clear_order() -> void:
 	_ordered_behavior = ""
 	_ordered_params = {}
+	_breach_target = null
 
 
 ## 获取当前命令行为名（空=无命令）。
@@ -1094,6 +1113,68 @@ func _travel_disengage(bi: Node) -> void:
 	var params: Dictionary = bi_param.duplicate()
 	params["retreat_mode"] = "fallback"
 	_state_machine.travel("retreat", params)
+
+
+# ─────────────────── 遇阻接战（打通态：任务路上攻击拦路者）───────────────────
+
+## 是否处于打通接战态（观测面：调试/测试消费）。拦路者已死亡/失效 = 不在态。
+func is_breach_engaged() -> bool:
+	if _breach_target == null:
+		return false
+	return is_instance_valid(_breach_target) \
+			and not (_breach_target.has_method("is_dead") and _breach_target.is_dead())
+
+
+## 打通态维护拍（决策首位，压制分支之后）：拦路者有效（存活 + 未跑出脱离距离）
+## → 保持/重入 attack（forced_target 锁定拦路者）；失效 → 清态返回 false，交还
+## 正常决策流（命令覆盖段自动续行原号令）。返回 true = 本拍被打通态占用。
+func _breach_tick() -> bool:
+	if _breach_target == null:
+		return false
+	var valid: bool = is_instance_valid(_breach_target) \
+			and not (_breach_target.has_method("is_dead") and _breach_target.is_dead())
+	if valid and _entity != null and is_instance_valid(_entity):
+		if _entity.global_position.distance_to(_breach_target.global_position) > BREACH_DROP_DIST:
+			valid = false  # 拦路者脱离（被拉开/风筝远离），不再构成拦路
+	if not valid:
+		_breach_target = null
+		return false
+	var cur: String = _state_machine.get_current_behavior_name() \
+			if _state_machine != null else ""
+	if cur == "attack" and not _state_machine.is_current_finished():
+		return true  # 攻击进行中，保持（不重入，保住持瞄/出手节奏）
+	if _state_machine != null and _state_machine.has_behavior("attack"):
+		_state_machine.travel("attack", {"forced_target": _breach_target})
+	return true
+
+
+## 遇阻接战请求（behavior_move 消费的 duck 调用面）：移动途中被拦且无法简单绕过
+## 时临时转入攻击拦路者。门禁：战斗职责过滤（工人不接战，同避战还击门）+ 战斗
+## 实例激活（attack 行为依赖）+ 拦路者有效。置位打通态并 travel attack
+##（forced_target 锁定拦路者）；**原号令不动**——粘性保障的核心：
+## _ordered_behavior/_ordered_params 原样保留。返回是否已切入。
+func request_breach_engagement(blocker: Node) -> bool:
+	if blocker == null or not is_instance_valid(blocker):
+		return false
+	if _entity == null or not is_instance_valid(_entity):
+		return false
+	if _entity.has_method("is_dead") and _entity.is_dead():
+		return false
+	if not _can_work(WorkTypeCombat):
+		return false
+	if _state_machine == null or not _state_machine.has_behavior("attack"):
+		return false
+	if _entity.has_method("get_battle_instance"):
+		var bi: Node = _entity.get_battle_instance()
+		if bi == null or not is_instance_valid(bi) or not bi.has_method("is_active") \
+				or not bi.is_active():
+			return false
+	if not is_breach_engaged():
+		_breach_target = blocker
+	if _state_machine.get_current_behavior_name() != "attack" \
+			or _state_machine.is_current_finished():
+		_state_machine.travel("attack", {"forced_target": _breach_target})
+	return true
 
 
 ## 所属实体状态效果组件（duck；缺失返回 null——测试桩/未装配环境零回归）。

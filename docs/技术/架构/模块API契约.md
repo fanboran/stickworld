@@ -333,7 +333,8 @@ const ALIGNMENT_STEER_SCALE: float      # 对齐收敛权重（1/s）
 
 ```gdscript
 # 战术号令脚本（TacticalOrders：OrderType 枚举 ADVANCE_ALL/SPRINT/HOLD_POSITION/RETREAT/TAKE_COVER/RALLY
-# + issue 小队直令 / issue_to_org 组织逐层；formation/command_chain/org 引用由装配层注入，不静态依赖）
+# + issue 编制直令（target_id = 班 squad_id 或班内火力组 ft_id——火力组寻址见 formation 契约）
+# / issue_to_org 组织逐层；formation/command_chain/org 引用由装配层注入，不静态依赖）
 const Orders: GDScript
 
 # 目标选择脚本（TargetFinder：find_target / find_weakest_ally / find_targets_in_arc，

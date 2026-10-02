@@ -392,9 +392,11 @@ modules/combat/
 
 **排层 API**（`FormationSystem` 实例方法）：`create_platoon(squad_ids, name)` / `assign_platoon_leader(pid, unit)`（排长须为排内班成员，随班行军占编队槽位）/ `get_platoon_leader` / `get_platoon_squads` / `get_platoon_of_squad` / `get_unit_platoon` / `get_platoon_units` / `disband_platoon`（班保留转独立）/ `has_squad_command_chain(squad_id)`；信号 `platoon_created` / `platoon_leader_lost`。
 
+**火力组层**（班内指挥分组，RL v3 编制地基【提案/待定】）：组 = 班内成员子集 + 组寻址 id（`fireteam_N`），**不占军衔不入组织树**（组长 = 组内首员，无标记）——只是号令的粒度，不是行政单位。API（`FormationSystem` 实例方法）：`create_fireteam(squad_id, units, name)` / `get_squad_fireteams(squad_id)` / `get_fireteam_units(ft_id)` / `get_unit_fireteam(unit)` / `get_fireteam_squad(ft_id)` / `is_fireteam(id)` / `get_fireteam_leader(ft_id)` / `disband_fireteam(ft_id)`。号令寻址：`TacticalOrders.issue` 对 ft_id 直令（收令成员 = 组员、战斗职责沿父班、不触发班粒度相位计划——军师规划器仍按班下令），按班下令原语义不变。组不拆散班聚结（一次性归队锚点仍是班长）；组随成员阵亡收缩、空组自动消亡；战斗域本地聚合（同排口径，不进跨图快照，`disband_all_squads` 一并清空）。
+
 **缺口语义**：排长阵亡 = 该排指挥链缺口——该排全部班**失去集火号令**（共享目标决策权归排长，`_decide_squad_targets` 按排查权属：排内班 rep=排长、缺口即 erase 不退化；独立班保留旧口径：班长决策、失效退化首个存活队员）与**排长士气光环**（排长存活 → 排内全员恢复；独立班保留班长光环旧口径），到战斗结束无法补员。班长轮转（组织侧补位回写 `commander_assigned` → 重写 squad.leader + 重算军衔）不受排长缺口影响。一人多职（如排长被补位选中兼任班长）军衔按现任职务取最高（`_recompute_unit_rank`）。
 
-**观察场编成**（`battle_arena.gd` PRESETS，`platoons` = 班下标分组建排）：遭遇战·16 = 1 排（2 班 ×8）；标准战役·48 = 2 排 ×2 班（4 班 ×12）；大军压境·96 = 4 排 ×2 班（8 班 ×12）。兵种结构落到班级（矛先锋/剑中坚/火力压制），出生纵深分排矛前→剑→杖→弓后。
+**观察场编成**（`battle_arena.gd` PRESETS，`platoons` = 班下标分组建排）：遭遇战·16 = 1 排（2 班 ×8）；标准战役·48 = 2 排 ×2 班（4 班 ×12）；大军压境·96 = 4 排 ×2 班（8 班 ×12）。兵种结构落到班级（矛先锋/剑中坚/火力压制），出生纵深分排矛前→剑→杖→弓后。每班劈两个火力组（一号/二号，劈法 = 班长外按出生序对半——出生序 = 武器行主序，前半靠前接敌、后半靠后火力支援）。一屏战场几何（创始人：战场范围限定在屏幕一样大）：出生中心 ±700、全部武器行按纵深行距 50 均匀收排（相邻行 Δx≥50 > 分离椭圆横半径 48，任意纵距不违反分离不变式；行内纵距下限 72）、指挥官阵列再后退 120——三档全场跨度最大 ≈ ±1170，观战缩放 0.75（缩放条 100% 档，可见半宽 1280）整场一屏内可见【提案/待定·待实测校准】。
 
 ### 8.8 阵列间距椭圆口径与班内聚拢（Boids 式裁剪）
 

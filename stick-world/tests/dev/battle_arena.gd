@@ -6,8 +6,13 @@ extends Node
 ## 控制面板（底部居中）：预设按钮（遭遇战·16 / 标准战役·48 / 大军压境·96，点按或
 ## 1/2/3 切换并立即重开，static _preset_idx 跨重开保持）+「重开 (R)」按钮。
 ##
-## 编制（现实军衔体系重排，融合 FormationSystem 排聚合层）：
+## 编制（现实军衔体系重排，融合 FormationSystem 排聚合层 + 火力组指挥分组）：
 ##   班 squad = 8~12 人小班（硬顶 15），班长 1 名（rank 1，阵亡经组织侧补位免费无缝轮转）；
+##   火力组 fireteam = 班内成员子集的指挥分组（创始人编制口径：一个班除班长外劈两个
+##   火力组，班长可以火力组为单位下发细分命令）——每班劈一号/二号两组，组长 = 组内
+##   首员（无标记不占军衔）；只作号令寻址粒度（TacticalOrders.issue 对 ft_id 下令），
+##   不拆散班聚结（归队锚点仍是班长）。军师意图规划器仍按班下令不动——火力组细分
+##   是后续班长级 AI 的地基；
 ##   排 platoon = 2~3 个班 + 排长 1 名（rank 2）——排长阵亡 = 该排指挥链缺口：
 ##   失去集火号令与排长士气光环，到战斗结束无法补员（班长轮转不受影响）。
 ##   兵种结构落到班级：矛兵班（先锋，射程 120 卡线）→ 剑士班（中坚）→
@@ -15,8 +20,11 @@ extends Node
 ##     遭遇战·16 = 1 排（矛兵班 8 + 中坚火力班 8，2 班 ×8 人）
 ##     标准战役·48 = 2 排 ×2 班（矛 12 + 矛剑混编 12 ｜ 剑 12 + 火 12，4 班 ×12 人）
 ##     大军压境·96 = 4 排 ×2 班（矛×2 ｜ 混编+剑 ｜ 剑×2 ｜ 火×2，8 班 ×12 人）
-##   出生按武器射程纵深分排（矛前→剑→杖→弓后），排间距 140 ≥ 椭圆纵深半径 72
-##   （分离口径见 formation_spacing，排距待实测校准）。
+##   一屏战场（创始人：战场范围限定在屏幕一样大）：出生中心 ±700、全部武器行按
+##   纵深行距 ROW_GAP=50 均匀收排（相邻行任意两员 Δx≥50 > 分离椭圆横半径 48，
+##   任意纵距都不违反分离不变式；行内纵向间距仍由 MIN_ROW_GAP≥72 分离下限把关），
+##   指挥官阵列再后退 120——三档全场横向跨度最大 ≈ ±1170（96 档含指挥官），
+##   观战缩放 0.75（缩放条 100% 档）可见半宽 1280px，整场一屏内可见。
 ##   开战先锋班下 ADVANCE_ALL（formation row/col 列阵）压至中线交战；后队班由编队动态
 ##   跟队（set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
 ##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
@@ -55,9 +63,10 @@ const W_MERIC: int = 5
 ## 每方编制 rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
 ## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**；
 ## follow_gap > 0 = 锚定跟随前一班（编队动态跟队），不下推进号令）：
-## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、剑锚矛 gap150、火力锚剑 gap150
+## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、火力压后。
 ## platoons = 班下标分组建排（排聚合层，2~3 班/排），每排任命排长（rank 2）。
-## 班间纵深推链：下一班 front_x = 上一班 front_x − 上一班行数×ROW_GAP − 班间余量 50。
+## 纵深布阵（一屏收拢口径）：全部武器行按纵深行距 ROW_GAP=50 均匀收排——
+## front_x 沿行序每行递减 50（跨班同口径），班结构只体现在编制层不体现在间距上。
 ##
 ## 对战预设（控制面板 1/2/3 切换，重开保持所选档位）：
 const PRESETS: Array = [
@@ -69,7 +78,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "中坚火力班", "front_x": -40.0, "follow_gap": 150.0,
+				"name": "中坚火力班", "front_x": 100.0, "follow_gap": 150.0,
 				"rows": [
 					{ "weapon": W_SWORD, "count": 4 }, { "weapon": W_STAFF, "count": 1 },
 					{ "weapon": W_BOW, "count": 2 }, { "weapon": W_MERIC, "count": 1 },
@@ -87,15 +96,15 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "矛剑混编班", "front_x": -40.0, "follow_gap": 150.0,
+				"name": "矛剑混编班", "front_x": 100.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SPEAR, "count": 4 }, { "weapon": W_SWORD, "count": 8 }],
 			},
 			{
-				"name": "剑士班", "front_x": -370.0, "follow_gap": 150.0,
+				"name": "剑士班", "front_x": 0.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力班", "front_x": -560.0, "follow_gap": 150.0,
+				"name": "火力班", "front_x": -50.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -110,31 +119,31 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "矛兵二班", "front_x": -40.0, "follow_gap": 150.0,
+				"name": "矛兵二班", "front_x": 100.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "矛剑混编班", "front_x": -230.0, "follow_gap": 150.0,
+				"name": "矛剑混编班", "front_x": 50.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SPEAR, "count": 4 }, { "weapon": W_SWORD, "count": 8 }],
 			},
 			{
-				"name": "剑士一班", "front_x": -560.0, "follow_gap": 150.0,
+				"name": "剑士一班", "front_x": -50.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "剑士二班", "front_x": -750.0, "follow_gap": 150.0,
+				"name": "剑士二班", "front_x": -100.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "剑士三班", "front_x": -940.0, "follow_gap": 150.0,
+				"name": "剑士三班", "front_x": -150.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力一班", "front_x": -1130.0, "follow_gap": 150.0,
+				"name": "火力一班", "front_x": -200.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 			{
-				"name": "火力二班", "front_x": -1460.0, "follow_gap": 150.0,
+				"name": "火力二班", "front_x": -300.0, "follow_gap": 150.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -144,10 +153,12 @@ const PRESETS: Array = [
 ]
 ## 当前预设下标（static：场景 reload 重开/切预设后保持所选档位）
 static var _preset_idx: int = 1
-## 出生排间距（px）：分离改椭圆口径（纵深半径 72，见 formation_spacing）后纵向
-## 疏朗化——110 压着旧圆形分离线站，视觉立面叠罗汉；140 ≈ 纵深半径 2 倍，
-## 【待实测校准】
-const ROW_GAP: float = 140.0
+## 纵深行距（px）：相邻武器行/班的 x 间距（一屏收拢口径，全预设统一 50 收排）。
+## 取 STAGGER_X 同值——相邻行任意两员 Δx≥50 > 分离椭圆横半径 48
+##（formation_spacing.SEPARARATION_RADIUS_X），纵距再近椭圆判别恒 >1、分离力
+## 不激活；行内纵向间距由 MIN_ROW_GAP（≥纵深半径 72）把关。
+##【提案/待定·待实测校准】
+const ROW_GAP: float = 50.0
 ## 排内左右间距（px）
 const LINE_GAP: float = 90.0
 ## 行内最小纵距（px，诊断 A1/B）：分离椭圆纵深半径（formation_spacing 72）——
@@ -158,19 +169,22 @@ const MIN_ROW_GAP: float = 72.0
 ## 单位 x 错开 ≥ 分离椭圆横向半径 48，Δx≥50 时任意纵距都不违反分离不变式
 ##（椭圆判别恒 >1），只须保同列纵距 ≥ MIN_ROW_GAP。【待实测校准】
 const STAGGER_X: float = 50.0
-## 左右两团出生中心 x 相对地图中线的偏移。观战缩放 0.75（缩放条 100% 档）下
-## 半屏 1280px——偏移 1400 时两军最前排（front_x 150）落在 ±1250，开场即在
-## 画面两缘可见、对冲收向中线（"两军拉满全屏"）
-const TEAM_OFFSET_X: float = 1400.0   # HD-2D 战场 88 格深带
+## 左右两团出生中心 x 相对地图中线的偏移。一屏战场（创始人：战场范围限定在屏幕
+## 一样大）：观战缩放 0.75（缩放条 100% 档）下可见半宽 = 1920/(2×0.75) = 1280px——
+## ±700 出生 + 阵列纵深朝中线内收（96 档最末行 -350）+ 指挥官再后退 120，
+## 全场横向跨度最大 ≈ ±1170（96 档含指挥官），整场一屏内可见。
+##【提案/待定·待实测校准】
+const TEAM_OFFSET_X: float = 700.0
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
 ## ── 夺点模式（开 = 意图规划器接管开战；关 = 完整回退旧 ADVANCE_ALL + 跟队逻辑）──
 const CAPTURE_ENABLED: bool = true
-## 夺点占领半径（px）
-const CAPTURE_RADIUS: float = 180.0
-## 相邻夺点横向间距（px，相对中线左右展开）
-const CAPTURE_X_SPREAD: float = 500.0
+## 夺点占领半径（px）【提案/待定·待实测校准】（RL v3 一屏口径 120；v2 战场是 180）
+const CAPTURE_RADIUS: float = 120.0
+## 相邻夺点横向间距（px，相对中线左右展开）【提案/待定·待实测校准】
+##（一屏收拢 ±260；120 半径下相邻旗圈不重叠，v2 战场是 ±500）
+const CAPTURE_X_SPREAD: float = 260.0
 ## 夺点纵向错开偏移（px，相对行走带中心）
 const CAPTURE_Y_OFFSET: float = 200.0
 ## 纵向夹紧安全边距（px：点心离行走带上下沿至少此值，再取整十）
@@ -180,8 +194,10 @@ const CAPTURE_POINT_LABELS: Array = ["左", "中", "右"]
 
 ## ── 指挥官（斩首规则）：双方后方各 1 名，阵亡 = 该方立即战败 ──
 const COMMANDER_ENABLED: bool = true
-## 指挥官出生在本方阵列中心再后退的纵深（px；越界由实体地面约束钳到图缘）
-const COMMANDER_REAR_OFFSET: float = 200.0
+## 指挥官出生在本方阵列最末行再后退的纵深（px；一屏口径收紧——v2 战场 200，
+## 阵列收拢后 120 即可脱离接战第一排；越界由实体地面约束钳到图缘）
+##【提案/待定·待实测校准】
+const COMMANDER_REAR_OFFSET: float = 120.0
 ## 指挥官出生 y 相对带中心的错开（px；避开编队出生带中位，防出生重叠遭分离推挤
 ## 把指挥官挤离留守位）
 const COMMANDER_Y_OFFSET: float = 300.0
@@ -196,6 +212,8 @@ const _TARGET_MAP := "battlefield"   # HD-2D 战场：观察场=真实生产观�
 var _hint_label: Label = null
 ## 旗点状态行（夺点模式；"旗：左我/中敌/右争夺"）
 var _flag_label: Label = null
+## 火力组计数行（"火：蓝 N / 红 M"——仍有存活成员的火力组数）
+var _ft_label: Label = null
 ## 控制面板预设按钮组（下标对齐 PRESETS）
 var _preset_buttons: Array = []
 var _attacker: Array = []
@@ -206,6 +224,8 @@ var _capture_points: Array = []
 var _planners: Dictionary = {}
 ## 编队系统引用（单位快照 provider 取班号用）
 var _arena_formation: Node = null
+## 火力组 id 登记（faction -> ft_id 数组；HUD 火力组计数用）
+var _arena_fireteams: Dictionary = {}
 ## 双方指挥官（faction -> 单位；斩首规则 HUD 消费）
 var _arena_commanders: Dictionary = {}
 ## 相机跟随代理（camera_rig 居中模式目标；每帧 lerp 到存活质心）
@@ -257,7 +277,8 @@ func _spawn_and_start() -> void:
 	var mid_x: float = (map.map_left + map.map_right) * 0.5
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 	# 接管相机（审计 P0-6）：不停用 rig——滚轮缩放/边界钳制/平滑全保留；
-	# 居中模式跟随"质心代理"；缩放让可走带（ground band）恰好占满屏高
+	# 居中模式跟随"质心代理"；缩放让整场一屏内可见：一屏战场全宽最大 ≈2340px
+	#（96 档 ±1170 含指挥官）< 0.75 缩放可见宽 2560px（1920/0.75），全宽入画
 	var rig: Node = _game_root.get("camera_rig")
 	if rig != null and rig.has_method("set_centered_mode"):
 		rig.set_centered_mode(true)
@@ -266,7 +287,8 @@ func _spawn_and_start() -> void:
 		if rig.has_method("set_follow_target_y"):
 			rig.set_follow_target_y(true)
 		# 缩放取 HD-2D 构图契约基准档 0.75（缩放条读 100%；设 1.0 会显示 133%
-		# ——创始人 2026-09-16：观察场缩放条该是 100%）
+		# ——创始人 2026-09-16：观察场缩放条该是 100%；0.75 下可见半宽 1280
+		# 覆盖一屏战场 ±1170，全宽可见无需再缩）
 		if rig.has_method("set_user_zoom"):
 			rig.set_user_zoom(0.75)
 		_cam_proxy = Marker2D.new()
@@ -329,8 +351,8 @@ func _spawn_and_start() -> void:
 	# 指挥官（斩首规则）：双方后方各 1 名——留守后方，不编班不下推进令，
 	# 被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）；阵亡 = 斩首 =
 	# 该方立即战败（BattleInstance.add_unit 自动扫描 rank 登记，进战斗前先 set_rank）。
-	# 纵深随预设编成推导（军衔重排后多班纵深分排，阵列深达 ~1450px，固定 rear
-	# 会把指挥官埋进队列中部挨打）——取最深一排再后退 COMMANDER_REAR_OFFSET。
+	# 纵深随预设编成推导（多班纵深分排收拢后 96 档阵列深 ~500px，固定 rear 会把
+	# 指挥官埋进队列中部挨打）——取最深一排再后退 COMMANDER_REAR_OFFSET。
 	if COMMANDER_ENABLED:
 		var rear_x: float = 0.0
 		for si in squad_defs.size():
@@ -380,6 +402,13 @@ func _spawn_and_start() -> void:
 			r_ids.append(right_squad_ids[int(members[mi])])
 		var _l_pid: String = _make_platoon(fs, l_ids, squads_left, members)
 		var _r_pid: String = _make_platoon(fs, r_ids, squads_right, members)
+	# 火力组编成（班内指挥分组，创始人编制口径）：每班劈一号/二号两组——组长 =
+	# 组内首员无标记，火力组不拆散班聚结、不占军衔；号令通道已通（TacticalOrders
+	# issue 对 ft_id 寻址）。军师规划器仍按班下令不动——细分是后续班长级 AI 的地基。
+	_arena_fireteams = { 1: [], 2: [] }
+	for si in squad_defs.size():
+		_arena_fireteams[1].append_array(_make_fireteams(fs, left_squad_ids[si]))
+		_arena_fireteams[2].append_array(_make_fireteams(fs, right_squad_ids[si]))
 	# 开战推进接管权分流：夺点模式 = 意图规划器（布点 + 双方各一台，0.5s 节拍
 	# 自主攻点/驻防/接火）；关闭 = 完整回退旧开战逻辑（下 else 分支，逐行原样）
 	var to: Node = _game_root.get_tactical_orders()
@@ -481,6 +510,35 @@ func _make_platoon(fs: Node, squad_ids: Array, squads_units: Array, squad_indice
 	if not lead_units.is_empty() and fs.has_method("assign_platoon_leader"):
 		fs.assign_platoon_leader(pid, lead_units[0])
 	return pid
+
+
+## 班劈两个火力组（创始人编制口径：一个班除班长外劈两个火力组）。
+## 劈法：班长不入组（班 = 班长 + 两火力组），其余成员按**出生序对半劈**——
+## 出生序 = 武器行主序（前排武器行在先、行内自南向北），前半 = 一号火力组
+##（靠前接敌），后半 = 二号火力组（靠后火力支援），人数奇数时前半多一。
+## 组长 = 组内首员（无标记不占军衔，formation 侧语义）。返回 ft_id 数组。
+func _make_fireteams(fs: Node, squad_id: String) -> Array:
+	if fs == null or not is_instance_valid(fs) or squad_id.is_empty():
+		return []
+	if not fs.has_method("create_fireteam"):
+		return []
+	var pool: Array = fs.get_squad_units(squad_id)
+	var leader: Node = fs.get_squad_leader(squad_id)
+	if leader != null and is_instance_valid(leader):
+		pool.erase(leader)
+	pool = pool.filter(func(u) -> bool: return is_instance_valid(u))
+	if pool.is_empty():
+		return []
+	var half: int = int(ceil(pool.size() * 0.5))
+	var ft_ids: Array = []
+	var ft1: String = fs.create_fireteam(squad_id, pool.slice(0, half), "一号火力组")
+	if not ft1.is_empty():
+		ft_ids.append(ft1)
+	if half < pool.size():
+		var ft2: String = fs.create_fireteam(squad_id, pool.slice(half), "二号火力组")
+		if not ft2.is_empty():
+			ft_ids.append(ft2)
+	return ft_ids
 
 
 ## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器。
@@ -599,6 +657,28 @@ func _point_token(point) -> String:
 			return "中立"
 
 
+## 火力组计数行（"火：蓝 N / 红 M"= 仍有存活成员的火力组数；未编组/编队系统
+## 已随局清理 → 空串不占位）。
+func _fireteam_status_text() -> String:
+	if _arena_fireteams.is_empty() or _arena_formation == null or not is_instance_valid(_arena_formation):
+		return ""
+	if not _arena_formation.has_method("get_fireteam_units"):
+		return ""
+	var parts: Array = []
+	for f in [1, 2]:
+		var alive_fts: int = 0
+		for ft_id_v in _arena_fireteams.get(f, []):
+			var any_alive := false
+			for u in _arena_formation.get_fireteam_units(String(ft_id_v)):
+				if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+					any_alive = true
+					break
+			if any_alive:
+				alive_fts += 1
+		parts.append("%s %d" % ["蓝" if f == 1 else "红", alive_fts])
+	return "火：%s / %s" % [parts[0], parts[1]]
+
+
 func _process(delta: float) -> void:
 	# HUD 存活计数节流 0.25s（战斗性能优化：每帧 O(n) 双列表扫描不参与观察）
 	_hud_timer -= delta
@@ -688,6 +768,7 @@ func _build_hud() -> void:
 	_left_alive_label = _make_label(board_v, Vector2.ZERO, Color(0.55, 0.75, 1.0), StickTokens.FONT_HUD)
 	_right_alive_label = _make_label(board_v, Vector2.ZERO, Color(1.0, 0.62, 0.55), StickTokens.FONT_HUD)
 	_flag_label = _make_label(board_v, Vector2.ZERO, Color(0.92, 0.85, 0.5), StickTokens.FONT_HUD)
+	_ft_label = _make_label(board_v, Vector2.ZERO, Color(0.75, 0.9, 0.75), StickTokens.FONT_HUD)
 	_hint_label = _make_label(board_v, Vector2.ZERO, Color(0.8, 0.8, 0.8), StickTokens.FONT_HINT)
 	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
 	# 控制面板（底部居中）：对战预设按钮组 + 重开按钮——点按立即重开
@@ -735,6 +816,9 @@ func _update_hud() -> void:
 	# 旗点状态行（夺点模式；回退模式无点 → 空串不占位）
 	if _flag_label != null:
 		_flag_label.text = _flag_status_text()
+	# 火力组计数行（仍有存活成员的组数；未编组 → 空串不占位）
+	if _ft_label != null:
+		_ft_label.text = _fireteam_status_text()
 	# 部队尚未生成完（数组为空）不能判胜负——空集双 0 会误显示"战斗结束"
 	if _attacker.is_empty() or _defender.is_empty():
 		_left_alive_label.text = "蓝方（攻）集结中"

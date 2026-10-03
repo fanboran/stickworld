@@ -115,7 +115,9 @@ func _test_overlay_fallback_swl() -> void:
 	# SWL 直译个性不被覆盖链打掉（P6 批次 7c 语义：剑士冲脸/弓手风筝/矛兵持阵）
 	_runner.assert_approx(float(p.get("aggressive_push_prob", -1.0)), 0.25, 0.001, "剑士冲脸概率直译保留")
 	var bow: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
-	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 500.0, 0.001, "弓手保距直译保留")
+	# 原直译 500，但 500 > attack_range(300) 时敌未进射程即入后撤态、持瞄路径永不可达
+	# （实测 50 万采样 aim=0）——收敛到射程内窄带 280，风筝个性保留
+	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 280.0, 0.001, "弓手保距直译保留")
 	var spear: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SPEAR)
 	_runner.assert_true(bool(spear.get("formation_block", false)), "矛兵行军举盾直译保留")
 

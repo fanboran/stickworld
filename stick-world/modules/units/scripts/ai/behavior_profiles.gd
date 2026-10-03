@@ -208,7 +208,10 @@ const CLASS_PROFILES: Dictionary = {
 		"stand_pool": ["idle_spear_v2", "idle_spear_v3"],
 	},
 	BOW: {
-		"kite_range": 500.0,
+		# 保距撤离距离必须 < attack_range(300)：否则敌未进射程就先进入后撤态，
+		# 持瞄路径永不可达（实测 50 万采样 aim=0，弓手光跑不射）——留 20px
+		# "边打边撤"窄带，【待实测校准】
+		"kite_range": 280.0,
 		"aggressive_push_prob": 0.0,
 		"hesitate_prob": 0.02,
 		"leash_mult": 5.0,

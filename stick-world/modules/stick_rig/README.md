@@ -49,6 +49,6 @@ modules/stick_rig/
 
 ## 相关文档
 
-- 分层与依赖：docs/技术/架构/模块依赖关系.md
-- 模块 API 契约：docs/技术/架构/模块API契约.md
+- 分层与依赖：docs/技术/架构/数据与契约/模块依赖关系.md
+- 模块 API 契约：docs/技术/架构/数据与契约/模块API契约.md
 - HD-2D 街景系统：docs/技术/架构/建筑管线/HD-2D街景系统.md

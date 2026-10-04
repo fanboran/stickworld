@@ -20,7 +20,7 @@
 #   7. 本图跟随最新设计实时变化：设计推翻某成果时，同步移除/改写对应完成节点
 #      （如河流追踪一版被推翻→从完成区移出，river_gen 阻塞重做）；git 顺序≠依赖
 #   校验: python tools/deptask/gen.py --check   生成: python tools/deptask/gen.py
-#   模块级（代码）依赖见 docs/技术/架构/模块依赖关系.md —— 与本图互补，勿混写
+#   模块级（代码）依赖见 docs/技术/架构/数据与契约/模块依赖关系.md —— 与本图互补，勿混写
 # ============================================================
 线序: 基线, 复刻主线, UI线, 配置存档, 战略图, 地图系统, 经济循环, 玩法系统, 叙事设计, 工程债, 宣发运营, 决策, 里程碑
 
@@ -69,7 +69,7 @@
 任务 fx_explosion_scorch | 名称=爆炸焦痕特效（兼召唤/爆炸地面标记） | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/fx | 注=批次 12；后沿=demo_content
 任务 fx_ground_slam | 名称=震地特效（GroundSlam 冲击波） | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/fx | 注=批次 12；后沿=demo_content（巨人震地观感随 Demo 收口验收）
 任务 fx_rain_cloud | 名称=天气观感特效（Rain+Cloud 云雨） | 线=复刻主线 | 状态=可开工 | 前置=hist_arena_obs | 域=modules/fx | 注=批次 12；与世界环境天气（weather_env）分工；后沿=demo_content
-任务 spell_base_class | 名称=Spell 基类（冷却/耗金/施放动画/效果统一结构） | 线=复刻主线 | 状态=可开工 | 前置=hist_p05 | 域=modules/combat | 文档=docs/技术/架构/火柴人战斗系统设计.md | 注=批次 4 前半；原版 15 法术统一结构；法术与巨人批次无内容依赖
+任务 spell_base_class | 名称=Spell 基类（冷却/耗金/施放动画/效果统一结构） | 线=复刻主线 | 状态=可开工 | 前置=hist_p05 | 域=modules/combat | 文档=docs/技术/架构/场景与战斗/火柴人战斗系统设计.md | 注=批次 4 前半；原版 15 法术统一结构；法术与巨人批次无内容依赖
 任务 spell_arrow_heal | 名称=具体法术：ArrowVolley 箭雨+HealSpell 治疗（挂基类） | 线=复刻主线 | 状态=阻塞 | 前置=spell_base_class | 域=modules/combat | 注=批次 4 后半；其余 12 法术按需
 簇 cluster_fx | 名称=战斗观感特效包（Effects 对照） | 成员=fx_directional_blood,fx_explosion_scorch,fx_ground_slam,fx_rain_cloud | 注=批次 12 拆分；四特效相互独立可并行
 任务 p12_skins | 名称=阵营皮肤 | 线=复刻主线 | 状态=阻塞 | 前置=p7_meric,p8_giant,p9_inventory | 注=批次 3；皮肤覆盖全部复刻兵种；特效/法术独立管线
@@ -103,11 +103,11 @@
 
 # ───────────── 配置存档（core/autoload + save） ─────────────
 任务 balance_fix | 名称=BalanceConfig 装载时机修复（autoload 自装载+精确警告） | 线=配置存档 | 状态=完成 | 前置=hist_excel_pipeline,hist_save_sqlite | 域=core/autoload/balance_config.gd | 树=.temp/datapipe | 注=已提交 312563f：单测 6/6 绿；待办里"路径解析坏"是误诊，收线时勘误
-任务 save_hardening | 名称=存档加固（事务返回值检查+SQL 参数化+schema 版本化迁移） | 线=配置存档 | 状态=可开工 | 前置=hist_save_sqlite | 域=core/autoload/save_manager.gd | 文档=docs/技术/架构/存储架构设计.md | 注=insert 返回值不检查+6 处 SQL 拼接+save_meta.version 恒写 2
-任务 worldstate_split | 名称=world_state.gd 483 行拆出序列化器 | 线=配置存档 | 状态=阻塞 | 前置=save_hardening | 域=core/autoload/world_state.gd | 文档=docs/技术/架构/存储架构设计.md | 注=序列化职责占 65%
+任务 save_hardening | 名称=存档加固（事务返回值检查+SQL 参数化+schema 版本化迁移） | 线=配置存档 | 状态=可开工 | 前置=hist_save_sqlite | 域=core/autoload/save_manager.gd | 文档=docs/技术/架构/数据与契约/存储架构设计.md | 注=insert 返回值不检查+6 处 SQL 拼接+save_meta.version 恒写 2
+任务 worldstate_split | 名称=world_state.gd 483 行拆出序列化器 | 线=配置存档 | 状态=阻塞 | 前置=save_hardening | 域=core/autoload/world_state.gd | 文档=docs/技术/架构/数据与契约/存储架构设计.md | 注=序列化职责占 65%
 任务 worldstate_resource_ledger | 名称=ResourceState 扩展为库存台账（ResourceLedgerState）后迁移集中制 | 线=配置存档 | 状态=阻塞 | 前置=worldstate_split | 域=core/autoload/world_state.gd,modules/resources
-任务 save_readback | 名称=读档完整性（建筑/工地/派工/资源/编队全量恢复） | 线=配置存档 | 状态=阻塞 | 前置=worldstate_split | 域=core/autoload/save_manager.gd | 文档=docs/技术/架构/存储架构设计.md
-任务 resources_persistence | 名称=资源库存持久化进存档（当前每次新游戏重置） | 线=配置存档 | 状态=阻塞 | 前置=worldstate_resource_ledger,dec_data_storage | 域=core/autoload/save_manager.gd,modules/resources | 文档=docs/技术/架构/存储架构设计.md | 注=存储格式决策（dec_data_storage）是真实前置——台账落库格式由它定
+任务 save_readback | 名称=读档完整性（建筑/工地/派工/资源/编队全量恢复） | 线=配置存档 | 状态=阻塞 | 前置=worldstate_split | 域=core/autoload/save_manager.gd | 文档=docs/技术/架构/数据与契约/存储架构设计.md
+任务 resources_persistence | 名称=资源库存持久化进存档（当前每次新游戏重置） | 线=配置存档 | 状态=阻塞 | 前置=worldstate_resource_ledger,dec_data_storage | 域=core/autoload/save_manager.gd,modules/resources | 文档=docs/技术/架构/数据与契约/存储架构设计.md | 注=存储格式决策（dec_data_storage）是真实前置——台账落库格式由它定
 
 # ───────────── 战略图（world_map + worldgen 管线） ─────────────
 任务 strat_ui | 名称=战略图 UI 补充（聚落 tooltip/粒度指示/模式切换+world_map_panel 归档收尾） | 线=战略图 | 状态=完成 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 树=.temp/worldgen
@@ -161,7 +161,7 @@
 任务 autonomy_tactics | 名称=编制默认战术与自主决策权限机制（三层命令系统中层：autonomy_level 控制编制默认战术覆盖单位本能） | 线=玩法系统 | 状态=阻塞 | 前置=hist_p06b,org_driven_behavior | 域=modules/combat,modules/organization | 文档=docs/设计/游戏设计文档.md | 注=GDD §6.1 三层命令系统：玩家指令(高)→编制默认战术(中,本条)→单位本能(低)
 任务 org_driven_behavior | 名称=组织驱动行为深化（load_preset/树状层级 UI/工程组织→建造 军事组织→战斗自动映射） | 线=玩法系统 | 状态=阻塞 | 前置=work_crew_taskboard | 域=modules/organization | 文档=docs/设计/系统/01-组织系统.md | 注=断链点6：组织自动派活依赖任务板（WorkCrewAssigner 任务板）；含通用 Project 分解机制（组织表 current_project 字段的执行体）与文明初始组织架构预设（load_preset 数据源，01 篇细化）
 任务 individual_attrs | 名称=火柴人个体属性标签系统（力量/智力/敏捷/工艺/指挥→行为树与工作适配） | 线=玩法系统 | 状态=可开工 | 前置=hist_p03 | 域=modules/units | 文档=docs/技术/架构/场景与战斗/战斗与AI.md | 注=属性挂实体、影响行为树——依赖行为 AI（已有）；参考世界盒子，先基础后迭代；与复刻批次 units 域互斥（调度裁决先后）
-任务 equipment_system | 名称=装备系统（个体装备+编制装备配置：武器/护甲/工具影响属性和行为） | 线=玩法系统 | 状态=阻塞 | 前置=individual_attrs,p9_inventory | 域=modules/units | 文档=docs/技术/架构/模块依赖关系.md | 注=GDD §3.2 编制管理含层级装备配置（FormationPanel 装备预设）+个体装备；依赖个体属性+物品栏；原 main_done 门拆除（units 域互斥走调度，物品栏才是真实内容前置）
+任务 equipment_system | 名称=装备系统（个体装备+编制装备配置：武器/护甲/工具影响属性和行为） | 线=玩法系统 | 状态=阻塞 | 前置=individual_attrs,p9_inventory | 域=modules/units | 文档=docs/技术/架构/数据与契约/模块依赖关系.md | 注=GDD §3.2 编制管理含层级装备配置（FormationPanel 装备预设）+个体装备；依赖个体属性+物品栏；原 main_done 门拆除（units 域互斥走调度，物品栏才是真实内容前置）
 任务 forge_process_anim | 名称=装备打造过程可视化（铁匠铺'看到打造过程'的感觉） | 线=玩法系统 | 状态=阻塞 | 前置=equipment_system | 域=modules/building_gen,modules/units | 注=GDD §九美术方向；后沿：产出服务装备系统表现层（玩家体验），内容冻结前收
 任务 idle_behavior | 名称=待机行为：火柴人无事可做时原地播放待机动画（behavior_wander 随机游走改为待机） | 线=玩法系统 | 状态=可开工 | 前置=hist_p03 | 域=modules/units | 文档=docs/技术/架构/场景与战斗/战斗与AI.md | 注=GDD §6.1 创始人确认项；后沿=sim_units_done（个体行为成熟）
 任务 input_refactor | 名称=输入系统重构（09-输入与操作复刻.md：SWL 输入操作对齐） | 线=玩法系统 | 状态=阻塞 | 前置=hist_p06b,docs_governance | 域=modules/player_control | 文档=docs/设计/系统/09-输入与操作复刻.md | 注=开工前文档校准（09 篇与 API 契约对齐）
@@ -235,7 +235,7 @@
 # ───────────── 决策（创始人拍板项——零代码成本，解锁下游一大片，优先派发） ─────────────
 任务 dec_map_refactor | 名称=决策：地图系统架构重构方案范围确认（9 项创始人诉求打包） | 线=决策 | 状态=可开工 | 前置=hist_p0_close | 注=对照 P0 原型现状拍板 9 项诉求的范围与顺序；原阻塞拆除——地图重构线（12 任务）的总闸，决策前置收益最大
 任务 dec_map_editor | 名称=决策：地图编辑器方案（改 .tscn/独立编辑器/Godot 插件三选一） | 线=决策 | 状态=阻塞 | 前置=settlement_maps | 注=真实触发=聚落地图生成落地后批量做图需求出现；后沿：产出=选型决策，消费方=地图编辑器立项（未建，决策后立）；地图重构收口前定
-任务 dec_data_storage | 名称=决策：建筑存档 JSON vs Resource vs 混合 | 线=决策 | 状态=可开工 | 前置=hist_save_sqlite | 文档=docs/技术/架构/存储架构设计.md | 注=对照 SQLite 存档现状（buildings 表/WorldState 直写）做决策；后沿：产出=存储决策，消费方=资源持久化（resources_persistence）与数据驱动设计；原阻塞拆除——存档扩展链的上游
+任务 dec_data_storage | 名称=决策：建筑存档 JSON vs Resource vs 混合 | 线=决策 | 状态=可开工 | 前置=hist_save_sqlite | 文档=docs/技术/架构/数据与契约/存储架构设计.md | 注=对照 SQLite 存档现状（buildings 表/WorldState 直写）做决策；后沿：产出=存储决策，消费方=资源持久化（resources_persistence）与数据驱动设计；原阻塞拆除——存档扩展链的上游
 任务 dec_unit_roster | 名称=决策：缺失兵种实体（CastleArchers/Statue 战争目标/King/GiantBoss/ConversionChannel） | 线=决策 | 状态=可开工 | 前置=hist_coverage_audit | 注=需创始人拍板，依赖大世界玩法定位（GDD 已定）；Statue 可抽象为战争目标建筑；原 main_done 门拆除——覆盖率对账（hist_coverage_audit）才是决策基线，产出供 variant_units/p11e/mode_variants 消费
 任务 dec_achievements | 名称=决策：成就图章完整列表 | 线=决策 | 状态=可开工 | 前置=hist_p0_close | 文档=docs/设计/系统/07-成就系统.md | 注=原型玩法定型后才知道哪些成就可做；产出供 steam_integration/achievement_module 消费；原阻塞拆除
 任务 not_replicated | 名称=范围决策：不复刻清单（平台服务≈40类型/Levels 关卡制/UserInterface 159类） | 线=决策 | 状态=放弃 | 前置=hist_gdd | 注=已决策不复刻：IAP/广告/云同步/成就/AB 测试（战略图路线替代关卡制；UX 流程按需参考）

@@ -1032,7 +1032,7 @@ config/
 7. ☐ 文件命名：`snake_case`；节点/类名 `PascalCase`
 8. ☐ 子目录按需：`scenes/` `scripts/` `data/` `assets/` `ui/`
 9. ☐ 同步本 README §1 模块速查表
-10. ☐ 在 `docs/技术/架构/模块API契约.md` 添加公共方法签名
+10. ☐ 在 `docs/技术/架构/数据与契约/模块API契约.md` 添加公共方法签名
 
 ***
 
@@ -1047,13 +1047,13 @@ config/
 | 场景与战斗架构（P0 工程基线）   | [`docs/技术/架构/场景与战斗架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md)             |
 | 战略图架构              | [`docs/技术/架构/世界与战略图/战略图架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界与战略图/战略图架构.md)                 |
 | 战略图数据流             | [`docs/技术/架构/世界与战略图/世界地图数据流.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界与战略图/世界地图数据流.md)             |
-| 模块 API 契约（签名+前置后置） | [`docs/技术/架构/模块API契约.md`](file:///f:/VSCode/game-2/docs/技术/架构/模块API契约.md)             |
-| EventBus 信号完整清单    | [`docs/技术/架构/系统交互与EventBus.md`](file:///f:/VSCode/game-2/docs/技术/架构/系统交互与EventBus.md) |
-| Autoload 依赖图       | [`docs/技术/架构/自动加载依赖.md`](file:///f:/VSCode/game-2/docs/技术/架构/自动加载依赖.md)               |
-| 核心实体/状态机（完整版）      | [`docs/技术/架构/核心实体与状态机.md`](file:///f:/VSCode/game-2/docs/技术/架构/核心实体与状态机.md)           |
+| 模块 API 契约（签名+前置后置） | [`docs/技术/架构/数据与契约/模块API契约.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/模块API契约.md)             |
+| EventBus 信号完整清单    | [`docs/技术/架构/数据与契约/系统交互与EventBus.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/系统交互与EventBus.md) |
+| Autoload 依赖图       | [`docs/技术/架构/数据与契约/自动加载依赖.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/自动加载依赖.md)               |
+| 核心实体/状态机（完整版）      | [`docs/技术/架构/数据与契约/核心实体与状态机.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/核心实体与状态机.md)           |
 | 建筑模块化设计            | [`docs/技术/架构/建筑模块化设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/建筑模块化设计.md)             |
-| 数据流与存储             | [`docs/技术/架构/数据流全景.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据流全景.md)                 |
-| 存储架构               | [`docs/技术/架构/存储架构设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/存储架构设计.md)               |
+| 数据流与存储             | [`docs/技术/架构/数据与契约/数据流全景.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/数据流全景.md)                 |
+| 存储架构               | [`docs/技术/架构/数据与契约/存储架构设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/存储架构设计.md)               |
 | 开发规范               | [`docs/技术/规范/开发指南.md`](file:///f:/VSCode/game-2/docs/技术/规范/开发指南.md)                   |
 | 建筑系统教程             | [`docs/技术/教程/建筑系统教程.md`](file:///f:/VSCode/game-2/docs/技术/教程/建筑系统教程.md)               |
 | 项目进度               | [`docs/项目/归档/项目进度-2026-09.md`](file:///f:/VSCode/game-2/docs/项目/归档/项目进度-2026-09.md)                         |

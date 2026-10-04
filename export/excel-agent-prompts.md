@@ -217,7 +217,7 @@ unlocks: JSON 数组描述解锁内容（如 ["warrior","spear","barracks"]）
 
 【必须先读】
 core/autoload/balance_config.gd
-docs/技术/架构/自动加载依赖.md（看 BalanceConfig 部分）
+docs/技术/架构/数据与契约/自动加载依赖.md（看 BalanceConfig 部分）
 
 【任务】
 更新 balance_config.gd，使其与 Excel 导出管线对接：

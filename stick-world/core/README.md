@@ -6,9 +6,9 @@
 > - `entities/`：实体状态快照（RefCounted）+ WorldState 存档的字段级序列化
 > - `services/`：音频抽象服务（AudioManager / MusicDirector）
 >
-> Autoload 依赖关系与加载顺序分析见 [docs/技术/架构/自动加载依赖.md](../../docs/技术/架构/自动加载依赖.md)；
-> EventBus 信号分组全表见 [docs/技术/架构/系统交互与EventBus.md](../../docs/技术/架构/系统交互与EventBus.md)；
-> 存储分层全景见 [docs/技术/架构/数据流全景.md](../../docs/技术/架构/数据流全景.md)。
+> Autoload 依赖关系与加载顺序分析见 [docs/技术/架构/数据与契约/自动加载依赖.md](../../docs/技术/架构/数据与契约/自动加载依赖.md)；
+> EventBus 信号分组全表见 [docs/技术/架构/数据与契约/系统交互与EventBus.md](../../docs/技术/架构/数据与契约/系统交互与EventBus.md)；
+> 存储分层全景见 [docs/技术/架构/数据与契约/数据流全景.md](../../docs/技术/架构/数据与契约/数据流全景.md)。
 
 ---
 
@@ -25,7 +25,7 @@
 | 5 | `BalanceConfig` | `core/autoload/balance_config.gd` | 平衡数据统一读取入口。扫描 `res://config/` 下全部 `.tres`（Excel 导出管线产物，BalanceResource 承载）装进点号路径表；`get_value("units.stickmen.<行id>.<字段>")` 逐级解析，`get_all_of_type` 取整表；`reload()` 全量热重载 / `reload_single()` 单文件重载，变更发 `EventBus.balance_changed`（信号本身尚无生产订户）。autoload 阶段即装载（早于 GameRoot 装配）。 |
 | 6 | `AudioManager` | `core/services/audio_manager.gd` | BGM/SFX 播放与总线音量。通道音量（master/bgm/sfx）→ AudioServer 总线（缺总线自动创建并路由 Master，SFX 末端挂硬限幅器）；SFX 唯一入口 `play_event(事件名, 世界坐标)`，事件→资产表 `SFX_EVENTS` 与播放策略表 `SFX_POLICY` 同文件（加音效不动调用点）；音乐压限为具名请求集 `request_music_duck`（多请求取最深，互不覆盖）；失焦静音、天气循环播放器。 |
 | 7 | `MusicDirector` | `core/services/music_director.gd` | 自适应音乐运行时状态机：调用方 `set_context` 报告情境，`_resolve_cue` 集中解析曲目（清单 `res://assets/audio/bgm/music_manifest.json`）；一 cue 多层同帧开播（纵向混音），tier 控强度，stinger 独立短句；暂停期 `PROCESS_MODE_ALWAYS` 只压限不中断。与 AudioManager 分工：本类管"放哪首、放几层、怎么切"，音量唯一消费方仍是 AudioManager。 |
-| 8 | `SaveManager` | `core/autoload/save_manager.gd` | SQLite 存档：5 槽位存 `user://saves/save_<slot>.db`。模块接口 = 订阅 `EventBus.game_saving/game_loaded`，回调内经 `get_db()` 直写各自表（建表 SQL/schema 版本 `CURRENT_SCHEMA_VERSION` 在本文件；SQL 白名单纪律：表名列名常量、运行时值 `?` 绑定）；自动存档间隔读 `game/auto_save_interval_sec`；`boot_load_slot` 供主菜单「继续游戏」跨场景交接；读档有 30s LoadGuard 兜底关库。存储设计详见 [docs/技术/架构/存储架构设计.md](../../docs/技术/架构/存储架构设计.md) 与 `modules/README.md` §8。 |
+| 8 | `SaveManager` | `core/autoload/save_manager.gd` | SQLite 存档：5 槽位存 `user://saves/save_<slot>.db`。模块接口 = 订阅 `EventBus.game_saving/game_loaded`，回调内经 `get_db()` 直写各自表（建表 SQL/schema 版本 `CURRENT_SCHEMA_VERSION` 在本文件；SQL 白名单纪律：表名列名常量、运行时值 `?` 绑定）；自动存档间隔读 `game/auto_save_interval_sec`；`boot_load_slot` 供主菜单「继续游戏」跨场景交接；读档有 30s LoadGuard 兜底关库。存储设计详见 [docs/技术/架构/数据与契约/存储架构设计.md](../../docs/技术/架构/数据与契约/存储架构设计.md) 与 `modules/README.md` §8。 |
 | 9 | `DebugApi` | `modules/debug_gui/api.gd` | F3 调试覆盖层对外 API（实体在 modules/debug_gui，注册跟在 core 各单例之后）。 |
 
 ## 目录结构
@@ -67,4 +67,4 @@ core/
 - **信号纪律**：信号名 snake_case；`@warning_ignore("unused_signal")` 对每条信号逐个标注（该注解只作用于下一条语句）；新信号实装订户后再声明。
 - **SQL 纪律**：表名/列名定义为常量（无法参数化），运行时值一律 `query_with_bindings` 走 `?` 绑定，禁止字符串拼接。
 - **暂停与 autoload**：自动加载单例不在 game_root/ui_root 两棵子树内，暂停期仍需工作的单例（SaveManager / TimeManager / MusicDirector）在各自 `_ready` 声明 `PROCESS_MODE_ALWAYS`。
-- **新增全局单例**：改 `project.godot` `[autoload]` 段，并同步 [docs/技术/架构/自动加载依赖.md](../../docs/技术/架构/自动加载依赖.md) 的依赖分析。
+- **新增全局单例**：改 `project.godot` `[autoload]` 段，并同步 [docs/技术/架构/数据与契约/自动加载依赖.md](../../docs/技术/架构/数据与契约/自动加载依赖.md) 的依赖分析。

@@ -88,7 +88,7 @@ docs/技术/架构/核心实体.md
 你是 stick-world 项目的 Godot GDScript 开发者。遵循 .trae/rules/rule.md 的全部规范。
 
 【必须先读】
-docs/技术/架构/自动加载依赖.md
+docs/技术/架构/数据与契约/自动加载依赖.md
 
 【任务】
 创建以下 3 个 Autoload 脚本，并按 autoloads.md 的初始化顺序更新 project.godot：

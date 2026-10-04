@@ -13,7 +13,7 @@ extends RefCounted
 ##   - 画框随 F3 调试总开关显隐（订阅 DebugApi.visibility_changed），不再常驻；
 ##     是否存在该层由 OS.is_debug_build() 决定：发行导出不创建。
 ##
-## 设计基线：docs/技术/架构/UI运行时架构优化方案.md §三。
+## 设计基线：docs/技术/UI/UI运行时架构优化方案.md §三。
 ## 约束：堆叠成员须挂在「顶部通栏全宽、原点即屏左上」的父级下（GlobalHUD /
 ## HudOverlay 均满足），同一组 offsets 才在不同父级下产生相同屏幕位置。
 

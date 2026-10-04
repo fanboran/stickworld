@@ -40,7 +40,7 @@ func repair_building(building_id: String, org_id: String) -> Dictionary
 # [P] building 状态=DAMAGED
 ```
 
-> **🔄 模块化重构后（B1+ 阶段，详见 [建筑模块化设计.md](建筑模块化设计.md)）**：
+> **🔄 模块化重构后（B1+ 阶段，详见 [建筑模块化设计.md](../建筑模块化设计.md)）**：
 > 
 > 上述 `building_type` 字符串将被 `BuildingDef` 配方取代，签名改为：
 > 
@@ -126,7 +126,7 @@ static func apply_thatch_cpu(polygon) -> void
 ## 二、科技模块（阶段 1 按新策略重建，契约以届时实现为准）
 
 > 科技系统按"征服获得即解锁"设计（无研究状态机），模块当前未实现。
-> 重建时以 [`../../设计/系统/04-科技系统.md`](../../设计/系统/04-科技系统.md) 的策略为准补充契约。
+> 重建时以 [`../../../设计/系统/04-科技系统.md`](../../../设计/系统/04-科技系统.md) 的策略为准补充契约。
 
 ---
 
@@ -163,7 +163,7 @@ func set_tax_rate(rate: float) -> Dictionary
 
 ## 四、扩张模块 `modules/expansion`（无对外 api）
 
-expansion 模块不设 `api.gd` 对外契约面（据点玩法层的配置/编排/出入口按 [`docs/设计/完整版蓝图.md`](../../设计/完整版蓝图.md) §6.1 拆除，模块收敛为纯管道）；仅保留驻军生成服务：
+expansion 模块不设 `api.gd` 对外契约面（据点玩法层的配置/编排/出入口按 [`docs/设计/完整版蓝图.md`](../../../设计/完整版蓝图.md) §6.1 拆除，模块收敛为纯管道）；仅保留驻军生成服务：
 
 ```gdscript
 # scripts/garrison_spawner.gd（RefCounted 纯服务，无节点、无信号）

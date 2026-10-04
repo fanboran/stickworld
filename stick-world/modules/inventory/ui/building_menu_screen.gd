@@ -2,7 +2,7 @@ class_name BuildingMenuScreen
 extends StickScreen
 ## 建筑交互菜单（480×420，UIModalStack.Layer.CONTAINER 同层同类单例）。
 ##
-## 走近建筑按 F 弹出的通用入口（预制框架，docs/设计/系统/背包与装备系统.md
+## 走近建筑按 F 弹出的通用入口（预制框架，docs/设计/系统/14-背包与装备系统.md
 ## §2.4）：标题=建筑名，按钮组=建筑声明的 actions（数据驱动 Array[Dictionary]：
 ## {label, callback, enabled=false 占位}）。SystemSetup 装配在 ModalOverlay；
 ## 已实装动作：仓库的「拿/放建材」「打开村仓」（村仓=RegionStorage 物品视图）；

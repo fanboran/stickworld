@@ -1,7 +1,7 @@
 class_name CityGen
 extends RefCounted
 ## 初始城市生成器（GD 运行时版，与 tools/blender_buildings/gen_initial_city.py
-## 同算法；建筑池按 docs/设计/系统/聚落等级与建筑分级.md 的**级别窗口表**取）。
+## 同算法；建筑池按 docs/设计/系统/16-聚落等级与建筑分级.md 的**级别窗口表**取）。
 ##
 ## 语义（创始人 2026-09-15 裁决）：
 ##   · 城市大小 = 建筑排完的自然跨度 + 墙留边，不写死——建筑变多城市扩展，

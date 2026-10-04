@@ -79,7 +79,7 @@ import materials as MAT        # noqa: E402
 import props as P              # noqa: E402
 
 CELL = 32.0
-#: 八档等级链（聚落等级与建筑分级.md §一）：4 既有档 + townlet/burgh 过渡档 +
+#: 八档等级链（16-聚落等级与建筑分级.md §一）：4 既有档 + townlet/burgh 过渡档 +
 #: capital/metropolis 行政档
 TIERS = ("hamlet", "village", "townlet", "town", "burgh", "city", "capital",
          "metropolis")

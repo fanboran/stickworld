@@ -1,6 +1,6 @@
 class_name ItemDef
 extends Resource
-## 物品静态定义（背包与装备系统，docs/设计/系统/背包与装备系统.md §2.2）。
+## 物品静态定义（背包与装备系统，docs/设计/系统/14-背包与装备系统.md §2.2）。
 ##
 ## 定义"一件物品是什么"；运行时数量归 ItemStack。当前真相源是 ItemDB 内置
 ## 注册表（GDScript 定义），excel 管线支持类型化导出后迁 .tres。

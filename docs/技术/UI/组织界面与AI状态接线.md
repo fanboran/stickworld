@@ -44,7 +44,7 @@
 |------|---------|------|
 | 行为名 | `_state_machine.get_current_behavior_name()`（ai_controller 内部既有消费，[ai_controller.gd:259](../../../stick-world/modules/units/scripts/ai/ai_controller.gd)） | 既有 |
 | AI 参数摘要 | BehaviorProfiles 兵种覆盖档关键字段（`decision_interval`/`burst_shots` 等**机制参数**；无难度档——维度已裁决移除） | 既有（A9） |
-| 相位/角色 | `squad_phase_plan.get_role_of(unit)` / `get_phase_name()`（[squad_phase_plan.gd:147/155](../../../stick-world/modules/combat/scripts/command/squad_phase_plan.gd)） | 既有（A5） |
+| 相位/角色 | `squad_phase_plan.get_role_of(unit)` / `get_phase_name()`（[squad_phase_plan.gd:147/155](../../../stick-world/modules/formation/scripts/squad_phase_plan.gd)） | 既有（A5） |
 | 撤退调制状态 | `ai_controller` 私有字段 `_retreat_mod_rng`/`_retreat_mod_next_roll_at`（[ai_controller.gd:96-99](../../../stick-world/modules/units/scripts/ai/ai_controller.gd)）——**需补只读 getter** `get_retreat_mod_state()`（候选因子命中项/最近掷骰结果/节流窗口余量） | 接口缺口 |
 
 - **落点文件**：`modules/debug_gui/scripts/debug_info_panel.gd`（追加段）
@@ -64,7 +64,7 @@
 
 ### 2.3 L2 相位计划显示
 
-- **现状可查**：`get_phase()`/`get_phase_name()`/`get_roles()`/`get_role_of()`（[squad_phase_plan.gd:143-155](../../../stick-world/modules/combat/scripts/command/squad_phase_plan.gd)），经宿主 formation_system 可达。
+- **现状可查**：`get_phase()`/`get_phase_name()`/`get_roles()`/`get_role_of()`（[squad_phase_plan.gd:143-155](../../../stick-world/modules/formation/scripts/squad_phase_plan.gd)），经宿主 formation_system 可达。
 - **接口缺口**：相位/角色变更**无信号**（squad_phase_plan.gd 零 signal 声明），UI 只能逐帧轮询。提案补两信号：
   - `phase_changed(squad_id, from_phase, to_phase)`——`_enter()`（:259）发射；
   - `roles_reassigned(squad_id)`——`_reassign_roles()`（:361）发射。
@@ -84,7 +84,7 @@
 ### 2.5 TeamAi 生产启用链路核实与接线方案
 
 **核实结论**：`enable_team_ai`（[battle_instance.gd:363](../../../stick-world/modules/combat/scripts/battle/battle_instance.gd)）是注册制开关（默认不启用 = 零回归闸门）。但生产链上——
-[battle_director.gd:65](../../../stick-world/modules/combat/scripts/battle/battle_director.gd) 只透传 `set_order_refs`，**从不调 `enable_team_ai`**：经 BattleDirector 开出的战斗（观察场/普通遭遇战）TeamAi 全程未启用；[conquest_manager.gd:157](../../../stick-world/modules/expansion/scripts/conquest_manager.gd) 仅据点战守军（faction 2）启用。即 §2.2 HUD 在多数生产战斗中**无数据可看**——接线须先修启用链。
+[battle_director.gd:65](../../../stick-world/modules/combat/scripts/battle/battle_director.gd) 只透传 `set_order_refs`，**从不调 `enable_team_ai`**：经 BattleDirector 开出的战斗（观察场/普通遭遇战）TeamAi 全程未启用；`conquest_manager`（历史落点，随据点玩法层拆除） 仅据点战守军（faction 2）启用。即 §2.2 HUD 在多数生产战斗中**无数据可看**——接线须先修启用链。
 
 **接线方案【提案/待定】**：
 
@@ -116,7 +116,7 @@
 1. **无逐层视图**——L1 班与 L3 师共用同一套 CRUD 详情字段；组织的「活」语义（士气/职责/状态/号令）不在场；
 2. **无指挥链可视化**——树只是数据结构；命令沿层物理传播（传输层 v1，[`组织系统架构.md` §4.2](../../技术/架构/组织系统架构.md)）与在途状态零表达；
 3. **无补位与上报显示**——`report_filed` 信号（[organization/api.gd:23](../../../stick-world/modules/organization/api.gd)）零 UI 消费方；补位候选序 `get_succession_candidates`（api.gd:326）有接口无界面；「群龙无首」持续空缺态（组织架构 §4.3 ③）无标记；
-4. **权威值经济无表达**——`get_squad_authority`/`should_switch_squad`（[formation_system.gd:431/451](../../../stick-world/modules/combat/scripts/command/formation_system.gd)，A9 已落地）——「谁想加入谁的班」不可见；
+4. **权威值经济无表达**——`get_squad_authority`/`should_switch_squad`（[formation_system.gd:431/451](../../../stick-world/modules/formation/scripts/formation_system.gd)，A9 已落地）——「谁想加入谁的班」不可见；
 5. **在途命令不可见**——CommandChain 接力执行无在途登记，UI 无从查询每跳 ETA（依赖 §2.6 末行接口）。
 
 ### 3.2 逐层级界面设计

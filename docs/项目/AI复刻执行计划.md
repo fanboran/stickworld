@@ -88,7 +88,7 @@
 
 - **范围**（原版 `Formation` 类 7 函数 + 基类 3 函数）：row/col 阵列（`UNITS_PER_COLUMN/ROW_GAP/formationOrder`）+ `FormationPositionIsStable` 落点稳定检测 + `UpdateCatchingUpToFormation` 追赶状态 + `FilterDownARandomRow/ShouldSwitchUnitsInFormation` 补位换位。
 - **验收**：三班 row/col 阵列推进，掉员自动补位；§三 覆盖数更新（编队稳定/结构 ❌→✅）。
-- **完成情况**：[formation_system.gd](../../stick-world/modules/combat/scripts/command/formation_system.gd) 落槽位制编队——小队新增 `slots`（iid→Vector2i(col,row)），`_assign_formation_slots` 在建队/入队/离队/掉员时全量重算（Add/Remove 直译；FilterDownARandomRow 等价=列数随减员收缩不留空列）；`ShouldSwitchUnitsInFormation` 直译为贪心互换（互换后总行走距离缩短则换，近者填前排）；`get_squad_dest` 新增 `"formation"` 模式（前列贴锚、后列退 ROW_GAP×col、同列横展 SPREAD_SPACING）；`_formation_position_is_stable`（死区内不重发号令）与 `is_unit_in_formation`（IsInTheFormation 直译）落查询侧；跟队 tick 与 ADVANCE_ALL/SPRINT 号令全切 formation 模式。追赶：距槽位 >140px 下 `run+catching_up` 号令（UpdateCatchingUpToFormation），[behavior_move.gd](../../stick-world/modules/units/scripts/ai/behavior_move.gd) 追赶中收盾疾跑、落定恢复端盾（UpdateBlockWhenInFormation 真值语义）。新套件 `test_formation_slots`（槽位双射/落点/补位/换位/稳定 5 用例）；battle_sim 回归 6 场景正常收敛、21 套件全过。常量 UNITS_PER_COLUMN=3/ROW_GAP=56/CATCHUP_RUN_DIST=140 无 dump 真值，**待实测校准**。
+- **完成情况**：[formation_system.gd](../../stick-world/modules/formation/scripts/formation_system.gd) 落槽位制编队——小队新增 `slots`（iid→Vector2i(col,row)），`_assign_formation_slots` 在建队/入队/离队/掉员时全量重算（Add/Remove 直译；FilterDownARandomRow 等价=列数随减员收缩不留空列）；`ShouldSwitchUnitsInFormation` 直译为贪心互换（互换后总行走距离缩短则换，近者填前排）；`get_squad_dest` 新增 `"formation"` 模式（前列贴锚、后列退 ROW_GAP×col、同列横展 SPREAD_SPACING）；`_formation_position_is_stable`（死区内不重发号令）与 `is_unit_in_formation`（IsInTheFormation 直译）落查询侧；跟队 tick 与 ADVANCE_ALL/SPRINT 号令全切 formation 模式。追赶：距槽位 >140px 下 `run+catching_up` 号令（UpdateCatchingUpToFormation），[behavior_move.gd](../../stick-world/modules/units/scripts/ai/behavior_move.gd) 追赶中收盾疾跑、落定恢复端盾（UpdateBlockWhenInFormation 真值语义）。新套件 `test_formation_slots`（槽位双射/落点/补位/换位/稳定 5 用例）；battle_sim 回归 6 场景正常收敛、21 套件全过。常量 UNITS_PER_COLUMN=3/ROW_GAP=56/CATCHUP_RUN_DIST=140 无 dump 真值，**待实测校准**。
 
 ### P5 · 批次 2：数值校准（2 轮）✅ 2026-09-02 完成
 
@@ -145,7 +145,7 @@
 
 #### 批次 6：编队动态跟队（2 轮）——✅ 2026-09-01
 
-- **改动点**：[formation_system.gd](../../stick-world/modules/combat/scripts/command/formation_system.gd) 加 `follow_squad_id`/`follow_gap` 锚定字段；0.5s tick 落点 = 前队质心 − 行进方向 × gap；前队全灭解除锚定；**前队接敌 → 后队越过 gap 推进支援**（9b 补丁）；[battle_arena.gd](../../stick-world/tests/dev/battle_arena.gd) 三班接线（矛先锋 ADVANCE_ALL，剑锚矛 gap150，火锚剑 gap150）；behavior_move `hold_on_arrive` 驻留 + 号令 `follow_order` 来源标记。
+- **改动点**：[formation_system.gd](../../stick-world/modules/formation/scripts/formation_system.gd) 加 `follow_squad_id`/`follow_gap` 锚定字段；0.5s tick 落点 = 前队质心 − 行进方向 × gap；前队全灭解除锚定；**前队接敌 → 后队越过 gap 推进支援**（9b 补丁）；[battle_arena.gd](../../stick-world/tests/dev/battle_arena.gd) 三班接线（矛先锋 ADVANCE_ALL，剑锚矛 gap150，火锚剑 gap150）；behavior_move `hold_on_arrive` 驻留 + 号令 `follow_order` 来源标记。
 - **验收**：三班纵深推进；前队接敌后后队推进支援；formation 套件回归绿。
 
 #### 批次 5：盾姿态分层动画（1.5 轮）——✅ 2026-09-01

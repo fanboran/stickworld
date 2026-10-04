@@ -14,4 +14,4 @@
 - `core/region_storage.gd` — 区域仓储的物品容器视图(ItemContainer 子类,
   资源品 def ↔ resources 台账经弱类型 api 注入桥接,经济 float 链路零改动)
 
-分层:零依赖(不引任何模块);`docs/设计/系统/背包与装备系统.md` §2.2。
+分层:零依赖(不引任何模块);`docs/设计/系统/14-背包与装备系统.md` §2.2。

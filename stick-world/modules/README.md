@@ -438,7 +438,7 @@ UI 四件套：`inventory_screen`（背包·角色合一，StatsScreen 已并入
 `building_menu_screen`（建筑交互菜单，actions 数据驱动预制）。
 
 **交互**：E 背包 / 滚轮切武器（附身态，Shift+滚轮缩放）/ 数字键 1-9/0 /
-F 翻检遗物与建筑菜单。详见其 README 与 [背包与装备系统.md](../docs/设计/系统/背包与装备系统.md)。
+F 翻检遗物与建筑菜单。详见其 README 与 [14-背包与装备系统.md](../docs/设计/系统/14-背包与装备系统.md)。
 
 ***
 
@@ -1056,7 +1056,7 @@ config/
 | 存储架构               | [`docs/技术/架构/存储架构设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/存储架构设计.md)               |
 | 开发规范               | [`docs/技术/规范/开发指南.md`](file:///f:/VSCode/game-2/docs/技术/规范/开发指南.md)                   |
 | 建筑系统教程             | [`docs/技术/教程/建筑系统教程.md`](file:///f:/VSCode/game-2/docs/技术/教程/建筑系统教程.md)               |
-| 项目进度               | [`docs/项目/项目进度.md`](file:///f:/VSCode/game-2/docs/项目/项目进度.md)                         |
+| 项目进度               | [`docs/项目/归档/项目进度-2026-09.md`](file:///f:/VSCode/game-2/docs/项目/归档/项目进度-2026-09.md)                         |
 | GDD vs 实现差异        | [`docs/项目/审计/专项/GDD与实现差异分析.md`](file:///f:/VSCode/game-2/docs/项目/审计/专项/GDD与实现差异分析.md)         |
 | 全项目审计快照           | [`docs/项目/归档/审计快照-2026-08-30.md`](file:///f:/VSCode/game-2/docs/项目/归档/审计快照-2026-08-30.md) |
 | 贡献指南               | [`docs/CONTRIBUTING.md`](file:///f:/VSCode/game-2/docs/CONTRIBUTING.md)               |

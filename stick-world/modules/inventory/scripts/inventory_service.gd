@@ -2,7 +2,7 @@ class_name InventoryService
 extends Node
 ## 背包服务 —— 玩家背包持有者 + 装备→实体桥接（模块对外的运行时中枢）。
 ##
-## 职责（设计文档 docs/设计/系统/背包与装备系统.md §2.3）：
+## 职责（设计文档 docs/设计/系统/14-背包与装备系统.md §2.3）：
 ##   1. 持有唯一的玩家 PlayerInventory（背包跟着玩家走，不跟火柴人）
 ##   2. 监听装备变化 → 写入当前附身实体（weapon_type / 盾 / 护甲聚合 /
 ##      武器 stats 乘子——attack_mult/speed_mult 经 weapon_mount 乘子字段生效）

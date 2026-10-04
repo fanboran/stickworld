@@ -2,7 +2,7 @@ class_name PlayerInventory
 extends RefCounted
 ## 玩家背包 + 装备栏 + Hotbar 指派（纯数据，可 headless 单测）。
 ##
-## 列表制（创始人裁决，docs/设计/系统/背包与装备系统.md §2.2/§2.3）：
+## 列表制（创始人裁决，docs/设计/系统/14-背包与装备系统.md §2.2/§2.3）：
 ## 背包 = items 域 ItemContainer——**无总数量限制，唯一上限=每类 max_stack**；
 ## 装备规则（双手锁副手 / 类别约束）收敛在 can_* 与装备事务里；列表制下
 ## "背包满"不存在（装备/卸装恒可行，无回滚分支）。战斗端桥接由

@@ -2,7 +2,7 @@ class_name CrystalSparkles
 extends CPUParticles2D
 ## 水晶/岩壁连续闪光 —— 《药剂工艺》CrystalSparks 逐字段复刻。
 ##
-## 数据来源（解包实证，详见 docs/技术/特效系统/药剂工艺特效复刻参考.md）：
+## 数据来源（解包实证，详见 docs/技术/参考/药剂工艺特效复刻参考.md）：
 ##   多子系统   一个矿石宿主 = 基础层 + 5 个强度子系统（CrystalSparks -1..-5），
 ##              areaFactor 6.0/4.5/2.25/1.5/0.75（ParticleSystemsGroup 运行时启用）
 ##   速率公式   rateOverTime = areaFactor × 发射 mesh 面积 × SpawnRate × 抖动(0.5~2)

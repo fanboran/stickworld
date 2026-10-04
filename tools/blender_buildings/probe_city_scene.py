@@ -95,7 +95,7 @@ DEF_MAP = {
     "gatehouse":     ("gatehouse", [6, 8, 12]),
     "lighthouse":    ("lighthouse", [4, 6]),
     "windmill":      ("windmill", [4, 6, 8]),
-    # ── 行政建筑阶梯（聚落等级与建筑分级.md §二，AI 提案/待定） ─────────
+    # ── 行政建筑阶梯（16-聚落等级与建筑分级.md §二，AI 提案/待定） ─────────
     # 行政批次已交付 4 装配器（council_hall/town_hall/governor_palace/
     # imperial_palace），映射到实名装配器；city_hall 暂无装配器（待 city_hall
     # 装配器立项后替换），过渡期按任务书 §二 由 guildhall[16] 兼。

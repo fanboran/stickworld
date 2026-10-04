@@ -12,7 +12,7 @@
   width_px：hamlet 2560 / village 3072 / townlet 3584 / town 4096 / burgh 5120 /
             city 6144 / capital 8192 / metropolis 12288
             （八档 = 4 既有档 + 2 过渡档（townlet/burgh）+ 2 高级行政档
-            （capital/metropolis），分级依据 docs/设计/系统/聚落等级与建筑分级.md
+            （capital/metropolis），分级依据 docs/设计/系统/16-聚落等级与建筑分级.md
             【AI 提案/待定】）
 
   平面 x_px ∈ [0, width_px)   —— 横向；左右两端为城墙（§4.5「左右两端以城墙转角收边」）

@@ -10,7 +10,7 @@ extends Node
 ## headless 模拟速率（无渲染噪声）：
 ##   godot --headless --path . res://tests/dev/battle_perf.tscn -- --headless-measure
 ## 对比基线：git worktree 检出改动前提交跑同命令；量测规范见
-## docs/技术/教程/性能量测规范.md（通道隔离/关声音/固定分辨率）。
+## docs/技术/规范/性能量测规范.md（通道隔离/关声音/固定分辨率）。
 
 const ArenaScene := preload("res://tests/dev/battle_arena.tscn")
 const ArenaScript := preload("res://tests/dev/battle_arena.gd")

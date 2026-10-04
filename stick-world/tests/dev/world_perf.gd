@@ -6,7 +6,7 @@ extends Node
 ##   godot --path . --resolution 1920x1080 res://tests/dev/world_perf.tscn
 ## 流程：boot_load_slot=-1（新开局，不碰玩家存档）→ 加载 game_root →
 ## 热身 10s（世界生成/刷单位）→ 采样 20s → 输出 [PERF] JSON 后退出。
-## 量测规范（通道隔离/关声音/基线表）见 docs/技术/教程/性能量测规范.md。
+## 量测规范（通道隔离/关声音/基线表）见 docs/技术/规范/性能量测规范.md。
 
 const GAME_ROOT_SCENE := "res://modules/world/scenes/game_root.tscn"
 const WARMUP_SECONDS: float = 10.0

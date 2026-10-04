@@ -3,7 +3,7 @@ extends RefCounted
 ## 启动预热 —— 把「切场景那一刻炸出来的 GDScript 编译闭包」摊到分帧里，让加载屏
 ## 有活进度可报。
 ##
-## 背景（实测见 `docs/项目/交接/加载屏双进度条与分帧装配-进度与交接.md`）：
+## 背景（实测见 `docs/项目/交接/加载屏双进度条与分帧装配.md`）：
 ## `change_scene_to_file(game_root.tscn)` 会在主线程一次性 load 场景 + 编译
 ## `game_root.gd`，连带编译 `system_setup.gd` 的 45 个 `preload` 及其传递闭包。
 ## 这段发生在 `GameRoot._ready` **之前**，此时九段进度还没开始，加载屏只能钉在

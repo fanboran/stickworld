@@ -23,7 +23,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 > `modules/hd2d/`（api.gd 契约 + scenes/scripts/shaders/assets 四类目录）；烘卡机产物 temp/
 > 优先、随包镜像 `modules/hd2d/assets/tex/` 兜底，新机器 clone 后不跑 Blender 也能玩。
 > 职责拆分（world 根编排 + cards/placer/ground/walls/char_stage 组件化）为挂起工作项，
-> 见 `docs/项目/交接/HD-2D架构正式化-进度与交接.md`（含组件映射表 v2）。
+> 见 `docs/项目/交接/HD-2D架构正式化.md`（含组件映射表 v2）。
 ```
 
 主街这张图的完整结构解剖（分层坐标 / 构图三钉 / 摆街数据流 / 光照档）见 **§六**——改布局、构图、背景前先读。

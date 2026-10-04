@@ -1,5 +1,5 @@
 extends PanelContainer
-## L1 班组卡（W2 · docs/设计/UI/组织界面与AI状态接线-总体方案.md §3.2.A）。
+## L1 班组卡（W2 · docs/技术/UI/组织界面与AI状态接线.md §3.2.A）。
 ##
 ## 落位：ContextPanel 的 SquadInspector 槽；BATTLE 模式框选小队（选中单位能解析出
 ## 所属 L1 编制）时显示，选择清空/小队消亡即收起。

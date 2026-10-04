@@ -279,7 +279,7 @@ func _add_field_row(field: Dictionary) -> void:
 
 ## 字段改动统一入口（slider/option/toggle 的 value_changed 均接这里）：
 ## 待应用项只暂存进 _values；其余即时写穿——写 ConfigManager（自动落盘）+
-## 调真实系统即时生效，对齐 07-设置界面 §五「即时生效项」。
+## 调真实系统即时生效，对齐 技术/UI/设置界面 §五「即时生效项」。
 func _on_field_changed(value: Variant, key: String) -> void:
 	_values[key] = value
 	if key in _APPLY_LATER_KEYS:
@@ -373,7 +373,7 @@ func _camera() -> Node:
 
 
 ## 关闭（footer 按钮 / ESC 出栈同路）：待应用项随关闭自动生效并落盘，
-## 不静默丢弃用户改动（07-设置界面 §五；相比弹"放弃修改？"确认框，
+## 不静默丢弃用户改动（技术/UI/设置界面 §五；相比弹"放弃修改？"确认框，
 ## 免去模态栈出栈后再拦关闭的状态簿记）。
 func close() -> void:
 	for key in _APPLY_LATER_KEYS:
@@ -464,7 +464,7 @@ const _VOLUME_KEYS: Array[String] = ["audio/master_volume", "audio/bgm_volume", 
 static func _to_stored_volume(value: Variant) -> float:
 	return clampf(float(value) / 100.0, 0.0, 1.0)
 
-## 待应用项（07-设置界面 §五「应用生效」）：改动只进 _values 暂存，点「应用」
+## 待应用项（技术/UI/设置界面 §五「应用生效」）：改动只进 _values 暂存，点「应用」
 ## 或关闭面板时才生效。其余字段全部即时生效（改动即写 ConfigManager + 实时接线）。
 const _APPLY_LATER_KEYS: Array[String] = ["video/window_mode", "video/ui_scale"]
 

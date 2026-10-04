@@ -2,7 +2,7 @@ class_name CommandChainView
 extends StickWindow
 ## 指挥链视图（CommandChainView）—— 「命令沿层级逐跳跑秒」的独立沙盘窗口。
 ##
-## 定位（docs/设计/UI/组织界面与AI状态接线-总体方案.md §3.2.B ★ 本项目独有特色）：
+## 定位（docs/技术/UI/组织界面与AI状态接线.md §3.2.B ★ 本项目独有特色）：
 ## 命令不是瞬发魔法而是物理旅程——把旅程画出来（逐层指挥链 + 传输层物理传播）。
 ## 窗口形态：独立 StickWindow FLOATING（开放问题 §五.2 提案：动画层需常驻、不被 CRUD 打断）；
 ## 渲染层：UI 层示意动画（§五.3 提案：不做世界层光点）。

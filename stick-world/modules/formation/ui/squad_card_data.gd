@@ -1,6 +1,6 @@
 extends RefCounted
 ## L1 班组卡·取数助手（从 squad_card.gd 下沉）——"取数（全 duck，缺则降级）"语义整区迁移
-## （docs/设计/UI/组织界面与AI状态接线-总体方案.md §2.0/§3.2.A）。
+## （docs/技术/UI/组织界面与AI状态接线.md §2.0/§3.2.A）。
 ##
 ## 纪律（与 system_setup 拆分同构）：
 ## - 状态全部留在宿主（squad_card.gd），本助手经 _host 回引现读宿主状态

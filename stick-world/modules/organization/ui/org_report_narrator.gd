@@ -2,7 +2,7 @@ class_name OrgReportNarrator
 extends Node
 ## 组织上报叙事器 —— 把 report_filed 三型上报与补位事件接成玩家可见的 toast。
 ##
-## 定位（docs/设计/UI/组织界面与AI状态接线-总体方案.md §3.2.C 上报流 / §3.3② 补位叙事）：
+## 定位（docs/技术/UI/组织界面与AI状态接线.md §3.2.C 上报流 / §3.3② 补位叙事）：
 ## 组织侧只透传上报，玩家侧此前零消费方；本类补上「上报流消费 + 补位仪式感」的玩家可见面。
 ##
 ## 通知通道：一律 EventBus.ui_notification → UIRoot 左下 NotificationFeed（既有唯一通道）。

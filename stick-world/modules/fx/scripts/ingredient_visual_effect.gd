@@ -5,7 +5,7 @@ extends Resource
 ## 对应原版：PotionCraft.Scripts/IngredientVisualEffectSystem/IngredientVisualEffect.cs
 ## 字段逐一对应，行为由 IngredientVisualEffectController 执行。
 ## 逻辑是"Sprite 帧集合 + 手写物理 + 池化"，不是粒子系统（那才是原版做法）。
-## 反编译参考记录见 docs/设计/UI/10-UI系统重构参考.md（2026-08-22 复刻）。
+## 反编译参考记录见 docs/技术/UI/UI系统重构参考.md（2026-08-22 复刻）。
 
 ## 精灵帧集合：每次生效随机取一帧（原版药剂工艺：List<Sprite> sprites）
 @export var sprites: Array[Texture2D] = []

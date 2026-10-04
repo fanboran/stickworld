@@ -117,7 +117,7 @@
 任务 enter_settlement_wire | 名称=双击城市进入接线（初始建筑 spawn 改造+重烘焙 bin） | 线=战略图 | 状态=阻塞 | 前置=settlement_maps | 域=modules/world_map,modules/world | 文档=docs/技术/架构/世界地图数据流.md | 注=实测：初始建筑仅游戏首载 spawn（game_root._on_map_loaded）
 任务 city_direction_roads | 名称=城镇朝向决定道路方向（左/右边界出口） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire | 文档=docs/技术/架构/场景与战斗/地图与场景图.md | 注=依赖战略图+聚落可进入
 任务 region_entity | 名称=Region 实体建模（地块归属/控制度，现为占位字符串 test_region） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=core/autoload/world_state.gd,modules/world_map | 文档=docs/技术/架构/世界地图数据流.md | 注=Region 对应战略图三层地块（已就绪）；含生成端 political_data（state_expander 政权/联盟/归属）；下游面大（外交/法律/文明差异），就绪即应优先排期 | 认领=exec-beta
-任务 river_gen | 名称=河流算法管线（08a-河流算法需求.md） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=tools | 文档=docs/设计/系统/08a-河流算法需求.md | 注=地形管线（分形大陆/高度场）之上重做河流；一版已被推翻；后沿=demo_content
+任务 river_gen | 名称=河流算法管线（河流算法需求.md） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=tools | 文档=docs/技术/架构/河流算法需求.md | 注=地形管线（分形大陆/高度场）之上重做河流；一版已被推翻；后沿=demo_content
 任务 biome_gen | 名称=群系生成（Whittaker 温湿矩阵+高度场 10 seed 候选挑选+迭代式河流密度调整） | 线=战略图 | 状态=可开工 | 前置=hist_worldgen_terrain | 域=tools | 文档=docs/设计/系统/08-程序化世界生成.md | 注=覆盖率补漏（08 篇 §二十一待办）；群系是聚落产业/差异化贴图的上游；后沿=settlement_maps（biome 输入）
 任务 strat_deepen | 名称=战略图深化（granularity_manager 三级粒度自动切换+settlement_renderer 动态聚落建筑群+Shader 化描边替代 _draw+拼接预览+风格化底图管线） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 文档=docs/技术/架构/战略图架构.md | 注=覆盖率补漏（路线图阶段1-7/战略图架构 SM-2~SM-5，冻结文件 settlement_renderer/granularity_manager/map_mode_manager/stitched_preview 待启用）；后沿=zoom_info_density（信息密度适配建在粒度机制上）
 任务 fast_travel | 名称=快速旅行（战略图选已探索目标+行进中过场+消耗游戏时间；战斗中禁止） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire | 域=modules/world_map,modules/world | 文档=docs/设计/游戏设计文档.md | 注=GDD §6.3 旅行系统：步行(道路)/快速旅行(本条)/传送(大建筑)——设定解释为主角走过去了；含道路选择 UI；hist_l3_l2_l1 冗余前置已删
@@ -154,7 +154,7 @@
 
 # ───────────── 玩法系统（科技/法律/外交/成就/组织/装备/输入） ─────────────
 任务 tech_rebuild | 名称=科技模块重建（征服获得制：战斗胜利解锁+事件获取，无研究状态机） | 线=玩法系统 | 状态=阻塞 | 前置=content_techtree,docs_governance,eventbus_hygiene | 域=modules/technology | 文档=docs/设计/系统/04-科技系统.md | 注=征服给科技的来源=战斗胜负判定（已有）；实现前文档校准+信号总线卫生；原 setup_root_refactor/main_done 门拆除——新模块自建 api+总线信号，装配接线点小，与装配收敛并行推进
-任务 expansion_module | 名称=扩张系统模块创建（03-扩张系统.md：目录未创建；含归属变更→战略图刷新接线） | 线=玩法系统 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/expansion | 文档=docs/设计/系统/03-扩张系统.md | 注=领土扩张依赖战略图三层（已就绪）；含归属变更→战略图刷新接线（世界地图数据流 §8.5）
+任务 expansion_module | 名称=扩张系统模块创建（10-扩张系统.md：目录未创建；含归属变更→战略图刷新接线） | 线=玩法系统 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/expansion | 文档=docs/设计/系统/10-扩张系统.md | 注=领土扩张依赖战略图三层（已就绪）；含归属变更→战略图刷新接线（世界地图数据流 §8.5）
 任务 diplomacy | 名称=外交系统（路线图阶段2） | 线=玩法系统 | 状态=阻塞 | 前置=region_entity | 注=外交对象=多政权——依赖 Region 建模+战略图（后者已就绪）；hist_l3_l2_l1 冗余前置已删
 任务 achievement_module | 名称=游戏内成就系统实现（07-成就系统.md，模块未创建） | 线=玩法系统 | 状态=阻塞 | 前置=dec_achievements,eventbus_hygiene | 域=modules/achievement | 文档=docs/设计/系统/07-成就系统.md | 注=按定稿成就列表实现；成就解锁走事件总线
 任务 law_module | 名称=法律系统实现（颁布/可量化效果/不可量化叙事后果/废除代价/道德分支，冰汽时代式） | 线=玩法系统 | 状态=阻塞 | 前置=content_lawtree | 域=modules/law | 文档=docs/设计/游戏设计文档.md | 注=GDD §七；改造人伦理分支作为可选法律分支（§7.2）；org_driven/region 冗余前置已删（经法律树设计传递——设计已收敛其需求）
@@ -174,7 +174,7 @@
 # ───────────── 叙事设计（纯设计产出，无代码域） ─────────────
 任务 content_techtree | 名称=确定完整科技树结构 | 线=叙事设计 | 状态=可开工 | 前置=hist_gdd,hist_p05 | 文档=docs/设计/系统/04-科技系统.md | 注=细化设计依赖 GDD 总纲；征服获得制依赖战斗胜负判定（04-科技系统.md）；tech_rebuild 的直接上游，就绪即应排期
 任务 content_lawtree | 名称=确定法律分支树 | 线=叙事设计 | 状态=阻塞 | 前置=org_driven_behavior,region_entity,ui_panel_buildmenu | 文档=docs/设计/游戏设计文档.md | 注=GDD 之下的细化设计；需创始人参与；窗口成熟=业务面板迁移+国家存在（维护规范 §二）；hist_ui_system 冗余前置已删
-任务 content_civ_diff | 名称=各文明初始条件与差异化 | 线=叙事设计 | 状态=阻塞 | 前置=region_entity | 注=GDD 之下的细化设计；含扩张地图具体设计与各国初始势力（03-扩张系统 [待补充] 并入）；需创始人参与
+任务 content_civ_diff | 名称=各文明初始条件与差异化 | 线=叙事设计 | 状态=阻塞 | 前置=region_entity | 注=GDD 之下的细化设计；含扩张地图具体设计与各国初始势力（10-扩张系统 [待补充] 并入）；需创始人参与
 任务 content_cube_story | 名称=上古魔方获取剧情 | 线=叙事设计 | 状态=阻塞 | 前置=content_civ_diff,p0_prototype | 文档=docs/设计/游戏设计文档.md | 注=GDD 世界观之上的剧情细化；需创始人参与
 任务 content_hero_power | 名称=主角力量来源设定 | 线=叙事设计 | 状态=阻塞 | 前置=content_civ_diff,p0_prototype | 注=GDD 世界观之上的剧情细化；需创始人参与；后沿：产出等剧情系统立项消费，内容冻结前定稿
 任务 content_helpers | 名称=两个帮手设定 | 线=叙事设计 | 状态=阻塞 | 前置=content_civ_diff,p0_prototype | 注=GDD 世界观之上的剧情细化；需创始人参与；后沿：产出等剧情系统立项消费，内容冻结前定稿

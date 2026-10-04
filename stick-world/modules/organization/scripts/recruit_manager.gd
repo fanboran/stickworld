@@ -2,7 +2,7 @@ class_name RecruitManager
 extends Node
 ## 招兵与人口 —— 兵源闭环（游戏循环深化批次 1，核心循环 §7.1 断点 1/6）。
 ##
-## 出处：docs/设计/核心循环.md §七；玩法愿景 docs/设计/系统/12-小镇生活与美术.md §三。
+## 出处：docs/设计/核心循环.md §七；玩法愿景 docs/设计/系统/13-小镇生活与美术.md §三。
 ## 职责边界：招兵=扣资源 + 取空闲村民变身士兵；人口再生=村A 周期性自然增长。
 ## 战斗归 combat、建筑归 building_gen/construction、资源归 resources，
 ## 本类只持人事变动与人口节律，经 EventBus/OrganizationApi 对话。

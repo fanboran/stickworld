@@ -118,7 +118,7 @@ bash stick-world/tests/run_all.sh        # 24 用例全绿
 ## 七、与模板/正式 UI 的关系
 
 - 模板（`modules/ui_global/scenes/templates/`）是演示与起点，正式 UI 以 `main_menu.tscn` / `settings_template` 等为准。
-- 任何新界面先想一句：**内容能不能是一张数据表？位置能不能用 `center_on_screen` / `dock`？**（见 `06-组件库.md` §三）
+- 任何新界面先想一句：**内容能不能是一张数据表？位置能不能用 `center_on_screen` / `dock`？**（见 `组件库.md` §三）
 
 ---
 

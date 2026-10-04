@@ -2,7 +2,7 @@ class_name LayerOrder
 extends RefCounted
 ## 全游戏 UI 层号统一常量 —— 一处定义、处处引用，杜绝魔法数字。
 ##
-## 参照《药剂工艺》SpriteSortingLayers 集中式层序（见 docs/设计/UI/10-UI系统重构参考.md）。
+## 参照《药剂工艺》SpriteSortingLayers 集中式层序（见 docs/技术/UI/UI系统重构参考.md）。
 ## 分两类：
 ##   CanvasLayer.layer   —— 不同 CanvasLayer 之间的层序
 ##   UIRoot 内 z_index   —— 同一 CanvasLayer 内 Control 之间的层序

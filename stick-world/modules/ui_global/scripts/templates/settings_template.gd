@@ -2,7 +2,7 @@ class_name SettingsTemplate
 extends Control
 ## 设置界面模板 —— 左分类列 + 右内容区，整页由 SETTINGS_SCHEMA 数据驱动。
 ##
-## 设计要点（详见 docs/设计/UI/07-设置界面.md）：
+## 设计要点（详见 docs/技术/UI/设置界面.md）：
 ## - 加一项设置 = 在 SETTINGS_SCHEMA 里加一行 Dictionary，不写 UI 代码
 ## - 字段类型：slider（数值滑条）/ option（下拉）/ toggle（开关）
 ## - 落地时"应用"回调写 ConfigManager；演示桩只收进 _values 并 toast

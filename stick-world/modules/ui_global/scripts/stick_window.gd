@@ -3,7 +3,7 @@ extends Control
 ## 非模态浮动窗口基类 —— 4 种弹窗行为模板之一（FLOATING / DOCK / POPOVER）。
 ##
 ## 与 StickScreen（排他模态）相对：**本类不画全屏遮罩**、不挡游戏、可与其他页面元素交互。
-## 行为（PanelBehavior 见 05-弹窗与模态.md §五）：
+## 行为（PanelBehavior 见 docs/技术/UI/弹窗与模态.md §五）：
 ##   FLOATING  可拖动标题栏、位置自由（编制管理、工具窗）
 ##   DOCK      固定停靠屏幕角落（建造菜单）
 ##   POPOVER   跟随锚点弹出、点击面板外自动关闭（下拉/选择器/提示）
@@ -73,7 +73,7 @@ func _build_content() -> void:
 
 ## 初始定位（FLOATING 居中；DOCK 停靠；POPOVER 锚点）
 ## FLOATING/POPOVER 一律夹进安全矩形（HUD 顶栏/材料条/底栏避让），
-## 防"弹窗盖住常驻 HUD 按钮"（StickKit.safe_rect 单一真相源，见 09-布局规则与AI自检.md）。
+## 防"弹窗盖住常驻 HUD 按钮"（StickKit.safe_rect 单一真相源，见 docs/技术/UI/布局规则与AI自检.md）。
 func _position_panel() -> void:
 	var vp := get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
 	match behavior:

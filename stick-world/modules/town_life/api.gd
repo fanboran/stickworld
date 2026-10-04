@@ -2,7 +2,7 @@
 ##
 ## 本模块承载"小镇生活"线：村民职业（ProfessionRegistry）→ 采集行为族
 ## （批次 2 BehaviorHarvest）→ 工作场所运转（批次 3 WorkSlots/节律）→
-## 人口扩充与配比（批次 4）。愿景锚点：docs/设计/系统/12-小镇生活与美术.md §三。
+## 人口扩充与配比（批次 4）。愿景锚点：docs/设计/系统/13-小镇生活与美术.md §三。
 ##
 ## 外部模块通过本契约与模块交互：
 ##   - TownLifeAPI.assign_village_job(entity, index) -> String

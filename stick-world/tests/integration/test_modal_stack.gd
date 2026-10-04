@@ -4,7 +4,7 @@ extends Node
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_modal_stack.tscn -- --fresh-start
 ##
-## 覆盖（docs/设计/UI/10-UI系统重构参考.md §2.2 缺口 2）：
+## 覆盖（docs/技术/UI/UI系统重构参考.md §2.2 缺口 2）：
 ##   - ESC 空栈 → 开暂停菜单并暂停；再 ESC → 关闭并恢复（输入屏蔽随栈统一）
 ##   - 设置压过暂停菜单（栈盖住防双重遮罩）→ ESC 逐层退栈恢复（原"让位隐藏"语义）
 ##   - 帝国空面板同类单例：同预设提到栈顶、换预设替换不叠加

@@ -14,7 +14,7 @@ extends RefCounted
 ## 占位面板（scripts/placeholders/）：依赖系统未建立的大界面空面板（科技树等），
 ## 清单与将来接入点见 placeholder_presets.gd，验收入口 scenes/placeholders/
 ## ui_placeholder_preview.tscn（F6）。系统落地后把对应面板移入业务模块 ui/ 子目录，
-## 入口改接大界面注册挂点（见 08-拓展性.md §五）。
+## 入口改接大界面注册挂点（见 docs/技术/UI/拓展性.md §五）。
 
 # ─────────────────────────────── 模式面板 ID ────────────────────────────────
 enum PanelType {

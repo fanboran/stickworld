@@ -2,7 +2,7 @@ class_name UIModalStack
 extends Node
 ## 统一模态栈 —— 层键字典 + 逐层 pop，替代 GameRoot._handle_escape 的特判 if。
 ##
-## 设计参照《药剂工艺》DarkScreen（docs/设计/UI/10-UI系统重构参考.md §2.2）：
+## 设计参照《药剂工艺》DarkScreen（docs/技术/UI/UI系统重构参考.md §2.2）：
 ##   - 按层索引字典：`layers[layer]`，每层同时只挂一个激活对象（同类单例）
 ##   - 压栈而非互斥：设置上可再开确认框；ESC 逐层退栈（pop 栈顶）
 ##   - 输入屏蔽随栈统一：首层入栈自动暂停、栈空恢复原速度；压上层自动盖住下层

@@ -2,7 +2,7 @@ class_name ProfessionRegistry
 extends RefCounted
 ## 村民职业注册表 —— 职业档案读取、spawn 分配、职业着装。
 ##
-## 职业愿景锚点：docs/设计/系统/12-小镇生活与美术.md §三（"每个火柴人都在真实生活"）。
+## 职业愿景锚点：docs/设计/系统/13-小镇生活与美术.md §三（"每个火柴人都在真实生活"）。
 ## 职业档案配置：config/town_life/professions.tres（BalanceResource 行数组，
 ## 同步装载进 BalanceConfig 类型路径 town_life.professions；读取照 formation_system
 ## 先例直读 .tres，不依赖 autoload 顺序，单测/直跑场景可用）。

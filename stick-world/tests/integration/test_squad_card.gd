@@ -1,5 +1,5 @@
 extends Node
-## 集成测试：L1 班组卡（W2 · docs/设计/UI/组织界面与AI状态接线-总体方案.md §3.2.A）。
+## 集成测试：L1 班组卡（W2 · docs/技术/UI/组织界面与AI状态接线.md §3.2.A）。
 ##
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_squad_card.tscn -- --fresh-start

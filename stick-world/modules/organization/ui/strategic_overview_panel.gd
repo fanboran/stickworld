@@ -2,7 +2,7 @@ class_name StrategicOverviewPanel
 extends StickWindow
 ## 战略总览面板（StrategicOverviewPanel）—— 全组织报表 + 上报流时间线（UI-W4b · 方案 §3.2.C）。
 ##
-## 定位（docs/设计/UI/组织界面与AI状态接线-总体方案.md §3.2.C 战略视图）：
+## 定位（docs/技术/UI/组织界面与AI状态接线.md §3.2.C 战略视图）：
 ## 宏观层级 = 密集报表式（01-设计语言.md §1.3）——全组织森林树 + 每组织摘要行
 ##（人数 直辖/统辖 / 士气均值 / 状态徽标 / 驻地 / 最近上报）+ 上报流时间线。
 ## 窗口形态：ModalOverlay 大面板（UI.md §10.1「组织架构总览」既有槽位语义），

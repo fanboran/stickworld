@@ -1,5 +1,5 @@
 extends Node
-## 集成测试：设置项真实生效（docs/设计/UI/07-设置界面.md §二「生效」列）。
+## 集成测试：设置项真实生效（docs/技术/UI/设置界面.md §二「生效」列）。
 ##
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_settings_apply.tscn

@@ -2,7 +2,7 @@ class_name ComponentGallery
 extends Control
 ## 组件展示页模板 —— 组件库的"活文档"：所有标准控件集中陈列、可交互验证。
 ##
-## 设计要点（详见 docs/设计/UI/06-组件库.md）：
+## 设计要点（详见 docs/技术/UI/组件库.md）：
 ## - 每个组件的真实样式即主题样式（改 token → 本页立即反映，做回归自检页用）
 ## - 分组数据驱动（SECTIONS）：加一组 = 加一行 id，构建函数按 id 分发
 ##

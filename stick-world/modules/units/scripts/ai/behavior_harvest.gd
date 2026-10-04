@@ -1,7 +1,7 @@
 class_name BehaviorHarvest
 extends BehaviorBase
 ## 采集行为族 -- 泛化工作循环（小镇生活批次 2，愿景锚点
-## docs/设计/系统/12-小镇生活与美术.md §三"工作是世界内可观察的行为"）。
+## docs/设计/系统/13-小镇生活与美术.md §三"工作是世界内可观察的行为"）。
 ##
 ## 循环：寻位（资源点/工位）→ 移动 → 劳作（play_attack 动画钩子，cycle 节拍）
 ## → 产物经 ResourcesApi 入账 → 回到劳作。与玩家手采并存（同资源点同入账通道）。

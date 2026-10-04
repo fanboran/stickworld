@@ -1,5 +1,5 @@
 extends Node
-## L1 班组卡观感验收（W2 · 09-布局规则与AI自检 §五 截图自检惯例）。
+## L1 班组卡观感验收（W2 · 技术/UI/布局规则与AI自检 §五 截图自检惯例）。
 ##
 ## 真实游戏窗口化启动（game_root → SystemSetup 全量装配，走真槽位/真主题），
 ## 造出"有班有令有相位有异常状态"的满配态与几种边界态，逐张截图供肉眼验收：
@@ -167,7 +167,7 @@ func _check_card_rect() -> void:
 	_check(rect.position.y >= panel_rect.position.y - 1.0,
 			"卡片上缘不应越出 ContextPanel 顶（card.y=%.1f panel.y=%.1f）" % [rect.position.y, panel_rect.position.y])
 	_check(rect.position.y >= 0.0, "卡片上缘应在屏内（card.y=%.1f）" % rect.position.y)
-	# 离屏边缘 ≥ SCREEN_MARGIN（09-布局规则 §一.3：浮层不得贴边）
+	# 离屏边缘 ≥ SCREEN_MARGIN（技术/UI/布局规则 §一.3：浮层不得贴边）
 	_check(vp.size.x - rect.end.x >= StickTokens.SCREEN_MARGIN - 0.5,
 			"卡片右缘应留 %.0fpx 安全边距（实测 %.1f）" % [StickTokens.SCREEN_MARGIN, vp.size.x - rect.end.x])
 	_check(vp.size.y - rect.end.y >= StickTokens.SCREEN_MARGIN - 0.5,

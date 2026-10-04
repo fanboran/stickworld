@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dwpi1r08d11ue"
-path="res://.godot/imported/加载页.png-e9bf6d01db5d395ee609061d539ebc48.ctex"
+uid="uid://ckg2c1ydkgrwh"
+path="res://.godot/imported/组件陈列.png-797fbfbcf87c2ca40c6a55c9d6f6d474.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/加载页.png"
-dest_files=["res://.godot/imported/加载页.png-e9bf6d01db5d395ee609061d539ebc48.ctex"]
+source_file="res://docs/images/演示/备选/组件陈列.png"
+dest_files=["res://.godot/imported/组件陈列.png-797fbfbcf87c2ca40c6a55c9d6f6d474.ctex"]
 
 [params]
 

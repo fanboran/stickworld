@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dxucw6psru22l"
-path="res://.godot/imported/编队与夜空.png-c3b609754b6351040b576fd2a5fe19ba.ctex"
+uid="uid://cx28frly7ylmf"
+path="res://.godot/imported/小地图.png-e2ca434f444675f386af6b3bebb0748e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/编队与夜空.png"
-dest_files=["res://.godot/imported/编队与夜空.png-c3b609754b6351040b576fd2a5fe19ba.ctex"]
+source_file="res://docs/images/演示/小地图.png"
+dest_files=["res://.godot/imported/小地图.png-e2ca434f444675f386af6b3bebb0748e.ctex"]
 
 [params]
 

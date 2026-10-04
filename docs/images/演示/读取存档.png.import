@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c1yqufhbkl32c"
-path="res://.godot/imported/暂停菜单.png-b11bff42842223d42f45d31a47d4deb1.ctex"
+uid="uid://j5p7b7fp7akh"
+path="res://.godot/imported/读取存档.png-bceb9aa4ea9369d11afa706127ed4e05.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/暂停菜单.png"
-dest_files=["res://.godot/imported/暂停菜单.png-b11bff42842223d42f45d31a47d4deb1.ctex"]
+source_file="res://docs/images/演示/读取存档.png"
+dest_files=["res://.godot/imported/读取存档.png-bceb9aa4ea9369d11afa706127ed4e05.ctex"]
 
 [params]
 

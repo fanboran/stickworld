@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://yqi3gygwjryw"
-path="res://.godot/imported/村庄建造.png-45d702a53879eaa7acdb5aebada353ab.ctex"
+uid="uid://b00uxeoir1xsx"
+path="res://.godot/imported/游戏内HUD.png-3b24fefbb9725fe7add5959f34581a22.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/村庄建造.png"
-dest_files=["res://.godot/imported/村庄建造.png-45d702a53879eaa7acdb5aebada353ab.ctex"]
+source_file="res://docs/images/演示/备选/游戏内HUD.png"
+dest_files=["res://.godot/imported/游戏内HUD.png-3b24fefbb9725fe7add5959f34581a22.ctex"]
 
 [params]
 

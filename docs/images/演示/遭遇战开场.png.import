@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7wkylejwodf4"
-path="res://.godot/imported/工作区.png-23124d100340bb6089abff82552b706e.ctex"
+uid="uid://u0w14hexy0d1"
+path="res://.godot/imported/遭遇战开场.png-a78172aaac5b201f28008db33679728c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/备选图/工作区.png"
-dest_files=["res://.godot/imported/工作区.png-23124d100340bb6089abff82552b706e.ctex"]
+source_file="res://docs/images/演示/遭遇战开场.png"
+dest_files=["res://.godot/imported/遭遇战开场.png-a78172aaac5b201f28008db33679728c.ctex"]
 
 [params]
 

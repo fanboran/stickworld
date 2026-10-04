@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bds8ghpicucol"
-path="res://.godot/imported/HD-2D主街.png-1e99e767a3651acdfb3d2f907f0c8650.ctex"
+uid="uid://d3bra1kgv6aww"
+path="res://.godot/imported/设置页.png-097647a90c49e308f3ba40d8d5d456ee.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/HD-2D主街.png"
-dest_files=["res://.godot/imported/HD-2D主街.png-1e99e767a3651acdfb3d2f907f0c8650.ctex"]
+source_file="res://docs/images/演示/备选/设置页.png"
+dest_files=["res://.godot/imported/设置页.png-097647a90c49e308f3ba40d8d5d456ee.ctex"]
 
 [params]
 

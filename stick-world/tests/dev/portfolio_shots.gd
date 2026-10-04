@@ -1,6 +1,6 @@
 extends Node
 ## 作品集/README 实机截图驱动（dev 层）——真渲染跑游戏，按剧本截全套实机画面。
-## 产物喂 README「游戏实机画面」（docs/演示/，入库时改中文名）。
+## 产物喂 README「游戏实机画面」（docs/images/演示/，入库时改中文名）。
 ## 用法（必须带显示，不能 --headless）：
 ##   godot --path stick-world --resolution 1920x1080 res://tests/dev/portfolio_shots.tscn
 ## 产物写到 user://shots/portfolio_*.png；结束后自动 quit。

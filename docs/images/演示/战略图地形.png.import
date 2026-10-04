@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dgbv8exvgiefi"
-path="res://.godot/imported/战斗_大军压境.png-864954b408444080ca0e8223bbcc3e96.ctex"
+uid="uid://crnegh5ujkvxj"
+path="res://.godot/imported/战略图地形.png-71c19085defc3719aae620e285e5c90d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/战斗_大军压境.png"
-dest_files=["res://.godot/imported/战斗_大军压境.png-864954b408444080ca0e8223bbcc3e96.ctex"]
+source_file="res://docs/images/演示/战略图地形.png"
+dest_files=["res://.godot/imported/战略图地形.png-71c19085defc3719aae620e285e5c90d.ctex"]
 
 [params]
 

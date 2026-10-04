@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dg4ej40j45uqr"
-path="res://.godot/imported/组件陈列.png-1fa63813ce78b533f24f744acad573a5.ctex"
+uid="uid://db4ry1o3hvpc6"
+path="res://.godot/imported/村B大修道院_24px换轨后实景.png-9f8576bc093ba16660c1097a10c0abcd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/备选图/组件陈列.png"
-dest_files=["res://.godot/imported/组件陈列.png-1fa63813ce78b533f24f744acad573a5.ctex"]
+source_file="res://docs/images/演示/备选/村B大修道院_24px换轨后实景.png"
+dest_files=["res://.godot/imported/村B大修道院_24px换轨后实景.png-9f8576bc093ba16660c1097a10c0abcd.ctex"]
 
 [params]
 

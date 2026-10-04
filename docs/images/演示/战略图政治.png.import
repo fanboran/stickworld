@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://brt037lif3e1x"
-path="res://.godot/imported/游戏内HUD.png-3b3019590e3bc64e569a67a90a8ad281.ctex"
+uid="uid://bnk0qo58lb8nf"
+path="res://.godot/imported/战略图政治.png-caa8650b4dc185b13c451ca20d1fb56b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/备选图/游戏内HUD.png"
-dest_files=["res://.godot/imported/游戏内HUD.png-3b3019590e3bc64e569a67a90a8ad281.ctex"]
+source_file="res://docs/images/演示/战略图政治.png"
+dest_files=["res://.godot/imported/战略图政治.png-caa8650b4dc185b13c451ca20d1fb56b.ctex"]
 
 [params]
 

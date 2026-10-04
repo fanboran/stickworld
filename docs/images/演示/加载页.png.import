@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bsjicc8s22tkq"
-path="res://.godot/imported/战略图政治.png-c503f67b4ddff3a7e71b16c240c2ef2e.ctex"
+uid="uid://defxjt6ynyc2w"
+path="res://.godot/imported/加载页.png-253c04ce3808627b2e9ff926829d4e62.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/演示/战略图政治.png"
-dest_files=["res://.godot/imported/战略图政治.png-c503f67b4ddff3a7e71b16c240c2ef2e.ctex"]
+source_file="res://docs/images/演示/加载页.png"
+dest_files=["res://.godot/imported/加载页.png-253c04ce3808627b2e9ff926829d4e62.ctex"]
 
 [params]
 

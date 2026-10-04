@@ -2,7 +2,7 @@ class_name ChunkTrigger
 extends Area2D
 ## 地图出口触发器 -- 玩家接近地图边缘时触发地图切换。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §3.2（Chunk 末端出口触发器）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §3.2（Chunk 末端出口触发器）。
 ## 放置在地图的 ChunkTriggers 节点下，配置 target_map_id 和 entry_side。
 ## 当玩家（附身实体）进入触发区域时，通过 GameRoot 调用 SceneLoader.travel_to_map。
 

@@ -1,6 +1,6 @@
 # 战斗与AI
 
-> 拆分自 [场景与战斗架构.md](../场景与战斗架构.md) §七、§八。
+> 拆分自 [场景与战斗架构.md](../场景与战斗/场景与战斗架构.md) §七、§八。
 > 关联文档：[`场景宿主架构.md`](场景宿主架构.md)（InputDispatcher/CameraRig）、[`地图与场景图.md`](地图与场景图.md)（MapInstance/EntityHost）、[`事件总线信号契约.md`](EventBus信号契约.md)
 
 ---

@@ -2,7 +2,7 @@ class_name BehaviorSeekCover
 extends BehaviorBase
 ## 找掩体行为 -- 查询最佳掩体，移动过去，停留并还击，完成后回 attack。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2 / §8.2（cover_system）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.2 / §8.2（cover_system）。
 ## 无掩体时立即 finish（AIController 回退到 attack 或 retreat）。
 ##
 ## params 可选字段：

@@ -9,7 +9,7 @@ extends RefCounted
 ## - 行为创建顺序/命名/字段注入/注册顺序与拆分前逐行一致；
 ##   入树（add_child）与初态 travel("idle") 留在宿主壳完成，顺序不变。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1 / §7.2。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1 / §7.2。
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptBehaviorWork := preload("res://modules/units/scripts/ai/behavior_work.gd")

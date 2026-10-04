@@ -10,7 +10,7 @@ extends RefCounted
 ## - _world_time 累加留在宿主 physics_update（累加在宿主、读取在助手）；
 ## - 各方法与宿主同名壳逐一对应（宿主壳只做一行转发），行为与拆分前逐行等价。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1 / §7.3。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1 / §7.3。
 
 ## 宿主 AIController 回引（宿主 _init 装配本助手；不写宿主类型防循环 preload）
 var _ai: Node

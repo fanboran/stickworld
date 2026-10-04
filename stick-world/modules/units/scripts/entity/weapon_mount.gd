@@ -2,7 +2,7 @@ class_name WeaponMount
 extends Node2D
 ## 武器挂载点 -- 管理武器/盾牌挂载、攻击动画触发与攻击执行。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1（WeaponMount）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1（WeaponMount）。
 ## 武器挂到右手骨骼 hand_inner（跟随手臂摆动），盾牌挂左手 hand_outer。
 ## 武器/盾牌贴图由 tools/baking/extract_weapons.gd 从解包 universal 图集裁剪
 ## （Swordbasic/Spear/Shield/Bow/Pickaxe/Magicstaff），场景带 GripPoint 对齐握把。

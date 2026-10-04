@@ -2,7 +2,7 @@ class_name BehaviorBase
 extends Node
 ## AI 行为基类 -- 所有行为状态的最小单元。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.2。
 ## 每个行为定义 enter / update / exit 三个回调，由 BehaviorStateMachine 调度。
 ## 行为本身不决策"下一步做什么"，只负责执行当前逻辑，
 ## 完成后调用 finish() 通知状态机，由 AIController 决策切换。

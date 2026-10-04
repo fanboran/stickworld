@@ -2,7 +2,7 @@ class_name BehaviorIdle
 extends BehaviorBase
 ## 闲置行为 -- 站立不动，持续一段时间后完成。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.2。
 ## enter 时停止移动并播放 idle 动画，到时间后 finish()。
 ## params 可选字段：
 ##   - duration: float  闲置时长（秒），不传则随机 2~5 秒

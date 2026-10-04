@@ -9,7 +9,7 @@
 > BattleDirector / TacticalOrders（tactics）/ FormationSystem 引用由装配层注入（setup / set_tactical_orders /
 > setup_formation_system）；FormationSystem 为内部类，外部经实例注入 + duck 协议使用。
 >
-> 系统级设计规范：[docs/技术/架构/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md) §8、
+> 系统级设计规范：[docs/技术/架构/场景与战斗/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/场景与战斗架构.md) §8、
 > [docs/设计/系统/12-游戏AI系统.md](file:///f:/VSCode/game-2/docs/设计/系统/12-游戏AI系统.md)。
 
 ---

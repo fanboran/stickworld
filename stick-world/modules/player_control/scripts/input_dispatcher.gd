@@ -5,7 +5,7 @@ extends Node
 ## 模式切换通过 set_mode() 触发，发射 mode_changed 信号。
 ## 各模式处理器通过 register_handler() 注册。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §二.2、§七.3。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §二.2、§七.3。
 
 # PlayerControlAPI 是全局 class_name，无需 preload
 

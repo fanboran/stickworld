@@ -2,7 +2,7 @@ class_name CoverSystem
 extends RefCounted
 ## 掩体查询系统 -- 扫描地图上的 CoverMarker，提供掩体位置查询。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §8.2（cover_system）、§4.3（CoverMarker）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §8.2（cover_system）、§4.3（CoverMarker）。
 ## CoverMarker 是地图场景中的 Node2D 节点，加入 group "cover_marker"。
 ## 建筑的 CoverMarker 子节点（§4.3）也会被扫描到（只要加入 group）。
 ##

@@ -2,7 +2,7 @@ class_name BattlePanel
 extends Control
 ## 战斗面板 —— BATTLE 模式下的底部 HUD。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §10.1、§10.2、§8.3。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.1、§10.2、§8.3。
 ## 三大区域：
 ##   1. 框选信息：选中单位数量/概要
 ##   2. 编制：打开编制管理窗口（FormationPanel，队伍类型编制）

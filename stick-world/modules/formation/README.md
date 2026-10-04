@@ -17,7 +17,7 @@
 > "人站在哪、阵列怎么排、何时算到位"，号令经 `get_squad_dest(…, "formation")` 取落点。
 > 共享目标选型与推进类号令枚举直取 `../tactics/api.gd` 契约出口（Orders / Finder 常量）。
 >
-> 系统级设计规范：[docs/技术/架构/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md) §8.2/§8.3。
+> 系统级设计规范：[docs/技术/架构/场景与战斗/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/场景与战斗架构.md) §8.2/§8.3。
 
 ---
 
@@ -65,6 +65,6 @@ modules/formation/
 
 ## 相关文档
 
-- 编队/阵列设计：`docs/技术/架构/场景与战斗架构.md` §8.2（FormationSystem）、§8.3（小队 = L1 组织节点）
+- 编队/阵列设计：`docs/技术/架构/场景与战斗/场景与战斗架构.md` §8.2（FormationSystem）、§8.3（小队 = L1 组织节点）
 - AI 机制族（相位计划/权威值择班的参数与开关）：`docs/设计/系统/12-游戏AI系统.md`、[modules/combat/README.md](../combat/README.md) 的 GK 机制开关族
 - 参数档案：`config/balance/variables.tres`（formation 类目）、`config/formations/formation_presets.tres`、`config/ai/squad_phase_plan.tres`、`config/ai/formation_authority.tres`

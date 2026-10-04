@@ -2,7 +2,7 @@ class_name SceneLoader
 extends Node
 ## 场景加载器 -- 地图与 Chunk 流式加载。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §三 / §六。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §三 / §六。
 ## 阶段 0.8：支持地图间过渡（步行/快速旅行/传送）+ EventBus 信号转发。
 
 # WorldAPI 是全局 class_name，无需 preload

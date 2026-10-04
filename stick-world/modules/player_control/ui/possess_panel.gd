@@ -2,7 +2,7 @@ class_name PossessPanel
 extends Control
 ## 附身面板 -- POSSESS 模式下的底部 HUD。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §10.1、§7.5。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.1、§7.5。
 ## 显示附身单位的状态信息：
 ##   - HP / 士气
 ##   - 武器冷却 / 情绪标签

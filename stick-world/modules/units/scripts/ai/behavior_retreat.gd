@@ -2,7 +2,7 @@ class_name BehaviorRetreat
 extends BehaviorBase
 ## 撤退行为 -- 向远离最近敌人的方向移动，拉开距离或恢复士气后 finish。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.2。
 ## 撤退中士气缓慢恢复；士气恢复到安全水平或拉开足够距离后 finish（回 attack）。
 ##
 ## 战役撤离模式（C3 敌将撤仗，出征与领地架构 §4.2）：params 带 evacuate=true 时

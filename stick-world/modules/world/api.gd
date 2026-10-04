@@ -23,7 +23,7 @@ const PATH_BATTLE_DIRECTOR := "BattleDirector"
 
 # ─────────────────────────────── MapInstance 节点路径 ────────────────────────────────
 ## MapInstance（村落/战场）下各子节点的相对路径
-## 详见 docs/技术/架构/场景与战斗架构.md §3.4
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §3.4
 const PATH_MAP_PLACEMENT_GRID := "PlacementGrid"
 const PATH_MAP_DECORATION_LAYER := "DecorationLayer"
 const PATH_MAP_BUILDING_HOST := "BuildingHost"

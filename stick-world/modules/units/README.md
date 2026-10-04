@@ -15,7 +15,7 @@
 > `set_formation_system` / `set_battle_sim`；骨架动画经 StickRigAPI 的 `play()` /
 > `animation_finished` / `animation_event`。模块自身不向 EventBus 发射信号。
 >
-> 系统级设计规范：[docs/技术/架构/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md) §7、
+> 系统级设计规范：[docs/技术/架构/场景与战斗/场景与战斗架构.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/场景与战斗架构.md) §7、
 > [docs/技术/架构/场景与战斗/战斗与AI.md](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/战斗与AI.md)。
 
 ---

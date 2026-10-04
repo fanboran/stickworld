@@ -2,7 +2,7 @@ class_name BehaviorMove
 extends BehaviorBase
 ## 移动行为 -- 向目标点直线移动，到达后完成。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.2。
 ## P0 阶段为简单直线移动，不做 A* 寻路（障碍由 entity 的通行障碍检测处理）。
 ## params 必填字段：
 ##   - target: Vector2  目标位置（世界坐标）

@@ -2,7 +2,7 @@ class_name BattleInstance
 extends Node
 ## 单场战斗实例 -- 纯逻辑+调度，挂载到 MapInstance.BattleAnchor。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §8.1（战斗实例 vs 战场场景）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §8.1（战斗实例 vs 战场场景）。
 ## 管理参战双方、战斗状态、伤亡统计、胜负判定。
 ## 不依赖场景渲染，只持有单位引用并 tick AI 导演。
 ##

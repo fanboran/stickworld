@@ -7,7 +7,7 @@ extends Node
 ##   - 时间映射到 CanvasModulate.color（按关键帧插值）
 ##
 ## 后续阶段扩展：天空、天气、地面震动、生物群落。
-## 详见 docs/技术/架构/场景与战斗架构.md §十一。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §十一。
 
 # EnvironmentAPI 是全局 class_name，无需 preload
 

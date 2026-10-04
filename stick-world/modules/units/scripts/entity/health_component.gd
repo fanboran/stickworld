@@ -2,7 +2,7 @@ class_name HealthComponent
 extends Node
 ## 生命与士气组件 -- 挂在 StickmanEntity 下，管理 HP / 士气。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1（HealthComponent）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1（HealthComponent）。
 ## P0 阶段数值为占位值（数值层待原型后填，见 §16）。
 ##
 ## 职责：

@@ -2,7 +2,7 @@ class_name Hitbox
 extends Area2D
 ## 受击判定区域 -- 标记实体为可受击目标，提供附近敌我查询。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1（Hitbox）。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1（Hitbox）。
 ## P0 阶段：Area2D + RectangleShape2D，用于"谁在我攻击范围内"的查询。
 ## 命中判定本身由 WeaponMount 按距离 + 概率完成，不依赖物理碰撞。
 ##

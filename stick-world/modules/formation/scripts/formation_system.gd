@@ -2,7 +2,7 @@ class_name FormationSystem
 extends Node
 ## 编队系统 -- 将选中的单位编为小队（squad），复用组织模块的 L1 节点。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §8.2、§8.3。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §8.2、§8.3。
 ##
 ## 流程：
 ##   1. selection_system 返回 unit_ids 数组

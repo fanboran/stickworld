@@ -2,7 +2,7 @@ class_name DebugDrawers
 extends RefCounted
 ## 调试绘制器集合 -- 各模块的调试可视化绘制函数。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §10.5.3。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.5.3。
 ## 每个绘制函数签名为 func(control: Control, ctx: Dictionary) -> void
 ## ctx 包含：
 ##   - camera: Camera2D       相机引用

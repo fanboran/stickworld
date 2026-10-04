@@ -2,7 +2,7 @@ class_name BehaviorStateMachine
 extends Node
 ## 行为状态机 -- 管理行为注册、切换、每帧调度。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.2。
 ## 持有所有已注册行为的引用，通过 travel(name, params) 切换当前行为。
 ## AIController 负责决策，状态机只负责执行。
 

@@ -2,7 +2,7 @@ class_name PossessionInterface
 extends Node
 ## 附身接口 -- POSSESS 模式 handler。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1.3、§7.5。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1.3、§7.5。
 ##
 ## 职责：
 ##   1. 进入 POSSESS 模式时，从 SelectionSystem 取选中单位（或沿用 EXPLORE 已附身实体）

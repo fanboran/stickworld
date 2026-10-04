@@ -2,7 +2,7 @@ class_name StickmanEntity
 extends CharacterBody2D
 ## 火柴人实体 —— 物理+碰撞外壳。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.1。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1。
 ## 在已有 StickmanRig（纯渲染骨架）外包一层 CharacterBody2D，
 ## 承担物理移动、碰撞、附身接口。
 ##

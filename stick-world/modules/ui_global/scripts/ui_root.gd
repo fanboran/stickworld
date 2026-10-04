@@ -2,7 +2,7 @@ class_name UIRoot
 extends CanvasLayer
 ## UI 根容器 —— 三层 UI 的总装。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §十。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §十。
 ## 子节点结构（z 从低到高）：
 ##   GlobalHUD / ModePanel / ContextPanel / ResourceBar / HudOverlay
 ##   ModalOverlay（Z_MODAL，模态遮罩盖住全部 UI） / UiInspector（Z_INSPECTOR，F3 调试）

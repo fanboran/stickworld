@@ -2,7 +2,7 @@ class_name ExploreHandler
 extends Node
 ## EXPLORE 模式输入处理器。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §二.2、§7.5。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §二.2、§7.5。
 ## 激活时：找到当前地图的玩家 StickmanEntity（或默认第一个），设置 possessed=true。
 ## 停用时：设置 possessed=false。
 ##

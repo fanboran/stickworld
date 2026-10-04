@@ -2,7 +2,7 @@ class_name BattleDirector
 extends Node
 ## 多战场调度 -- 挂到 GameRoot.BattleDirector，管理多个 BattleInstance。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §2.2（BattleDirector）、§8.1。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §2.2（BattleDirector）、§8.1。
 ## 职责：在指定地图上启动/结束战斗实例，查询活跃战斗。
 ## P0 阶段只支持单战场，但保留多战场接口供后续扩展。
 

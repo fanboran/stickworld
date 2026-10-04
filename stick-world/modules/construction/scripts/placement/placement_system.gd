@@ -2,7 +2,7 @@ class_name PlacementSystem
 extends RefCounted
 ## 选址系统 —— 在 PlacementGrid 之上提供高层语义 API。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §4.2 / §15 阶段 0.4。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §4.2 / §15 阶段 0.4。
 ## PlacementGrid 只回答「格子是否占用」，PlacementValidator 回答「能否放」，
 ## PlacementSystem 再封装一层提供：
 ##   1. try_place：校验 + 占用一步到位

@@ -7,7 +7,7 @@ extends Node2D
 ##   WorldChunkHost / UIRoot / BattleDirector
 ##
 ## 子场景（村落/战场/室内）通过 SceneLoader 加载到 WorldChunkHost。
-## 详见 docs/技术/架构/场景与战斗架构.md §二。
+## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §二。
 ##
 ## 子节点：
 ##   ShortcutGate    —— 暂停期快捷键通道（ALWAYS，转发输入到 handle_shortcuts）

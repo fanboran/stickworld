@@ -135,12 +135,12 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 ├── behavior_follow.gd               ✅ 跟随（小队"跟随玩家"）
 ├── behavior_attack.gd               ✅ 攻击（命中帧→伤害事件）
 ├── behavior_seek_cover.gd           ✅ 找掩体
-├── behavior_retreat.gd              ✅ 撤退（当前亦承担溃逃）
+├── behavior_retreat.gd              ✅ 撤退/避战（fallback 档=避战：RA 压制式脱离，不走向地图边缘）
 ├── behavior_work.gd                 ✅ 建造（build 动画驱动，受材料进度限制）
 ├── behavior_haul.gd                 ✅ 搬运（仓库↔工地往返）
 ├── behavior_suppress.gd             📋 火力压制（设计未实现）
 ├── behavior_flank.gd                📋 侧翼包抄（设计未实现）
-├── behavior_flee.gd                 📋 独立溃逃（设计未实现，暂由 retreat 承担）
+├── behavior_flee.gd                 📋 独立溃逃（已随裁决【删溃逃、立避战】取消立项——溃逃永久退役，避战由 retreat fallback 档承担）
 └── behavior_state_machine.gd        ✅ 状态机调度
 ```
 
@@ -209,6 +209,32 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 - P1：扩展属性种类 + 装备系统 + 职业分化 + **天赋树**（承接 traits，树状解锁）
 - P2+：亚种/文化/宗教等世界盒子式复杂特质（详见 [竞品分析.md](../../../商业/竞品分析.md) §4.12）
 
+#### 7.2.3 遇阻接战（局部绕行 + 打通，不做 A*）
+
+移动执行（behavior_move）途中的敌挡路处置，创始人口径：「前往任务目标的路上如果被
+敌人拦住且无法简单绕过，就像一般 RTS 一样攻击路径上的敌人」。寻路 = 局部绕行 +
+遇阻接战的组合；**命令有粘性**：接战拦路者是号令的临时插叙，任务持续执行到完成或
+失效，不高频翻改。
+
+- **挡路判定**：前进锥面扫描（口径同 entity_motion 友军让路 `_ally_yield_lateral`：
+  前向点积 > YIELD_AHEAD_DOT，敌我区分），挡路判定距离 180px
+  【提案/待定·待实测校准】。与"接敌即战"（engage_in_range）共用 0.2s 节流拍，
+  挡路处置优先——路径上的敌人不走"接敌即战 finish 清令"路径。
+- **决策序**（behavior_move._handle_path_block）：
+  1. 远程特例（弓/杖）：拦路者在射程内 → 边走边射不停车（复用 kite 边打边走的
+     衔接；不进 attack 行为即不触发后撤风筝/持瞄，两条链路不打架）；
+  2. 侧向有空隙（探测窗 120px【提案/待定】内有净空）→ 局部绕行（复用让路横分量
+     几何的敌挡路版，与目标方向点乘恒 0 不减速；侧别优先挡路者反侧，对称僵局按
+     实例奇偶拆半）；
+  3. 无法简单绕过（两侧被占 / 敌已贴身 ≤70px / 绕行超 3s）→ 请求 AIController
+     转入攻击拦路者（**打通态**）。
+- **打通态粘性**（ai_controller._breach_target / _breach_tick）：原号令
+  `_ordered_behavior/_ordered_params` 不清空不降级；攻击行为经 `forced_target`
+  锁定拦路者；击杀或脱离（>320px【提案/待定】）后清态，命令覆盖段自动续行原
+  move 号令——恢复的目标点仍是原号令目标。新号令（set_order）显式接管时插叙作废。
+- **集体语义**：一个班多单位同时被拦时各自独立判定（涌现出班级接战线），不做
+  班级协同决策。
+
 ### 7.3 三层命令系统（决策来源）
 
 ```
@@ -230,7 +256,7 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 
 `StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
 
-> **实现状态（2026-08）**：当前为**确定性优先级**（命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`；§7.4 灵动性（概率钩子 + 战场导演情绪标签）为 **P1 目标，未实现**。决策优先级当前**硬编码**，计划抽成 `.tres` 数据驱动。
+> **实现状态**：决策优先级当前**确定性硬编码**（压制避战 > 命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；单位级强制溃逃链已随裁决【删溃逃、立避战】删除（士气=避战打分输入，避战行为态经 `AIController.is_disengaging()` 查询）；§7.4 第一层概率钩子**已在役**（档案参数化，生效层开关表见 12-游戏AI系统.md §7.3），第二层战场导演情绪标签未接通（`battle_ai_director.gd` 在库待接线）。
 
 ### 7.4 小兵步枪式灵动性 — 两层实现
 
@@ -254,8 +280,10 @@ func update(delta):
 `battle_ai_director.gd` 周期性（每 2~5s）给单位打"情绪标签"：
 - `HESITANT` — 犹豫（命中率-30%、移动减速）
 - `EXCITED` — 亢奋（追击倾向+50%、忽视指令概率+10%）
-- `PANICKED` — 恐慌（找掩体优先级最高、可能溃逃）
+- `PANICKED` — 恐慌（找掩体优先级最高、大概率触发避战脱离）
 - `STEADY` — 稳定（默认）
+
+**卡死看门狗**：`ai_controller._watchdog_tick` O(1)（只记上次采样位置 + 计时，零扫描零分配）——有移动意图（>10px/s）但窗口 2s 内净位移 <12px 判卡死，处置 = 重进 attack（enter 清目标/持瞄，下一拍重选）+ 0.25s 随机方向分离推力；无移动意图自动清零豁免（站桩输出/压制/硬直/待命不误伤）。档案键 `stuck_watchdog_*` 五键（12-游戏AI系统.md §7.3）。
 
 情绪概率受：指挥官能力、部队士气、文化传统、自主决策权限影响。
 
@@ -363,3 +391,41 @@ modules/combat/
 - **层级数本身不产生延迟**——同层远距两节点可以比跨层相邻两节点更慢
 - 玩家附身某指挥官亲自下令 → 该环节无传播（玩家的话已在那个人嘴里）
 - 信使实体化（真实跑动/可截杀/阵亡丢令）为后续信使任务，接口见 [`组织系统架构.md §4.2`](../组织系统架构.md)
+
+### 8.6 最高指挥单位与军衔体系（斩首规则）
+
+**军衔数据层**（`StickmanEntity.rank`，0/1/2/3 int，任命链写、渲染方消费）：
+
+| rank | 称谓 | 层级语义 |
+|------|------|---------|
+| 0 | 士兵 | 大头兵，无标记 |
+| 1 | 班长 | **战术轮转层**——阵亡免费无缝继任（组织侧 `_run_succession` 现链：班内存活按 personnel 序，cmd 属性平局按插入序稳定排序），无延迟无惩罚，军衔点跟职务走 |
+| 2 | 排长 | **指挥链层**——阵亡无法现场补员 = 该排持续指挥链缺口（非一次性扣减，是持续状态；行为影响挂 RL/后续批次） |
+| 3 | 指挥官 | 战场最高（连长级兼任）——**斩首规则载体** |
+
+**斩首规则**（结算：`battle_instance._check_victory` 斩首分支，先于全灭判定）：
+
+- 指挥官阵亡 = 该方**立即战败**（reason=`decapitation`，收束原因表见 [02-战斗系统.md §八-A](../../../设计/系统/02-战斗系统.md)）——哪怕还有兵也是败：指挥链崩就是战败，不用打到全灭。
+- 登记：`add_unit` 自动扫描 rank>=3（生产战场零接线；单位进战斗前 rank 须已设置），`register_commander` 供后设 rank/测试桩手动补登；同阵营后到覆盖（"战场最高"唯一）。无登记的战斗斩首分支恒跳过（既有战斗零回归）。
+- **指挥官行为守卫**（`ai_controller`）：rank>=3 拒推进/撤离类号令（move/retreat/seek_cover；idle 放行）——留守后方，任何来路的号令都拉不走他；避战豁免（C6 概率调制对指挥官恒不触发，`is_disengaging` 恒 false）——被近身就地自卫反击（行为层追击 LEASH 内迎击，敌远不追；低血找掩体保留——就近掩体仍属还击）。
+- 双方指挥官同殁 = 平局（复用 `mutual` 口径）。
+
+观察场接线（`battle_arena.gd`）：双方阵列后方各生成 1 名指挥官（rank3、佩剑、不编班不下令）；
+生产战场的指挥官生成与 UI 接入挂后续批次。军衔标记（血条军衔点）渲染为独立批次。
+### 8.7 排聚合层（现实军衔体系重排，formation 侧实现）
+
+**编制结构**：班 squad（8~12 人小班、硬顶 15，班长 rank 1）→ 排 platoon（2~3 班 + 排长 1 名 rank 2）→ 连/战场（2~4 排 + 连长或指挥官 rank 3，挂载点 = platoon 的 `company_id` 预留字段，指挥官批次接入）。班是组织侧 L1 节点；**排是 FormationSystem 战斗域本地聚合（不入组织树）**——组织侧继任/补位只认班的指挥官，排长阵亡天然无继任，"屏蔽继任"由构造保证。
+
+**排层 API**（`FormationSystem` 实例方法）：`create_platoon(squad_ids, name)` / `assign_platoon_leader(pid, unit)`（排长须为排内班成员，随班行军占编队槽位）/ `get_platoon_leader` / `get_platoon_squads` / `get_platoon_of_squad` / `get_unit_platoon` / `get_platoon_units` / `disband_platoon`（班保留转独立）/ `has_squad_command_chain(squad_id)`；信号 `platoon_created` / `platoon_leader_lost`。
+
+**火力组层**（班内指挥分组，RL v3 编制地基【提案/待定】）：组 = 班内成员子集 + 组寻址 id（`fireteam_N`），**不占军衔不入组织树**（组长 = 组内首员，无标记）——只是号令的粒度，不是行政单位。API（`FormationSystem` 实例方法）：`create_fireteam(squad_id, units, name)` / `get_squad_fireteams(squad_id)` / `get_fireteam_units(ft_id)` / `get_unit_fireteam(unit)` / `get_fireteam_squad(ft_id)` / `is_fireteam(id)` / `get_fireteam_leader(ft_id)` / `disband_fireteam(ft_id)`。号令寻址：`TacticalOrders.issue` 对 ft_id 直令（收令成员 = 组员、战斗职责沿父班、不触发班粒度相位计划——军师规划器仍按班下令），按班下令原语义不变。组不拆散班聚结（一次性归队锚点仍是班长）；组随成员阵亡收缩、空组自动消亡；战斗域本地聚合（同排口径，不进跨图快照，`disband_all_squads` 一并清空）。
+
+**缺口语义**：排长阵亡 = 该排指挥链缺口——该排全部班**失去集火号令**（共享目标决策权归排长，`_decide_squad_targets` 按排查权属：排内班 rep=排长、缺口即 erase 不退化；独立班保留旧口径：班长决策、失效退化首个存活队员）与**排长士气光环**（排长存活 → 排内全员恢复；独立班保留班长光环旧口径），到战斗结束无法补员。班长轮转（组织侧补位回写 `commander_assigned` → 重写 squad.leader + 重算军衔）不受排长缺口影响。一人多职（如排长被补位选中兼任班长）军衔按现任职务取最高（`_recompute_unit_rank`）。
+
+**观察场编成**（`battle_arena.gd` PRESETS，`platoons` = 班下标分组建排）：遭遇战·16 = 1 排（2 班 ×8）；标准战役·48 = 2 排 ×2 班（4 班 ×12）；大军压境·96 = 4 排 ×2 班（8 班 ×12）。兵种结构落到班级（矛先锋/剑中坚/火力压制），出生纵深分排矛前→剑→杖→弓后。每班劈两个火力组（一号/二号，劈法 = 班长外按出生序对半——出生序 = 武器行主序，前半靠前接敌、后半靠后火力支援）。一屏战场几何（创始人：战场范围限定在屏幕一样大）：出生中心 ±700、全部武器行按纵深行距 50 均匀收排（相邻行 Δx≥50 > 分离椭圆横半径 48，任意纵距不违反分离不变式；行内纵距下限 72）、指挥官阵列再后退 120——三档全场跨度最大 ≈ ±1170，观战缩放 0.75（缩放条 100% 档，可见半宽 1280）整场一屏内可见【提案/待定·待实测校准】。
+
+### 8.8 阵列间距椭圆口径与班内聚拢（Boids 式裁剪）
+
+**分离椭圆口径**（单一真相源 `formation_spacing.gd`，经 `FormationAPI` 转发）：旧圆形 `SEPARATION_RADIUS=40.5` 拆双轴——`SEPARATION_RADIUS_X=48`（横向）/ `SEPARATION_RADIUS_Y=72`（纵深，约横向 1.5 倍；billboard 竖长卡纵深视觉重叠是"排列太密集"主因）；`SEPARATION_RADIUS` 保留为兼容别名（=X）。数值【提案/待定·待实测校准】。不变式：碰撞体宽 < X ≤ 横向间距 < Y ≤ 列间距。**椭圆判定的消费方改造**（entity_motion `_apply_separation`/`_apply_static_separation`、battle_sim 分离循环，位置见收线报告清单）由集成批次落，改前消费方经别名自动跟随横向口径（圆 48）。编队列间距 `ROW_GAP_DEFAULT` 56→80（≥ Y+余量，调参表 `var_row_gap` 同步）。
+
+**班内聚拢**（`squad_cohesion.gd`，Boids 三力裁剪的二、三力；分离力归椭圆分离）：聚拢弹簧 = 单位距本班质心超过班散布半径（8 人班 140px、每增 1 人 +6）才回拉，随超出距离线性增强、上限封顶（220）——**死区内零施力，只拉掉队的不吸站好的**；对齐 = 行军速度向班均速收敛（班均速 > 20 才生效，站桩不抖）。门控：接战中（behavior=attack）回拉减半；撤退/避战（retreat/seek_cover）全零。消费出口 `FormationSystem.get_unit_cohesion_steer(unit)`（转向建议，加速度量纲）——**力的施加经消费方转向通道（entity_motion 集成清单见收线报告），不直改位置**。

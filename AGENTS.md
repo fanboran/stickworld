@@ -147,8 +147,7 @@ core/
 │                          # （视觉/主题/屏幕基类属 L1，在 modules/ui_global：sketch 手绘控件族、StickTheme/StickStyle、StickScreen/StickWindow）
 └── services/              # 抽象服务
     ├── audio_manager.gd   # 音频管理器（预留，未接线）
-    ├── analytics/         # 数据分析（预留）
-    └── iap/               # 内购（预留）
+    └── analytics/         # 数据分析（预留）
 ```
 
 ### 游戏功能模块 (`modules/`) 标准结构

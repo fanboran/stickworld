@@ -40,7 +40,7 @@ func repair_building(building_id: String, org_id: String) -> Dictionary
 # [P] building 状态=DAMAGED
 ```
 
-> **🔄 模块化重构后（B1+ 阶段，详见 [建筑模块化设计.md](../建筑模块化设计.md)）**：
+> **🔄 模块化重构后（B1+ 阶段，详见 [建筑模块化设计.md](../场景与战斗/建筑模块化设计.md)）**：
 > 
 > 上述 `building_type` 字符串将被 `BuildingDef` 配方取代，签名改为：
 > 

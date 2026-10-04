@@ -1051,7 +1051,7 @@ config/
 | EventBus 信号完整清单    | [`docs/技术/架构/数据与契约/系统交互与EventBus.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/系统交互与EventBus.md) |
 | Autoload 依赖图       | [`docs/技术/架构/数据与契约/自动加载依赖.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/自动加载依赖.md)               |
 | 核心实体/状态机（完整版）      | [`docs/技术/架构/数据与契约/核心实体与状态机.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/核心实体与状态机.md)           |
-| 建筑模块化设计            | [`docs/技术/架构/建筑模块化设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/建筑模块化设计.md)             |
+| 建筑模块化设计            | [`docs/技术/架构/场景与战斗/建筑模块化设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/建筑模块化设计.md)             |
 | 数据流与存储             | [`docs/技术/架构/数据与契约/数据流全景.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/数据流全景.md)                 |
 | 存储架构               | [`docs/技术/架构/数据与契约/存储架构设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/存储架构设计.md)               |
 | 开发规范               | [`docs/技术/规范/开发指南.md`](file:///f:/VSCode/game-2/docs/技术/规范/开发指南.md)                   |

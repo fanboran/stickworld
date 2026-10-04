@@ -495,7 +495,7 @@ func _stone_band(parent: Node2D, node_name: String, pos: Vector2,
 
 
 # ═══════════════ 多层装配结构件（批次 3：Layers[0..N] 二层框架） ═══════════════
-# 设计图纸：docs/技术/架构/建筑模块化设计.md §三 Layers[0..N] / §十五 B3 楼梯模块。
+# 设计图纸：docs/技术/架构/场景与战斗/建筑模块化设计.md §三 Layers[0..N] / §十五 B3 楼梯模块。
 # 全部结构件沿用批次 2 定案：贴纹理面一律 Sprite2D + CPU 纹理（Polygon2D uv 采样
 # 在本环境坍缩），纯色块几何（Polygon2D 无 texture / Line2D）安全。
 # 消费范例：manor.gd（二层半木悬挑宅邸）。

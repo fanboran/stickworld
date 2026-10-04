@@ -1045,8 +1045,8 @@ config/
 | 整体设计（GDD，唯一真相源）    | [`docs/设计/游戏设计文档.md`](file:///f:/VSCode/game-2/docs/设计/游戏设计文档.md)                     |
 | 核心循环               | [`docs/设计/核心循环.md`](file:///f:/VSCode/game-2/docs/设计/核心循环.md)                         |
 | 场景与战斗架构（P0 工程基线）   | [`docs/技术/架构/场景与战斗架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗架构.md)             |
-| 战略图架构              | [`docs/技术/架构/战略图架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/战略图架构.md)                 |
-| 战略图数据流             | [`docs/技术/架构/世界地图数据流.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界地图数据流.md)             |
+| 战略图架构              | [`docs/技术/架构/世界与战略图/战略图架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界与战略图/战略图架构.md)                 |
+| 战略图数据流             | [`docs/技术/架构/世界与战略图/世界地图数据流.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界与战略图/世界地图数据流.md)             |
 | 模块 API 契约（签名+前置后置） | [`docs/技术/架构/模块API契约.md`](file:///f:/VSCode/game-2/docs/技术/架构/模块API契约.md)             |
 | EventBus 信号完整清单    | [`docs/技术/架构/系统交互与EventBus.md`](file:///f:/VSCode/game-2/docs/技术/架构/系统交互与EventBus.md) |
 | Autoload 依赖图       | [`docs/技术/架构/自动加载依赖.md`](file:///f:/VSCode/game-2/docs/技术/架构/自动加载依赖.md)               |

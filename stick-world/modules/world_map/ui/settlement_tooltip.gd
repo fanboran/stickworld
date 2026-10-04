@@ -2,7 +2,7 @@ extends SketchPanel
 class_name SettlementTooltip
 ## 聚落悬停提示 —— L1 地块视图下鼠标悬停聚落时显示信息
 ##
-## 详见 docs/技术/架构/战略图架构.md §二 模块结构（ui/settlement_tooltip.gd）
+## 详见 docs/技术/架构/世界与战略图/战略图架构.md §二 模块结构（ui/settlement_tooltip.gd）
 ## 挂在 strategic_map.tscn 的 Content 子节点下（随视图开/关自动显隐，控制器无需接线）；
 ## 自身 visible 仅表示"当前 hover 命中聚落"。
 ##

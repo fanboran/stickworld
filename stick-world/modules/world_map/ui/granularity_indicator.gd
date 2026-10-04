@@ -2,7 +2,7 @@ extends SketchPanel
 class_name GranularityIndicator
 ## 战略图粒度指示器 —— 当前所处层级（L1/L2/L3）+ 按键操作提示
 ##
-## 详见 docs/技术/架构/战略图架构.md §二 模块结构（ui/granularity_indicator.gd）
+## 详见 docs/技术/架构/世界与战略图/战略图架构.md §二 模块结构（ui/granularity_indicator.gd）
 ## 三视图各挂一个实例（strategic_map / strategic_map_l2 / strategic_map_l3 的
 ## Content 子节点，随视图显隐自动同步，控制器无需管理 visible）。
 ##

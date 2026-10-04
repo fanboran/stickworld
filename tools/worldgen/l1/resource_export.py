@@ -1,6 +1,6 @@
 """L1 战略图资源点派生（resource_export.py）—— 各包 resources 字段生成端注入。
 
-战略图「资源开关」画的是资源点图标（docs/技术/架构/战略图架构.md §4.5），数据源在
+战略图「资源开关」画的是资源点图标（docs/技术/架构/世界与战略图/战略图架构.md §4.5），数据源在
 L1 视图包顶层 `resources: [{"id": <资源表 id>, "pos": [x, y]}]`（pos = 包 context 本地
 坐标，与 roads polyline 同坐标系同原点 world_origin）。运行时零新增文件加载。
 

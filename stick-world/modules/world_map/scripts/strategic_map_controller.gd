@@ -7,7 +7,7 @@ class_name StrategicMapController
 ## 初始视角 = 整图适配（DEFAULT_ZOOM_MULT=1.0），地图居中（出生 L1 位于 context 中心），HUD 记为 100%；
 ## 首次打开适配后保留用户位置/缩放（与 L2/L3 一致）。
 ##
-## 详见 docs/技术/架构/战略图架构.md §9（L1 版）
+## 详见 docs/技术/架构/世界与战略图/战略图架构.md §9（L1 版）
 ## 交互：
 ##   - 左键单击聚落：选中（发 settlement_clicked）+ 弹传送确认窗（直达传送，
 ##     不依赖 F3——创始人 2026-09-16 改为常规交互）

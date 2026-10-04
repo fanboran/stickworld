@@ -2,7 +2,7 @@ class_name ConquestAnchor
 extends Node2D
 ## 敌据点征服锚点 —— 守军布阵/敌将位/集结线的场景化布局标记。
 ##
-## 契约见 docs/技术/架构/出征与领地架构.md §2.3（对齐 MapBase.BattleAnchor 先例：
+## 契约见 docs/技术/架构/世界与战略图/出征与领地架构.md §2.3（对齐 MapBase.BattleAnchor 先例：
 ## 场景是布局唯一真相源，消费方读锚点布阵，不写死坐标）：
 ##   ConquestAnchor (Node2D, 本脚本)
 ##   ├── GarrisonSlots (Node2D)   ← 子 Marker2D 数组 = 守军出生点（按配置兵种刷军）

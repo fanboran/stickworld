@@ -111,15 +111,15 @@
 
 # ───────────── 战略图（world_map + worldgen 管线） ─────────────
 任务 strat_ui | 名称=战略图 UI 补充（聚落 tooltip/粒度指示/模式切换+world_map_panel 归档收尾） | 线=战略图 | 状态=完成 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 树=.temp/worldgen
-任务 mapdef_class | 名称=MapDefinition 契约类立项实现 | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 文档=docs/技术/架构/世界地图数据流.md | 注=前置缺口：类全库不存在；优先级低于进行线，排期由协调者裁量
+任务 mapdef_class | 名称=MapDefinition 契约类立项实现 | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 文档=docs/技术/架构/世界与战略图/世界地图数据流.md | 注=前置缺口：类全库不存在；优先级低于进行线，排期由协调者裁量
 任务 prop_library | 名称=城市填充物零件库（民居/装饰/室内道具） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/building_gen | 注=现状仅兵营/仓库/茅草屋/城墙/城门
 任务 settlement_maps | 名称=聚落可玩地图（SettlementGenerator：seed+biome+级别+产业→MapDefinition） | 线=战略图 | 状态=冻结 | 前置=mapdef_class,prop_library,dec_village_def,biome_gen | 文档=docs/设计/系统/08-程序化世界生成.md | 注=按村落定义（dec_village_def 产出）生成；零件齐前做了也是脚手架（并行协调 §五 冻结令）；含敌方预置与资源点布置
-任务 enter_settlement_wire | 名称=双击城市进入接线（初始建筑 spawn 改造+重烘焙 bin） | 线=战略图 | 状态=阻塞 | 前置=settlement_maps | 域=modules/world_map,modules/world | 文档=docs/技术/架构/世界地图数据流.md | 注=实测：初始建筑仅游戏首载 spawn（game_root._on_map_loaded）
+任务 enter_settlement_wire | 名称=双击城市进入接线（初始建筑 spawn 改造+重烘焙 bin） | 线=战略图 | 状态=阻塞 | 前置=settlement_maps | 域=modules/world_map,modules/world | 文档=docs/技术/架构/世界与战略图/世界地图数据流.md | 注=实测：初始建筑仅游戏首载 spawn（game_root._on_map_loaded）
 任务 city_direction_roads | 名称=城镇朝向决定道路方向（左/右边界出口） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire | 文档=docs/技术/架构/场景与战斗/地图与场景图.md | 注=依赖战略图+聚落可进入
-任务 region_entity | 名称=Region 实体建模（地块归属/控制度，现为占位字符串 test_region） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=core/autoload/world_state.gd,modules/world_map | 文档=docs/技术/架构/世界地图数据流.md | 注=Region 对应战略图三层地块（已就绪）；含生成端 political_data（state_expander 政权/联盟/归属）；下游面大（外交/法律/文明差异），就绪即应优先排期 | 认领=exec-beta
-任务 river_gen | 名称=河流算法管线（河流算法需求.md） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=tools | 文档=docs/技术/架构/河流算法需求.md | 注=地形管线（分形大陆/高度场）之上重做河流；一版已被推翻；后沿=demo_content
+任务 region_entity | 名称=Region 实体建模（地块归属/控制度，现为占位字符串 test_region） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=core/autoload/world_state.gd,modules/world_map | 文档=docs/技术/架构/世界与战略图/世界地图数据流.md | 注=Region 对应战略图三层地块（已就绪）；含生成端 political_data（state_expander 政权/联盟/归属）；下游面大（外交/法律/文明差异），就绪即应优先排期 | 认领=exec-beta
+任务 river_gen | 名称=河流算法管线（河流算法需求.md） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=tools | 文档=docs/技术/架构/世界与战略图/河流算法需求.md | 注=地形管线（分形大陆/高度场）之上重做河流；一版已被推翻；后沿=demo_content
 任务 biome_gen | 名称=群系生成（Whittaker 温湿矩阵+高度场 10 seed 候选挑选+迭代式河流密度调整） | 线=战略图 | 状态=可开工 | 前置=hist_worldgen_terrain | 域=tools | 文档=docs/设计/系统/08-程序化世界生成.md | 注=覆盖率补漏（08 篇 §二十一待办）；群系是聚落产业/差异化贴图的上游；后沿=settlement_maps（biome 输入）
-任务 strat_deepen | 名称=战略图深化（granularity_manager 三级粒度自动切换+settlement_renderer 动态聚落建筑群+Shader 化描边替代 _draw+拼接预览+风格化底图管线） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 文档=docs/技术/架构/战略图架构.md | 注=覆盖率补漏（路线图阶段1-7/战略图架构 SM-2~SM-5，冻结文件 settlement_renderer/granularity_manager/map_mode_manager/stitched_preview 待启用）；后沿=zoom_info_density（信息密度适配建在粒度机制上）
+任务 strat_deepen | 名称=战略图深化（granularity_manager 三级粒度自动切换+settlement_renderer 动态聚落建筑群+Shader 化描边替代 _draw+拼接预览+风格化底图管线） | 线=战略图 | 状态=可开工 | 前置=hist_l3_l2_l1 | 域=modules/world_map | 文档=docs/技术/架构/世界与战略图/战略图架构.md | 注=覆盖率补漏（路线图阶段1-7/战略图架构 SM-2~SM-5，冻结文件 settlement_renderer/granularity_manager/map_mode_manager/stitched_preview 待启用）；后沿=zoom_info_density（信息密度适配建在粒度机制上）
 任务 fast_travel | 名称=快速旅行（战略图选已探索目标+行进中过场+消耗游戏时间；战斗中禁止） | 线=战略图 | 状态=阻塞 | 前置=enter_settlement_wire | 域=modules/world_map,modules/world | 文档=docs/设计/游戏设计文档.md | 注=GDD §6.3 旅行系统：步行(道路)/快速旅行(本条)/传送(大建筑)——设定解释为主角走过去了；含道路选择 UI；hist_l3_l2_l1 冗余前置已删
 
 # ───────────── 地图系统（world 场景图 + 战场类型） ─────────────

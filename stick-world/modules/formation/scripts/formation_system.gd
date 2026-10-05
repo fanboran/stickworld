@@ -1501,6 +1501,13 @@ func _apply_balance_tuning() -> void:
 	ROW_GAP = float(merged["var_row_gap"])
 	CATCHUP_RUN_DIST = float(merged["var_catchup_run_dist"])
 	_casualty_report_threshold = float(merged["var_report_casualty_threshold"])
+	# 间距不变式自检（formation_spacing 头部不变式的代码化）：调参表只覆盖间距，
+	# 不校验链式关系——压穿分离椭圆 = 分离力常驻 + 位置伺服极限环（全员蛇形
+	# 抽动，2026-10-05 实测 vx 翻转 8.67 次/s）。违例如实打 error，启动不阻断
+	#（数值档问题归调参，不让游戏起不来）
+	for violation in FormationSpacing.check_invariants(SPREAD_SPACING, ROW_GAP,
+			FormationSpacing.ARRIVE_TOLERANCE):
+		push_error("[Formation] 间距不变式违例：%s" % violation)
 
 
 # ──────────────────── A5 小队相位计划（设计文档12号 C8）────────────────────────────────

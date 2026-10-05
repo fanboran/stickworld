@@ -40,7 +40,7 @@ extends Node
 ##
 ## 相机（审计 P0-6）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑全可用），
 ##   居中模式跟随"质心代理"（每帧 lerp）+ 开纵向跟随（rig 侧钳在行走带内）；
-##   缩放 0.75（缩放条 100% 档）——3D 侧战场契约把地平线钉屏幕上 1/3 线，
+##   缩放 0.75（缩放条 100% 档）——3D 侧战场契约把地面钉半屏高（地平线在屏幕中线），
 ##   地面恒占 2/3（HD-2D街景系统.md §4.1）。
 ##
 ## 热键：ESC 确认后回主菜单（DevSceneEscape 统一弹窗拦截）· R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
@@ -153,22 +153,24 @@ const PRESETS: Array = [
 ]
 ## 当前预设下标（static：场景 reload 重开/切预设后保持所选档位）
 static var _preset_idx: int = 1
-## 纵深行距（px）：相邻武器行/班的 x 间距（一屏收拢口径，全预设统一 50 收排）。
-## 取 STAGGER_X 同值——相邻行任意两员 Δx≥50 > 分离椭圆横半径 48
-##（formation_spacing.SEPARARATION_RADIUS_X），纵距再近椭圆判别恒 >1、分离力
-## 不激活；行内纵向间距由 MIN_ROW_GAP（≥纵深半径 72）把关。
-##【提案/待定·待实测校准】
-const ROW_GAP: float = 50.0
+## 出生几何与分离半径同源联动（2026-10-05 限位环复发教训：半径改 60/92 而
+## 出生几何没跟，出生阵列压穿椭圆 → 全员蛇形抽动。此后三个几何常量直接
+## 从 formation_spacing 推导，单一真相源，不另立数值）
+const FormationSpacing := preload("res://modules/formation/scripts/formation_spacing.gd")
+## 纵深行距（px）：相邻武器行/班的 x 间距 = 横半径+2——Δx 超横半径，任意纵距
+## 椭圆判别恒 >1，行间分离力不激活
+const ROW_GAP: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
 ## 排内左右间距（px）
 const LINE_GAP: float = 90.0
-## 行内最小纵距（px，诊断 A1/B）：分离椭圆纵深半径（formation_spacing 72）——
-## 行内自适应压缩的钳制下限。压穿它 = 分离力常驻 + 位置伺服极限环（移动单位
-## 水平翻转 4.3~5.1 次/s、友邻纵距 43~57px 的根因）。【待实测校准】
-const MIN_ROW_GAP: float = 72.0
+## 行内最小纵距（px，诊断 A1/B）：= 分离椭圆纵深半径——行内自适应压缩的钳制
+## 下限。压穿它 = 分离力常驻 + 位置伺服极限环（移动单位水平翻转 4.3~5.1 次/s、
+## 友邻纵距 43~57px 的根因；半径 60/92 试验期未联动本值，2026-10-05 复发实测
+## 8.67 次/s）
+const MIN_ROW_GAP: float = FormationSpacing.SEPARATION_RADIUS_Y
 ## 奇偶错排横向错位（px，诊断 B）：一行按 MIN_ROW_GAP 放不下时改错排——相邻
-## 单位 x 错开 ≥ 分离椭圆横向半径 48，Δx≥50 时任意纵距都不违反分离不变式
-##（椭圆判别恒 >1），只须保同列纵距 ≥ MIN_ROW_GAP。【待实测校准】
-const STAGGER_X: float = 50.0
+## 单位 x 错开超横半径，任意纵距都不违反分离不变式（椭圆判别恒 >1），
+## 只须保同列纵距 ≥ MIN_ROW_GAP
+const STAGGER_X: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
 ## 左右两团出生中心 x 相对地图中线的偏移。一屏战场（创始人：战场范围限定在屏幕
 ## 一样大）：观战缩放 0.75（缩放条 100% 档）下可见半宽 = 1920/(2×0.75) = 1280px——
 ## ±700 出生 + 阵列纵深朝中线内收（96 档最末行 -350）+ 指挥官再后退 120，
@@ -207,7 +209,10 @@ const COMMANDER_WEAPON: int = W_SWORD
 var _game_root: Node = null
 var _left_alive_label: Label = null
 var _right_alive_label: Label = null
-const _TARGET_MAP := "battlefield"   # HD-2D 战场：观察场=真实生产观感（血条随骨架进 billboard）
+const _TARGET_MAP := "battlefield"
+## 武器对照阵容模式（tools/dev/arena_shot_boot.tscn `-- --lineup`）：六兵种一排
+## 站桩不开战——逐武器检查镜像挂接（握位/角度/盾位），战场观感工位件
+static var lineup_mode := false   # HD-2D 战场：观察场=真实生产观感（血条随骨架进 billboard）
 	## （battlefield_2d 是自动化套件的 2D 空旷开机图，不承担观感）
 var _hint_label: Label = null
 ## 旗点状态行（夺点模式；"旗：左我/中敌/右争夺"）
@@ -257,6 +262,9 @@ func _spawn_and_start() -> void:
 	# 切到空旷演练场（village 是玩家村，建筑/资源点干扰观察）
 	if loader != null and loader.has_method("load_map"):
 		loader.load_map(_TARGET_MAP)
+	if lineup_mode:
+		await _spawn_lineup()
+		return
 		# 等新图装配（旧图延迟销毁，get_current_map 稳定到 battlefield 再继续）
 		for i in 300:
 			await get_tree().process_frame
@@ -286,11 +294,13 @@ func _spawn_and_start() -> void:
 		# 南漂时大军沉出屏幕下沿；RTS 观战开 Y 跟随，rig 侧带内钳制）
 		if rig.has_method("set_follow_target_y"):
 			rig.set_follow_target_y(true)
-		# 缩放取 HD-2D 构图契约基准档 0.75（缩放条读 100%；设 1.0 会显示 133%
-		# ——创始人 2026-09-16：观察场缩放条该是 100%；0.75 下可见半宽 1280
-		# 覆盖一屏战场 ±1170，全宽可见无需再缩）
+		# 缩放取半屏构图档 0.46（rig base_zoom=1.0@1080p，_hd 实收 uz=0.46）：
+		# 半屏地平线契约（02-战斗系统 二-A）要求可见地面深 = h_v/2/sinθ ≥ 带前缘
+		# z93.1 → uz ≤ 22.5/(sin26°×93.1) ≈ 0.464（rig ZOOM_MIN 已配套放宽到 0.45）。
+		# 本档地平线钉中线、带前缘恰在屏幕底沿；更近档带前缘兜底锚生效
+		#（不出界，地面相应加深）
 		if rig.has_method("set_user_zoom"):
-			rig.set_user_zoom(0.75)
+			rig.set_user_zoom(0.46)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)
@@ -542,6 +552,76 @@ func _make_fireteams(fs: Node, squad_id: String) -> Array:
 
 
 ## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器。
+## 武器对照阵容：六兵种一排站桩（间距拉开互不遮挡），不开战不编队——
+## 截图逐武器检查镜像挂接（握点落手骨/角度/盾位）
+func _spawn_lineup() -> void:
+	for i in 1800:
+		if _game_root.get("_boot_world_phase") == false and _game_root.get_current_map() != null:
+			break
+		await get_tree().process_frame
+	var loader: Node = _game_root.get("scene_loader")
+	if loader != null and loader.has_method("load_map"):
+		loader.load_map(_TARGET_MAP)
+	for i in 300:
+		await get_tree().process_frame
+		var m: Node2D = _game_root.get_current_map()
+		if m != null and "battlefield" in str(m.scene_file_path):
+			break
+	var map: Node2D = _game_root.get_current_map()
+	if map == null:
+		push_error("[Arena] lineup: 地图未加载")
+		return
+	for e in map.get_entities():
+		if is_instance_valid(e):
+			e.queue_free()
+	for i in 3:
+		await get_tree().process_frame
+	var mid_x: float = (map.map_left + map.map_right) * 0.5
+	# 3D 视野垂直锚死地平线（z=0 在屏幕中线），2D 相机 Y 不改 3D 取景——
+	# lineup 行必须落在可见 z 带内：战场 z=(y-516)/24，取 z=28 格（地面中段
+	# 稍靠前，脚下留出生长空间，不贴 UI 底栏）
+	var row_y: float = 516.0 + 28.0 * 24.0
+	var types: Array = [
+		["剑士", 0], ["矛士", 1], ["弓手", 2], ["矿工", 3], ["法师", 4], ["祭司", 5],
+	]
+	for i in types.size():
+		var pos := Vector2(mid_x + (i - (types.size() - 1) * 0.5) * 200.0, row_y)
+		var e: Node2D = _spawn_unit(map, pos, int(types[i][1]), null)
+		if e != null:
+			e.add_to_group("arena_lineup")
+	# 相机对准阵容（挂杆检查要看清握点）：居中模式 + 代理钉阵容中点 + 贴近缩放
+	var rig: Node = _game_root.get("camera_rig")
+	if _cam_proxy == null or not is_instance_valid(_cam_proxy):
+		_cam_proxy = Marker2D.new()
+		_cam_proxy.name = "ArenaCamProxy"
+		add_child(_cam_proxy)
+	_cam_proxy.global_position = Vector2(mid_x, row_y)
+	# 居中模式 + follow_target_y（纵向贴住代理）——相机纵向默认钉 ground_bottom，
+	# 不开 follow_target_y 会停在出生带而看不到阵容
+	if rig != null:
+		if rig.has_method("set_centered_mode"):
+			rig.set_centered_mode(true)
+		if rig.has_method("set_follow_target_y"):
+			rig.set_follow_target_y(true)
+		if rig.has_method("set_follow_target"):
+			rig.set_follow_target(_cam_proxy)
+		if rig.has_method("snap_to_follow_target"):
+			rig.snap_to_follow_target()
+		# 不覆盖缩放：保持 0.75 契约档（与实战同取景，阵容才落在可见 z 带内）
+	_camera_following = true
+	_reveal()
+	await get_tree().create_timer(1.0).timeout
+	var cam2d := get_viewport().get_camera_2d()
+	var first := map.get_tree().get_first_node_in_group("arena_lineup")
+	print("[Arena] 武器对照阵容就绪：6 兵种 @ y=%d" % int(row_y))
+	if cam2d != null:
+		print("[Arena]   cam2d=%s zoom=%s" % [cam2d.global_position, cam2d.zoom])
+	if first != null:
+		print("[Arena]   first_unit=%s hp_ok=%s" % [first.global_position, first.get("health_component") != null])
+	else:
+		print("[Arena]   first_unit=null（分组后已丢？）")
+
+
 func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 	var e: Node2D = map.spawn_entity(_StickmanScene, pos)
 	if e == null:

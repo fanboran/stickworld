@@ -1,0 +1,330 @@
+extends Node
+## 观察场抽搐/色块诊断探针——arena_shot_boot `--twitch` 挂 root 驱动。
+## 三路证据（只读，不改游戏代码）：
+##   A. 烘焙内容审计：逐帧盯每张卡的 _blit_tex 实例（每次重烘都换新实例），
+##      前 3 次烘焙回读分类——剪影（正常）vs 整幅色块（出生爆大色块实锤）。
+##   B. 出生窗连拍：首单位出现后 200 帧内每 2 帧截中幅 crop，供肉眼复核。
+##   C. 抽搐采样：揭幕后逐物理帧记录全员 位置/速度/动画/seq/盾态/移动意图，
+##      统计 同名重播churn / vx翻转率 / 待机漂移 / 盾态抖动 / 姿态换装抖动。
+
+
+const FIRST_BAKES_TO_AUDIT := 3
+const BURST_FRAMES := 200
+const SETTLE := 12
+
+
+func run(_tag: String, _preset: int, secs: int, _every: int) -> void:
+	DirAccess.make_dir_recursive_absolute("user://twitch_burst")
+	await _phase_spawn_audit_and_burst()
+	await _phase_twitch_sample(secs)
+	get_tree().quit(0)
+
+
+# ───────── A+B：出生窗（烘焙审计 + 连拍） ─────────
+
+var _audited := {}          # card_id -> 已审计烘焙次数
+var _first_spawn_frame := -1
+var _shot_idx := 0
+
+
+func _find_map() -> Node:
+	var arena := get_tree().current_scene
+	if arena == null or not is_instance_valid(arena):
+		return null
+	for m in arena.find_children("", "Hd2dMapBase", true, false):
+		return m
+	return null
+
+
+## 相机取景直测：地面 z 反投影到屏幕百分比——半屏契约（地平线 z=0 应 50%H）
+## 与出界兜底（带前缘 z=93 应 ≤100%H）的数学验收，不靠像素启发式（绿树线
+## 会污染草线检测）
+func _camera_math_audit() -> void:
+	var map := _find_map()
+	var hd: Node = map.get("_hd") if map != null else null
+	if hd == null:
+		return
+	var cam: Camera3D = hd.get("_cam") if hd.get("_cam") is Camera3D else null
+	if cam == null:
+		return
+	var out := "[TwitchProbe] 取景直测（%s）: " % ("战场" if bool(hd.get("battlefield")) else "街景")
+	if map != null:
+		out += "walk_front=%.0f ground_bottom=%.0f(带前缘z=%.1f) hd_uz=%.3f | " % [
+				float(map.get("walk_front_y")), float(map.get("ground_bottom")),
+				(float(map.get("ground_bottom")) - float(map.get("depth_y_min"))) / float(map.get("CELL_PX")),
+				float(hd.get("_last_user_zoom"))]
+	for z in [0.0, 28.0, 85.0, 93.1]:
+		# 地面点 (0, 0, z)：反投影求屏幕 y 百分比
+		var gp := Vector3(0.0, 0.0, z)
+		if cam.is_position_behind(gp):
+			out += "z%d=behind " % z
+			continue
+		var sp: Vector2 = cam.unproject_position(gp)
+		var frac: float = sp.y / cam.get_viewport().get_visible_rect().size.y
+		out += "z%d=%.0f%%H " % [z, frac * 100.0]
+	print(out)
+
+
+func _phase_spawn_audit_and_burst() -> void:
+	var wait := 0
+	while wait < 3600:   # ~60s 上限：等图装配
+		await get_tree().process_frame
+		wait += 1
+		var map := _find_map()
+		if map != null and map.get("_char_map") != null \
+				and (map.get("_char_map") as Dictionary).size() > 0:
+			break
+	print("[TwitchProbe] 图就绪，开始出生窗审计 frame=%d" % Engine.get_process_frames())
+	var blocks := 0
+	var silhouettes := 0
+	var samples: Array = []   # (frame, age_frames, card_id, verdict_detail)
+	while _shot_idx * 2 < BURST_FRAMES or _pending_audit_any():
+		await get_tree().process_frame
+		var map := _find_map()
+		if map == null:
+			continue
+		var char_map: Dictionary = map.get("_char_map")
+		if char_map.is_empty():
+			continue
+		if _first_spawn_frame < 0:
+			_first_spawn_frame = Engine.get_process_frames()
+		# A. 烘焙审计：_blit_tex 实例变化 = 新烘焙
+		for id in char_map:
+			var card: Node = char_map[id]
+			if card == null or not is_instance_valid(card):
+				continue
+			var n_audited: int = _audited.get(id, 0)
+			if n_audited >= FIRST_BAKES_TO_AUDIT:
+				continue
+			var tex: ImageTexture = card.get("_blit_tex")
+			if tex == null or not is_instance_valid(tex):
+				continue
+			var verdict: String = _audit_bake(tex)
+			_audited[id] = n_audited + 1
+			var age: int = Engine.get_process_frames() - _first_spawn_frame
+			if verdict.begins_with("BLOCK"):
+				blocks += 1
+			else:
+				silhouettes += 1
+			if samples.size() < 80 and verdict.begins_with("BLOCK"):
+				samples.append([Engine.get_process_frames(), age, id, verdict])
+		# B. 连拍（每 2 帧一张，全幅缩到 960x540——出生军在屏幕两翼，窄裁会漏）
+		if _shot_idx * 2 < BURST_FRAMES and Engine.get_process_frames() % 2 == 0:
+			var img := get_viewport().get_texture().get_image()
+			if img != null and not img.is_empty():
+				var full := Image.create(960, 540, false, Image.FORMAT_RGB8)
+				img.resize(960, 540, Image.INTERPOLATE_BILINEAR)
+				full = img
+				full.save_png("user://twitch_burst/b%04d.png" % _shot_idx)
+				_shot_idx += 1
+	print("[TwitchProbe] 烘焙审计：色块 %d 次 / 剪影 %d 次（每卡前 %d 烘）" % [
+			blocks, silhouettes, FIRST_BAKES_TO_AUDIT])
+	for s in samples:
+		print("[TwitchProbe]   %s @frame=%d age=%d card=%s" % [s[3], s[0], s[1], s[2]])
+
+
+func _pending_audit_any() -> bool:
+	# 仍有卡未审满次数（最多再等 240 帧兜底，防止个别卡永不烘焙拖死探针）
+	if Engine.get_process_frames() - _first_spawn_frame > BURST_FRAMES + 240:
+		return false
+	var map := _find_map()
+	if map == null:
+		return false
+	var char_map: Dictionary = map.get("_char_map")
+	for id in char_map:
+		if _audited.get(id, 0) < 1:
+			return true
+	return false
+
+
+## 单次烘焙分类：不透明占比 + 主色集中度。正常帧 = 稀疏剪影（不透明 <35%、
+## 无单色统治）；坏帧 = 整幅/大半幅单色（出生爆的"大色块"）。返回带主色明细
+func _audit_bake(tex: ImageTexture) -> String:
+	var img := tex.get_image()
+	if img == null or img.is_empty():
+		return "EMPTY"
+	var w := img.get_width()
+	var h := img.get_height()
+	var opaque := 0
+	var hist := {}
+	var step := 2   # 隔行采样，量级足够
+	for y in range(0, h, step):
+		for x in range(0, w, step):
+			var c := img.get_pixel(x, y)
+			if c.a > 0.05:
+				opaque += 1
+				var key: int = (int(c.r * 15.0) << 8) | (int(c.g * 15.0) << 4) | int(c.b * 15.0)
+				hist[key] = int(hist.get(key, 0)) + 1
+	var total := (w / step) * (h / step)
+	var opaque_frac := float(opaque) / float(total)
+	var dom := 0
+	var dom_key := -1
+	for k in hist:
+		if int(hist[k]) > dom:
+			dom = int(hist[k])
+			dom_key = int(k)
+	var dom_frac := float(dom) / float(maxi(opaque, 1))
+	var dom_col := "(n/a)"
+	if dom_key >= 0:
+		dom_col = "rgb(%d,%d,%d)" % [(dom_key >> 8 & 0xF) * 17,
+				(dom_key >> 4 & 0xF) * 17, (dom_key & 0xF) * 17]
+	if opaque_frac > 0.35 or (opaque_frac > 0.12 and dom_frac > 0.80):
+		return "BLOCK opq=%.2f dom=%.2f %s" % [opaque_frac, dom_frac, dom_col]
+	return "SILHOUETTE"
+
+
+# ───────── C：抽搐采样 ─────────
+
+## 伤害飘字对位端到端验证：2D 重映射脚点（remap_fx_pos，飘字锚同链）与 3D
+## 接地影脚点（真实渲出来的地面点）反投影到屏幕像素——对差即飘字落点误差。
+## 旧锚死 walk_front 的实现下此差达半屏（2026-10-05 创始人点名），活锚对应≈0
+func _fx_align_audit() -> void:
+	var map := _find_map()
+	if map == null or not map.has_method("remap_fx_pos"):
+		return
+	var canvas_xform: Transform2D = map.get_viewport().get_canvas_transform()
+	var worst := 0.0
+	var n := 0
+	for e in get_tree().current_scene.find_children("", "StickmanEntity", true, false):
+		if not is_instance_valid(e) or e.is_dead() or n >= 12:
+			continue
+		var char_map: Dictionary = map.get("_char_map")
+		var card: Node3D = char_map.get(e.get_instance_id())
+		if card == null or not is_instance_valid(card):
+			continue
+		var shadow: MeshInstance3D = card.get("_my_shadow")
+		if shadow == null or not is_instance_valid(shadow) or not shadow.visible:
+			continue
+		var cam3d: Camera3D = (map.get("_hd") as Node).get("_cam")
+		if cam3d == null or cam3d.is_position_behind(shadow.global_position):
+			continue
+		var foot_3d: Vector2 = cam3d.unproject_position(shadow.global_position)
+		var foot_2d: Vector2 = canvas_xform * map.remap_fx_pos((e as Node2D).global_position)
+		worst = maxf(worst, absf(foot_2d.y - foot_3d.y))
+		n += 1
+	print("[TwitchProbe] 伤害字锚对位（%d 实体）: 2D重映射脚 vs 3D影脚 worst Δy=%.1f px%s" % [
+			n, worst, "  ✓<8px" if worst < 8.0 else "  ✗ 超容差"])
+
+
+func _phase_twitch_sample(secs: int) -> void:
+	# 等揭幕（ArenaCover 消失）+ 稳定
+	for i in 4200:
+		await get_tree().process_frame
+		var arena := get_tree().current_scene
+		if arena != null and is_instance_valid(arena) \
+				and arena.get_node_or_null("ArenaCover") == null:
+			break
+	for i in SETTLE:
+		await get_tree().process_frame
+	print("[TwitchProbe] 揭幕完成，开始抽搐采样")
+	_camera_math_audit()
+	_fx_align_audit()
+	var t0 := Time.get_ticks_msec() / 1000.0
+	# series[eid] = {fields..., frames: [...]} 逐物理帧采样
+	var series := {}
+	var frames := 0
+	while Time.get_ticks_msec() / 1000.0 - t0 < secs:
+		await get_tree().physics_frame
+		frames += 1
+		var arena := get_tree().current_scene
+		if arena == null or not is_instance_valid(arena):
+			continue
+		for e in arena.find_children("", "StickmanEntity", true, false):
+			if not is_instance_valid(e) or e.is_dead():
+				continue
+			var id: int = e.get_instance_id()
+			var rec: Dictionary = series.get(id, {})
+			if rec.is_empty():
+				var visual: Variant = e.get("_visual")
+				var mount: Variant = e.get("weapon_mount")
+				rec = {"first_frame": frames, "visual": visual, "mount": mount,
+						"data": []}
+				series[id] = rec
+			var body := e as Node2D
+			var vel: Vector2 = (body as CharacterBody2D).velocity \
+					if body is CharacterBody2D else Vector2.ZERO
+			var anim: String = str(e.get("_current_anim"))
+			var seq: int = -1
+			var stance := "  "
+			if rec["visual"] != null and is_instance_valid(rec["visual"]):
+				seq = int(rec["visual"].get("_mirror_seq"))
+				var st: Dictionary = rec["visual"].get_stance_anims()
+				stance = ("%d%d" % [1 if not str(st.get("walk", "")).is_empty() else 0,
+						1 if not str(st.get("idle", "")).is_empty() else 0])
+			var shield := -1
+			if rec["mount"] != null and is_instance_valid(rec["mount"]) \
+					and rec["mount"].has_method("shield_visual_enabled"):
+				shield = 1 if rec["mount"].shield_visual_enabled() else 0
+			var dir: Vector2 = e.get("_ai_move_dir")
+			(rec["data"] as Array).append([body.position.x, body.position.y,
+					vel.x, vel.y, anim, seq, stance, shield,
+					0.0 if dir == null else dir.x])
+	# ── 统计 ──
+	print("[TwitchProbe] 采样 %d 物理 = %.1fs，实体 %d" % [frames,
+			Time.get_ticks_msec() / 1000.0 - t0, series.size()])
+	var churn_tot := 0
+	var churn_worst: Array = []
+	var flips_tot := 0.0
+	var flips_worst: Array = []
+	var idle_wander_tot := 0.0
+	var stance_flap_tot := 0
+	var shield_flap_tot := 0
+	for id in series:
+		var rec: Dictionary = series[id]
+		var d: Array = rec["data"]
+		if d.size() < 30:
+			continue
+		# 1) 同名重播 churn：anim 名没变但 seq 递增（镜像被强制重播）
+		var churn := 0
+		for i in range(1, d.size()):
+			if d[i][4] == d[i - 1][4] and int(d[i][5]) > int(d[i - 1][5]):
+				churn += 1
+		churn_tot += churn
+		churn_worst.append([churn, id])
+		# 2) vx 翻转率（|vx|>10 才计），次/秒
+		var flips := 0
+		var last_s := 0
+		for i in range(d.size()):
+			var vx: float = d[i][2]
+			var s := 0
+			if vx > 10.0:
+				s = 1
+			elif vx < -10.0:
+				s = -1
+			if s != 0 and last_s != 0 and s != last_s:
+				flips += 1
+			if s != 0:
+				last_s = s
+		var dur := float(d.size()) / 60.0
+		flips_tot += flips / dur
+		flips_worst.append([flips / dur, id])
+		# 3) 待机漂移：anim==idle 期间的位移总和（px）
+		var wander := 0.0
+		for i in range(1, d.size()):
+			if d[i][4] == "idle" and d[i - 1][4] == "idle":
+				wander += Vector2(d[i][0] - d[i - 1][0], d[i][1] - d[i - 1][1]).length()
+		idle_wander_tot += wander
+		# 4) 姿态/盾抖动
+		for i in range(1, d.size()):
+			if d[i][6] != d[i - 1][6]:
+				stance_flap_tot += 1
+			if d[i][7] != -1 and d[i][7] != d[i - 1][7]:
+				shield_flap_tot += 1
+	churn_worst.sort_custom(func(a, b) -> bool: return a[0] > b[0])
+	flips_worst.sort_custom(func(a, b) -> bool: return a[0] > b[0])
+	print("[TwitchProbe] 同名重播churn 总数=%d（worst5: %s）" % [churn_tot,
+			str(churn_worst.slice(0, 5)).replace("[", "").replace("]", "")])
+	print("[TwitchProbe] vx翻转率 均值=%.2f/s（worst5: %s）" % [flips_tot / maxi(series.size(), 1),
+			str(flips_worst.slice(0, 5)).replace("[", "").replace("]", "")])
+	print("[TwitchProbe] 待机漂移总和=%.0fpx | 姿态换装翻转=%d | 盾态翻转=%d" % [
+			idle_wander_tot, stance_flap_tot, shield_flap_tot])
+	# 抽 1 个 churn 最高的实体打 12 帧原始序列（肉眼对时序）
+	if not churn_worst.is_empty():
+		var rec: Dictionary = series.get(churn_worst[0][1], {})
+		if not rec.is_empty():
+			var d: Array = rec["data"]
+			print("[TwitchProbe] churn冠军原始序列（每8物理帧）: x,y,vx,anim,seq,stance,sh,dx")
+			for i in range(0, d.size(), 8):
+				var r = d[i]
+				print("[TwitchProbe]   %7.1f %7.1f %6.1f %-10s seq=%d st=%s sh=%d dx=%.2f" % [
+						r[0], r[1], r[2], r[4], r[5], r[6], r[7], r[8]])

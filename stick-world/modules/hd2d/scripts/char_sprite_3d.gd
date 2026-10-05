@@ -97,8 +97,16 @@ var _moved_this_tick := false        # 本物理刻内是否已位移过（识�
 ## 对策：视口渲完后按节拍回读落成 ImageTexture（generate_mipmaps 出真实
 ## mip 链，缩小采样也顺带治好）喂 billboard。回读是 sync 点必须节流：每帧
 ## 最多 BLIT_BUDGET 次，各角色按相位轮转，节奏 = BLIT_FPS。
-const BLIT_FPS := 10.0
 const BLIT_BUDGET := 10
+## LOD 烘焙节拍（帧）：按采集分档给节奏——近景档高频（近战动作连贯）、
+## 远景档低频省预算。配合公平队列预算上限：全员近景时按预算摊薄（FIFO 公平），
+## 少数近战接火时前排吃到 30Hz，远景行军维持 12Hz——旧 10Hz 均一节拍下
+## 1.4×速动画每烘跳 8+ 帧，是"动作闪现"的成分之一
+const BLIT_CADENCE_TIERS: Array[int] = [2, 5, 12]
+## 烘焙最小间隔（帧）：两次成功烘焙之间的硬下限——set_anim 的唤醒排期与
+## 队列突发排水再热也不许逐帧连烘（出生洪峰实测同卡连帧烘焙，读回竞态
+## 概率被放大到必现 = 大色块直接来源）
+const BLIT_MIN_GAP := 3
 static var _blit_frame := -1
 static var _blit_used := 0
 static var _blit_usec := 0.0
@@ -116,27 +124,20 @@ var _blit_next_frame := 0
 ## 把视口当帧内容烘焙进 _blit_tex（由公平队列驱动，见 _blit_queue 注释）
 func _blit_capture() -> void:
 	# 失败必须重试、休眠必须晚于成功：旧写法在函数顶部先定下次到拍（idle 即
-	# 休眠 0x7FFFFFFF），若首烘撞上视口未就绪（空图 return / 白帧闸），休眠
+	# 休眠 0x7FFFFFFF），若首烘撞上视口未就绪（空图 return / 坏帧闸），休眠
 	# 已落定 → 永不再采 → char_tex 停在占位/默认纹理。出生即站桩的单位
-	# （防守方全员）因此整卡白块直到首次换动画（实测 48v48 出生帧半队白掉）
+	# （防守方全员）因此整卡坏块直到首次换动画（实测 48v48 出生帧半队坏掉）
 	var t0 := Time.get_ticks_usec()
 	var img := viewport.get_texture().get_image()
 	if img == null or img.is_empty():
 		_blit_next_frame = Engine.get_process_frames() + 2   # 视口未就绪，稍后重试
 		return
-	# 白帧闸：只查四角——正常帧背景 transparent_bg 四角 alpha≈0；白底帧
-	# （视口首渲前回读/透明背景失效）四角必为实心白。身体中点**不**采样：
-	# 站姿躯干恰在视口中心，白底带身体的坏帧会被旧五点判据漏过
-	var w := img.get_width()
-	var h := img.get_height()
-	var all_opaque_white := true
-	for p: Vector2i in [Vector2i(2, 2), Vector2i(w - 3, 2), Vector2i(2, h - 3),
-			Vector2i(w - 3, h - 3)]:
-		var c := img.get_pixel(p.x, p.y)
-		if not (c.a > 0.95 and c.r > 0.95 and c.g > 0.95 and c.b > 0.95):
-			all_opaque_white = false
-			break
-	if all_opaque_white:
+	# 坏帧内容闸（出生大色块根治，2026-10-05 实测）：视口首渲前/撕裂帧的回读
+	# 不是白就是黑/花——旧四角白闸只拦纯白，黑帧与泥彩帧全放行上屏（探针实测
+	# 369 次首三烘 149 次坏帧：整幅纯黑 opq=1.00、白、撕裂身体泥彩）。闸规：
+	# 不透明占比 >35%（剪影恒 <15%）或 主体单色集中度过高 = 坏帧，拒收重试，
+	# **不更新纹理**——保持上一张好帧（首烘前保持透明占位），坏帧永不上屏
+	if _is_bad_capture(img):
 		_blit_next_frame = Engine.get_process_frames() + 2
 		return
 	img.generate_mipmaps()
@@ -153,10 +154,11 @@ func _blit_capture() -> void:
 		_baked_once = true
 		if _my_shadow != null and is_instance_valid(_my_shadow):
 			_my_shadow.visible = true
-	# 下次到拍（到这里纹理已有效，休眠才安全）：动画中按 BLIT_FPS 节拍；
-	# idle 姿态静止，休眠到 set_anim 唤醒
+	# 下次到拍（到这里纹理已有效，休眠才安全）：按距离分档节拍（近景高频）；
+	# idle 姿态静止，休眠到 set_anim 唤醒。两次烘焙间至少隔 BLIT_MIN_GAP 帧
+	#（防逐帧重烘风暴放大读回竞态）
 	_blit_next_frame = Engine.get_process_frames() \
-			+ maxi(1, int(Engine.get_frames_per_second() / BLIT_FPS)) + (_tier_phase % 3)
+			+ maxi(BLIT_MIN_GAP, BLIT_CADENCE_TIERS[_tier]) + (_tier_phase % 3)
 	if _anim == "idle":
 		_blit_next_frame = 0x7FFFFFFF
 	_blit_usec += Time.get_ticks_usec() - t0
@@ -165,6 +167,35 @@ func _blit_capture() -> void:
 		print("[char_sprite_3d] blit avg %.3f ms" % (_blit_usec / 1000.0 / _blit_count))
 		_blit_usec = 0.0
 		_blit_count = 0
+
+
+## 坏帧判别（内容闸的判定体）：隔 4 像素采样，量化 4bit/通道做主色直方图。
+## 正常帧 = 稀疏剪影（不透明 <15%，无单色统治）；坏帧 = 整幅/大半幅实心或
+## 单色高度集中。阈值与探针（arena_twitchprobe._audit_bake）同口径标定
+func _is_bad_capture(img: Image) -> bool:
+	var w := img.get_width()
+	var h := img.get_height()
+	var opaque := 0
+	var hist := {}
+	const STEP := 4
+	for y in range(0, h, STEP):
+		for x in range(0, w, STEP):
+			var c := img.get_pixel(x, y)
+			if c.a > 0.05:
+				opaque += 1
+				var key: int = (int(c.r * 15.0) << 8) | (int(c.g * 15.0) << 4) | int(c.b * 15.0)
+				hist[key] = int(hist.get(key, 0)) + 1
+	var total := (w / STEP) * (h / STEP)
+	var opaque_frac := float(opaque) / float(maxi(total, 1))
+	if opaque_frac > 0.35:
+		return true
+	if opaque_frac > 0.12 and not hist.is_empty():
+		var dom := 0
+		for k in hist:
+			dom = maxi(dom, int(hist[k]))
+		if float(dom) / float(maxi(opaque, 1)) > 0.80:
+			return true
+	return false
 
 
 ## 烘焙排程（每宿主每帧经 set_world_pos 调）：到拍的非 idle 宿主入公平队列，
@@ -632,7 +663,10 @@ func set_anim(anim: String, seq: int = -1, swap: String = "") -> void:
 	_anim = anim
 	_anim_seq = seq
 	rig.play(anim)
-	_blit_next_frame = 0   # [采集烘焙] 姿态变化（含 idle 唤醒）立即排期烘焙
+	# 姿态变化唤醒烘焙：把到拍拉到最近可用帧（而非本帧清零）——清零遇上
+	# 高频重入会让同卡逐帧连烘（读回竞态放大器）；唤醒 + BLIT_MIN_GAP 硬下限
+	# 保证既不睡过头也不风暴
+	_blit_next_frame = mini(_blit_next_frame, Engine.get_process_frames() + 1)
 
 
 ## 循环动画速率镜像（#8 滑步治理）：走 rig.set_anim_speed——oneshot 内部强制
@@ -824,8 +858,10 @@ func set_stance_anims(walk_anim: String, idle_anim: String) -> void:
 		rig.set_state_anim("idle", ANIMS.pick_stand_variant_for(_weapon_type_cached))
 	else:
 		rig.set_state_anim("idle", idle_anim)
-	if _anim == "walk" or _anim == "idle":
-		rig.play(_anim)
+	# 不重播（churn 治理）：换装 = 换 state 内动画资源，播放位置连续——重播会把
+	# walk/idle 拉回第 0 帧，攻击后举盾的周期性翻转（block_after_attack）在镜像
+	# 侧变成原地抽搐（实测 20s 内 689 次翻转）。2D 链 _apply_stance_anim 同样
+	# 只换装不重播，两侧语义一致；attack 等单次动画本就不经本口
 
 
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。

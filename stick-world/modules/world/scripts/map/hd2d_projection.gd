@@ -35,6 +35,22 @@ static func visual_to_ground_y(yv: float, k: float, front_y: float) -> float:
 	return front_y - (front_y - yv) / k
 
 
+## 活锚对压缩（remap_fx_pos 族的运行时口径）：y_v = 视觉锚 + k·(y − 世界锚)。
+## 世界锚 = 3D 取景中心对应的地面世界 y（depth_y_min + CELL_PX·z_c），
+## 视觉锚 = 2D 相机 y——两锚随相机对（纵移跟随/缩放/构图档）实时走，
+## 2D 画布特效在任意相机状态下与 3D 投影逐像素对齐。锚对相等时退化为
+## 旧 front_y 恒等式（离树单测/mock 的回退路径）
+static func compress_y(y: float, k: float, world_anchor_y: float,
+		visual_anchor_y: float) -> float:
+	return visual_anchor_y + (y - world_anchor_y) * k
+
+
+## 活锚对展开（compress_y 的精确逆）
+static func expand_y(yv: float, k: float, world_anchor_y: float,
+		visual_anchor_y: float) -> float:
+	return world_anchor_y + (yv - visual_anchor_y) / k
+
+
 ## 悬浮框视觉域矩形（billboard 几何）：HD-2D 图 origin=视觉脚线（canvas 域），
 ## 身体直立向上、宽高随深度缩放——Range 框的 2D 局部语义（origin=髋部居中）
 ## 在此不适用，输出矩形**底边贴视觉脚线**。box_size 由宿主图计算：

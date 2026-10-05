@@ -399,14 +399,32 @@ func _configure_hd(_hd: Node3D) -> void:
 
 # ─────────────────────────────── 视觉域坐标协议（MapBase 覆写）────────────────────────────────
 
+## 视觉域压缩的活锚对：(世界锚 y, 视觉锚 y)。世界锚 = 3D 取景中心对应的
+## 地面世界 y；视觉锚 = 2D 相机 y——两锚随相机对实时取（Y 纵移跟随/滚轮缩放/
+## 构图档切换都会动）。旧实现锚死 walk_front（假设 2D 相机纵移不改变 3D 取景），
+## 战场 Y 跟随态下锚对错位，2D 画布特效（伤害飘字/粒子/青箱）整体下沉
+## （实测偏移达半屏，2026-10-05）。取不到活锚（未入树/mock hd）回退
+## 锚对恒等 walk_front = 旧口径，离树单测零回归
+func _fx_anchor_pair() -> Vector2:
+	if _hd == null or not _hd.has_method("get_ground_squash") \
+			or not _hd.has_method("get_view_center_ground_z"):
+		return Vector2(walk_front_y, walk_front_y)
+	var cam := get_viewport().get_camera_2d() if is_inside_tree() else null
+	if cam == null:
+		return Vector2(walk_front_y, walk_front_y)
+	var world_anchor: float = depth_y_min + CELL_PX * float(_hd.get_view_center_ground_z())
+	return Vector2(world_anchor, cam.global_position.y)
+
+
 ## 2D 特效/坐标重映射（fx_pos_remapper 组协议 + MapBase 视觉域协议）：2D 世界
-## y → 3D 投影呈现的同一地面线。锚线 walk_front_y 不动，纵深越深压缩越多
-## （俯角前缩 k=sinθ，数学核 Hd2dProjection）——飘字/粒子由此与角色 feet 对齐。
+## y → 3D 投影呈现的同一地面线（俯角前缩 k=sinθ，数学核 Hd2dProjection，
+## 活锚对见 _fx_anchor_pair）——飘字/粒子由此与角色 feet 对齐。
 func remap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	var ry: float = Hd2dProjection.ground_to_visual_y(pos.y, k, walk_front_y)
+	var anchor := _fx_anchor_pair()
+	var ry: float = Hd2dProjection.compress_y(pos.y, k, anchor.x, anchor.y)
 	# 台面/台后地面抬升（2D 画布域）：与角色 billboard 脚底抬升同源同值——
 	# 角色走上台面后，青箱/FX/选中框等一切锚 origin 的画布元素跟着贴到抬升后的地面
 	if _hd.has_method("get_ground_lift_px"):
@@ -421,7 +439,8 @@ func unmap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, walk_front_y))
+	var anchor := _fx_anchor_pair()
+	return Vector2(pos.x, Hd2dProjection.expand_y(pos.y, k, anchor.x, anchor.y))
 
 
 ## 随身特效锚点抬升（MapBase 协议覆写）：HD-2D 图实体原点=视觉脚线，
@@ -443,20 +462,27 @@ func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return super(range_center, range_size, entity)
 	var k: float = float(_hd.get_ground_squash())
+	var anchor := _fx_anchor_pair()
 	var box_size := Vector2(range_size.x, BILLBOARD_BODY_H_PX)
-	return Hd2dProjection.billboard_hover_rect(
-			entity.global_position, box_size, k, walk_front_y, depth_scale_at(entity.global_position.y))
+	var foot_v: float = Hd2dProjection.compress_y(entity.global_position.y, k,
+			anchor.x, anchor.y)
+	var depth: float = depth_scale_at(entity.global_position.y)
+	var w := box_size.x * depth
+	var h := box_size.y * depth
+	return Rect2(entity.global_position.x - w * 0.5, foot_v - h, w, h)
 
 
 ## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
-## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 walk_front_y，
-## 每格纵深在屏幕上占 32×压缩率×缩放 px（公式推导见 HD-2D街景系统.md §屏幕映射）
+## 活锚对口径：屏幕中心 = 世界锚（3D 取景中心的地面 y），向下每 k×zoom px
+## 对应 1px 世界纵深（公式推导见 HD-2D街景系统.md §屏幕映射；锚对取法同
+## remap_fx_pos——2D 相机纵移跟随态下旧"屏幕底沿恒=walk_front"假设不成立）
 func screen_y_to_ground_y(screen_y: float, effective_zoom: float) -> float:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return screen_y
 	var k: float = float(_hd.get_ground_squash())
+	var anchor := _fx_anchor_pair()
 	var vp_h: float = get_viewport_rect().size.y
-	return walk_front_y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
+	return anchor.x + (screen_y - vp_h * 0.5) / (k * maxf(effective_zoom, 0.001))
 
 
 # ─────────────────────────────── 设施/村民覆盖点 ────────────────────────────────

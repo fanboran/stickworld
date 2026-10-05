@@ -210,8 +210,14 @@ func _test_breach_and_resume() -> void:
 	_runner.assert_equal(ai.get_ordered_params().get("target", Vector2.ZERO), Vector2(400, 0),
 			"恢复的目标点仍是原号令目标")
 	ai.get_state_machine().physics_update(0.1)
-	_runner.assert_true(unit.last_dir.x > 0.9 and absf(unit.last_dir.y) < 0.01,
-			"恢复后直走原目标（无残存绕行分量）")
+	# "无残存绕行分量"锁行为状态本身（确定性），不锁 dir.y 容差——攻击打通期的
+	# y 纵深个性漂移（合法走位）会把桩单位挪离 y=0 几像素，390px 距离下
+	# dir.y=漂移/390 恰好卡爆 0.01 容差（实测 4 跑 1 挂的抖动源）；绕行残存
+	# 的真语义 = move 行为的 _detour_lateral 非零，直查它
+	var resumed_move: Node = ai.get_state_machine().get("_current_behavior")
+	_runner.assert_true(unit.last_dir.x > 0.9, "恢复后朝原目标方向直走")
+	_runner.assert_true(resumed_move != null and resumed_move.get("_detour_lateral") == Vector2.ZERO,
+			"无残存绕行分量（_detour_lateral 清零）")
 	_teardown_ctx(ctx, [blocker])
 
 

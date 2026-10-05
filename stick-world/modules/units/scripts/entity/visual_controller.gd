@@ -158,6 +158,16 @@ func play(anim_name: String) -> void:
 	# 动作锁定时保持当前动作动画（如 build），不切走
 	if _entity._action_locked:
 		return
+	# 同名幂等（churn 治理，战场观感重构）：**循环动画**同名 play 直接吞掉——
+	# 否则调用方边沿检测失效时（限位环里速度绕阈值振荡、姿态翻转重入）每帧
+	# 重入，_mirror_seq 逐帧+1 → billboard 镜像每帧重播同名动画（实测原地
+	# 抽搐）+ 逐帧强制重烘（出生大色块的放大器）。**单次动画（attack/hit/
+	# arrive/block…）例外**：同名重播 = 合法的第二刀/再次受击，必须重新起播
+	#（rig.play 的 start() 分支；tests/integration/test_anim_finished 锁死该
+	# 语义）。play_attack/play_hit 显式重播通道不受影响，与 2D rig 的
+	# travel-同名空操作语义一致
+	if anim_name == _entity._current_anim and not Anims.rigless_is_oneshot(anim_name):
+		return
 	# 搬运状态：walk/idle 映射为 walk_carry（手搬姿势）
 	var play_name: String = anim_name
 	if _entity._carrying and (anim_name == "walk" or anim_name == "idle"):

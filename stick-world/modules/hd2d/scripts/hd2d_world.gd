@@ -160,8 +160,9 @@ const FRONT_ROW: Array = [
 ##   · bg2 基线 = 真实地平线（底衬远端同步收到此处）。
 const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
 ## 战场地平线（格）：绿草地皮远端 z=0（=行走带后界 688px）。战场构图契约
-## （创始人 2026-09-16：全场景只有前景大地无后景）把它钉在屏幕上 1/3 线——
-## 地面占下 2/3、天空占上 1/3，任意缩放档成立（见 set_cam_zoom 战场分支）
+## （全场景只有前景大地无后景）把地面高度钉在**半屏**——02-战斗系统.md 二-A
+## Tier0「半屏高：战场高度约 1/2 屏幕高」（创始人 2026-10-05 改约，原为地平线
+## 钉上 1/3 线/地占下 2/3），任意缩放档成立（见 set_cam_zoom 战场分支）
 const BF_HORIZON_Z := 0.0
 ## 深端行走界（2D y）：前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁——前景
 ## 整段可行走，建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下
@@ -249,6 +250,22 @@ var _layout: Dictionary = {}      # 布局驱动模式的数据（空 = 手摆�
 @export var layout_data: Dictionary = {}
 var layout_name := ""             # 布局名（--layout= 或地图宿主 set；空 = 手摆主街）
 var battlefield := false          # 战场模式（城东开阔野地：无墙无街无楼群，战痕散布）
+## 战场行走带前缘的世界地面 z（格，含前缘余量；宿主地图算好 ground_bottom 后
+## 经 set_bf_band_front_z 推入——set_cam_zoom 战场分支的出界兜底锚，0 = 未推入
+var _bf_band_front_z := 0.0
+## 最近一次 set_cam_zoom 的原始入参（set_bf_band_front_z 迟到时重算取景用）
+var _last_user_zoom := -1.0
+
+
+## 战场带前缘推入（宿主 battlefield 图 _ready 里 ground_bottom 定稿后调）：
+## 迟到重算——世界场景 build 时 set_cam_zoom(0.75) 先跑，此刻带前缘还没推入，
+## 推入后按同缩放档重跑一遍取景
+func set_bf_band_front_z(z: float) -> void:
+	if not battlefield or absf(z - _bf_band_front_z) < 0.001:
+		return
+	_bf_band_front_z = z
+	if _last_user_zoom > 0.0:
+		set_cam_zoom(_last_user_zoom)
 var resource_field := false       # 城外资源图模式（同战场式开阔，但无战争遗物、无天空剪影）
 var _tex_cache: Dictionary = {}
 
@@ -1000,6 +1017,7 @@ func set_cam_x(cx: float) -> void:
 func set_cam_zoom(user_zoom: float) -> void:
 	if _cam == null or user_zoom <= 0.05:
 		return
+	_last_user_zoom = user_zoom
 	var uz: float = clampf(user_zoom, 0.25, 8.0)
 	var vp := _cam.get_viewport().get_visible_rect().size
 	_cam.size = DESIGN_HEIGHT * vp.x / (24.0 * vp.y * uz)
@@ -1009,12 +1027,15 @@ func set_cam_zoom(user_zoom: float) -> void:
 	var h_anchor: float = DESIGN_HEIGHT / 32.0
 	var z_bottom: float                                  # 屏幕底沿锚线的世界地面 z
 	if battlefield:
-		# 战场构图契约（创始人 2026-09-16）：全场景只有前景大地——地平线
-		# （绿草地皮远端 BF_HORIZON_Z）钉屏幕上 1/3 线，地面占下 2/3，任意
-		# 缩放档成立。推导同下行：屏幕底沿地面 z = 地平线 + (2/3)·h_v/sinθ
-		# ⇒ P.z = 地平线 + h_v/(6·sinθ) + P.y/tanθ
-		z_bottom = BF_HORIZON_Z + h_v * (2.0 / 3.0) / sin(t)
-		_cam.position.z = BF_HORIZON_Z + h_v / (6.0 * sin(t)) + _cam.position.y / tan(t)
+		# 战场构图契约（半屏高，02-战斗系统.md 二-A Tier0）：全场景只有前景大地
+		# ——地平线（绿草地皮远端 BF_HORIZON_Z）名义钉屏幕中线，地面占下 1/2。
+		# 带前缘兜底（2026-10-05 出界修复）：战场行走带深 85 格 + 前缘余量，半屏
+		# 构图在近缩放档只能装下 ~51-68 格——纯钉中线会把带前缘投到屏幕底沿
+		# 之外（战线贴前缘 = 整团出界）。取 max：半屏能装下时地平线恒中线；
+		# 装不下时以带前缘+余量为底锚（地平线相应上移），任意缩放档带内单位
+		# 永不出屏。推导同 village 分支：P.z = z_bottom − h_v/(2 sinθ) + P.y/tanθ
+		z_bottom = maxf(BF_HORIZON_Z + h_v * 0.5 / sin(t), _bf_band_front_z)
+		_cam.position.z = z_bottom - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
 	else:
 		z_bottom = SKYLINE_Z + h_anchor / (3.0 * sin(t))
 		_cam.position.z = z_bottom - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
@@ -1041,6 +1062,17 @@ func set_cam_zoom(user_zoom: float) -> void:
 ## 宿主用本值做坐标重映射（remap_fx_pos）。
 func get_ground_squash() -> float:
 	return sin(deg_to_rad(TILT_DEG))
+
+
+## 3D 取景中心对应的地面世界 z（格）：z_c = P.z − P.y/tanθ（屏幕中心点
+## 的地面深度，沿视轴退避不改变该值——正交投影）。视觉域坐标协议
+##（remap_fx_pos 族）的活锚：取景中心随缩放档/构图契约变，旧实现锚死
+## walk_front 常量，相机一对错位时 2D 画布特效（伤害飘字等）整体偏移
+## （实测战场 Y 跟随态下沉半屏，2026-10-05）
+func get_view_center_ground_z() -> float:
+	if _cam == null:
+		return 0.0
+	return _cam.position.z - _cam.position.y / tan(deg_to_rad(TILT_DEG))
 
 
 ## 地面世界抬升（格）：台面/台后城内地面比街面高 PLAT_H——角色走到 z<路肩

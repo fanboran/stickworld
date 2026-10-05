@@ -1,0 +1,18 @@
+# check_godot_errors.sh 已知噪声白名单（每行一条子串，# 注释）。
+# 收录口径：负路径单测故意触发、测试台装配噪音——是断言对象的一部分，非回归。
+# 新增条目前必须先定性来源（测试故意 vs 真回归），真回归修代码不进此表。
+
+# test_texture_gen_api / test_org_command_chain：喂不存在的 shader id，验证报错链
+nonexistent_xyz
+
+# test_behavior_state_machine：注册空行为/未设名，验证注册失败守卫
+[BehaviorStateMachine] 注册失败
+
+# 单测替身：AIController 挂非 CharacterBody2D 父节点，验证装配前置校验
+[AIController] 父节点非 CharacterBody2D
+
+# test_organization_manager：_test_load_preset_errors 喂坏 preset 数据，String() 构造炸在负样本上
+Nonexistent 'String' constructor
+
+# batch_runner 测试台：用例场景复用时 CaseRoot 重复 add_child（台架行为，不影响断言）
+already has a parent 'CaseRoot'

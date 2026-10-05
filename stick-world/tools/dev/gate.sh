@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# 门禁一体化（工位三件套之二）——一次跑完三段：import 自检 → 变更测试 → 报错扫描。
+# 门禁一体化（工位三件套之二）——一次跑完四段：import 自检 → 改动面编译 → 变更测试 → 报错扫描。
+# 改动面编译段（批0 教训⑤：fx 并损=常量丢失属编译期错，测试才炸不如编译先炸）：
+#   diff 出改动/新增的 .gd 逐个 --check-only 编译，红一个即停。
 # 用法（任意目录均可）：
 #   tools/dev/gate.sh                     # 默认：-Changed HEAD（工作区改动）
 #   tools/dev/gate.sh HEAD~1              # 指定对比基线（如提交后验证上一笔）
-#   tools/dev/gate.sh --full              # 全量测试（慢，收线用）
+#   tools/dev/gate.sh --full              # 全量测试（慢，收线用；编译段仍按 HEAD 工作区）
 #   tools/dev/gate.sh --skip-import       # 跳过 import（未动资源时省时）
 # 退出码 0=全绿；任何一段失败即停并给出定位提示。各段耗时单独计时。
 set -u
@@ -28,7 +30,36 @@ if [ "$DO_IMPORT" -eq 1 ]; then
 	echo "   ok (${SECONDS}s)"
 fi
 
+step "改动面编译自检（运行时上下文 load）"
+# 注：不能用 --check-only（不解析 autoload 标识符，引用 EventBus 等的脚本全假红），
+# 改用 compile_check.tscn 在完整启动链里 load 每个改动脚本（见其脚本头注释）。
+mapfile -t CHANGED_GD < <(git diff --name-only --diff-filter=ACMR "$REF" -- '*.gd' 2>/dev/null; git ls-files --others --exclude-standard -- '*.gd' 2>/dev/null)
+if [ "${#CHANGED_GD[@]}" -eq 0 ]; then
+	echo "   无 .gd 改动，跳过"
+else
+	# 仓库根在 stick-world/ 上层时 diff 路径带 stick-world/ 前缀，去掉映射回 res://
+	RES_ARGS=()
+	for f in "${CHANGED_GD[@]}"; do
+		RES_ARGS+=("res://${f#stick-world/}")
+	done
+	"$GODOT" --headless --path . res://tools/dev/compile_check.tscn -- "${RES_ARGS[@]}" \
+		> /tmp/gate_compile.log 2>&1
+	if [ $? -ne 0 ]; then
+		grep -E "compile_check|SCRIPT ERROR|Parse Error" /tmp/gate_compile.log | head -30 >&2
+		fail "编译失败（明细见上）"
+	fi
+	echo "   ok（${#CHANGED_GD[@]} 个 .gd，${SECONDS}s）"
+fi
+
 step "测试（$([ $FULL -eq 1 ] && echo 全量 || echo "-Changed $REF")）"
+# 日志隔离：user://logs 按项目名跨 worktree 共享且轮转保留——不挪走旧日志，
+# 报错扫描段会数到历史会话（含修复前）的错误。归档到子目录，只扫本门禁新日志。
+LOG_DIR="$APPDATA/Godot/app_userdata/$(sed -n 's/^config\/name="\(.*\)"/\1/p' project.godot | head -n1)/logs"
+if [ -d "$LOG_DIR" ] && ls "$LOG_DIR"/godot*.log >/dev/null 2>&1; then
+	ARCH="$LOG_DIR/archive_gate_$(date +%Y%m%d_%H%M%S)"
+	mkdir -p "$ARCH"
+	mv "$LOG_DIR"/godot*.log "$ARCH"/ 2>/dev/null
+fi
 if [ "$FULL" -eq 1 ]; then
 	bash tests/run_all.sh || fail "测试有失败"
 else
@@ -40,4 +71,4 @@ step "报错扫描（user:// 日志）"
 bash tools/check_godot_errors.sh > /dev/null 2>&1 || fail "运行时报错非零"
 echo "   ok (${SECONDS}s)"
 
-echo "[gate] ✓ 全绿（import + tests + errors）"
+echo "[gate] ✓ 全绿（import + 编译 + tests + errors）"

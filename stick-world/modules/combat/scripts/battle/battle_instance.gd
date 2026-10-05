@@ -216,7 +216,10 @@ func _physics_process(delta: float) -> void:
 	# §十四 小兵渲染代理（sim 之后：读最新位置/朝向；物理刻驱动即暂停门禁同 sim）
 	if _crowd != null:
 		_crowd.tick(sim)
-	_director.tick(sim)
+	# 判空同 _sim/_crowd：单测直接拍 ENGAGED 不走 setup()（test_battle_settlement）
+	# 时 _director 尚未创建，不守卫会逐物理帧报 Nil tick
+	if _director != null:
+		_director.tick(sim)
 	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
 	for faction in _team_ai.keys():
 		var tai: ScriptTeamAi = _team_ai[faction]

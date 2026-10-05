@@ -47,6 +47,18 @@ done
 PATTERNS=("ERROR" "SCRIPT ERROR" "Parse Error" "Invalid call" "Invalid access" "Cannot open" "Cannot load" "Cannot find" "Cannot instantiate" "Cannot create" "Cannot parse")
 [ "$WARNINGS" -eq 1 ] && PATTERNS+=("WARNING")
 
+# 已知噪声白名单：tools/known_log_noise.txt 每行一条子串（# 注释），命中的错误行
+# 打印为 [known] 但不计失败——负路径单测（喂坏数据/错误装配）与测试台场景复用
+# 的报错是断言对象的一部分，不能让门禁永远红。新增白名单先定性来源（测试故意 vs 真回归）。
+NOISE_FILE="$SCRIPT_DIR/known_log_noise.txt"
+NOISE=()
+if [ -f "$NOISE_FILE" ]; then
+	while IFS= read -r nl; do
+		case "$nl" in ""|\#*) continue ;; esac
+		NOISE+=("$nl")
+	done <"$NOISE_FILE"
+fi
+
 total_errors=0
 
 match_pattern() {
@@ -54,6 +66,16 @@ match_pattern() {
 	for p in "${PATTERNS[@]}"; do
 		case "$line" in
 			*"$p"*) return 0 ;;
+		esac
+	done
+	return 1
+}
+
+is_known_noise() {
+	local line="$1" nl
+	for nl in "${NOISE[@]}"; do
+		case "$line" in
+			*"$nl"*) return 0 ;;
 		esac
 	done
 	return 1
@@ -83,6 +105,10 @@ if [ -d "$LOG_DIR" ]; then
 			echo "== [log] $(basename "$f") ($n hits) =="
 			while IFS= read -r line; do
 				[ -z "$line" ] && continue
+				if is_known_noise "$line"; then
+					echo "  [known] $line"
+					continue
+				fi
 				if count_as_error "$line"; then total_errors=$((total_errors + 1)); fi
 				echo "  $line"
 			done <<<"$hits"
@@ -120,6 +146,10 @@ if [ "$QUICK" -eq 0 ]; then
 	if [ -n "$hits" ]; then
 		while IFS= read -r line; do
 			[ -z "$line" ] && continue
+			if is_known_noise "$line"; then
+				echo "  [known] $line"
+				continue
+			fi
 			count_as_error "$line" && total_errors=$((total_errors + 1))
 			echo "  $line"
 		done <<<"$hits"

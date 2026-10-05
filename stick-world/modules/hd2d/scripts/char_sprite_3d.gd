@@ -21,7 +21,7 @@ extends Node3D
 ## 一个 SubViewport 可以被 N 个 quad 共用（同姿态）；要每个角色不同动画相位，
 ## 必须一个角色一个 SubViewport（成本见汇报的性能读数）。
 
-const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
+const RIG_SCENE := "res://modules/stick_rig/scenes/stickman_test.tscn"
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
@@ -142,6 +142,10 @@ func _blit_capture() -> void:
 ## 首个进场的宿主代为扣预算出队执行。idle 姿态静止不重复烘焙（set_anim 换档
 ## 时会立即排期一次，见 set_anim）。
 func _blit_schedule() -> void:
+	# 纯 sim 不装配 viewport（build 里 _pure_sim 豁免），无纹理可烘——
+	# 不出队也不入队（防 null viewport 逐帧报错挤爆日志）
+	if _pure_sim or viewport == null:
+		return
 	var now := Engine.get_process_frames()
 	if _blit_frame != now:            # 跨帧重置预算（由首宿主执行）
 		_blit_frame = now

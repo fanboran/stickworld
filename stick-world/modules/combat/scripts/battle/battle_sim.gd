@@ -37,7 +37,8 @@ const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
 const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
 ## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
 const MAX_SEPARATION_CORRECTION: float = 3.0
-## 击退衰减（与 KNOCKBACK_DECAY 同值）
+## 击退衰减（与 stickman_entity.KNOCKBACK_DECAY 成对同值，2026-10-05 统一为
+## sim 链标定值 700；批1 双链契约测试落地后退役成对常量）
 const KNOCKBACK_DECAY: float = 700.0
 ## 空间网格 cell（与 map_base.GRID_CELL 同值）
 const GRID_CELL: float = 64.0

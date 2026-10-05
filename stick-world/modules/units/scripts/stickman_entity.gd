@@ -208,8 +208,9 @@ var _walk_only: bool = false
 # ─────────────────────────────── 受击反馈（近战打击感）────────────────────────────────
 ## 击退冲量速度（受击时注入，随帧衰减）
 var _knockback_velocity: Vector2 = Vector2.ZERO
-## 击退衰减（px/s²）
-const KNOCKBACK_DECAY: float = 525.0  # 24px 换轨
+## 击退衰减（px/s²）。与 battle_sim.KNOCKBACK_DECAY 成对（同值纪律：观察场
+## sim 链 2026-10 标定 700，实体链随统一；批1 建双链契约测试后退役成对常量）
+const KNOCKBACK_DECAY: float = 700.0
 ## 受击红闪 Tween（中断旧闪烁）
 var _hurt_tween: Tween = null
 ## 受击硬直剩余时间（秒，>0 时 AI 停止行动；行业最佳实践 hit stun）

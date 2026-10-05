@@ -39,6 +39,10 @@ func _ready() -> void:
 	# delta 自动补偿）。project.godot 里的同名配置实测未生效（原因未明），
 	# 此处运行时强制执行，单一真相源。
 	Engine.physics_ticks_per_second = 30
+	# 物理步/渲染帧钳制：默认 8 会在掉帧后成簇追赶（单位瞬移突进观感）；
+	# 4 = 30Hz 下渲染 fps≥8 时不丢拍，更低帧率宁可慢放不突进（LOD panic 降刻
+	# 兜底下界），2026-10-05 观感重构批0
+	Engine.max_physics_steps_per_frame = 4
 	if ConfigManager:
 		if ConfigManager.has_key("game/slow_on_possess"):
 			auto_slow_on_possess = bool(ConfigManager.get_value("game/slow_on_possess"))

@@ -17,7 +17,9 @@ STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT_DIR="$OUT_BASE/${STAMP}_p${PRESET}"
 mkdir -p "$OUT_DIR"
 rm -f "$USER_SHOTS"/"${TAG}"_p*.png 2>/dev/null
-"$GODOT" --headless --path "$PROJ_ROOT" --script res://tools/dev/arena_shot_boot.gd -- \
+# 注意：带窗口跑（不 --headless）——headless 渲染服务器无 viewport 纹理可采
+# （库内 diag_arena_shots 同口径"必须带显示"；截图走真实渲染帧）。
+"$GODOT" --path "$PROJ_ROOT" res://tools/dev/arena_shot_boot.tscn --resolution 1920x1080 -- \
 	--preset "$PRESET" --secs "$SECS" --every "$EVERY" --tag "$TAG" || true
 cp "$USER_SHOTS"/"${TAG}"_p*.png "$OUT_DIR/" 2>/dev/null
 rm -f "$USER_SHOTS"/"${TAG}"_p*.png 2>/dev/null

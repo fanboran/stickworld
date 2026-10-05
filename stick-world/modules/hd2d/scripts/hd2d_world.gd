@@ -200,9 +200,10 @@ const CLOUD_POOL := 14
 const BAND_SIDEWALK := Vector2(0.42, 1.95)  # 路肩（建筑根部 → 外缘；细条，占位）
 const PLAT_H := 0.65                        # 人行道台面高（格）≈17px：整面垫高，建筑落在台面上
 const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到画面外）
-## 野地草色（战场全幅草专用档；街景城外草地用淡草色 0.90/0.93/0.80——
-## 创始人 2026-09-17：城外近野/远条一色不断缝，深绿只留战场）
-const GRASS_WILD := Color(0.40, 0.58, 0.30)
+## 草地染色统一淡草档：草地贴图已换回创始人认可的原 AI 手绘源（自带花草
+## 笔触与配色），深绿染色档会把花草压成暗橄榄——战场全幅草与街景城外草带
+## 同用一档，野地草色一色（创始人 2026-09-17：AI 草地按原色呈现）
+const GRASS_TINT := Color(0.90, 0.93, 0.80)
 
 ## 城墙（创始人 2026-09-14：地图两侧到城墙，城镇由城墙收口；2026-09-15
 ## 城镇扩到 ±95——"没走多久就城门"；墙高升 10 格 town 档——"城墙这么矮"）。
@@ -274,6 +275,7 @@ var _char_host: Node3D = null
 var _post_layer: CanvasLayer
 var _post_rect: ColorRect
 var _post_mat: ShaderMaterial
+var _post_viewport_msaa2d := 0   # 进树时视口 msaa_2d 原值（_exit_tree 恢复）
 var _hud: Label
 var _hud2: Label
 
@@ -353,6 +355,13 @@ func _ready() -> void:
 
 ## 诊断对照实验：按 --hide= 组名隐藏节点组（shadow=接地影面片 / plat=台面系几何 /
 ## cards=建筑卡 / kerb=台肩镶边）。只影响显示，不改落位。
+func _exit_tree() -> void:
+	# 恢复 post 通道关掉的视口 2D MSAA（缘由见 post 层创建处注释）
+	if _post_viewport_msaa2d != 0 and get_viewport() != null:
+		get_viewport().msaa_2d = _post_viewport_msaa2d
+	_post_viewport_msaa2d = 0
+
+
 func _apply_hide_groups() -> void:
 	var spec := str(_opts.get("hide", ""))
 	if spec.is_empty():
@@ -982,7 +991,6 @@ func set_cam_x(cx: float) -> void:
 
 ## 3D 相机缩放镜像——与 2D CameraRig **逐像素 1:1**（创始人：紫箱水平移动
 ## 比角色快 / 蓝线与屏幕下边界不重合的根因 = 旧固定视宽 74 格在 1920 下
-## 25.9 px/格，与 2D 的 32 px/格差 19%，所有 2D 投影物相对 3D 世界漂移）。
 ## 25.9 px/格，与 2D 的 24 px/格差档，所有 2D 投影物相对 3D 世界漂移）。
 ## 可视宽（格）= 2D 可视世界宽 px / 24 = DESIGN_HEIGHT·宽高比/(24·user_zoom)；
 ## 纵向 px/格 随之同为 24。锚线 z_near 按"地面占屏幕下 1/3、天际线基线压
@@ -1215,8 +1223,8 @@ func _build_world() -> void:
 		# 会在深缩放档露出底沿外的天幕蓝条（创始人 2026-09-17 指认的"缩太小
 		# 出蓝条"在战场/资源图的另一半成因）；常态缩放档这段在画面外零开销。
 		# 木本杂物已清空
-		_add_ground_plane_at("grass_alb_128.png", 0.0, 600.0,
-			0.0, 210.0, 0.0, 8.0, GRASS_WILD)
+			_add_ground_plane_at("grass_alb_128.png", 0.0, 600.0,
+				0.0, 210.0, 0.0, 8.0, GRASS_TINT)
 	else:
 		# 远景地面带（与台面同高 y=PLAT_H，**与台面同一块面、代码里同一段**）：
 		# 城内段 flagstone 石板从第三层楼根拉通到台面外缘（创始人 2026-09-16：
@@ -1247,8 +1255,8 @@ func _build_world() -> void:
 	var fb_tex := _tex_abs(_temp + GROUND_DIR + "grass_alb_128.png")
 	if fb_tex != null:
 		fb_mat.albedo_texture = fb_tex
-	# 战场=野地绿档；街景=淡草色（与城外草地同色）
-	fb_mat.albedo_color = GRASS_WILD if battlefield else Color(0.90, 0.93, 0.80)
+	# 战场与街景同用淡草档（草色一色，见 GRASS_TINT 注）
+	fb_mat.albedo_color = GRASS_TINT
 	fb_mat.roughness = 0.95
 	fb_mat.uv1_triplanar = true
 	fb_mat.uv1_world_triplanar = true
@@ -1341,6 +1349,15 @@ func _build_world() -> void:
 	_post_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_post_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_post_layer.add_child(_post_rect)
+
+	# post 通道经 hint_screen_texture 整屏拷贝背缓冲：所在视口开着 msaa_2d 时，
+	# 拷贝读回的是未 resolve 的多重采样数据，R/G/B 落自不同子像素采样点——
+	# 全屏 RGB 色散，只在描边细线等高对比处肉眼可见（2026-09-30 验收指正根因；
+	# HUD 在更高 CanvasLayer 自绘不经这份拷贝，所以只有 3D 世界内容花）。
+	# 本视口 2D MSAA 关到退出树为止：3D 世界抗锯齿走 msaa_3d 不受影响；
+	# 纯 2D 场景不经 hd2d_world，工程级 msaa_2d=2（2D 路径抗锯齿生命线）保持不动。
+	_post_viewport_msaa2d = get_viewport().msaa_2d
+	get_viewport().msaa_2d = Viewport.MSAA_DISABLED
 
 	# HUD 标签（只在遮挡对照图里显示，给两格加字）
 	_hud = _make_label(Vector2(24, 18), 30)

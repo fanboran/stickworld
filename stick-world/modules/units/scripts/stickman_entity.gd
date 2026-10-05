@@ -457,6 +457,11 @@ func _mount_components() -> void:
 	add_child(_health_bar)
 	if _health_bar.has_method("setup"):
 		_health_bar.setup(get_node_or_null("HealthComponent"))
+	if _billboard_visual and _health_bar.has_method("set_crowd_data_mode"):
+		# HD-2D（血条随骨架进 billboard）：2D 画布条不画——画布坐标与 3D
+		# 投影纵向错开 (1-k) 倍，直绘血条悬浮在部队上方；切数据模式只产
+		# 状态，宿主逐帧拉 get_bar_state() 喂 billboard 内镜像条
+		_health_bar.set_crowd_data_mode(true)
 
 	# 蓄力轨迹预览（拉弓/投矛抛物线点列、杖落点 AOE 圈；默认隐藏待命）
 	_aim_preview = Node2D.new()

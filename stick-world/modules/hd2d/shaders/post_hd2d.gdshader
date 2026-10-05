@@ -13,7 +13,7 @@ shader_type canvas_item;
 //   （真正的分离式高斯要两趟渲染 + 两个 Viewport；单 pass 12 tap 是性价比取舍，
 //    半径 7px 内肉眼与高斯无差。）
 
-uniform sampler2D screen_tex : hint_screen_texture, repeat_disable, filter_linear_mipmap;
+uniform sampler2D screen_tex : hint_screen_texture, repeat_disable, filter_linear;
 // 屏幕像素尺寸。Godot 4.7 的 canvas_item shader **没有** SCREEN_PIXEL_SIZE
 // 这个内建（实测编译报 Unknown identifier），改用 uniform 从脚本灌
 // （1/视口尺寸；窗口 resize/性能档改分辨率时必须一起更新）。

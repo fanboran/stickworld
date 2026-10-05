@@ -22,6 +22,9 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 目标刷新间隔（秒）
 const ACQUIRE_INTERVAL: float = 0.5
+## 每目标围攻名额（SWL NumberOfUnitsThatCanHit 防集火口径）：集火目标被围满
+## 后其余队员各自寻敌（跟队堆叠的闸）；外圈等位判断同用此值
+const MAX_ATTACKERS_PER_TARGET: int = 3
 ## 犹豫检查间隔（秒）
 const HESITATE_CHECK_INTERVAL: float = 0.5
 ## 低士气阈值（低于此值触发撤退决策）
@@ -192,25 +195,54 @@ func update(delta: float) -> void:
 	# 刷新目标
 	_acquire_timer -= delta
 	if _target == null or not is_instance_valid(_target) or (_target.has_method("is_dead") and _target.is_dead()) or _is_beyond_leash() or _acquire_timer <= 0.0:
-		# 队伍级共享目标（反编译参考实装 D-B）：排长决策 → 队员执行（集火）。
-		# 所属小队有共享攻击目标时优先用它，否则回退各自寻敌。
-		var squad_target: Node = _get_squad_target()
-		if squad_target != null:
-			# 队伍目标始终优先（排长换目标 = 全队换目标）
-			_target = squad_target
-		elif _target != null and is_instance_valid(_target) and not (_target.has_method("is_dead") and _target.is_dead()) and not _is_beyond_leash():
-			# 目标切换滞后（行业最佳实践 sticky target）：当前目标仍有效且未超追击范围则锁定保留，
-			# 不因刷新周期重选（避免频繁换目标导致攻击输出丢失）
-			pass
+		# 接敌前分配目标（创始人 2026-09-17：索敌应在接敌前分配好谁打谁）：
+		# 开战前由编队/组织方按位次 1v1 配对写入 assigned_target 元数据，
+		# 分配语义最优先（高于集火、不受围攻名额约束）——各自认敌、保持
+		# 阵位对冲，不再全队涌向排长集火点。
+		# 元数据经 Variant 读取（配对目标可能已被释放，类型化直赋会报
+		# "invalid previously freed instance"），判活通过才转手
+		var assigned_v: Variant = entity.get_meta("assigned_target", null) \
+				if entity.has_meta("assigned_target") else null
+		var assigned_valid: bool = assigned_v != null and assigned_v is Node \
+				and is_instance_valid(assigned_v) \
+				and not (assigned_v.has_method("is_dead") and assigned_v.is_dead())
+		if assigned_valid:
+			_target = assigned_v
+			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
+			if _target == null:
+				if _cap_ai_stop:
+					entity.ai_stop()
+				finish()
+				return
 		else:
-			# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
-			# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
-			# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
-			_target = ScriptTargetFinder.find_target(entity, {
-				"battle": _battle,
-				"ignore_current_attackers": true,
-				"prefer_large": _p("prefer_large", 0.0),
-			})
+			# 队伍级共享目标（反编译参考实装 D-B）：排长决策 → 队员执行（集火）。
+			# 集火受**围攻名额**约束（SWL NumberOfUnitsThatCanHit 语义，名额见
+			# MAX_ATTACKERS_PER_TARGET）：目标已被围满时其余队员不再跟队堆叠
+			# （"全班水泄不通围正面一人、身后近敌不打"的根因就是集火无条件
+			# 覆盖个人索敌），回退各自寻敌；已在打该目标的人不换（保持输出）
+			var squad_target: Node = _get_squad_target()
+			var squad_capped: bool = squad_target != null \
+					and _battle != null and _battle.has_method("get_attacker_count") \
+					and _battle.get_attacker_count(squad_target) >= MAX_ATTACKERS_PER_TARGET \
+					and not (_target == squad_target)
+			var sticky_valid: bool = _target != null and is_instance_valid(_target) \
+					and not (_target.has_method("is_dead") and _target.is_dead()) and not _is_beyond_leash()
+			if squad_target != null and not squad_capped:
+				# 队伍目标优先（排长换目标 = 全队换目标，名额未满时集火）
+				_target = squad_target
+			elif sticky_valid:
+				# 目标切换滞后（行业最佳实践 sticky target）：当前目标仍有效且未超追击范围则锁定保留，
+				# 不因刷新周期重选（避免频繁换目标导致攻击输出丢失）
+				pass
+			else:
+				# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
+				# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
+				# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
+				_target = ScriptTargetFinder.find_target(entity, {
+					"battle": _battle,
+					"ignore_current_attackers": true,
+					"prefer_large": _p("prefer_large", 0.0),
+				})
 		# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
 		_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
 		if _target == null:
@@ -327,7 +359,7 @@ func update(delta: float) -> void:
 		# 硬挤"的解法；等位期间远程照常输出，近战等前排空位
 		var attack_radius: float = maxf(attack_range * 0.85, 24.0)
 		if not really_close and _battle != null and _battle.has_method("get_attacker_count") \
-				and _battle.get_attacker_count(_target) >= 3:
+				and _battle.get_attacker_count(_target) >= MAX_ATTACKERS_PER_TARGET:
 			attack_radius = maxf(attack_range * 1.25, 100.0)
 		var desired_pos: Vector2 = _target.global_position if really_close \
 				else _target.global_position + to_target.normalized() * attack_radius

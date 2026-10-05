@@ -21,11 +21,11 @@ extends Node3D
 ## 一个 SubViewport 可以被 N 个 quad 共用（同姿态）；要每个角色不同动画相位，
 ## 必须一个角色一个 SubViewport（成本见汇报的性能读数）。
 
-const RIG_SCENE := preload("res://modules/stick_rig/api.gd").RIG_SCENE_PATH
+const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
-const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
-const HEALTH_BAR_SCRIPT := preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
+const StickmanOutline := preload("res://modules/units/scripts/rig/stickman_outline.gd")
+const HEALTH_BAR_SCRIPT := preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
@@ -53,6 +53,116 @@ var bbox := Rect2i()
 var px_scale := 2.0
 var _sv_size := Vector2i(SV_W, SV_H)
 var _foot_row := FOOT_ROW
+
+## ── 距离分档（创始人 2026-09-30 指正"缩小了满身锯齿"）──
+## 缩小档只切 alpha 口径、**不改视口尺寸**：实测（同日）对 SubViewport 执行
+## size 重分配会永久破坏其 CanvasGroup 内容（回读全白不透明）——烘焙路线的
+## 真实 mip 链已承担缩小平滑（视口恒 px2.0 超采样），尺寸分档不再需要。
+## 特写档维持定稿硬切；缩小档放开软边，消除无 mip 时代的二值 alpha 毛刺。
+const QUALITY_TIERS: Array[Dictionary] = [
+	{"cut": 0.35, "soften": 0.0, "shrink_below": 80.0, "grow_above": 95.0},
+	{"cut": 0.10, "soften": 0.20, "shrink_below": 36.0, "grow_above": 45.0},
+	{"cut": 0.05, "soften": 0.30, "shrink_below": 0.0, "grow_above": 0.0},
+]
+var _tier := 0
+## 分档抽查的错峰相位（几十个实体同帧齐换档会齐震，按实例序号错开落地帧）
+static var _tier_seq := 0
+var _tier_phase := 0
+var _rescale_at_frame := -1   # >0 = 到帧后落地换档（错峰摊平 RT 重建峰值）
+var _world_zoom := -1.0       # set_outline_zoom 最近一次推入值（换档后重推）
+
+## ── 采集烘焙（spatial 管线直采 ViewportTexture 出 RGB 色散的绕行）──
+## 现象与定位（2026-09-30 排查）：视口纹理本体干净（get_image 回读、2D 直显
+## 均无坏点），但任何 3D 材质（自定义 billboard shader / Sprite3D）一采它，
+## 白描边两侧就出定向红青镶边（R 通道环整体错 ~1px、B 反向，G 居中）；同
+## shader 采 ImageTexture（建筑卡路径）从不复现——引擎对"spatial 采样画布
+## RT"这一组合的缺陷，msaa/格式/尺寸/过滤全调过无效，只能不喂 RT。
+## 对策：视口渲完后按节拍回读落成 ImageTexture（generate_mipmaps 出真实
+## mip 链，缩小采样也顺带治好）喂 billboard。回读是 sync 点必须节流：每帧
+## 最多 BLIT_BUDGET 次，各角色按相位轮转，节奏 = BLIT_FPS。
+const BLIT_FPS := 10.0
+const BLIT_BUDGET := 10
+static var _blit_frame := -1
+static var _blit_used := 0
+static var _blit_usec := 0.0
+static var _blit_count := 0
+## 烘焙公平队列：set_world_pos 的树序是固定的，若各宿主自行抢预算，同一批
+## 靠前宿主会垄断预算、其余宿主饿死（实测：出生首帧采到空白 RT 的宿主从此
+## 永远停留在那一帧内容上=白方块/僵死贴图）。改为 FIFO 轮转，预算从队首扣。
+static var _blit_queue: Array = []
+static var _blit_queued: Dictionary = {}
+var _blit_tex: ImageTexture = null
+var _blit_tex_size := Vector2i.ZERO
+var _blit_next_frame := 0
+
+
+## 把视口当帧内容烘焙进 _blit_tex（由公平队列驱动，见 _blit_queue 注释）
+func _blit_capture() -> void:
+	# 下次到拍：动画中按 BLIT_FPS 节拍；idle 姿态静止，休眠到 set_anim 唤醒
+	_blit_next_frame = Engine.get_process_frames() \
+			+ maxi(1, int(Engine.get_frames_per_second() / BLIT_FPS)) + (_tier_phase % 3)
+	if _anim == "idle":
+		_blit_next_frame = 0x7FFFFFFF
+	var t0 := Time.get_ticks_usec()
+	var img := viewport.get_texture().get_image()
+	if img == null or img.is_empty():
+		return
+	# 白帧闸：视口首渲完成前的回读会拿到全白不透明帧——视作无效采集，弃用并
+	# 延后重试（正常帧背景 transparent_bg，四角 alpha≈0，不会误伤真实内容）
+	var w := img.get_width()
+	var h := img.get_height()
+	var all_opaque_white := true
+	for p: Vector2i in [Vector2i(2, 2), Vector2i(w - 3, 2), Vector2i(2, h - 3),
+			Vector2i(w - 3, h - 3), Vector2i(w / 2, h / 2)]:
+		var c := img.get_pixel(p.x, p.y)
+		if not (c.a > 0.95 and c.r > 0.95 and c.g > 0.95 and c.b > 0.95):
+			all_opaque_white = false
+			break
+	if all_opaque_white:
+		_blit_next_frame = Engine.get_process_frames() + 2
+		return
+	img.generate_mipmaps()
+	# 每次都 create_from_image：update() 对 mip/格式不匹配会静默失败（视口 resize
+	# 后回读图像属性可能与旧纹理不一致，卡死在创建时刻的那一帧内容），而上传
+	# 成本两者相同，重建没有收益——不做 update 优化
+	_blit_tex = ImageTexture.create_from_image(img)
+	_blit_tex_size = Vector2i(img.get_width(), img.get_height())
+	if mat != null:
+		mat.set_shader_parameter("char_tex", _blit_tex)
+	_blit_usec += Time.get_ticks_usec() - t0
+	_blit_count += 1
+	if _blit_count >= 600:
+		print("[char_sprite_3d] blit avg %.3f ms" % (_blit_usec / 1000.0 / _blit_count))
+		_blit_usec = 0.0
+		_blit_count = 0
+
+
+## 烘焙排程（每宿主每帧经 set_world_pos 调）：到拍的非 idle 宿主入公平队列，
+## 首个进场的宿主代为扣预算出队执行。idle 姿态静止不重复烘焙（set_anim 换档
+## 时会立即排期一次，见 set_anim）。
+func _blit_schedule() -> void:
+	var now := Engine.get_process_frames()
+	if _blit_frame != now:            # 跨帧重置预算（由首宿主执行）
+		_blit_frame = now
+		_blit_used = 0
+	# 出队执行（本帧预算内，FIFO）。到拍即入队（idle 也能首烘；重复烘焙由
+	# _blit_capture 里的 idle 休眠抑制）
+	var id := get_instance_id()
+	if now >= _blit_next_frame and not _blit_queued.has(id):
+		_blit_queued[id] = true
+		_blit_queue.append(self)
+	while _blit_used < BLIT_BUDGET and not _blit_queue.is_empty():
+		var head: Node = _blit_queue.pop_front()
+		_blit_queued.erase(head.get_instance_id())
+		if not is_instance_valid(head):
+			continue
+		_blit_used += 1
+		head.call("_blit_capture")
+
+
+func _init() -> void:
+	_tier_phase = _tier_seq
+	_tier_seq += 1
 
 
 func set_px_scale(n: float) -> void:
@@ -95,9 +205,14 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	viewport.size = _sv_size
 	viewport.transparent_bg = true
 	viewport.disable_3d = true
-	# 4x MSAA：2D 角色是矢量线段（圆头 Line2D / 多边形），MSAA 直接作用在
-	# 线段边缘像素上（不是纹理内容），是除超采样之外最有效的一道。
-	viewport.msaa_2d = Viewport.MSAA_4X
+	# MSAA 必须关（2026-09-30 验收指正"角色满身 RGB 色散"的根因）：全融合描边
+	# 是 CanvasGroup 双 pass，描边材质经 hint_screen_texture 读回组缓冲再原样
+	# 拷贝前景像素（stickman_outline.gdshader）；msaa_2d 开着时读回的是未
+	# resolve 的多重采样数据，R/G/B 落自不同子像素采样点——字面意义的色散
+	# 被烘焙进角色贴图（描边/血条/阵营点边缘的红绿蓝镶边，像素级实测铁证：
+	# 白描边与绿草之间出现 (255,93,19) 这类单通道饱和值，合法混色产不出）。
+	# 边缘平滑交给 px_scale 超采样 + 屏幕实测分档（见 QUALITY_TIERS），不叠 MSAA。
+	viewport.msaa_2d = Viewport.MSAA_DISABLED
 	viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	# 每帧更新：角色在动就必须每帧重画。UPDATE_DISABLED / UPDATE_ONCE 的省法见 --perf。
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -130,7 +245,9 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 
 	mat = ShaderMaterial.new()
 	mat.shader = CHAR_SHADER
-	mat.set_shader_parameter("char_tex", viewport.get_texture())
+	# billboard 不直采视口 RT（spatial 采样画布 RT 出色散，见 _blit_capture 注释块）：
+	# 喂烘焙平纹理。_blit_tex 首次烘焙才有内容，此前采样默认黑 → 被 alpha_cut 剔除，
+	# 首帧短暂无角色属预期
 	mat.set_shader_parameter("tint", Color(1, 1, 1))
 	# 硬边切割（目标旧版=干净直轮廓）：软羽化边在明亮地面上会透出彩边
 	mat.set_shader_parameter("alpha_soften", 0.0)
@@ -337,6 +454,13 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 		ground_lift: float = 0.0) -> void:
 	if _quad == null:
 		return
+	# 采集分档：低频抽查屏幕实测高度，换档到帧后错峰落地（QUALITY_TIERS 注释块）
+	if _rescale_at_frame > 0 and Engine.get_process_frames() >= _rescale_at_frame:
+		_apply_quality_tier()
+	elif (Engine.get_process_frames() + _tier_phase) % 10 == 0:
+		_update_quality_tier()
+	# 采集烘焙排程（公平队列+预算摊帧，见 _blit_queue 注释块）
+	_blit_schedule()
 	_flip = flip
 	_depth = depth
 	# 缩放并入 basis 一次赋值（scale setter 与 basis 先后赋值互相覆盖）；
@@ -367,10 +491,46 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 ## 等比变粗（武器薄刃上尤其刺眼）。把世界 zoom 作为等效画布缩放推给
 ## viewport 内 rig，屏幕描边宽度回归恒定。
 func set_outline_zoom(z: float) -> void:
+	_world_zoom = z
 	if rig == null or not rig.has_method("set_outline_canvas_scale"):
 		return
 	rig.outline_zoom_external = true
 	rig.set_outline_canvas_scale(z)
+
+
+## 每 ~10 帧抽查一次本 quad 的屏幕实测高度（按实例相位错峰），按 QUALITY_TIERS
+## 上下换档（带滞回）。quad 与相机同基，正反面各投影一点取 y 差即屏上高度，
+## 透视/正交通吃，不依赖 zoom 语义（同 zoom 下战场与街景屏上尺寸差一倍）。
+func _update_quality_tier() -> void:
+	if _quad == null or mat == null or viewport == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var half := _cam_basis().y * (SV_H * PX * SIZE_K * 0.5 * _depth)
+	var top := _quad.position + half
+	var bot := _quad.position - half
+	if cam.is_position_behind(top) or cam.is_position_behind(bot):
+		return
+	var h := absf(cam.unproject_position(top).y - cam.unproject_position(bot).y)
+	var t := _tier
+	if h < float(QUALITY_TIERS[t]["shrink_below"]):
+		t += 1
+	elif t > 0 and h >= float(QUALITY_TIERS[t - 1]["grow_above"]):
+		t -= 1
+	if t == _tier:
+		return
+	_tier = t
+	_rescale_at_frame = Engine.get_process_frames() + (_tier_phase % 36)
+
+
+## 落地分档：切 alpha 口径（不改视口尺寸——resize 会永久破坏 CanvasGroup 内容，
+## 见 QUALITY_TIERS 注释块；缩小平滑由烘焙 mip 链承担）
+func _apply_quality_tier() -> void:
+	_rescale_at_frame = -1
+	var tier: Dictionary = QUALITY_TIERS[_tier]
+	mat.set_shader_parameter("alpha_cut", float(tier["cut"]))
+	mat.set_shader_parameter("alpha_soften", float(tier["soften"]))
 
 
 ## 动画切换（只在变化时 play，避免每帧重置动画进度）
@@ -379,6 +539,7 @@ func set_anim(anim: String) -> void:
 		return
 	_anim = anim
 	rig.play(anim)
+	_blit_next_frame = 0   # [采集烘焙] 姿态变化（含 idle 唤醒）立即排期烘焙
 
 
 ## 主手武器镜像（HD-2D billboard）：实体的武器挂在 2D 骨架手骨
@@ -386,11 +547,12 @@ func set_anim(anim: String) -> void:
 ## 镐/斧/剑因此在街上"空手"。把同一武器场景挂进本 SubViewport 骨架的
 ## 同名骨，GripPoint 对齐口径与 WeaponMount._mount_one 一致（握点落手骨原点）。
 ##
-## 描边豁免（武器不属于剪影描边范围）：描边 pass 作用于 CanvasGroup 的组缓冲，
-## 组内**任何**像素都会被外轮廓白线包一圈，细武器（弓片/矛杆两三像素宽）会被
-## 白线吞成"白武器"。武器因此挂 viewport 根（描边组之外），经
-## RemoteTransform2D 跟手骨变换：RT2D 自身无绘制不产像素，武器不吃描边，
-## 但缩放/旋转/挥动仍逐帧跟手（含 rig 缩放，比例与 2D 挂骨一致）。
+## 描边豁免（创始人 2026-09-15：武器不应该有描边；2026-09-17 升格**全游戏
+## 口径**：任何场合武器都不应有描边，2D 骨架/批渲染路径经查本就无武器描边）：
+## 武器**不进 OutlineGroup**（全融合描边 pass 只包火柴人身体剪影）——挂
+## viewport 根下、经 RemoteTransform2D 跟手骨变换：RT2D 自身无绘制不产像素，
+## 武器在组外不吃描边，但缩放/旋转/挥动仍逐帧跟手（含 rig 缩放，比例与 2D
+## 挂骨一致）。
 var _weapon_instance: Node2D = null
 var _weapon_follow: RemoteTransform2D = null
 var _weapon_type_cached: int = -1
@@ -405,9 +567,9 @@ func set_weapon_type(wt: int) -> void:
 	if _weapon_follow != null and is_instance_valid(_weapon_follow):
 		_weapon_follow.queue_free()
 		_weapon_follow = null
-	if rig == null or wt == int(StickRigAPI.WeaponType.NONE):
+	if rig == null or wt == int(WeaponMount.WeaponType.NONE):
 		return
-	var scene_path: String = str(StickRigAPI.WEAPON_SCENE_PATHS.get(wt, ""))
+	var scene_path: String = str(WeaponMount.WEAPON_SCENE_PATHS.get(wt, ""))
 	if scene_path.is_empty():
 		return
 	var bone: Node2D = rig.get_node_or_null(
@@ -422,8 +584,11 @@ func set_weapon_type(wt: int) -> void:
 	var spr := instance.get_node_or_null("Sprite") as Sprite2D
 	if grip != null and spr != null:
 		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
-	# 挂杆取 viewport 本身：rig 的父链已整体收进描边 CanvasGroup
-	# （FusedOutlineGroup），挂 rig.get_parent() 会落进组内吃白描边
+	# 挂杆（viewport 根，CanvasGroup 描边组之外）：武器根持 GripPoint 补偿局部
+	# 变换，RT2D 把手骨全局变换推给挂杆——武器完全复现"挂骨"位姿。挂载点必须
+	# 取 viewport 本身：rig 的父链 OutlineGroup 已整体收进 CanvasGroup（描边
+	# pass 作用于组缓冲），武器挂进去会吃白色外轮廓——细武器（矛杆/剑刃两三
+	# 像素宽）会被描边吞成"白武器"（创始人 2026-09-15：武器不应该有描边）。
 	var stick_root: Node = viewport
 	stick_root.add_child(instance)
 	_weapon_instance = instance
@@ -431,12 +596,6 @@ func set_weapon_type(wt: int) -> void:
 	bone.add_child(follow)
 	follow.remote_path = instance.get_path()
 	_weapon_follow = follow
-
-
-## 当前武器镜像实例（null=未挂载）：公共只读取口，外部（测试/调试）经此拿
-## billboard 武器，不摸 _weapon_instance 私有字段。
-func get_weapon_instance() -> Node2D:
-	return _weapon_instance
 
 
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。

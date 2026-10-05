@@ -14,16 +14,17 @@ const BAR_HEIGHT: float = 24.0
 const LABEL_WIDTH: float = 48.0
 ## 缩放滑块量程：**显示百分比域，整 10 档**（创始人 2026-09-16"缩放的最大
 ## 最小范围变成整10"）——70%~260%、步进 10%，20 档；user_zoom = 显示% ×
-## ZOOM_BASE / 100（70%→0.525 / 260%→1.95，均在 CameraRig 夹制 [0.5, 2.0]
+## ZOOM_BASE / 100（70%→0.7 / 260%→2.6，均在 CameraRig 夹制 [0.6667, 2.6667]
 ## 内；100% 默认档恰在刻度上）。滚轮缩放仍走 CameraRig 步进，句柄按最近
 ## 整 10 刻度吸附，标签读相机真实值。
 ## ui_global 禁止反向依赖 world 模块，CameraRig.ZOOM_* 不取，夹制由其自身保证。
 const DISPLAY_MIN: float = 70.0
 const DISPLAY_MAX: float = 260.0
 const DISPLAY_STEP: float = 10.0
-## 显示基准档：user_zoom=0.75（HD-2D 构图契约默认档，CameraRig 同值镜像）
-## 显示为 100%（创始人 2026-09-15：缩放条 75% 的数字映射为 100%）。
-const ZOOM_BASE: float = 0.75
+## 显示基准档：user_zoom=1.0（HD-2D 构图契约默认档，CameraRig 同值镜像）
+## 显示为 100%（创始人 2026-09-15：默认档的数字映射为 100%；24px 换轨后
+## 基准档由旧轨 0.75 折入世界常量、归一为 1.0）。
+const ZOOM_BASE: float = 1.0
 
 var _zoom: ZoomSlider = null
 var _camera_rig: Node = null

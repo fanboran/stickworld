@@ -28,6 +28,8 @@ shader_type spatial;
 
 render_mode blend_mix, cull_disabled, depth_draw_always, unshaded;
 
+// mip 过滤：char_tex 是采集烘焙出的 ImageTexture，自带真实 mip 链（视口 RT
+// 天生无 mip，直采时代这里声明 mipmap 是谎言——现在是烘焙路线的必要项）
 uniform sampler2D char_tex : source_color, filter_linear_mipmap, repeat_disable;
 // 场景光近似（day = 1,1,1；night = 冷蓝压暗）
 uniform vec3 tint : source_color = vec3(1.0);

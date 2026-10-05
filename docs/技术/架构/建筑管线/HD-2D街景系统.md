@@ -86,6 +86,9 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ### 2.5 全融合描边（stickman_outline.gd + 双 shader）
 
 创始人定稿口径：**白描边只包整体剪影外轮廓，内部零描边**（肘/膝/臂身交界都不出线，肢体靠剪影读形）。
+**武器全场景无描边（创始人 2026-09-17 全游戏口径）**：武器不属于剪影描边范围——billboard
+镜像武器挂 viewport 根（CanvasGroup 描边组之外，细武器会被外轮廓白线吞成"白武器"）；
+2D 骨架武器为普通 Sprite 无 stroke 层；crowd 批渲染不渲染武器。三条路径均无武器描边。
 
 机制（ID Buffer + 邻接表，最早版即此设计）：
 1. OutlineGroup 整棵收进 CanvasGroup（**子树同搬**，rig→IK marker 相对路径不变）；
@@ -97,6 +100,29 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 包一圈——细武器（弓片/矛杆两三像素宽）会被白线吞成"白武器"。billboard 镜像武器因此
 挂 SubViewport 根（`FusedOutlineGroup` 之外，经 RemoteTransform2D 跟手骨）；
 2D 骨架武器是普通 Sprite 无 stroke 层；crowd 批渲染不画武器。
+
+**角色 SubViewport 禁开 msaa_2d**：描边材质经 `hint_screen_texture` 读回组缓冲，
+msaa_2d 开着时读到未 resolve 的多重采样数据（逐通道错采样）——色散直接烘焙进
+角色贴图。视口保持 MSAA_DISABLED，边缘平滑由 px_scale 超采样承担。
+
+**HD-2D post 通道运行期关所在视口的 msaa_2d（hd2d_world 进树时改、_exit_tree 恢复）**：
+post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工程级 msaa_2d
+开着时同样逐通道错采样——全屏 RGB 色散，草地噪点/血条镶边即此（细白线处才肉眼
+可见）。HD-2D 场景内 3D 抗锯齿走 msaa_3d 不受影响；纯 2D 场景不经 hd2d_world，
+工程级 msaa_2d=2（2D 路径抗锯齿生命线，测试金丝雀锚定）保持不动。
+
+**角色贴图烘焙路线（char_sprite_3d `_blit_capture`；2026-09-30 创始人验收指正
+"角色满身 RGB 色散 + 缩小后满身锯齿"的最终方案）**：排查实证（贴图回读/2D 直显
+均干净、16 轮参数探针全无法消除）——本引擎组合下 **spatial 管线采样画布 RT 会
+在细亮线两侧产生逐通道错位的红青镶边**（自定义 shader 与 Sprite3D 同病，换
+格式/尺寸/过滤/MSAA 全无效，属引擎/驱动层缺陷，工程侧不可修）。绕行：billboard
+不直采视口 RT，按节拍把视口内容回读落成**带真实 mip 链的 ImageTexture** 喂给
+char_billboard（ImageTexture 路径=建筑卡同款，实测干净；真实 mip 链同时治好
+"ViewportTexture 无 mip、缩小走样满身锯齿"）。回读是 sync 点，必须节流：FIFO
+公平队列 + 每帧预算（BLIT_BUDGET）摊帧，动画中单位按 BLIT_FPS 节拍刷新，idle
+姿态休眠、换动画立即唤醒（set_anim 排期）。注意：不要对 SubViewport 做运行期
+size 重分配——实测会永久破坏其 CanvasGroup 内容（回读全白），分档只切 alpha
+口径（QUALITY_TIERS：特写硬切定稿 / 缩小档软边）。
 
 **火柴人渲染踩坑备查**（本节知识曾完全无记载，复排查了两天）：
 - 骨架渲染是**全局两遍**（stickman_skeleton.gd）：所有描边层 z=-1 压底、所有填充层 z=0 置顶——肢体重叠处填充无缝融合，描边只在整体剪影外轮廓出线（"只有剪影描边"口径，与 ID Buffer 全融合同语义）。部件间相对遮挡靠填充层之间的树序（`reorder_render_order`）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
@@ -214,7 +240,7 @@ PostProcessLayer 的屏幕太阳 glow+streak+ghost，要它沿弧线到处移动
 缩放时钉死屏幕底沿。
 
 **战场分支契约（`set_cam_zoom` battlefield 分支）**：战场无背景楼群，纵向取景改钉
-**地平线 = 绿草地皮远端 `BF_HORIZON_Z`（z=0，即行走带后界 688px）**——地平线压
+**地平线 = 绿草地皮远端 `BF_HORIZON_Z`（z=0，即行走带后界 516px）**——地平线压
 **屏幕上 1/3 线**，地面占下 **2/3**、天空占上 1/3，任意缩放档成立
 （`P.z = BF_HORIZON_Z + h_v/(6·sinθ) + P.y/tanθ`）。实测锚：ground z=0 unproject =
 screen y 360（1080p）。街景分支（下 1/3 契约）只服务有楼群填充中上段的城内图。
@@ -381,7 +407,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
   虚方法（基类 false=2D 图脚部口径、内收 foot_offset），`Hd2dStreetMap` 覆写
   true；深端取值走 `_walk_deep_y()`（黄线以下就是可行走地面范围——创始人
   2026-09-15：两楼之间应能一路走到黄线，碰撞箱顶到黄线才停；+2px 仅防与
-  bg1 卡共面闪烁，非玩法余量）。战场图覆写 `_walk_deep_y` 维持旧带 688（战斗
+  bg1 卡共面闪烁，非玩法余量）。战场图覆写 `_walk_deep_y` 维持旧带 516（战斗
   阵型按旧域调的）。城墙碰撞带随 `DEEP_WALK_Y` 拉通全深（防台后区穿墙），
   出口触发器纵深跨整个可行走域。建筑 footprint 是真正的深端障碍。
 
@@ -450,7 +476,7 @@ offset/limits 变化时手搓漂、变换不会）。
   装配进 UIRoot top_center 槽）**：滑块量程=**显示百分比域，整 10 档**——
   70%~260%、步进 10%（20 档刻度，SketchHSlider 自绘）；显示基准 `ZOOM_BASE
   = 1.0` → **100%**（默认档恰在刻度上）。拖动 = `set_user_zoom(显示% ×
-  ZOOM_BASE / 100)`（70%→0.525、260%→1.95，均落在 CameraRig 夹制区间内）；
+  ZOOM_BASE / 100)`（70%→0.7、260%→2.6，均落在 CameraRig 夹制区间内）；
   滚轮缩放后 `_process` 每帧 `sync_from_camera` 把句柄吸附最近整 10 刻度、
   标签读相机真实值。ui_global 不反向依赖 world——`CameraRig.ZOOM_*` 不取，
   夹制由 CameraRig 自身保证。

@@ -33,6 +33,11 @@ var _action_progress_indicator: Node2D = null
 ## 举盾姿态（盾姿态分层，计划 5）：true 时 walk/idle 换持盾变体、attack 走持盾池。
 ## 由 WeaponMount.set_blocking 经实体 on_blocking_changed 驱动。
 var _blocking: bool = false
+## 弓手持瞄保持姿态（瞄准表现窗）：true 时 walk 换持弓保持变体（walk_bow_hold，
+## 上身拉满 + 下肢走步）。由 WeaponMount 瞄准窗开/关（_mark_bow_aim_started /
+## _end_bow_aim_visual / begin_player_draw）驱动，与举盾姿态同一消费通道
+## （get_stance_anims 镜像观测口 + 2D 侧 set_state_anim 换装）。
+var _bow_aim_active: bool = false
 
 
 func setup(entity: Node2D) -> void:
@@ -106,6 +111,11 @@ func play(anim_name: String) -> void:
 	# 盾姿态分层（计划 5）：举盾时 walk/idle 换持盾变体（block_walk/block_crouch）
 	if _blocking and not _entity._carrying and (anim_name == "walk" or anim_name == "idle"):
 		_apply_stance_anim(anim_name)
+	# 弓手持瞄保持（瞄准表现窗）：walk 换拉弓保持变体（walk_bow_hold，上身拉满
+	# + 下肢走步）——机制同举盾 stance 换装（walk state 资源替换，state 不增）。
+	# 每次进 walk 都重放一次换装（防武器重挂/收盾恢复把 walk state 洗回基础走姿）
+	elif _bow_aim_active and not _blocking and not _entity._carrying and anim_name == "walk":
+		_apply_bow_aim_anim()
 	_entity._current_anim = anim_name
 	if rig == null:
 		return
@@ -147,6 +157,55 @@ func _apply_stance_anim(kind: String) -> void:
 		elif kind == "idle":
 			# 9r：收盾恢复站姿从兵种站姿池重挑（与 play() 进待机的挑选逻辑一致）
 			rig.set_state_anim("idle", _pick_idle_variant())
+
+
+## 弓手持瞄保持开/关（瞄准表现窗；WeaponMount 驱动）：walk state 动画资源
+## 换装为持弓保持变体（StickmanAnims.walk_hold_for_weapon），关窗恢复武器基础
+## 走姿（walk_for_weapon，弓 = walk_bow）。2D 侧正播 walk 时立即重换资源；
+## billboard 镜像侧经 get_stance_anims 观测口随帧生效（名字解析单一真相源在
+## StickmanAnims 映射，镜像层不摸 L1 之外的表）。举盾/搬运/动作锁定时让位，
+## 收盾/解锁后经 play() 的持瞄钩子自然回正。
+func set_bow_aim_stance(on: bool) -> void:
+	if on == _bow_aim_active:
+		return
+	_bow_aim_active = on
+	var rig: Node2D = _entity.rig if _entity != null else null
+	if rig == null or not rig.has_method("set_state_anim"):
+		return
+	if _blocking or _entity._action_locked or _entity._carrying:
+		return
+	if on:
+		_apply_bow_aim_anim()
+	else:
+		rig.set_state_anim("walk", Anims.walk_for_weapon(_weapon_type()))
+
+
+## walk state 换装为持瞄保持变体（无变体的武器保持基础走姿，空名不换）
+func _apply_bow_aim_anim() -> void:
+	var rig: Node2D = _entity.rig
+	var hold: String = Anims.walk_hold_for_weapon(_weapon_type())
+	if rig == null or not rig.has_method("set_state_anim") or hold.is_empty():
+		return
+	rig.set_state_anim("walk", hold)
+
+
+## 当前生效姿态动画观测口（billboard 镜像消费）：2D 侧换装在 _apply_stance_anim
+## （依赖 rig，billboard 图 rig==null 不生效，持盾变体此前因此整体不可见）。
+## HD-2D 镜像 feed 经本口拿当前应生效的 walk/idle 动画名，交
+## char_sprite_3d.set_stance_anims 自行换装——名字解析单一真相源仍在本类
+## （档案键 block_walk_anim/block_idle_anim），镜像层不摸行为档案（L1 不依赖 L2）。
+## 空名 = 无持盾变体/未举盾，镜像侧恢复武器默认动画。
+func get_stance_anims() -> Dictionary:
+	var prof: Dictionary = ScriptBehaviorProfiles.get_profile(_weapon_type())
+	if _blocking:
+		return {
+			"walk": str(prof.get("block_walk_anim", "")),
+			"idle": str(prof.get("block_idle_anim", "")),
+		}
+	# 弓手持瞄保持：walk 换拉满保持变体（idle 无保持语义，留空 = 武器默认站姿）
+	if _bow_aim_active:
+		return {"walk": Anims.walk_hold_for_weapon(_weapon_type()), "idle": ""}
+	return {"walk": "", "idle": ""}
 
 
 ## 挑选站姿变体（9r 站姿池直译）：档案 stand_pool 非空时随机抽取（如矛士

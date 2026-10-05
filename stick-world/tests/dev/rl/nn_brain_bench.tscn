@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/dev/rl/nn_brain_bench.gd" id="1_nnbench"]
+
+[node name="NNBrainBench" type="Node"]
+script = ExtResource("1_nnbench")

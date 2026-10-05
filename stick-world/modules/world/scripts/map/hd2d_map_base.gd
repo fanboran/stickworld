@@ -309,8 +309,21 @@ func _sync_character_render() -> void:
 		# 武器/工具镜像：2D 骨架已隐藏，武器须挂进 billboard 内部骨架
 		# （职业识别走武器——工具不渲染 = 村民"没有职业"的观感）
 		var mount: Variant = body.get("weapon_mount")
-		if mount != null and is_instance_valid(mount) and ch.has_method("set_weapon_type"):
-			ch.set_weapon_type(int(mount.get("weapon_type")))
+		if mount != null and is_instance_valid(mount):
+			if ch.has_method("set_weapon_type"):
+				ch.set_weapon_type(int(mount.get("weapon_type")))
+			# 盾镜像（HD-2D 铁律：数据与状态留 2D 侧，渲染走镜像）：实体侧逻辑盾
+			# 只服务格挡判定（隐藏实例），视觉由镜像按同一规则挂进 billboard 骨架
+			if ch.has_method("set_shield_visible") and mount.has_method("shield_visual_enabled"):
+				ch.set_shield_visible(mount.shield_visual_enabled())
+		# 盾姿态镜像（盾姿态分层，计划 5）：2D 侧换装依赖 rig（billboard 图为 null
+		# 不生效），经 VisualController 观测口拿当前生效 walk/idle 动画名，镜像层
+		# 自行换装（举盾行军 block_walk / 举盾待命 block_crouch 在 billboard 可见）
+		var visual: Variant = body.get("_visual")
+		if visual != null and is_instance_valid(visual) \
+				and visual.has_method("get_stance_anims") and ch.has_method("set_stance_anims"):
+			var stance: Dictionary = visual.get_stance_anims()
+			ch.set_stance_anims(str(stance.get("walk", "")), str(stance.get("idle", "")))
 		# 血条随骨架进 billboard：2D 血条切数据模式（停画、状态机照跑——
 		# 在战/掉血/悬浮/LOD 语义全留在实体侧），快照喂 billboard 内镜像。
 		# 2D 画布坐标与 3D 投影对不上，2D 直画会飘；数据模式 = 同一实现两处渲染

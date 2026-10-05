@@ -1,7 +1,8 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：9i+ 溃逃保真五项增强（P6 · 6.3）。
+## 单元测试：9i+ 避战保真五项增强（P6 · 6.3；裁决【删溃逃、立避战】后键名沿用、
+## 语义改避战——"溃逃"退役，本文件名保留防断 run_all 收录）。
 ## 覆盖：未开闸开关默认关（零回归闸门）/ 已开闸开关默认开（GK-1 rout_strafe / GK-2
 ## rout_reengage+test_engage）/ 数值默认值 / 可覆盖开启 / TeamAi 姿态查询接口。
 ## 不进场景树，确定性（纯档案 + 接口存在性验证）。
@@ -103,9 +104,9 @@ func _test_reengage_morale_bound() -> void:
 
 
 func _test_override_on() -> void:
-	# 验证 CLASS_PROFILES 覆盖机制：STAFF 有 kite_range=0.0 覆盖
+	# 验证档案覆盖机制：STAFF 保距经 .tres staff 行开闸（kite_range 480，法师保距）
 	var staff: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.STAFF)
-	_runner.assert_approx(float(staff.get("kite_range", -1.0)), 0.0, 0.001, "STAFF kite_range=0.0 覆盖")
+	_runner.assert_approx(float(staff.get("kite_range", -1.0)), 480.0, 0.001, "STAFF kite_range=480 .tres staff 行开闸")
 	# 9i+ 开关可通过档案覆盖开启（模拟 battle_sim 扫参）
 	# 直接修改缓存中的档案（battle_sim 扫参先例）
 	var sword: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)

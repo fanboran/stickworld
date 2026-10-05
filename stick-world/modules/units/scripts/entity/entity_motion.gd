@@ -5,6 +5,7 @@ extends RefCounted
 ## - 地形/持盾移速倍率查询（_terrain_speed_mult / _blocking_speed_mult）
 ## - 加速/减速与移动动画公式（_handle_acceleration / _handle_deceleration）
 ## - AI 驱动移动与群体分离（_handle_ai_input / _apply_separation / _apply_static_separation）
+## - 群体让路（9k，RTS 式：友军挡路给横向绕行分量，_sim_ally_yield / _ally_yield_lateral）
 ## - 统一移动处理（_apply_movement：方向 → 朝向/加速/奔跑 → velocity，sim 分支逐行保留）
 ##
 ## 速度/朝向/AI 意图状态字段（_current_speed/_is_running/_facing/_ai_move_dir/
@@ -13,6 +14,9 @@ extends RefCounted
 
 ## 实体回引（构造注入；Node 不参与引用计数，无循环持有）
 var _entity: Node = null
+## 让路绕行缓存（9k，sim 链）：与 AI 决策同拍重算、帧间持有——免逐帧邻居查询
+## 分配，且偏航方向帧间稳定不抖；移动意图归零即清（重开会重算）
+var _yield_cache: Vector2 = Vector2.ZERO
 
 
 func _init(entity: Node) -> void:
@@ -33,10 +37,24 @@ const IDLE_THRESHOLD: float = 5.0
 ## 半径 < 编队间距）唯一维护在 formation 模块 formation_spacing.gd——历史上本处
 ## 与实体壳/批模拟各持一份副本，换轨漏改导致分离力对抗槽位、阵型挤散
 const SEPARATION_RADIUS: float = preload("res://modules/formation/api.gd").SEPARATION_RADIUS
+## 椭圆分离双轴（创始人 2026-09-30 观感裁决：billboard 竖长卡纵深重叠，纵向
+## 半径加大；单一真相源 formation_spacing，消费方判定已全部改椭圆口径）
+const _FormationAPI := preload("res://modules/formation/api.gd")
+const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X
+const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
+## 椭圆外接圆扫描半径（=max 两轴）：邻域查询用圆盒不漏人，逐对判定再走椭圆
+const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
+## 聚拢转向混入系数（班内一次性归队方向向量的混入权重；待实测校准）
+const COHESION_STEER_FORCE: float = 0.8
 ## 分离推力系数（叠加到 AI 移动方向）
 const SEPARATION_FORCE: float = 1.6
 ## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）
 const MAX_SEPARATION_CORRECTION: float = 3.0
+## 让路触发门槛：友军相对移动意图方向的前向点积 ≥ 此值才算"挡在去路上"（9k）。
+## 身旁/身后的友军走常规分离不算挡路；收拢末段友军偏出锥面，绕行权重随点积衰减归零
+const YIELD_AHEAD_DOT: float = 0.35
+## 让路横向绕行强度上限（叠加进移动方向的垂直分量权重；0.9 ≈ 最大偏航约 42°）
+const YIELD_LATERAL_FORCE: float = 0.9
 
 
 ## 获取当前脚下地形的移动速度倍率（土路=1.0，非土路=0.8）。
@@ -125,24 +143,60 @@ func _handle_deceleration(delta: float) -> void:
 # ─────────────────────────────── AI 输入处理 ────────────────────────────────
 
 ## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
-## 移动方向叠加群体分离（防叠人/1字长蛇，行业 soft-body separation 简化版）。
+## 移动方向叠加群体分离（防叠人/1字长蛇，行业 soft-body separation 简化版）
+## 与友军让路绕行（9k）。意图归零时清让路缓存（接近槽位/到位后绕行分量归零）。
 func _handle_ai_input(delta: float) -> void:
 	var dir: Vector2 = _entity._ai_move_dir
 	if dir != Vector2.ZERO:
 		dir = _apply_separation(dir)
+	elif _yield_cache != Vector2.ZERO:
+		_yield_cache = Vector2.ZERO
+	dir = _apply_cohesion(dir)
 	_apply_movement(delta, dir, _entity._ai_running, false)
+
+
+## 椭圆分离归一距离（1.0=椭圆边界，<1 过近）：横向/纵深双轴口径——
+## 与旧圆形 (1-dist/r) 权重语义同构，直接替换比较基准
+func _sep_ellipse_d(offset: Vector2) -> float:
+	var ex: float = offset.x / SEPARATION_RADIUS_X
+	var ey: float = offset.y / SEPARATION_RADIUS_Y
+	return sqrt(ex * ex + ey * ey)
+
+
+## 班内一次性归队（SWL 滞回+节流直译；内核 formation/squad_cohesion——
+## JOIN/SETTLE 滞回进/出判定、0.4s 触发节流、接战/避战战斗优先全在内核门控）。
+## 非归队态内核返回 ZERO（零施力：不打扰任务执行——站桩不拉、行军不扰、
+## 接战不吸）；归队态返回指向锚点的方向向量，此处归一混入移动意图
+## （掉队站桩单位由此获得一次归队移动，落定后回原任务）。
+func _apply_cohesion(dir: Vector2) -> Vector2:
+	var host: Node = _FormationAPI.get_active_host()
+	if host == null or not is_instance_valid(host):
+		return dir
+	var steer: Vector2 = host.get_unit_cohesion_steer(_entity)
+	if steer == Vector2.ZERO:
+		return dir
+	return (dir + steer.normalized() * COHESION_STEER_FORCE).normalized()
 
 
 ## 群体分离：扫描附近过近的单位（地图空间网格邻域查询），
 ## 距离越近推力越强，叠加到移动方向（RTS 单位移动标准做法，参考
 ## StickmanEntity 的 soft-body separation：位置推开 + 速度修正）。
+## 9k 群体让路：友军挡在移动意图方向上时叠加横向绕行分量（_ally_yield_lateral），
+## 纵队蛇形穿过友军密集区，而不是顶着分离力与人群对顶。
 func _apply_separation(dir: Vector2) -> Vector2:
+	var dir_n := dir.normalized()
 	# sim 模式：走 sim 网格快照的内联推力查询（无逐邻居 Node 遍历）
 	if _entity._sim_active():
-		var push_sim: Vector2 = _entity._sim.separation_push(_entity._sim_sid, SEPARATION_RADIUS)
-		if push_sim == Vector2.ZERO:
-			return dir
-		return (dir + push_sim * SEPARATION_FORCE).normalized()
+		var result := dir
+		var push_sim: Vector2 = _entity._sim.separation_push_ellipse(_entity._sim_sid)
+		if push_sim != Vector2.ZERO:
+			result = (result + push_sim * SEPARATION_FORCE).normalized()
+		# 让路扫描与 AI 决策同拍（相位错峰，免逐帧邻居查询分配）；帧间持有缓存向量
+		if _entity._ai_tick_counter % _entity._ai_rate_div == _entity._ai_phase % _entity._ai_rate_div:
+			_yield_cache = _sim_ally_yield(dir_n)
+		if _yield_cache != Vector2.ZERO:
+			result = (result + _yield_cache).normalized()
+		return result
 	var map_ref: Node2D = _entity._map_ref
 	if map_ref == null or not is_instance_valid(map_ref) or not _entity._map_has_query:
 		return dir
@@ -150,7 +204,9 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	if _entity._sep_frame_counter % _entity._sep_rate_div != 0:
 		return dir
 	var push := Vector2.ZERO
-	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_RADIUS):
+	var yield_side: float = 0.0
+	var yield_mag: float = 0.0
+	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS):
 		if e == _entity or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -159,13 +215,73 @@ func _apply_separation(dir: Vector2) -> Vector2:
 			continue
 		var offset: Vector2 = _entity.global_position - e.global_position
 		var dist: float = offset.length()
-		if dist >= SEPARATION_RADIUS or dist <= 0.001:
+		var ed: float = _sep_ellipse_d(offset)
+		if ed >= 1.0 or dist <= 0.001:
 			continue
-		# 越近推力越大（1 - dist/radius 线性权重）
-		push += offset.normalized() * (1.0 - dist / SEPARATION_RADIUS)
-	if push == Vector2.ZERO:
+		# 越近推力越大（椭圆归一距离的 1-ed 线性权重）
+		push += offset.normalized() * (1.0 - ed)
+		# 9k 让路：仅友军计入"挡路"（同阵营 + 前向锥面内；权重随椭圆距离×前向点积衰减）
+		if "faction_id" in e and e.faction_id == _entity.faction_id:
+			var ahead: float = -offset.normalized().dot(dir_n)
+			if ahead > YIELD_AHEAD_DOT:
+				var w: float = (1.0 - ed) * ahead
+				yield_mag += w
+				# cross(意图方向, 挡路者相对位)：判挡路者偏意图向哪一侧（Godot 2D y 向下）
+				yield_side += signf(dir_n.x * -offset.y - dir_n.y * -offset.x) * w
+	if push == Vector2.ZERO and yield_mag <= 0.0:
 		return dir
-	return (dir + push * SEPARATION_FORCE).normalized()
+	var result := dir
+	if push != Vector2.ZERO:
+		result = (result + push * SEPARATION_FORCE).normalized()
+	if yield_mag > 0.0:
+		result = (result + _ally_yield_lateral(dir_n, yield_side, yield_mag)).normalized()
+	return result
+
+
+## sim 链让路扫描（9k）：BattleSim 批数据直读（query_neighbor_ids/get_pos/get_faction，
+## 与 separation_push/set_intent 同一注入引用的既有公共面），免 Node 遍历。
+## 返回横向绕行分量（无友军挡路 = 零向量）。
+func _sim_ally_yield(dir_n: Vector2) -> Vector2:
+	var sim = _entity._sim
+	var my_pos: Vector2 = sim.get_pos(_entity._sim_sid)
+	var my_faction: int = _entity.faction_id
+	var side: float = 0.0
+	var mag: float = 0.0
+	for oid in sim.query_neighbor_ids(my_pos, SEPARATION_SCAN_RADIUS):
+		if sim.get_faction(oid) != my_faction:
+			continue
+		var to: Vector2 = sim.get_pos(oid) - my_pos
+		var dist: float = to.length()
+		var ed: float = _sep_ellipse_d(to)
+		if dist <= 0.001 or ed >= 1.0:
+			continue
+		var ahead: float = to.dot(dir_n) / dist
+		if ahead <= YIELD_AHEAD_DOT:
+			continue
+		var w: float = (1.0 - ed) * ahead
+		mag += w
+		side += signf(dir_n.x * to.y - dir_n.y * to.x) * w
+	if mag <= 0.0:
+		return Vector2.ZERO
+	return _ally_yield_lateral(dir_n, side, mag)
+
+
+## 由挡路累计（强度 mag / 左右偏向 side）解出横向绕行分量（9k）。
+## 不变式红线（formation_spacing.gd"分离力对抗槽位"教训）：本分量只在
+## "有移动意图 + 挡路者是友军 + 友军在意图方向锥面内"时产生（调用方保证）；
+## 方向取意图向的垂直向——与目标方向点乘恒 0，不减速不顶牛；权重随
+## "距离 × 前向点积"衰减，友军偏到身侧即消失，到位后意图归零整体消失；
+## 静止列阵单位无意图不进本路径，队形不会被推散。
+## 绕行侧按挡路权重投票（挡路者多在垂直向哪侧就往反侧绕）；对称僵局
+## （side≈0）按实例奇偶固定拆半——一半向左一半向右自然分流。
+func _ally_yield_lateral(dir_n: Vector2, side: float, mag: float) -> Vector2:
+	var s: float = signf(side)
+	if s == 0.0:
+		s = 1.0 if _entity.get_instance_id() % 2 == 0 else -1.0
+	var perp := Vector2(-dir_n.y, dir_n.x)  # cross(dir,to)>0 的挡路者在此侧，往反侧绕
+	if s > 0.0:
+		perp = -perp
+	return perp * (minf(mag, 1.0) * YIELD_LATERAL_FORCE)
 
 
 ## 静态分离（soft-body 位置修正）：对过近邻居直接推位置（重叠量各半，双向）。
@@ -180,7 +296,7 @@ func _apply_static_separation() -> void:
 		return
 	var total_push := Vector2.ZERO
 	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
-	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_RADIUS + 8.0):
+	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS + 8.0):
 		if e == _entity or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -189,14 +305,16 @@ func _apply_static_separation() -> void:
 			continue
 		var offset: Vector2 = _entity.global_position - e.global_position
 		var dist: float = offset.length()
-		if dist >= SEPARATION_RADIUS:
+		var ed: float = _sep_ellipse_d(offset)
+		if ed >= 1.0:
 			continue
 		if dist <= 0.001:
 			# 完全重叠：退化为固定方向（向上），否则无法计算推开方向
 			offset = Vector2.UP
-			dist = 0.001
-		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）
-		total_push += offset.normalized() * ((SEPARATION_RADIUS - dist) * 0.5)
+			ed = 0.0
+		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）；
+		# 深度按椭圆归一折算（纵深轴为名义尺度）
+		total_push += offset.normalized() * ((1.0 - ed) * SEPARATION_RADIUS_Y * 0.5)
 	if total_push == Vector2.ZERO:
 		return
 	if total_push.length() > MAX_SEPARATION_CORRECTION:

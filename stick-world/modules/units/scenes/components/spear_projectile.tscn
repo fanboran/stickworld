@@ -7,8 +7,11 @@
 [ext_resource type="Script" path="res://modules/units/scripts/weapons/arrow_projectile.gd" id="1_script"]
 [ext_resource type="Texture2D" path="res://modules/stick_rig/assets/textures/weapons/spear.png" id="2_tex"]
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_spear"]
-size = Vector2(60, 4)
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_spear"]
+; 碰撞形状仅编辑器占位：运行期由 arrow_projectile.gd _setup_collision_shape
+; 按脚本常量重建（竖直胶囊，与箭矢同口径的纵深换算容差）
+radius = 25.5
+height = 116.4
 
 [node name="SpearProjectile" type="Area2D"]
 collision_layer = 8
@@ -21,4 +24,4 @@ scale = Vector2(0.3, 0.3)
 texture = ExtResource("2_tex")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("RectangleShape2D_spear")
+shape = SubResource("CapsuleShape2D_spear")

@@ -25,13 +25,12 @@ func _ready() -> void:
 	_runner.add_test("开关默认关：候选条件满足也不撤退（走 attack）", _test_mod_off_zero_regression)
 	_runner.add_test("因果性：chance=1 但战况健康不撤退", _test_candidate_causality)
 	_runner.add_test("掷骰边界：chance=0 永不撤 / chance=1 候选必撤", _test_dice_boundary)
-	_runner.add_test("双档：战线崩坏→withdraw 回锚点 / 个人恶化→fallback 后撤", _test_dual_tier)
+	_runner.add_test("候选因子：战线崩坏/个人恶化 → 避战统一出口（fallback）", _test_dual_tier)
 	_runner.add_test("掷骰节流：评估周期内只掷一次", _test_throttle)
-	_runner.add_test("强制溃逃链优先：绕过开关与节流", _test_forced_chain_priority)
 	_runner.add_test("种子确定性：同种子同决策序列", _test_seed_determinism)
 	_runner.add_test("withdraw 档行为：朝锚点行军、抵达收束、士气恢复", _test_withdraw_behavior)
 	_runner.add_test("withdraw 降级：锚点不可用回退 fallback / evacuate 优先", _test_withdraw_degrade)
-	_runner.add_test("fallback 收敛：贴边无路可退 → 脱离战场登记 departed", _test_fallback_jam_departs)
+	_runner.add_test("fallback 收敛：贴边无路可退 → 收束交还决策（不走边缘）", _test_fallback_jam_finishes)
 	_runner.add_test("W1 get_retreat_mod_state：观测快照（enabled/因子/掷骰/节流余量）", _test_w1_state_getter)
 	_runner.run()
 	print(_runner.summary())
@@ -138,17 +137,19 @@ func _test_dice_boundary() -> void:
 
 
 func _test_dual_tier() -> void:
-	# 战线崩坏：判定半径内友军全部溃逃/阵亡（比例 1.0 ≥ 0.51）→ withdraw 撤退回锚点
+	# 裁决【删溃逃、立避战】：C6 出口统一避战（_travel_disengage：夹具无 get_cover
+	# → fallback 短距后撤；withdraw 档保留为命令路径，C6 不再下发）
+	# 战线崩坏：判定半径内友军全部避战/阵亡（比例 1.0 ≥ 0.51）→ 候选成立
 	var ctxw := _make_ctx({"retreat_mod_chance": 1.0})
 	ctxw.health.hp_ratio = 0.9  # 个人战况健康，只崩战线
 	ctxw.health.morale_ratio = 0.9
-	ctxw.add_ally(Vector2(800, 300), true, false)   # 溃逃友军
+	ctxw.add_ally(Vector2(800, 300), true, false)   # 避战友军
 	ctxw.add_ally(Vector2(1000, 280), false, true)  # 阵亡友军
 	ctxw.ai._try_combat()
-	_runner.assert_equal(ctxw.ai.get_current_behavior(), "retreat", "战线崩坏触发撤退")
+	_runner.assert_equal(ctxw.ai.get_current_behavior(), "retreat", "战线崩坏触发避战")
 	var rw: BehaviorRetreat = ctxw.ai.get_state_machine()._current_behavior
-	_runner.assert_true(rw._withdraw, "战线崩坏 → withdraw 档")
-	_runner.assert_true(rw.get_retreat_dir().x < 0.0, "方向朝己方锚点（x=260 < 实体 900）")
+	_runner.assert_false(rw._withdraw, "战线崩坏 → 统一 fallback 出口（withdraw 只剩命令路径）")
+	_runner.assert_true(rw.get_retreat_dir().x < 0.0, "方向远离最近敌（敌在 +x，fallback 朝 -x）")
 	ctxw.teardown()
 	# 孤军（判定半径内无友军）：崩坏比例 0，不构成战线信号 → 个人恶化走 fallback
 	var ctxf := _make_ctx({"retreat_mod_chance": 1.0})
@@ -208,26 +209,6 @@ func _test_throttle() -> void:
 	ctx.ai._try_combat()
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "周期过后再掷再撤")
 	ctx.teardown()
-
-
-func _test_forced_chain_priority() -> void:
-	# is_routed 强制溃逃：调制关也撤；调制开且节流窗未到也撤（绕过掷骰）；
-	# 强制链 params 不带 retreat_mode（BehaviorRetreat 缺省 fallback 语义）
-	var ctx := _make_ctx({"retreat_mod_enabled": true, "retreat_mod_chance": 1.0})
-	ctx.health.routed = true
-	ctx.ai._retreat_mod_next_roll_at = 100.0  # 节流窗未到
-	ctx.battle.duration = 0.0
-	ctx.ai._try_combat()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "强制链绕过节流撤退")
-	var rb: BehaviorRetreat = ctx.ai.get_state_machine()._current_behavior
-	_runner.assert_false(rb._withdraw, "强制链缺省 fallback 语义")
-	ctx.teardown()
-	# 调制关 + is_routed：既有强制链原样（零回归）
-	var ctx2 := _make_ctx({}, false)
-	ctx2.health.routed = true
-	ctx2.ai._try_combat()
-	_runner.assert_equal(ctx2.ai.get_current_behavior(), "retreat", "调制关强制链仍生效")
-	ctx2.teardown()
 
 
 func _test_seed_determinism() -> void:
@@ -308,11 +289,11 @@ func _test_withdraw_degrade() -> void:
 	battle_plain.free()
 
 
-## fallback 收敛加固（结束判定 P2）：撤退方向被可走带夹死（敌人正上/正下 → 位移被
-## y 夹紧清零）且已贴边时，不再"原地打转收束回决策"（那会下一轮再接敌、再溃逃，
-## 常规战斗无 duration_limit 兜底 → 永不收敛），而是朝己方出生侧边缘脱离战场并
-## 登记 departed（BattleInstance._count_alive 计非存活）。
-func _test_fallback_jam_departs() -> void:
+## fallback 收敛（裁决【删溃逃、立避战】）：撤退方向被可走带夹死（敌人正上/正下 →
+## 位移被 y 夹紧清零）→ 收束交还决策（还击/重新掷骰由决策层治理）——避战**绝不
+## 走向地图边缘**，旧"朝己方边缘离场登记 departed"的收敛兜底随溃逃退役删除
+## （战斗收敛 = TeamAi 指挥层撤离 + duration_limit）。
+func _test_fallback_jam_finishes() -> void:
 	var entity := _FakeEntity.new()
 	entity.map_left = 0.0
 	entity.map_right = 1800.0
@@ -337,9 +318,9 @@ func _test_fallback_jam_departs() -> void:
 	_runner.assert_true(retreat.get_retreat_dir().y < 0.0, "撤退方向朝上（垂直，出可走带）")
 	retreat.update(0.1)
 	_runner.assert_true(retreat.is_finished(), "贴边夹死一次即收束（不原地打转）")
-	_runner.assert_true(entity.departed, "按战役离场登记 departed（战斗可收敛）")
-	_runner.assert_true(entity.stopped, "离场后停步（溃兵视觉保留）")
-	# 零回归：带内夹死（未贴边）不误判离场——仍是脱战重整，不回战斗前先离场
+	_runner.assert_false(entity.departed, "避战绝不登记 departed（不走地图边缘）")
+	_runner.assert_true(entity.stopped, "收束时停步")
+	# 带内夹死（未贴边）同样收束交还决策——不再"朝边缘脱离"
 	var entity2 := _FakeEntity.new()
 	entity2.map_left = 0.0
 	entity2.map_right = 1800.0
@@ -359,15 +340,8 @@ func _test_fallback_jam_departs() -> void:
 	retreat2.entity = entity2
 	retreat2.enter("", {"battle": battle2})
 	retreat2.update(0.1)
-	_runner.assert_false(entity2.departed, "带内夹死不登记 departed（仍是脱战重整）")
-	_runner.assert_false(retreat2.is_finished(), "带内夹死继续朝边缘脱离（未收束）")
-	_runner.assert_gt(entity2.global_position.x, 900.0, "朝己方出生侧边缘移动")
-	# 有界兜底：无论走得到走不到边缘，行为都必须收束（禁止无限挂起）
-	var steps2 := 0
-	while not retreat2.is_finished() and steps2 < 400:
-		retreat2.update(0.1)
-		steps2 += 1
-	_runner.assert_true(retreat2.is_finished(), "脱战重整在有界步数内收束（%d 步）" % steps2)
+	_runner.assert_false(entity2.departed, "带内夹死不登记 departed（避战不走边缘）")
+	_runner.assert_true(retreat2.is_finished(), "夹死即收束交还决策（有界，不挂起）")
 	retreat.free()
 	retreat2.free()
 	health.free()
@@ -460,11 +434,11 @@ class _Ctx:
 			var p2: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 			p2[k] = profile_overrides[k]
 
-	func add_ally(pos: Vector2, routed: bool, dead: bool) -> void:
+	func add_ally(pos: Vector2, disengaging: bool, dead: bool) -> void:
 		var ally := _FakeAlly.new()
 		ally.faction = 1
 		ally.global_position = pos
-		ally.routed = routed
+		ally.disengaging = disengaging
 		ally.dead = dead
 		battle.allies.append(ally)
 
@@ -523,7 +497,6 @@ class _FakeEntity extends CharacterBody2D:
 class _FakeHealth extends Node:
 	var hp_ratio: float = 1.0
 	var morale_ratio: float = 1.0
-	var routed: bool = false
 	var recovered_total: float = 0.0
 
 	func get_hp_ratio() -> float:
@@ -532,16 +505,13 @@ class _FakeHealth extends Node:
 	func get_morale_ratio() -> float:
 		return morale_ratio
 
-	func is_routed() -> bool:
-		return routed
-
 	func restore_morale(amount: float) -> void:
 		recovered_total += amount
 
 
 class _FakeAlly extends Node2D:
 	var faction: int = 1
-	var routed: bool = false
+	var disengaging: bool = false
 	var dead: bool = false
 
 	func is_dead() -> bool:
@@ -553,8 +523,11 @@ class _FakeAlly extends Node2D:
 	func get_health() -> Node:
 		return self
 
-	func is_routed() -> bool:
-		return routed
+	func get_ai_controller() -> Node:
+		return self  # 避战行为态查询面（is_disengaging 直接挂自身，简化夹具）
+
+	func is_disengaging() -> bool:
+		return disengaging
 
 
 class _FakeBattle extends Node:

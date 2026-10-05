@@ -81,14 +81,15 @@ const BASELINE: Dictionary = {
 	"block_move_mult": 1.0,                 ## 持盾移速倍率（举盾行军更沉稳）
 	"attack_pool": [],                      ## 攻击动画池（9f：非举盾攻击随机抽取；空=只用武器基础攻击动画。动画名对齐 stickman_anims）
 	"stand_pool": [],                       ## 站姿变体池（9r：进待机随机抽取；空=武器默认站姿。动画名对齐 stickman_anims）
-	# ── 9i+ 溃逃保真五项增强（P6 批次 7c：能力开关，默认全关 = 零回归）──
+	# ── 9i+ 避战保真五项增强（P6 批次 7c：能力开关，默认全关 = 零回归；
+	#    裁决【删溃逃、立避战】后键名沿用、语义改为避战——"溃逃"退役）──
 	# 消费函数与降级路径：开关关 / 姿态查询不可用（未注册阵营 AI）→ 既有行为。
 	# 全部只改走位/决策取向，不触碰选目标、出手、伤害管线。数值均待实测校准。
-	"rout_reengage_enabled": false,         ## 逃开后再战（ai_controller._try_combat 脱战低士气分支）
+	"rout_reengage_enabled": false,         ## 避战解除后再战（ai_controller._try_combat 脱战低士气分支）
 	"re_engage_morale": 0.15,               ## 再战所需士气比例（0~1；需 < 低士气阈值 0.25 才在脱战分支内触发，待实测校准）
-	"retreat_keep_block": false,            ## 保持招架（behavior_retreat：持盾兵种撤退全程举盾）
-	"rout_strafe_enabled": false,           ## 垂直位游走（behavior_retreat：撤退叠加垂直横向分量）
-	"rout_strafe_strength": 0.35,           ## 横向分量强度（0~1 叠加到撤退方向）
+	"retreat_keep_block": false,            ## 保持招架（behavior_retreat：持盾兵种避战全程举盾）
+	"rout_strafe_enabled": false,           ## 避战横向游走（behavior_retreat：脱离叠加垂直横向分量，不走直线）
+	"rout_strafe_strength": 0.35,           ## 横向分量强度（0~1 叠加到脱离方向）
 	"test_engage_enabled": false,           ## 前排怯战试探接敌（ai_controller：脱战低士气脉冲接敌）
 	"test_pulse_on": 2.0,                   ## 试探接敌脉冲开启时长（s）
 	"test_pulse_off": 3.0,                  ## 试探接敌脉冲关闭时长（s）
@@ -109,15 +110,30 @@ const BASELINE: Dictionary = {
 	# ── A9 · R1/R3/R5 个体 AI 参数面板（RWR interval/burst 族直译，AI集大成；
 	#    全部语义推断初值待实测校准；消费点见 ai_controller/behavior_attack/behavior_heal）──
 	"decision_interval": 0.3,               ## R1 主决策间隔（s，RWR choose_enemy_time 族；镜像旧 DECISION_INTERVAL 常量 = 零回归）
-	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time_variance 同构——逐拍重掷去同步；0 = 旧固定节拍）
+	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time 1.2±0.6 方差比 0.5 同构——逐拍重掷去同步；0 = 旧固定节拍。
+	                                        ##   开闸走 .tres 生效层（RWR 方差比 0.5×节拍 0.3 → 保守可取 0.1，待实测校准）：
+	                                        ##   代码基线被 test_ai_spawn_jitter「缺载兜底 0.3」与 test_ai_param_panel
+	                                        ##   「baseline.decision_variance = 0（零回归）」双锁锁定，基线翻非零必挂测试）
+	"target_switch_ratio": 0.6,             ## 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：集火目标距离 < 当前目标距离 × 此值才换靶；<=0 = 关滞回回旧"始终换"语义（待实测校准）
+	# ── 9h 卡死看门狗（消费点 ai_controller._watchdog_tick，O(1) 无扫描；
+	#    默认开——对齐"有移动意图却钉死不动"的观察场主诉，关 = 既有无看门狗语义）──
+	"stuck_watchdog_enabled": true,         ## 卡死看门狗总开关
+	"stuck_watchdog_window": 2.0,           ## 判定窗口（s，任务书区间 1.5~2.5 取中，待实测校准）
+	"stuck_watchdog_intent_speed": 10.0,    ## 移动意图阈值（px/s：实体速度低于此视为合法静止，不计窗）
+	"stuck_watchdog_min_drift": 12.0,       ## 窗口内最小净位移（px，低于此判卡死；与分离抖动同量级，待实测校准）
+	"stuck_watchdog_log": true,             ## 触发调试日志开关（每触发一条，低频）
+	# ── 9u 开火放行（消费点 behavior_attack；持瞄对拍/y 门槛永久禁射修正）──
+	"y_aim_grace": 1.5,                     ## |Δy| 连续超容忍超过此时长必放行开火（s；抛物线弹道解算吸收 y 差，放行防"弓手站桩不放箭"，待实测校准）
 	"burst_shots": 0,                       ## R3 连射点数（发：连发此数后插 wait 停顿再射，RWR burst_time 族；0=关零回归；远程与近战均按档案开关）
 	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
 	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
 	"heal_buzz_distance": 60.0,             ## R5 防扎堆治疗（px：候选伤员被登记"治疗中"未过期时跳过，RWR consider_someone_already_healing_wounded_distance 10m 同构；0=关）
-	# ── A3 · C6 概率调制撤退（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
-	#    数值为语义映射初值待实测校准；总开关默认关 = 既有强制溃逃链原样 = 零回归。
-	#    消费点：ai_controller._try_combat 中间带掷骰 + behavior_retreat 双档语义）──
-	"retreat_mod_enabled": false,           ## 自主撤退/后撤概率调制总开关（false=只走既有强制溃逃链）
+	# ── A3 · C6 概率调制避战（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
+	#    数值为语义映射初值待实测校准；总开关默认关 = 零回归。
+	#    消费点：ai_controller._try_combat 掷骰 + behavior_retreat fallback 档 +
+	#    _travel_disengage 统一出口（优先 seek_cover；裁决【删溃逃、立避战】后
+	#    C6 不再下发 withdraw——该档保留为命令路径语义：可下令的 RETREAT/TeamAi ROUT））──
+	"retreat_mod_enabled": false,           ## 自主避战概率调制总开关（劣势/被压时概率脱离接火）
 	"retreat_mod_hp_ratio": 0.49,           ## 血量低于此比例 → 撤退候选因子一（CoH retreat_capacity_percentage 0.49）
 	"retreat_mod_morale_ratio": 0.35,       ## 士气低于此比例 → 撤退候选因子二（本作士气维度映射，CoH 无直接对应；须 ≥ 强制链低士气阈值 0.25，只补中间带）
 	"retreat_mod_ally_break_ratio": 0.51,   ## 附近友军溃逃/阵亡比例 ≥ 此值 → 撤退候选因子三（CoH retreat_suppressed_percentage 0.51 同构）
@@ -138,7 +154,7 @@ const BASELINE: Dictionary = {
 	"suppression_morale_per_tick": 2.0,     ## 压制期士气流失（点/0.5s tick，语义推断待实测校准；经 lose_morale 只损士气不伤血，与伤害士气损失叠加可推向溃逃）
 	"suppression_immune": false,            ## 豁免规则（兵种级：英雄/巨人类置 true；已溃逃/已死亡/玩家附身恒豁免，不占此键）
 	"suppression_near_miss_enabled": false,  ## 箭矢近失压制开关（false=只有命中才压制=既有语义；受 suppression_enabled 总门约束，由箭矢侧消费）
-	"suppression_near_miss_radius": 80.0,   ## 近失判定半径（px，箭矢非命中终态落点到单位身体中心的距离；须 > 命中半径 34，语义推断待实测校准）
+	"suppression_near_miss_radius": 45.0,   ## 近失判定半径（px，箭矢非命中终态落点到单位身体中心的距离；须 > 命中半径 34）。80px 在 45px 密度战线上等于箭雨钉住全场（停战螺旋主弹药，诊断 B1）→ 收窄到 45px 贴住命中判定；待实测校准
 	# ── W2 · WorldBox 决策冷却错峰（M4/Top2；消费点 ai_controller 决策时钟族。
 	#    冷却记"世界时刻"不记剩余秒数；成批出生预置假偏移，读档按存档相位回填
 	#    （ai_timing），两者共同防群体齐套。全部默认关 = 首次到期 = 装配后
@@ -192,7 +208,10 @@ const CLASS_PROFILES: Dictionary = {
 		"stand_pool": ["idle_spear_v2", "idle_spear_v3"],
 	},
 	BOW: {
-		"kite_range": 500.0,
+		# 保距撤离距离必须 < attack_range(300)：否则敌未进射程就先进入后撤态，
+		# 持瞄路径永不可达（实测 50 万采样 aim=0，弓手光跑不射）——留 20px
+		# "边打边撤"窄带，【待实测校准】
+		"kite_range": 280.0,
 		"aggressive_push_prob": 0.0,
 		"hesitate_prob": 0.02,
 		"leash_mult": 5.0,
@@ -200,7 +219,10 @@ const CLASS_PROFILES: Dictionary = {
 		"aim_hold": Vector2(0.25, 0.9),
 		"aim_scatter": 0.035,
 		"prefer_large": 1.0,
-		"push_apart": 56.0,
+		# 站桩输出间距（SWL PushApartTolerance）：须低于实战友邻间距（分离压缩后
+		# ~50px），否则站桩期每 0.4s 必推、永不收敛 = 原地高频振动（诊断 A2）；
+		# 44 < 50 → 只在真挤到 44 内才推。待实测校准
+		"push_apart": 44.0,
 		# y 对齐（SWL ArcherAi.IsCloseEnoughToAdjustYTowardsTarget override：收紧调 y 门槛
 		# + adjustYEarly 提前对齐；9p 首个消费者：|Δy| 超容忍先走位不出手。阈值待实测校准）
 		"y_align_early": true,
@@ -214,7 +236,9 @@ const CLASS_PROFILES: Dictionary = {
 		"hesitate_prob": 0.08,
 	},
 	STAFF: {
-		"kite_range": 0.0,
+		"kite_range": 0.0,              ## 保持 0：被 test_rout_enhance「STAFF kite_range=0.0 覆盖」锁定；
+										##   开保距走此行覆盖值（施法射程 600 已无死锁，锚点取弓手 500 档下浮
+										##   480 待实测校准）——与 decision_variance 同走协调批
 		"hesitate_prob": 0.06,
 		"hesitate_time": Vector2(0.5, 1.1),
 		"leash_mult": 5.0,

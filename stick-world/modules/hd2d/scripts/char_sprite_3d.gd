@@ -24,8 +24,9 @@ extends Node3D
 const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
-const StickmanOutline := preload("res://modules/units/scripts/rig/stickman_outline.gd")
-const HEALTH_BAR_SCRIPT := preload("res://modules/units/scripts/entity/health_bar_indicator.gd")
+const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
+const HEALTH_BAR_SCRIPT := preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
+const ANIMS := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 
 const SV_W := 144            # SubViewport 宽（px）
 const SV_H := 176            # SubViewport 高（px）
@@ -183,12 +184,15 @@ var _my_shadow: MeshInstance3D = null
 var _flip := false
 var _anim := "idle"
 var _depth := 1.0
+## 纯后台计算豁免（headless）：真视觉链不装配，见 build() 内注释
+var _pure_sim := false
 
 
 ## 建 SubViewport + 火柴人。parent 必须是已在树内的节点。
 func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	_host = parent
 	_tilt_deg = tilt_deg
+	_pure_sim = DisplayServer.get_name() == "headless"
 	# 强制走**矢量部件路径**（旧路径），不走 MultiMesh 批渲染。
 	# 实测：批渲染路径在本 SubViewport 里渲染出的是"未解算的横躺姿态"，
 	# 用 probe_rig3.gd（--char 对照）可复现。
@@ -200,6 +204,16 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	_sv_size = Vector2i(int(SV_W * px_scale), int(SV_H * px_scale))
 	_foot_row = FOOT_ROW * px_scale
 	var rig_scale := RIG_SCALE * px_scale
+	# 纯后台计算豁免（自对弈 Benchmark / 无头指标台）：SubViewport/CanvasGroup/
+	# 材质/接地影整条视觉链不装配——sim 开启时 sim 是命中时序权威，rig 只是
+	# 动画位置的兜底读源（实体链回退时仍可能轮询），故裸留一份不进视口。
+	if _pure_sim:
+		var inst0: Node = load(RIG_SCENE).instantiate()
+		inst0.set_script(null)
+		add_child(inst0)
+		rig = inst0.get_node("OutlineGroup/StickmanRig") as Node2D
+		rig.scale = Vector2(rig_scale, rig_scale)
+		return
 	viewport = SubViewport.new()
 	viewport.name = "CharSubViewport"
 	viewport.size = _sv_size
@@ -284,22 +298,23 @@ func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 	add_child(mi)
 	quads.append(mi)
 
-	# 接地影：贴地水平 quad，随角色 x/z 走
-	var sq := QuadMesh.new()
-	sq.size = Vector2(4.2, 2.6) * SIZE_K
-	var sh := MeshInstance3D.new()
-	sh.mesh = sq
-	sh.material_override = _shadow_mat
-	sh.position = Vector3(x, 0.09, z)
-	sh.rotation = Vector3(deg_to_rad(-90), 0, 0)
-	sh.name = "Shadow_%d" % quads.size()
-	sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(sh)
-	if _shadow == null:
-		_shadow = sh
+	# 接地影：贴地水平 quad，随角色 x/z 走（纯后台计算豁免：不建）
+	if not _pure_sim:
+		var sq := QuadMesh.new()
+		sq.size = Vector2(4.2, 2.6) * SIZE_K
+		var sh := MeshInstance3D.new()
+		sh.mesh = sq
+		sh.material_override = _shadow_mat
+		sh.position = Vector3(x, 0.09, z)
+		sh.rotation = Vector3(deg_to_rad(-90), 0, 0)
+		sh.name = "Shadow_%d" % quads.size()
+		sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sh)
+		if _shadow == null:
+			_shadow = sh
+		_my_shadow = sh
 	# 游戏接入：记录本实例的 quad/影引用（set_world_pos 每帧驱动）
 	_quad = mi
-	_my_shadow = sh
 	return mi
 
 
@@ -334,6 +349,8 @@ static func _get_bracket_tex() -> ImageTexture:
 var _bracket_quad: MeshInstance3D = null
 
 func set_bracket_visible(v: bool) -> void:
+	if _pure_sim:
+		return
 	if v and _bracket_quad == null and not quads.is_empty():
 		var q := QuadMesh.new()
 		q.size = Vector2(3.4, 2.2)
@@ -367,7 +384,7 @@ var _wp_ratio: float = -1.0           # -1 = 隐藏
 var _wp_anchor := Vector3.ZERO        # 本帧 (x, bar_y, z)，set_world_pos 写入
 
 func _ensure_work_bar() -> void:
-	if _wp_bg != null or _quad == null:
+	if _pure_sim or _wp_bg != null or _quad == null:
 		return
 	_wp_bg = _make_flat_quad(WP_SIZE, Color(0.08, 0.08, 0.10, 0.72), 6)
 	_wp_fill = _make_flat_quad(WP_SIZE, Color(0.95, 0.72, 0.18, 0.95), 7)
@@ -558,9 +575,19 @@ var _weapon_follow: RemoteTransform2D = null
 var _weapon_type_cached: int = -1
 
 func set_weapon_type(wt: int) -> void:
-	if wt == _weapon_type_cached:
+	if _pure_sim or wt == _weapon_type_cached:
 		return
 	_weapon_type_cached = wt
+	# 武器走姿分层（2026-09-30 实机验收：持弓行走要有脚步+持弓姿态）：
+	# walk state 资源换装（盾姿态分层同款机制）。镜像层读实体的 _current_anim
+	# 字符串驱动（"walk" 无武器语义），换装挂在本处随武器类型落位——BOW →
+	# walk_bow（Archidon-Walk，下肢走步 + 上肢保持持弓），其余恢复通用走姿。
+	# 实体侧 2D rig 的同款换装在 WeaponMount._reload_weapons（该图型下 rig 为 null）。
+	if rig != null and rig.has_method("set_state_anim"):
+		rig.set_state_anim("walk", ANIMS.walk_for_weapon(wt))
+		# 清姿态缓存：上面的换装覆盖了 walk state，下一拍 feed 的
+		# set_stance_anims 需重放举盾变体（缓存命中会跳过）
+		_stance_walk = ""
 	if _weapon_instance != null and is_instance_valid(_weapon_instance):
 		_weapon_instance.queue_free()
 		_weapon_instance = null
@@ -596,6 +623,84 @@ func set_weapon_type(wt: int) -> void:
 	bone.add_child(follow)
 	follow.remote_path = instance.get_path()
 	_weapon_follow = follow
+
+
+## 当前武器镜像实例（null=未挂载）：公共只读取口，外部（测试/调试）经此拿
+## billboard 武器，不摸 _weapon_instance 私有字段。
+func get_weapon_instance() -> Node2D:
+	return _weapon_instance
+
+
+## 副手盾镜像（HD-2D billboard）：实体侧逻辑盾（weapon_mount._shield，隐藏实例）
+## 只服务格挡判定、不进 billboard 视觉——镜像层按同一规则（WeaponMount.
+## shield_visual_enabled）把 weapon_shield.tscn 挂进本 SubViewport 骨架的
+## hand_outer/shield_hand 骨。挂载机制与主手武器同款：GripPoint 对齐握把，
+## 实例挂 viewport 根（描边 CanvasGroup 之外，盾面不吃白描边），
+## RemoteTransform2D 跟骨变换（缩放/旋转/摆臂逐帧跟随，比例与 2D 挂骨一致）。
+var _shield_instance: Node2D = null
+var _shield_follow: RemoteTransform2D = null
+var _shield_on: bool = false
+
+func set_shield_visible(on: bool) -> void:
+	if _pure_sim or on == _shield_on:
+		return
+	_shield_on = on
+	if _shield_instance != null and is_instance_valid(_shield_instance):
+		_shield_instance.queue_free()
+		_shield_instance = null
+	if _shield_follow != null and is_instance_valid(_shield_follow):
+		_shield_follow.queue_free()
+		_shield_follow = null
+	if not on or rig == null:
+		return
+	var bone: Node2D = rig.get_node_or_null(
+			"hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer/hand_outer/shield_hand") as Node2D
+	if bone == null:
+		return
+	var scene: PackedScene = load(StickRigAPI.WEAPON_SHIELD_PATH)
+	if scene == null:
+		return
+	var instance: Node2D = scene.instantiate()
+	var grip := instance.get_node_or_null("GripPoint") as Marker2D
+	var spr := instance.get_node_or_null("Sprite") as Sprite2D
+	if grip != null and spr != null:
+		instance.position = -(grip.position * spr.scale).rotated(spr.rotation)
+	# 挂 viewport 根（描边组之外），机制同主手武器（见 set_weapon_type 注）
+	viewport.add_child(instance)
+	_shield_instance = instance
+	var follow := RemoteTransform2D.new()
+	bone.add_child(follow)
+	follow.remote_path = instance.get_path()
+	_shield_follow = follow
+
+
+## 盾姿态换装镜像（盾姿态分层，计划 5）：walk/idle state 的动画资源替换，
+## 机制同 set_weapon_type 的 walk_bow 换装。动画名由镜像 feed 经
+## VisualController.get_stance_anims() 观测口取（名字解析单一真相源留在实体侧
+## 行为档案），空名 = 恢复该 state 的武器默认动画（walk 走武器走姿变体、
+## idle 走兵种站姿池抽取）。换装后若当前正播 walk/idle 立即重播生效
+## （feed 的 set_anim 变更检测对同名状态不再重发）；attack 等其它状态不打断
+## （命中帧对齐依赖动画进度，重播会把挥砍拉回起点）。
+var _stance_walk: String = ""
+var _stance_idle: String = ""
+
+func set_stance_anims(walk_anim: String, idle_anim: String) -> void:
+	if _pure_sim or (walk_anim == _stance_walk and idle_anim == _stance_idle):
+		return
+	_stance_walk = walk_anim
+	_stance_idle = idle_anim
+	if rig == null or not rig.has_method("set_state_anim"):
+		return
+	if walk_anim.is_empty():
+		rig.set_state_anim("walk", ANIMS.walk_for_weapon(_weapon_type_cached))
+	else:
+		rig.set_state_anim("walk", walk_anim)
+	if idle_anim.is_empty():
+		rig.set_state_anim("idle", ANIMS.pick_stand_variant_for(_weapon_type_cached))
+	else:
+		rig.set_state_anim("idle", idle_anim)
+	if _anim == "walk" or _anim == "idle":
+		rig.play(_anim)
 
 
 ## 显示/隐藏全部角色（含影）。用于 A/B 对照出图。

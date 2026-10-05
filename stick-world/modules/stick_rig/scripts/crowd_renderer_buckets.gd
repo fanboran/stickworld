@@ -425,6 +425,22 @@ static func write_bars(host) -> void:
 				host._bar_trail_fill.row(kf, left + fw * 0.5, cy, fw, hh,
 						_colc(st["color"], shown), fw, fw / bs < 6.0, hh)
 			host._bar_ring2.row(kbg, cx2, cy, bw, hh, _colc(HealthBarIndicator.COLOR_OUTLINE, shown), bw, plain, hh)
+		# 军衔方点（血条上侧横排居中；rank0 无标记）——与 _draw_rank_dots
+		# 同参数（4px 方块/2px 间距/y=-9），plain 槽直角网格 = 无 wobble 方块；
+		# 暗底垫层+白块各一行，随 shown 渐隐
+		var rank: int = clampi(int(st.get("rank", 0)), 0, 3)
+		if rank > 0:
+			var ds: float = HealthBarIndicator.RANK_DOT_SIZE * bs
+			var dg: float = HealthBarIndicator.RANK_DOT_GAP * bs
+			var dx: float = cx - (rank * ds + (rank - 1) * dg) * 0.5
+			var dy: float = cy + HealthBarIndicator.RANK_DOT_Y * bs
+			var db: float = ds + 2.0 * bs  # 暗底外扩 1px（局部）×缩放
+			for i in rank:
+				var dcx: float = dx + i * (ds + dg) + ds * 0.5
+				host._bar_trail_fill.row(BatchRig.WOBBLE_VARIANTS, dcx, dy, db, db,
+						_colc(HealthBarIndicator.COLOR_BG, shown), db, true, db)
+				host._bar_trail_fill.row(BatchRig.WOBBLE_VARIANTS, dcx, dy, ds, ds,
+						_colc(HealthBarIndicator.COLOR_RANK, shown), ds, true, ds)
 	host._bar_bg.end_tick()
 	host._bar_ring1.end_tick()
 	host._bar_trail_fill.end_tick()

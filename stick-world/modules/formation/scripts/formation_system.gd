@@ -13,9 +13,28 @@ extends Node
 ## 小队 = L1 MILITARY 组织节点（§8.3: "任命排长 = 创建 L1 组织节点"）。
 ## 本系统在组织模块之上封装小队级别的便捷 API，并维护 unit<->squad 双向映射。
 ##
+## 排聚合层（现实军衔体系重排，创始人裁决）：排 = 2~3 个班 + 排长 1 名（rank 2）。
+##   - 班是现役最低编制单元（8~12 人小班、硬顶 15），班长 rank 1——阵亡经组织侧
+##     补位（_run_succession → commander_assigned 回写）免费无缝轮转；
+##   - 排长是排级指挥链：**阵亡即缺口**——该排全部班失去集火号令与排长士气光环，
+##     到战斗结束无法补员。排是本系统战斗域本地聚合（不入组织树），组织侧继任
+##     只认班的指挥官——"屏蔽继任"由构造保证，无特判；
+##   - 连/战场层（2~4 排 + 连长或指挥官 rank 3）由指挥官批次接入，挂载点 =
+##     _platoons[].company_id 预留字段（排列表的归属结构）。
+##
+## 火力组层（班内指挥分组，RL v3 编制地基【提案/待定】）：组 = 班内成员子集 +
+## 组寻址 id，不占军衔不入组织树（组长 = 组内首员，无标记）；只作号令寻址粒度
+##（TacticalOrders.issue 对 ft_id 下令），不拆散班聚结（归队锚点仍是班长）；
+## 组随成员阵亡收缩、空组自动消亡；战斗域本地聚合（同排口径，不进跨图快照）。
+## API 面：create_fireteam / get_squad_fireteams / get_fireteam_units /
+## get_unit_fireteam / get_fireteam_squad / is_fireteam / get_fireteam_leader /
+## disband_fireteam。
+##
 ## 队伍级目标决策（反编译参考实装 D-B）：本系统每 SQUAD_DECISION_INTERVAL 秒为每个
-## 战斗小队选一个**共享攻击目标**（排长决策 → 队员执行），队员在攻击行为里优先用
+## 战斗小队选一个**共享攻击目标**（决策 → 队员执行），队员在攻击行为里优先用
 ## 队伍目标（集火），否则各自寻敌。参考遗产 TeamAi / 传奇单位组目标同步。
+## 决策权归属（军衔重排后）：排内班 = 排长（排长缺口 → 该排失去集火号令）；
+## 独立班（无排）= 班长，失效退化第一个存活队员（旧口径）。
 ##
 ## 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
 ## 直译）：小队可锚定跟随另一小队（set_squad_follow_squad），每 0.5s tick 把后队未接战
@@ -34,10 +53,19 @@ extends Node
 ##   squad_follow_director.gd   编队动态跟队（锚定落点维持/号令下发/锚定链防环）
 ##   squad_report_hooks.gd      信息上报挂点（§4.4 contact/casualty 上报 + 征用互斥）
 ##   squad_snapshot.gd          跨图快照/恢复 + BalanceConfig 装载收敛（load_overrides）
+##   squad_cohesion.gd          班内一次性归队状态机（SWL 滞回+节流；常量在 api.gd）
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 小队对应的组织层级（L1 = 最低层，排级）
 const SQUAD_TIER := 1
+## ── 军衔（现实军衔体系重排）：0 兵 / 1 班长 / 2 排长；3 连长（连层由指挥官批次接入）──
+const RANK_MEMBER: int = 0
+const RANK_SQUAD_LEADER: int = 1
+const RANK_PLATOON_LEADER: int = 2
+## 班编制规模口径（8~12 人小班，硬顶 15；超编仅告警不强拆——编制纪律由调用方保证）
+const SQUAD_SIZE_MIN: int = 8
+const SQUAD_SIZE_MAX: int = 12
+const SQUAD_SIZE_HARD_CAP: int = 15
 ## 默认预设（未指定时使用战斗班，保持旧行为兼容）
 const DEFAULT_PRESET_ID := "fp_combat_squad"
 ## 预设配置文件路径
@@ -57,8 +85,10 @@ var FOLLOW_DEFAULT_GAP: float = 150.0
 ## 误判为已落定，编队失守不再纠位（相位计划侧的同名容差另在 config/ai/
 ## squad_phase_plan.tres arrive_tolerance，口径见彼处）
 const FOLLOW_DEADZONE: float = FormationSpacing.FOLLOW_DEADZONE
-## 每列人数（SWL Formation.UNITS_PER_COLUMN 直译，11b）：同列单位沿垂直方向排开，
-## 多列沿行进方向反侧退 ROW_GAP。无 dump 数值真值，按三班 8~10 人取 3，待实测校准
+## 每列人数基准档（SWL Formation.UNITS_PER_COLUMN 直译，11b）：同列单位沿垂直方向
+## 排开，多列沿行进方向反侧退 ROW_GAP。8~12 人小班口径基准取 4（2~3 纵列）；
+## 各班现役列高按班人数 4~6 自适应（见 formation_geometry.squad_units_per_column，
+## 分配时落盘 squad["upc"]，取数走 _squad_upc）
 const UNITS_PER_COLUMN: int = FormationSpacing.UNITS_PER_COLUMN
 ## 列间距（px，SWL Formation.ROW_GAP 直译，11b；无 dump 真值，待实测校准）
 var ROW_GAP: float = FormationSpacing.ROW_GAP_DEFAULT
@@ -77,6 +107,7 @@ const ScriptSquadAuthorityMarket := preload("res://modules/formation/scripts/squ
 const ScriptSquadFollowDirector := preload("res://modules/formation/scripts/squad_follow_director.gd")
 const ScriptSquadReportHooks := preload("res://modules/formation/scripts/squad_report_hooks.gd")
 const ScriptSquadSnapshot := preload("res://modules/formation/scripts/squad_snapshot.gd")
+const ScriptSquadCohesion := preload("res://modules/formation/scripts/squad_cohesion.gd")
 
 ## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
 ## 搬运（HAUL）是全员基础能力，不受职责范围限制（见 is_work_allowed）；
@@ -94,6 +125,10 @@ const WorkType := {
 signal squad_created(squad_id: String, unit_ids: Array)
 ## 小队解散
 signal squad_disbanded(squad_id: String)
+## 排创建：platoon_id + 班 id 数组
+signal platoon_created(platoon_id: String, squad_ids: Array)
+## 排长阵亡（指挥链缺口）：该排集火号令与排长士气光环随之中断，战斗结束前不补员
+signal platoon_leader_lost(platoon_id: String)
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## OrganizationApi 引用（由 GameRoot 注入）
@@ -101,12 +136,29 @@ var _org_api: Node = null
 ## squad_id -> {"units": Array[Node], "leader": Node, "preset_id": String,
 ##              "work_types": Array[String], "role": String, "name": String,
 ##              "follow_squad_id": String, "follow_gap": float,
-##              "slots": Dictionary(iid -> Vector2i(col, row), 11b 编队槽位)}
+##              "slots": Dictionary(iid -> Vector2i(col, row), 11b 编队槽位),
+##              "upc": int（本班现役每列人数——随班人数按 4~6 自适应，几何分配时落盘）}
 var _squads: Dictionary = {}
 ## unit.get_instance_id() -> squad_id（快速反查）
 var _unit_to_squad: Dictionary = {}
 ## 小队名称自增计数
 var _squad_counter: int = 0
+## ── 排聚合层（现实军衔体系重排）──
+## platoon_id -> {"name": String, "squads": Array[String],
+##                "leader": Node（排长，rank 2）,
+##                "company_id": String（连层挂载点预留，指挥官批次接入）}
+var _platoons: Dictionary = {}
+## squad_id -> platoon_id（快速反查）
+var _squad_to_platoon: Dictionary = {}
+## 排 id 自增计数
+var _platoon_counter: int = 0
+## ── 火力组层（班内指挥分组，RL v3 编制地基【提案/待定】）──
+## ft_id -> {"squad_id": String, "units": Array[Node], "name": String}
+var _fireteams: Dictionary = {}
+## unit iid -> ft_id（快速反查）
+var _unit_to_fireteam: Dictionary = {}
+## 火力组 id 自增计数
+var _fireteam_counter: int = 0
 ## 编制预设：preset_id -> {"id", "name", "tag", "work_types", "default_role"}
 var _presets: Dictionary = {}
 ## 预设是否已加载
@@ -163,6 +215,8 @@ func _on_commander_assigned(org_id: String, unit_id: int) -> void:
 	if unit not in _squads[org_id]["units"]:
 		return
 	_squads[org_id]["leader"] = unit
+	# 补位即班长轮转（军衔重排）：接任者写 rank 1（免费无缝轮转的组织侧实现）
+	_recompute_unit_rank(unit)
 
 
 ## 从 config/formations/formation_presets.tres 加载编制预设（失败用内置默认兜底保证可用）。
@@ -214,6 +268,7 @@ func _process(_delta: float) -> void:
 				break
 			if u.has_method("is_dead") and u.is_dead():
 				_unit_to_squad.erase(u.get_instance_id())
+				_remove_unit_from_fireteam(u)  # 阵亡即离组（组随成员阵亡收缩）
 				units.remove_at(i)
 				changed = true
 				# 伤亡上报挂点（§4.4）：每次死亡评估一次存活比（跌破沿只报首次，档位门控归组织侧）
@@ -229,6 +284,9 @@ func _process(_delta: float) -> void:
 					# 同步解除指挥官
 					if _org_api != null and _org_api.has_method("remove_commander"):
 						_org_api.remove_commander(squad_id)
+				# 排长阵亡核对（军衔重排）：排长死亡 = 该排指挥链缺口（无补位无继任，
+				# 该排班集火清空、士气光环中断，到战斗结束）
+				_check_platoon_leader_death(u)
 				# 清除编队派生角色（单位仍有效时）
 				if u.has_method("set_role"):
 					u.set_role("")
@@ -251,11 +309,29 @@ func _process(_delta: float) -> void:
 	_tick_authority_switch(_delta)
 
 
-## 指挥官光环（行业最佳实践）：战斗小队排长存活时，队员持续恢复士气（指挥提振）。
+## 士气光环（军衔重排后口径）：排长存活 → 该排全部战斗班成员持续恢复士气（排长提振）；
+## 独立班（无排）保留旧口径——班长存活 → 本班成员恢复。排长缺口 = 光环中断。
 func _apply_leader_morale_aura(delta: float) -> void:
 	if _squads.is_empty():
 		return
-	for squad_id in _squads.keys():
+	# 排口径：排长 → 排内各战斗班全员（每排一遍，成员不重复计入）
+	for pid_v in _platoons.keys():
+		var pid := String(pid_v)
+		var leader: Node = _platoons[pid]["leader"]
+		if leader == null or not is_instance_valid(leader) \
+				or (leader.has_method("is_dead") and leader.is_dead()):
+			continue
+		for sid_v in _platoons[pid]["squads"]:
+			var sid := String(sid_v)
+			if not _squads.has(sid) or not is_combat_squad(sid):
+				continue
+			for u in _squads[sid]["units"]:
+				_apply_morale_restore(u, leader, delta)
+	# 独立班口径：班长 → 本班成员（排内班已由排长光环覆盖，不重复恢复）
+	for squad_id_v in _squads.keys():
+		var squad_id := String(squad_id_v)
+		if not get_platoon_of_squad(squad_id).is_empty():
+			continue
 		if not is_combat_squad(squad_id):
 			continue
 		var leader: Node = get_squad_leader(squad_id)
@@ -263,15 +339,20 @@ func _apply_leader_morale_aura(delta: float) -> void:
 				or (leader.has_method("is_dead") and leader.is_dead()):
 			continue
 		for u in _squads[squad_id]["units"]:
-			if u == leader or not is_instance_valid(u):
-				continue
-			if u.has_method("is_dead") and u.is_dead():
-				continue
-			if not u.has_method("get_health"):
-				continue
-			var health: Node = u.get_health()
-			if health != null and health.has_method("restore_morale"):
-				health.restore_morale(LEADER_MORALE_AURA * delta)
+			_apply_morale_restore(u, leader, delta)
+
+
+## 单位士气恢复（光环内核）：无健康组件/已死/施光环者本人跳过。
+func _apply_morale_restore(u: Node, leader: Node, delta: float) -> void:
+	if u == leader or not is_instance_valid(u):
+		return
+	if u.has_method("is_dead") and u.is_dead():
+		return
+	if not u.has_method("get_health"):
+		return
+	var health: Node = u.get_health()
+	if health != null and health.has_method("restore_morale"):
+		health.restore_morale(LEADER_MORALE_AURA * delta)
 
 
 # ─────────────────────────────── 核心 API ────────────────────────────────
@@ -297,6 +378,10 @@ func create_squad(units: Array, squad_name: String = "", preset_id: String = DEF
 	if valid_units.is_empty():
 		push_warning("[FormationSystem] 无有效单位，无法创建小队")
 		return ""
+	# 班编制口径（军衔重排）：8~12 人小班、硬顶 15——超编告警不强拆（纪律由调用方保证）
+	if valid_units.size() > SQUAD_SIZE_HARD_CAP:
+		push_warning("[FormationSystem] 班超编：%d 人 > 硬顶 %d（8~12 人小班口径）"
+				% [valid_units.size(), SQUAD_SIZE_HARD_CAP])
 	# 解析预设
 	var preset: Dictionary = _resolve_preset(preset_id)
 	# 已在其他小队的单位先移出
@@ -352,6 +437,9 @@ func disband_squad(squad_id: String) -> void:
 	if not _squads.has(squad_id):
 		return
 	var squad: Dictionary = _squads[squad_id]
+	# 火力组先散（组是班内子集，班亡组不存；成员映射逐组清）
+	for ft_id_v in get_squad_fireteams(squad_id):
+		disband_fireteam(String(ft_id_v))
 	# 清除单位映射与编队派生角色（2026-08 审计修复：disband 也要清 role，与 disband_all_squads 一致）
 	for u in squad["units"]:
 		if is_instance_valid(u):
@@ -361,6 +449,8 @@ func disband_squad(squad_id: String) -> void:
 	# 解散组织
 	if _org_api != null and _org_api.has_method("disband_organization"):
 		_org_api.disband_organization(squad_id)
+	# 排聚合层清理：班离排（排内班空则自动解散排）
+	_remove_squad_from_platoon(squad_id)
 	# 移除本地追踪
 	_squads.erase(squad_id)
 	_squad_targets.erase(squad_id)
@@ -381,9 +471,15 @@ func disband_all_squads() -> void:
 		squad_disbanded.emit(squad_id)
 	_squads.clear()
 	_unit_to_squad.clear()
+	# 排聚合层一并清空（排是战斗域本地聚合，跨图携带只走班快照）
+	_platoons.clear()
+	_squad_to_platoon.clear()
+	# 火力组层一并清空（同口径：班内指挥分组不跨图携带）
+	_fireteams.clear()
+	_unit_to_fireteam.clear()
 
 
-## 任命小队长（排长）。返回是否成功。
+## 任命小队长（班长，rank 1）。返回是否成功。
 func assign_leader(squad_id: String, leader: Node) -> bool:
 	if not _squads.has(squad_id):
 		push_warning("[FormationSystem] 小队不存在: %s" % squad_id)
@@ -397,7 +493,12 @@ func assign_leader(squad_id: String, leader: Node) -> bool:
 	# 设置组织指挥官
 	if _org_api != null and _org_api.has_method("assign_commander"):
 		_org_api.assign_commander(squad_id, str(leader.get_instance_id()))
+	# 军衔联动：换班长时旧班长削秩、新班长写 rank 1（按现任职务统一重算防错档）
+	var old: Node = _squads[squad_id]["leader"]
+	if old != null and is_instance_valid(old) and old != leader:
+		_recompute_unit_rank(old)
 	_squads[squad_id]["leader"] = leader
+	_recompute_unit_rank(leader)
 	if EventBus != null and EventBus.has_signal("commander_assigned"):
 		EventBus.commander_assigned.emit(squad_id, leader.get_instance_id())
 	return true
@@ -535,7 +636,7 @@ func get_squad_dest(squad_id: String, unit: Node, base_pos: Vector2, mode: Strin
 			facing = anch["facing"]
 		else:
 			facing = facing.normalized()
-		return _slot_world(slot, base_pos, facing)
+		return _slot_world(slot, base_pos, facing, squad_id)
 	if mode == "line":
 		# 垂直于移动方向横排展开：间距 SPREAD_SPACING，相对中心左右交替
 		var dir: Vector2 = (base_pos - unit.global_position).normalized() if base_pos != unit.global_position else Vector2.RIGHT
@@ -555,7 +656,9 @@ func _pick_squad_target(rep: Node, battle: Node) -> Node:
 	return ScriptTargetFinder.find_target(rep, { "battle": battle })
 
 
-## 队伍级目标决策（反编译参考实装 D-B）：每 SQUAD_DECISION_INTERVAL 秒为每个战斗小队选共享攻击目标（排长决策 → 队员执行）。
+## 队伍级目标决策（反编译参考实装 D-B）：每 SQUAD_DECISION_INTERVAL 秒为每个战斗小队选共享攻击目标。
+## 决策权（军衔重排后）：排内班 = 排长（排长缺口 = 该排失去集火号令，不退化）；
+## 独立班 = 班长，失效退化第一个存活队员（旧口径）。
 func _decide_squad_targets(delta: float) -> void:
 	if _squads.is_empty():
 		_squad_targets.clear()
@@ -568,15 +671,26 @@ func _decide_squad_targets(delta: float) -> void:
 		if not is_combat_squad(squad_id):
 			_squad_targets.erase(squad_id)
 			continue
-		var leader: Node = get_squad_leader(squad_id)
-		var rep: Node = leader
-		# 排长失效时退化到第一个存活队员
-		if rep == null or not is_instance_valid(rep) or (rep.has_method("is_dead") and rep.is_dead()):
-			rep = null
-			for u in _squads[squad_id]["units"]:
-				if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
-					rep = u
-					break
+		var rep: Node = null
+		var pid := get_platoon_of_squad(squad_id)
+		if not pid.is_empty() and _platoons.has(pid):
+			# 排内班：集火决策权归排长；排长缺口 = 指挥链断，失去集火号令
+			#（不退化到班长/队员——排级缺口语义，到战斗结束）
+			rep = _platoons[pid]["leader"]
+			if rep == null or not is_instance_valid(rep) \
+					or (rep.has_method("is_dead") and rep.is_dead()):
+				_squad_targets.erase(squad_id)
+				continue
+		else:
+			# 独立班：班长决策，失效时退化到第一个存活队员（旧口径不变）
+			rep = get_squad_leader(squad_id)
+			if rep == null or not is_instance_valid(rep) \
+					or (rep.has_method("is_dead") and rep.is_dead()):
+				rep = null
+				for u in _squads[squad_id]["units"]:
+					if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+						rep = u
+						break
 		if rep == null:
 			_squad_targets.erase(squad_id)
 			continue
@@ -637,6 +751,386 @@ func get_squad_size(squad_id: String) -> int:
 	return _squads[squad_id]["units"].size()
 
 
+# ─────────────────────────────── 排聚合层 ────────────────────────────────
+## 排 = 2~3 个班 + 排长 1 名（rank 2）。排是战斗域本地聚合（不入组织树）：
+## 组织侧继任/补位只认班（L1 org）的指挥官——排长阵亡天然无继任，指挥链缺口
+## 保持到战斗结束（"屏蔽继任"由构造保证）。连/战场层挂载点：platoon 的
+## company_id 字段（2~4 排归属哪个连，由指挥官批次接入）。
+
+## 创建排：把若干已存在班聚合为一个排。班须存在且未属于其他排。
+## 返回 platoon_id（失败返回 ""）。
+func create_platoon(squad_ids: Array, platoon_name: String = "") -> String:
+	var valid: Array = []
+	for sid_v in squad_ids:
+		var sid := String(sid_v)
+		if not _squads.has(sid):
+			push_warning("[FormationSystem] 创建排失败：班不存在 %s" % sid)
+			return ""
+		if _squad_to_platoon.has(sid):
+			push_warning("[FormationSystem] 创建排失败：班已属于其他排 %s" % sid)
+			return ""
+		valid.append(sid)
+	if valid.is_empty():
+		push_warning("[FormationSystem] 创建排失败：无有效班")
+		return ""
+	_platoon_counter += 1
+	var pid: String = "platoon_%d" % _platoon_counter
+	_platoons[pid] = {
+		"name": platoon_name if not platoon_name.is_empty() else pid,
+		"squads": valid,
+		"leader": null,
+		"company_id": "",  # 连层挂载点预留（指挥官批次接入）
+	}
+	for sid in valid:
+		_squad_to_platoon[sid] = pid
+	platoon_created.emit(pid, valid.duplicate())
+	return pid
+
+
+## 任命排长（rank 2）。排长须是排内某班的成员（随班行军、占编队槽位）。
+## 排长阵亡后本 API 仍可手动重任命（测试/剧情口），但系统侧永不自动补位。
+## 返回是否成功。
+func assign_platoon_leader(platoon_id: String, leader: Node) -> bool:
+	if not _platoons.has(platoon_id):
+		push_warning("[FormationSystem] 排不存在: %s" % platoon_id)
+		return false
+	if not is_instance_valid(leader):
+		return false
+	# 须为排内班的成员
+	var in_platoon := false
+	for sid_v in _platoons[platoon_id]["squads"]:
+		var sid := String(sid_v)
+		if _squads.has(sid) and leader in _squads[sid]["units"]:
+			in_platoon = true
+			break
+	if not in_platoon:
+		push_warning("[FormationSystem] 任命排长失败：单位不在该排任何班中")
+		return false
+	# 若在他排挂职先卸任（一人不领两排）
+	for pid_v in _platoons.keys():
+		if String(pid_v) != platoon_id and _platoons[pid_v].get("leader") == leader:
+			_platoons[pid_v]["leader"] = null
+	_platoons[platoon_id]["leader"] = leader
+	_recompute_unit_rank(leader)
+	return true
+
+
+## 排长查询（缺口时返回 null）。
+func get_platoon_leader(platoon_id: String) -> Node:
+	if not _platoons.has(platoon_id):
+		return null
+	return _platoons[platoon_id]["leader"]
+
+
+## 排内班 id 列表。
+func get_platoon_squads(platoon_id: String) -> Array:
+	if not _platoons.has(platoon_id):
+		return []
+	return (_platoons[platoon_id]["squads"] as Array).duplicate()
+
+
+## 班所属排 id（独立班返回 ""）。
+func get_platoon_of_squad(squad_id: String) -> String:
+	return String(_squad_to_platoon.get(squad_id, ""))
+
+
+## 单位所属排 id（未编队/独立班成员返回 ""）。
+func get_unit_platoon(unit: Node) -> String:
+	if unit == null or not is_instance_valid(unit):
+		return ""
+	return get_platoon_of_squad(get_unit_squad(unit))
+
+
+## 排内全部单位（各班成员拼合；士气光环等排级作用域用）。
+func get_platoon_units(platoon_id: String) -> Array:
+	if not _platoons.has(platoon_id):
+		return []
+	var out: Array = []
+	for sid_v in _platoons[platoon_id]["squads"]:
+		var sid := String(sid_v)
+		if _squads.has(sid):
+			out.append_array(_squads[sid]["units"])
+	return out
+
+
+func get_all_platoons() -> Array:
+	return _platoons.keys()
+
+
+func get_platoon_count() -> int:
+	return _platoons.size()
+
+
+## 解散排（班保留转独立，不随排散；排长卸任削秩）。
+func disband_platoon(platoon_id: String) -> void:
+	if not _platoons.has(platoon_id):
+		return
+	var leader: Node = _platoons[platoon_id].get("leader")
+	for sid_v in _platoons[platoon_id]["squads"]:
+		_squad_to_platoon.erase(String(sid_v))
+	_platoons.erase(platoon_id)
+	if leader != null and is_instance_valid(leader):
+		_recompute_unit_rank(leader)
+
+
+## 班指挥链是否完整（集火/光环决策口径）：独立班恒完整（班长口径自管）；
+## 排内班 = 排长存活。排长缺口 → false（该排失去集火号令）。
+func has_squad_command_chain(squad_id: String) -> bool:
+	var pid := get_platoon_of_squad(squad_id)
+	if pid.is_empty() or not _platoons.has(pid):
+		return true
+	var leader: Node = _platoons[pid]["leader"]
+	if leader == null or not is_instance_valid(leader):
+		return false
+	return not (leader.has_method("is_dead") and leader.is_dead())
+
+
+# ─────────────────────────────── 火力组（班内指挥分组）────────────────────────────────
+## 火力组 = 班内成员子集的指挥分组（RL 层级指挥训练 v3 §一编制的地基层：班长以
+## 火力组为单位细分命令——「一号攻 X、二号攻 Y」，火力组是最小指挥单元）。
+## 设计边界（v3 §一定案）：
+##   - 只是命令的粒度，不是组织树节点/编制实体——不动组织模块、不占军衔
+##    （组长 = 组内首员，无任何标记）；战斗中组随成员阵亡收缩，不重组不跳槽；
+##   - 不拆散班聚结：一次性归队锚点仍是班长（squad_cohesion 零改动），班内
+##     槽位/集火/士气全按班走——火力组只回答「号令发给谁」（TacticalOrders.issue
+##     对 ft_id 寻址分流，按班下令原语义不变）；
+##   - 战斗域本地聚合（同排 platoon 口径）：不入组织树、不进跨图快照，
+##     disband_all_squads 一并清空。
+
+## 创建火力组：把班内若干成员编为一组。units 须全部是该班在册存活成员（无效/
+## 阵亡者滤除，重复成员去重）；已在本班其他火力组的成员自动移入新组（班长重劈
+## 组常用）。返回 ft_id（失败返回 ""）。
+func create_fireteam(squad_id: String, units: Array, ft_name: String = "") -> String:
+	if not _squads.has(squad_id):
+		push_warning("[FormationSystem] 创建火力组失败：班不存在 %s" % squad_id)
+		return ""
+	var squad: Dictionary = _squads[squad_id]
+	var members: Array = []
+	for u in units:
+		if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
+			continue
+		if u not in squad["units"]:
+			push_warning("[FormationSystem] 创建火力组失败：单位不在该班 %s 中" % squad_id)
+			return ""
+		if u in members:
+			continue
+		members.append(u)
+	if members.is_empty():
+		push_warning("[FormationSystem] 创建火力组失败：无有效成员")
+		return ""
+	_fireteam_counter += 1
+	var ft_id: String = "fireteam_%d" % _fireteam_counter
+	_fireteams[ft_id] = {
+		"squad_id": squad_id,
+		"units": members,
+		"name": ft_name if not ft_name.is_empty() else ft_id,
+	}
+	for u in members:
+		# 从旧组移入新组（仅同班可能——异班单位通不过上面的成员校验）
+		var old := String(_unit_to_fireteam.get(u.get_instance_id(), ""))
+		if not old.is_empty() and _fireteams.has(old):
+			(_fireteams[old]["units"] as Array).erase(u)
+		_unit_to_fireteam[u.get_instance_id()] = ft_id
+	_purge_empty_fireteams(squad_id)
+	return ft_id
+
+
+## 班内火力组 id 列表（编组序）。
+func get_squad_fireteams(squad_id: String) -> Array:
+	var out: Array = []
+	for ft_id_v in _fireteams.keys():
+		var ft_id := String(ft_id_v)
+		if String(_fireteams[ft_id]["squad_id"]) == squad_id:
+			out.append(ft_id)
+	return out
+
+
+## 全场火力组数（调试/测试观测位；同 get_platoon_count 口径）。
+func get_fireteam_count() -> int:
+	return _fireteams.size()
+
+
+## 火力组成员（值拷贝；含阵亡者——死亡清理由 _process 逐出，口径同 get_squad_units）。
+func get_fireteam_units(ft_id: String) -> Array:
+	if not _fireteams.has(ft_id):
+		return []
+	return (_fireteams[ft_id]["units"] as Array).duplicate()
+
+
+## 单位所属火力组 id（未入组返回 ""）。
+func get_unit_fireteam(unit: Node) -> String:
+	if unit == null or not is_instance_valid(unit):
+		return ""
+	return String(_unit_to_fireteam.get(unit.get_instance_id(), ""))
+
+
+## 火力组父班 id（ft_id 无效返回 ""）。
+func get_fireteam_squad(ft_id: String) -> String:
+	if not _fireteams.has(ft_id):
+		return ""
+	return String(_fireteams[ft_id]["squad_id"])
+
+
+## id 是否为火力组（TacticalOrders 寻址分流用；班 id 返回 false）。
+func is_fireteam(id: String) -> bool:
+	return _fireteams.has(id)
+
+
+## 火力组组长（组内首员，无军衔无标记——纯语义寻址；首员阵亡/失效顺延下一位）。
+func get_fireteam_leader(ft_id: String) -> Node:
+	if not _fireteams.has(ft_id):
+		return null
+	for u in _fireteams[ft_id]["units"]:
+		if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+			return u
+	return null
+
+
+## 解散火力组（成员留班不散；组无存续价值时班长重劈用）。
+func disband_fireteam(ft_id: String) -> void:
+	if not _fireteams.has(ft_id):
+		return
+	for u in _fireteams[ft_id]["units"]:
+		if is_instance_valid(u):
+			_unit_to_fireteam.erase(u.get_instance_id())
+	_fireteams.erase(ft_id)
+
+
+## 清扫某班的空组（成员死绝/被移走的火力组自动消亡——组随成员阵亡收缩，
+## 空组无指挥粒度）。
+func _purge_empty_fireteams(squad_id: String) -> void:
+	for ft_id_v in _fireteams.keys().duplicate():
+		var ft_id := String(ft_id_v)
+		if String(_fireteams[ft_id]["squad_id"]) != squad_id:
+			continue
+		if (_fireteams[ft_id]["units"] as Array).is_empty():
+			disband_fireteam(ft_id)
+
+
+## 单位移出其所在火力组（离班/阵亡共用；空组随之消亡）。
+func _remove_unit_from_fireteam(unit: Node) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	var iid: int = unit.get_instance_id()
+	var ft_id := String(_unit_to_fireteam.get(iid, ""))
+	if ft_id.is_empty():
+		return
+	_unit_to_fireteam.erase(iid)
+	if not _fireteams.has(ft_id):
+		return
+	(_fireteams[ft_id]["units"] as Array).erase(unit)
+	_purge_empty_fireteams(String(_fireteams[ft_id]["squad_id"]))
+
+
+func _enter_tree() -> void:
+	FormationAPI.set_active_host(self)
+
+
+func _exit_tree() -> void:
+	if FormationAPI.get_active_host() == self:
+		FormationAPI.set_active_host(null)
+
+
+# ──────────────────────── 班内一次性归队（SWL 滞回+节流，转向建议出口）────────────────────────────────
+## 归队状态机内核在 squad_cohesion.gd（JOIN/SETTLE 滞回进/出 + 0.4s 触发节流
+## + 接战/避战战斗优先 + 班长/质心锚点，状态挂 squad["catchup_state"]）。
+## 本系统只做消费出口——返回指向锚点的单位方向向量（消费方 entity_motion
+## 归一混入移动意图，不直改位置），非归队态 ZERO = 零施力。
+
+## 单位归队转向建议：归队态 = 指向锚点的单位方向向量；
+## ZERO = 非归队态/战斗挂起/无班（零施力，不打扰任务执行）。
+func get_unit_cohesion_steer(u: Node) -> Vector2:
+	if u == null or not is_instance_valid(u):
+		return Vector2.ZERO
+	var squad_id := get_unit_squad(u)
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return Vector2.ZERO
+	return ScriptSquadCohesion.squad_steer(self, squad_id, u)
+
+
+## 单位是否处于归队态（一次性归队状态机状态面）：超距触发后、落定前为 true。
+func is_unit_catching_up(u: Node) -> bool:
+	if u == null or not is_instance_valid(u):
+		return false
+	var squad_id := get_unit_squad(u)
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return false
+	return ScriptSquadCohesion.is_catching_up(self, squad_id, u)
+
+
+## 班离排（班解散/移编时清理归属；排内班空自动解散排）。
+func _remove_squad_from_platoon(squad_id: String) -> void:
+	var pid := String(_squad_to_platoon.get(squad_id, ""))
+	if pid.is_empty():
+		return
+	_squad_to_platoon.erase(squad_id)
+	if not _platoons.has(pid):
+		return
+	(_platoons[pid]["squads"] as Array).erase(squad_id)
+	if (_platoons[pid]["squads"] as Array).is_empty():
+		disband_platoon(pid)
+
+
+## 单位死亡后核对排长身份（_process 死亡清理处调用）：是排长则置指挥链缺口——
+## leader 置空 + 该排班集火清空 + 发 platoon_leader_lost。无任何补位/继任路径
+##（排不入组织树，组织侧继任不触达），缺口保持到战斗结束。
+func _check_platoon_leader_death(u: Node) -> void:
+	for pid_v in _platoons.keys():
+		var pid := String(pid_v)
+		if _platoons[pid].get("leader") != u:
+			continue
+		_platoons[pid]["leader"] = null
+		for sid_v in _platoons[pid]["squads"]:
+			_squad_targets.erase(String(sid_v))
+		platoon_leader_lost.emit(pid)
+
+
+# ─────────────────────────────── 军衔联动 ────────────────────────────────
+## stickman_entity 已立 rank 字段（0 兵/1 班长/2 排长/3 指挥官）与 set_rank 挂点
+## （联动血条军衔点渲染）：实体有 set_rank 走方法、有 rank 字段走属性，
+## 桩/无字段（单测 Node2D）走 set_meta("rank", n) 兜底。
+
+## 写单位军衔（set_rank 方法 → rank 属性 → set_meta 兜底，逐级回退）。
+func _set_unit_rank(u: Node, rank: int) -> void:
+	if u == null or not is_instance_valid(u):
+		return
+	if u.has_method("set_rank"):
+		u.set_rank(rank)
+	elif "rank" in u:
+		u.set("rank", rank)
+	else:
+		u.set_meta("rank", rank)
+
+
+## 读单位军衔（get_rank 方法 → rank 属性 → meta → 兵 0）。
+func _get_unit_rank(u: Node) -> int:
+	if u == null or not is_instance_valid(u):
+		return RANK_MEMBER
+	if u.has_method("get_rank"):
+		return int(u.get_rank())
+	if "rank" in u:
+		return int(u.get("rank"))
+	if u.has_meta("rank"):
+		return int(u.get_meta("rank"))
+	return RANK_MEMBER
+
+
+## 按现任职务重算军衔（排长 2 > 班长 1 > 兵 0）：任命/卸任/补位后统一走此口，
+## 一人多职取最高职，防升降不同步。
+func _recompute_unit_rank(u: Node) -> void:
+	if u == null or not is_instance_valid(u):
+		return
+	var rank := RANK_MEMBER
+	for pid_v in _platoons.keys():
+		if _platoons[pid_v].get("leader") == u:
+			rank = RANK_PLATOON_LEADER
+	var squad_id := get_unit_squad(u)
+	if not squad_id.is_empty() and _squads.has(squad_id) \
+			and _squads[squad_id]["leader"] == u:
+		rank = maxi(rank, RANK_SQUAD_LEADER)
+	_set_unit_rank(u, rank)
+
+
 # ─────────────────────────────── 内部 ────────────────────────────────
 
 ## 将单位从其当前小队中移除（如有）
@@ -653,8 +1147,14 @@ func _remove_unit_from_squad(unit: Node) -> void:
 	var squad: Dictionary = _squads[squad_id]
 	(squad["units"] as Array).erase(unit)
 	_unit_to_squad.erase(iid)
+	_remove_unit_from_fireteam(unit)  # 离班即离组（火力组是班内子集）
 	if squad["leader"] == unit:
 		squad["leader"] = null
+	# 排长被移出其班 = 卸任（手动移编非阵亡，不发缺口信号，可另行任命）
+	for pid_v in _platoons.keys():
+		if _platoons[pid_v].get("leader") == unit:
+			_platoons[pid_v]["leader"] = null
+	_recompute_unit_rank(unit)
 	# 清除编队派生角色
 	if unit.has_method("set_role"):
 		unit.set_role("")
@@ -708,6 +1208,8 @@ func _squad_anchor(squad_id: String) -> Dictionary:
 	if _squads.has(squad_id):
 		for u in _squads[squad_id]["units"]:
 			if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
+				if not ("global_position" in u):
+					continue  # 纯 Node 桩无位置（单测桩惯例）：不计入锚参考系
 				centroid += u.global_position
 				facing += ScriptFormationGeometry.member_facing(u)
 				n += 1
@@ -718,8 +1220,16 @@ func _squad_anchor(squad_id: String) -> Dictionary:
 
 
 ## 槽位世界坐标（11b，SWL GetFormationXOffset 的列位移等价；内核见助手 slot_world）。
-func _slot_world(slot: Vector2i, base_pos: Vector2, facing: Vector2) -> Vector2:
-	return ScriptFormationGeometry.slot_world(slot, base_pos, facing, UNITS_PER_COLUMN, SPREAD_SPACING, ROW_GAP)
+## squad_id 供按班现役列高取横展中心（缺省走基准档）。
+func _slot_world(slot: Vector2i, base_pos: Vector2, facing: Vector2, squad_id: String = "") -> Vector2:
+	return ScriptFormationGeometry.slot_world(slot, base_pos, facing, _squad_upc(squad_id), SPREAD_SPACING, ROW_GAP)
+
+
+## 班现役每列人数（几何分配时随班人数落盘 squad["upc"]；无班/未分配回落基准档）。
+func _squad_upc(squad_id: String) -> int:
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return UNITS_PER_COLUMN
+	return int(_squads[squad_id].get("upc", UNITS_PER_COLUMN))
 
 
 ## 编队槽位分配/重算（11b 核心入口；全队重算/列收缩/贪心互换内核见
@@ -748,7 +1258,7 @@ func is_unit_in_formation(unit: Node) -> bool:
 	if slot.x < 0:
 		return false
 	var anch: Dictionary = _squad_anchor(squad_id)
-	return unit.global_position.distance_to(_slot_world(slot, anch["centroid"], anch["facing"])) \
+	return unit.global_position.distance_to(_slot_world(slot, anch["centroid"], anch["facing"], squad_id)) \
 			<= FOLLOW_DEADZONE
 
 

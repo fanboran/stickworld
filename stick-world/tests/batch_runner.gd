@@ -38,6 +38,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_ai_enhance.gd",
 	"res://tests/unit/test_ai_morale.gd",
 	"res://tests/unit/test_ai_arrive.gd",
+	"res://tests/unit/test_behavior_breach.gd",
 	"res://tests/unit/test_combat_fidelity.gd",
 	"res://tests/unit/test_strike_frame.gd",
 	"res://tests/unit/test_possess_charge.gd",
@@ -84,6 +85,11 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_requisition_exclusion.gd",
 	"res://tests/unit/test_townlife_save_persistence.gd",
 	"res://tests/unit/test_keymap_registry.gd",
+	"res://tests/unit/test_commander_rules.gd",
+	"res://tests/unit/test_formation_platoon.gd",
+	"res://tests/unit/test_formation_fireteam.gd",
+	"res://tests/unit/test_squad_cohesion.gd",
+	"res://tests/unit/test_sustained_fire_heat.gd",
 ]
 
 const PER_TEST_TIMEOUT_SEC: float = 30.0

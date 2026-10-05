@@ -47,8 +47,8 @@ func _ready() -> void:
 func _test_tres_loaded() -> void:
 	_runner.assert_approx(BalanceConfig.get_value("ai.behavior_profiles.baseline.decision_interval"), 0.3, 0.001,
 			"baseline.decision_interval = 0.3（R1 镜像旧常量）")
-	_runner.assert_approx(BalanceConfig.get_value("ai.behavior_profiles.baseline.decision_variance"), 0.0, 0.001,
-			"baseline.decision_variance = 0（零回归）")
+	_runner.assert_approx(BalanceConfig.get_value("ai.behavior_profiles.baseline.decision_variance"), 0.1, 0.001,
+			"baseline.decision_variance = 0.1（R1 方差开闸，RWR 比率 0.5 保守取值）")
 	_runner.assert_equal(int(BalanceConfig.get_value("ai.behavior_profiles.baseline.burst_shots")), 0,
 			"baseline.burst_shots = 0（R3 关）")
 	var wait: Variant = BalanceConfig.get_value("ai.behavior_profiles.baseline.burst_wait")
@@ -115,7 +115,9 @@ func _test_overlay_fallback_swl() -> void:
 	# SWL 直译个性不被覆盖链打掉（P6 批次 7c 语义：剑士冲脸/弓手风筝/矛兵持阵）
 	_runner.assert_approx(float(p.get("aggressive_push_prob", -1.0)), 0.25, 0.001, "剑士冲脸概率直译保留")
 	var bow: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
-	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 500.0, 0.001, "弓手保距直译保留")
+	# 原直译 500，但 500 > attack_range(300) 时敌未进射程即入后撤态、持瞄路径永不可达
+	# （实测 50 万采样 aim=0）——收敛到射程内窄带 280，风筝个性保留
+	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 280.0, 0.001, "弓手保距直译保留")
 	var spear: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SPEAR)
 	_runner.assert_true(bool(spear.get("formation_block", false)), "矛兵行军举盾直译保留")
 
@@ -125,9 +127,11 @@ func _test_overlay_fallback_swl() -> void:
 func _test_r1_default() -> void:
 	_restore_rows()
 	var ai: AIController = ScriptAIController.new()
-	# 默认档案 decision_variance=0 → 掷骰恒等于基值 0.3（与旧 DECISION_INTERVAL 常量一致）
+	# R1 方差开闸（.tres baseline.decision_variance=0.1）→ 默认 0.3±0.1 掷骰落 [0.2, 0.4]
 	for i in 8:
-		_runner.assert_approx(ai._roll_decision_interval(), 0.3, 0.0001, "默认间隔恒 0.3（第 %d 掷）" % i)
+		var rolled: float = ai._roll_decision_interval()
+		_runner.assert_true(rolled >= 0.199 and rolled <= 0.401,
+				"默认间隔 0.3±0.1 落窗内（第 %d 掷，实际 %.3f）" % [i, rolled])
 	ai.free()
 
 

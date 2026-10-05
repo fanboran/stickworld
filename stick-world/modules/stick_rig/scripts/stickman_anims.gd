@@ -28,6 +28,15 @@ const ANIM_ATTACK_SPEAR_3 := "attack_spear_3"
 const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
+## 弓手射击表现两段拆分（2026-09-30 实机验收：持瞄没拉弓动作、放箭无绷住节奏）：
+##   attack_bow_hold = 拉弓段（Archidon-Draw 拉弦 0~0.5s 原样 + 之后定格拉满姿态）——
+##     持瞄期/玩家蓄力期播放，定格在拉满等放箭，"举弓-拉弦-绷住"可见；
+##   attack_bow_release = 释放段（拉满姿态定格 0~0.5s + 原放箭/余韵，Hit@0.5333
+##     位置不变，1.3333s 截断余韵）——放箭瞬间播放，"绷住-放"衔接。
+##   分段资产由 tools/baking/spine_import.gd 的 hold_pose_from/freeze_after/
+##   trim_after 变换生成；attack_bow（原版 Draw 全条）保留作对照/回退。
+const ANIM_ATTACK_BOW_HOLD := "attack_bow_hold"
+const ANIM_ATTACK_BOW_RELEASE := "attack_bow_release"
 ## 祭司治疗动画池（Meric-Heal1/Heal2，P7 批次 7b：dump healingAnimation 字段直译候选）
 ## 动画资产由任务 3.2 多骨架导入产出；本批先落常量供编译，运行时 _load_anim 缺资源只 push_warning
 const ANIM_HEAL_MERIC_1 := "heal_meric_1"
@@ -125,6 +134,7 @@ const ANIM_DIR := "res://modules/stick_rig/animations/"
 const ATTACK_ANIMS: Array[String] = [
 	ANIM_ATTACK, ANIM_ATTACK_SPEAR, ANIM_ATTACK_PICKAXE,
 	ANIM_ATTACK_STAFF, ANIM_ATTACK_BOW,
+	ANIM_ATTACK_BOW_HOLD, ANIM_ATTACK_BOW_RELEASE,
 ]
 
 ## 祭司治疗动画池（类型化数组直初始化，不经三元退化为 untyped，§七.4）
@@ -138,7 +148,8 @@ const HEAL_ANIMS: Array[String] = [ANIM_HEAL_MERIC_1, ANIM_HEAL_MERIC_2]
 const WEAPON_ATTACK_ANIM: Dictionary = {
 	0: ANIM_ATTACK,          # SWORD：剑挥砍（Swordwrath-Attack1）
 	1: ANIM_ATTACK_SPEAR,    # SPEAR：矛刺（Spearton-Attack1）
-	2: ANIM_ATTACK_BOW,      # BOW：拉弓（Archidon-Draw）
+	2: ANIM_ATTACK_BOW_RELEASE,  # BOW：放箭（Archidon-Draw 释放段；拉弓段走
+	                         # ANIM_ATTACK_BOW_HOLD，由 WeaponMount 瞄准窗驱动）
 	3: ANIM_ATTACK_PICKAXE,  # PICKAXE：镐挥（Miner-Attack1）
 	4: ANIM_ATTACK_STAFF,    # STAFF：法杖施法（Magikill-Spell1）
 }
@@ -156,11 +167,44 @@ const WEAPON_IDLE_ANIM: Dictionary = {
 	2: ANIM_IDLE_BOW,        # BOW：持弓
 	3: ANIM_IDLE_PICKAXE,    # PICKAXE：持镐
 	4: ANIM_IDLE_STAFF,      # STAFF：持杖
+	5: ANIM_IDLE_STAFF,      # MERIC：持杖（祭司专属站姿资产未转译前的回落——祭司持杖近观感，远好于持剑）
 }
 
 ## 取武器类型对应的站姿动画名（未知类型回落持剑）
 static func idle_for_weapon(weapon_type: int) -> String:
 	return WEAPON_IDLE_ANIM.get(weapon_type, ANIM_IDLE)
+
+## 武器类型 -> 持械行走动画名（键序对齐 WeaponMount.WeaponType；缺省 = 通用 walk）。
+## 原版各兵种 Walk：剑士 Swordwrath-Walk（通用）、弓手 Archidon-Walk（下肢走步、
+## 上肢无通道 = 保持持弓 setup 姿态，与 idle_bow 同源）——其余兵种暂用通用走姿。
+## 消费方（weapon_mount 实体侧换装 / char_sprite_3d 镜像层换装）经 walk_for_weapon
+## 取名，走 set_state_anim 换 walk state 资源（盾姿态分层同款机制，不增状态节点）。
+const ANIM_WALK_BOW := "walk_bow"
+## 持弓行走·拉弓保持变体（烘焙合并资产，tools/baking/bake_walk_bow_hold.gd 生成）：
+## walk_bow 腿轨 ∪ attack_bow_hold 上身轨按 Drawn@0.5 拉满帧定格——持瞄窗内移动
+## 时上身保持拉满姿态（腿走弓不收）。消费接线（walk state 资源换装）由后续批次接。
+const ANIM_WALK_BOW_HOLD := "walk_bow_hold"
+
+const WEAPON_WALK_ANIM: Dictionary = {
+	2: ANIM_WALK_BOW,        # BOW：持弓行走（Archidon-Walk）
+}
+
+## 取武器类型对应的行走动画名（未知类型回落通用走姿）
+static func walk_for_weapon(weapon_type: int) -> String:
+	return WEAPON_WALK_ANIM.get(weapon_type, ANIM_WALK)
+
+## 武器类型 -> 持瞄保持行走变体名（键序对齐 WeaponMount.WeaponType；缺省空串 =
+## 无保持变体，消费方回落 walk_for_weapon 的基础走姿）。持瞄窗（attack_bow_hold
+## 激活期间）内移动时 walk state 换装成本变体——上身保持拉满、下肢照常走步；
+## 窗结束恢复 walk_for_weapon。消费方与盾姿态分层同通道（weapon_mount 瞄准窗
+## 开关 → visual_controller.set_bow_aim_stance 换装 / char_sprite_3d.set_stance_anims 镜像）。
+const WEAPON_WALK_HOLD_ANIM: Dictionary = {
+	2: ANIM_WALK_BOW_HOLD,  # BOW：拉弓保持行走（walk_bow_hold 合并变体）
+}
+
+## 取武器类型对应的持瞄保持行走变体名（无变体的武器返回空串）
+static func walk_hold_for_weapon(weapon_type: int) -> String:
+	return WEAPON_WALK_HOLD_ANIM.get(weapon_type, "")
 
 ## 待机变体池（stand 类别，防全员同帧）
 const STAND_VARIANTS: Array[String] = [ANIM_IDLE, ANIM_IDLE_V2]
@@ -189,6 +233,10 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_IDLE_STAFF)
 	_load_anim(lib, ANIM_WALK)
 	_load_anim(lib, ANIM_RUN)
+	# 持弓行走变体（武器走姿分层，walk state 资源换装用）
+	_load_anim(lib, ANIM_WALK_BOW)
+	# 持弓行走·拉弓保持变体（烘焙合并资产，上身定格拉满+腿走步态，机制同上）
+	_load_anim(lib, ANIM_WALK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK)
 	_load_anim(lib, ANIM_ATTACK_SPEAR)
 	_load_anim(lib, ANIM_ATTACK_SPEAR_2)
@@ -196,6 +244,9 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_ATTACK_PICKAXE)
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)
+	# 弓手射击两段（拉弓保持 / 释放，见 ANIM_ATTACK_BOW_HOLD 注）
+	_load_anim(lib, ANIM_ATTACK_BOW_HOLD)
+	_load_anim(lib, ANIM_ATTACK_BOW_RELEASE)
 	# 祭司治疗动画（P7 批次 7b：Meric-Heal1/Heal2，资产由任务 3.2 导入）
 	for a in HEAL_ANIMS:
 		_load_anim(lib, a)
@@ -268,6 +319,10 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 			sm.add_transition(s, a, _smt(0.1, false))
 
 		sm.add_transition(a, ANIM_IDLE, _smt(0.12))
+	# 弓手射击两段直达过渡（拉弓保持 ↔ 释放）：出手瞬间"绷住→放"直接衔接；
+	# 不加直达则 travel 绕经 idle，拉满姿态会朝站姿闪跳一下再放箭
+	sm.add_transition(ANIM_ATTACK_BOW_HOLD, ANIM_ATTACK_BOW_RELEASE, _smt(0.1, false))
+	sm.add_transition(ANIM_ATTACK_BOW_RELEASE, ANIM_ATTACK_BOW_HOLD, _smt(0.1, false))
 	# 祭司治疗施法（P7 补接线）：与攻击同款模式——LOOP_NONE 一次性动画，
 	# AT_START 切入防吃进度，播完回 idle（WeaponMount.cast_heal 驱动 travel）
 	for a in HEAL_ANIMS:

@@ -4,9 +4,9 @@ signal test_done(code: int)
 ## 单元测试：A6 · C9 压制=定时锁死（设计文档12号 §三C9 / §五批次表 A6，AI集大成；
 ## CoH pinned-reaction-plan isInterruptablePlan=false + 等 7.5s 真值见逆向笔记 §4.2）。
 ## 覆盖：档案新键默认值（开关默认关=零回归）/ SUPPRESSED 状态落地与过期 / 触发门槛
-## （远程命中/近战重击/格挡残余不触发）/ 豁免规则（溃逃/死亡/附身/兵种免疫）/
-## 同 type 刷新不叠加 / 压制期士气流失（不伤血）/ ai_controller 禁令（强制停滞+
-## 号令挂起续行）/ 强制溃逃链优先 / 无组件零回归 / behavior_attack 在途兜底 /
+## （远程命中/近战重击/格挡残余不触发）/ 豁免规则（死亡/附身/兵种免疫）/
+## 同 type 刷新不叠加 / 压制期士气流失（不伤血）/ ai_controller 压制避战
+## （脱离接火+号令挂起续行+幂等）/ 无组件零回归 / behavior_attack 在途兜底 /
 ## squad_phase_plan 真实压制替换点 / **箭矢近失压制**（开关关零回归、总门约束、
 ## 半径内外边界、豁免集复用、只压制不伤害）。
 ## 确定性：压制链无掷骰（触发/禁令/解除续行全确定；BehaviorIdle 时长随机不影响
@@ -35,15 +35,17 @@ func _ready() -> void:
 	_runner.add_test("豁免：已溃逃/已死亡/玩家附身/兵种免疫", _test_exemptions)
 	_runner.add_test("同 type 刷新不叠加：再受击重置时长", _test_refresh)
 	_runner.add_test("士气流失：压制期 tick 经 lose_morale，不伤血", _test_morale_drain)
-	_runner.add_test("ai_controller 禁令：强制停滞 + 号令挂起，解除后续行", _test_ban_stall_order)
-	_runner.add_test("强制溃逃链优先：压制期溃逃照样跑", _test_rout_priority)
+	_runner.add_test("ai_controller 压制避战：脱离接火 + 号令挂起，解除后续行", _test_ban_stall_order)
+	_runner.add_test("压制避战幂等：已在避战不重 travel", _test_suppress_disengage_idempotent)
+	_runner.add_test("避战还击：避战态被贴脸切 attack，敌脱离收窗（带打带跑）", _test_disengage_counterattack)
+	_runner.add_test("避战还击豁免：撤离档（evacuate）被压继续撤离不回头", _test_counter_gate_command_path)
 	_runner.add_test("零回归：无状态效果组件实体决策原样", _test_no_component_regression)
 	_runner.add_test("behavior_attack 兜底：压制期在途行为立即停", _test_attack_segment)
 	_runner.add_test("squad_phase_plan 替换点：压制成员跳过/未压制走代理", _test_phase_plan)
 	_runner.add_test("A6 近失压制：档案默认关 + 半径键约束", _test_near_miss_defaults)
 	_runner.add_test("A6 近失压制：总门关/近失门关不压制（零回归）", _test_near_miss_gate_off)
 	_runner.add_test("A6 近失压制：半径内触发 / 半径外与友军不触发", _test_near_miss_radius)
-	_runner.add_test("A6 近失压制：豁免集复用（溃逃/死亡/附身/兵种免疫）", _test_near_miss_exemptions)
+	_runner.add_test("A6 近失压制：豁免集复用（死亡/附身/兵种免疫）", _test_near_miss_exemptions)
 	_runner.add_test("A6 近失压制：只压制不伤害（命中路径语义不受影响）", _test_near_miss_no_damage)
 	_runner.run()
 	print(_runner.summary())
@@ -64,7 +66,8 @@ func _test_near_miss_defaults() -> void:
 	var radius: float = float(p.get("suppression_near_miss_radius", 0.0))
 	_runner.assert_true(radius > ScriptArrowProjectile.HIT_RADIUS,
 			"近失半径须大于命中半径 34（实测 %.1f）" % radius)
-	_runner.assert_approx(radius, 80.0, 0.001, "近失半径档案初值 80px")
+	# 停战治理收窄（诊断 B1）：80px 在 45px 密度战线上等于箭雨钉住全场 → 收窄贴命中判定
+	_runner.assert_approx(radius, 45.0, 0.001, "近失半径档案初值 45px")
 	_reset_profile_cache()
 
 
@@ -118,8 +121,7 @@ func _test_near_miss_radius() -> void:
 func _test_near_miss_exemptions() -> void:
 	# 新触发源复用受击路径同一豁免集（不因走通用入口而绕过）
 	_arm_near_miss_profiles(true, 80.0, true)
-	var routed := _make_near_miss_victim(Vector2(20.0, 0.0))
-	routed.hp.routed = true
+	var plain := _make_near_miss_victim(Vector2(20.0, 0.0))
 	var dead := _make_near_miss_victim(Vector2(20.0, 0.0))
 	dead.dead = true
 	var possessed := _make_near_miss_victim(Vector2(20.0, 0.0))
@@ -132,10 +134,10 @@ func _test_near_miss_exemptions() -> void:
 	# 对照组：同装具但走 SWORD 档（不免疫）→ 近失压制正常施加
 	var control := _make_near_miss_victim(Vector2(20.0, 0.0))
 	var s3 := _make_shooter(ScriptBehaviorProfiles.BOW)
-	var arrow: ArrowProjectile = _nfire(Vector2.ZERO, [routed, dead, possessed, immune], s3)
+	var arrow: ArrowProjectile = _nfire(Vector2.ZERO, [plain, dead, possessed, immune], s3)
 	var applied: int = arrow.try_near_miss_suppression()
-	_runner.assert_equal(applied, 0, "四类豁免全部拒绝近失压制")
-	_runner.assert_false(routed.effects.has_suppressed(), "已溃逃豁免（同受击路径）")
+	_runner.assert_equal(applied, 1, "死亡/附身/免疫三类豁免拒绝；普通单位照常压制")
+	_runner.assert_true(plain.effects.has_suppressed(), "普通单位被压制（旧溃逃豁免随溃逃退役删除）")
 	_runner.assert_false(dead.effects.has_suppressed(), "已死亡豁免")
 	_runner.assert_false(possessed.effects.has_suppressed(), "玩家附身豁免")
 	_runner.assert_false(immune.effects.has_suppressed(), "兵种级 suppression_immune 豁免")
@@ -148,7 +150,7 @@ func _test_near_miss_exemptions() -> void:
 	arrow2.free()
 	s3.free()
 	s4.free()
-	for v in [routed, dead, possessed, immune, control]:
+	for v in [plain, dead, possessed, immune, control]:
 		_free_victim(v)
 	_reset_profile_cache()
 
@@ -253,12 +255,8 @@ func _test_melee_trigger() -> void:
 
 
 func _test_exemptions() -> void:
-	# 已溃逃：强制溃逃链优先，压制不施加
-	var ctx := _make_sup_ctx({"suppression_enabled": true})
-	ctx.health.routed = true
-	ctx.hit(20.0, _make_shooter())
-	_runner.assert_false(ctx.se.has_suppressed(), "已溃逃豁免")
-	ctx.teardown()
+	# （旧"已溃逃豁免"随裁决【删溃逃、立避战】删除——压制现在触发避战而非与
+	# 强制溃逃竞争优先级，避战中的单位继续可被压制 = 延长脱离）
 	# 兵种免疫
 	var ctx2 := _make_sup_ctx({"suppression_enabled": true, "suppression_immune": true})
 	ctx2.hit(20.0, _make_shooter())
@@ -308,36 +306,80 @@ func _test_morale_drain() -> void:
 
 
 func _test_ban_stall_order() -> void:
-	# 压制期：强制停滞（idle + ai_stop），号令挂起不清除；解除后号令自动续行
+	# 压制期：强制避战（RA 压制式脱离，裁决【删溃逃、立避战】）——夹具战斗无掩体
+	# → 统一出口走 fallback 后撤；号令挂起不清除；解除后号令自动续行
 	var ctx := _make_ai_ctx({"suppression_enabled": true})
 	ctx.ai.set_order("move", {"target": Vector2(1200, 300)})
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "move", "号令已下达")
 	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
 	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "idle", "压制期强制停滞 idle")
-	_runner.assert_true(ctx.entity.stopped, "压制期停步（ai_stop）")
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制期脱离接火（retreat 避战）")
 	_runner.assert_equal(ctx.ai.get_ordered_behavior(), "move", "号令挂起不清除（玩家意图保留）")
 	# 压制结束（白盒清效果）：命令覆盖段检测 cur != ordered 自动续行
 	ctx.se._effects.erase(ScriptStatusEffects.Type.SUPPRESSED)
-	ctx.entity.stopped = false
 	ctx.ai._make_decision()
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "move", "压制解除后号令续行")
 	ctx.teardown()
-	# 无号令压制：同样强制停滞
+	# 无号令压制：同样脱离接火
 	var ctx2 := _make_ai_ctx({"suppression_enabled": true})
 	ctx2.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
 	ctx2.ai._make_decision()
-	_runner.assert_equal(ctx2.ai.get_current_behavior(), "idle", "无号令压制期强制停滞")
+	_runner.assert_equal(ctx2.ai.get_current_behavior(), "retreat", "无号令压制期同样避战")
 	ctx2.teardown()
 
 
-func _test_rout_priority() -> void:
-	# 强制溃逃链 > 压制禁令：士气崩溃的压制单位照样跑（禁令是"不敢动"不是"不能逃"）
+func _test_suppress_disengage_idempotent() -> void:
+	# 压制避战幂等：已在避战行为（retreat 进行中）且**无敌贴脸**时，压制期决策拍
+	# 不重 travel（重 travel 会重播 enter/清避战计时——幂等保持是"压制结束自动
+	# 续行"的前提；贴脸还击走 _test_disengage_counterattack 的新语义）
 	var ctx := _make_ai_ctx({"suppression_enabled": true})
 	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
-	ctx.health.routed = true
 	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制期溃逃优先（retreat）")
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制期切入避战")
+	# 敌挪出近战范围（> COUNTER_RANGE 200）：还击窗不开，纯避战幂等场景
+	ctx.battle.enemies[0].global_position = Vector2(1500, 300)
+	ctx.ai.get_state_machine()._current_behavior._timer = 3.0  # 白盒：避战进行中
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "已在避战保持（不重 travel）")
+	_runner.assert_approx(ctx.ai.get_state_machine()._current_behavior._timer, 3.0, 0.001,
+			"避战计时未被重置（enter 未重播）")
+	ctx.teardown()
+
+
+func _test_disengage_counterattack() -> void:
+	# 诊断 B2 带打带跑：避战态被敌人贴进近战范围（COUNTER_RANGE 200）→ 开还击窗
+	# 切 attack 就地迎击（窗口带闩，压制期敌不出范围不收回）；敌拉开后收窗回避战
+	var ctx := _make_ai_ctx({"suppression_enabled": true})
+	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制先切入避战")
+	_runner.assert_true(ctx.ai.is_disengaging(), "避战行为态置位")
+	ctx.ai._make_decision()  # 夹具敌在 100px < COUNTER_RANGE 200：开窗还击
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "避战态被贴脸 → 切 attack 还击")
+	_runner.assert_true(ctx.ai.is_counter_attack_window(), "还击窗口开启")
+	# 窗口带闩：敌仍在近战范围，下一拍保持还击不抖回避战
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "窗口带闩：敌未脱离保持还击")
+	# 敌拉开出近战范围：收窗回避战（带打带跑后半拍）
+	ctx.battle.enemies[0].global_position = Vector2(1500, 300)
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "敌脱离近战范围 → 收窗回避战")
+	_runner.assert_false(ctx.ai.is_counter_attack_window(), "还击窗口已收")
+	ctx.teardown()
+
+
+func _test_counter_gate_command_path() -> void:
+	# 命令路径撤离豁免：retreat 的 evacuate 档（C3 撤仗/可下令撤退）被压不开
+	# 还击窗——带打带跑只作用于自主避战（fallback），命令撤离一路撤到边缘
+	var ctx := _make_ai_ctx({"suppression_enabled": true})
+	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	ctx.ai._make_decision()  # 先入 fallback 避战
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "先入避战")
+	# 白盒翻 evacuate 档（TeamAi ROUT 撤仗同款行为形态）+ 敌仍贴脸
+	ctx.ai.get_state_machine()._current_behavior._evacuate = true
+	ctx.ai._make_decision()
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "撤离档被压继续撤离（不回头还击）")
+	_runner.assert_false(ctx.ai.is_counter_attack_window(), "撤离档不开还击窗")
 	ctx.teardown()
 
 
@@ -580,6 +622,7 @@ class _AiCtx:
 			entity.se = se
 		ai = AIController.new()
 		ai._entity = entity  # 不进树直接注入（_ready cast 等价物，batch 准入：不进场景树）
+		entity.ai_controller = ai  # 避战行为态回写面（behavior_retreat._set_disengaging 消费）
 		ai._setup_state_machine()
 
 	func teardown() -> void:
@@ -617,6 +660,7 @@ class _SupEntity extends CharacterBody2D:
 	var possessed: bool = false
 	var dead: bool = false
 	var faction: int = 1
+	var ai_controller: Node = null  # AIController（避战行为态回写面，_AiCtx.setup 注入）
 
 	func get_weapon() -> Node:
 		return weapon
@@ -626,6 +670,9 @@ class _SupEntity extends CharacterBody2D:
 
 	func get_battle_instance() -> Node:
 		return battle
+
+	func get_ai_controller() -> Node:
+		return ai_controller
 
 	func is_possessed() -> bool:
 		return possessed
@@ -653,13 +700,9 @@ class _SupWeapon extends Node:
 ## 假生命组件：damaged 信号（触发源）+ 决策链查询面 + 士气流失记录
 class _SupHealth extends Node:
 	signal damaged(amount: float, source: Node)
-	var routed: bool = false
 	var dead: bool = false
 	var morale_lost: float = 0.0
 	var hp: float = 100.0
-
-	func is_routed() -> bool:
-		return routed
 
 	func is_dead() -> bool:
 		return dead

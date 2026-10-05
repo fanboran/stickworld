@@ -69,11 +69,16 @@ var ARROW_LEAD_FACTOR: float = 0.7
 ## 拉弓动画在 0.5s 拉满（Drawn），0.5333s 放箭（Hit），而不是拍脑袋的 0.75s。
 const BOW_FIRE_DELAY_FALLBACK: float = 0.5333
 ## RWR sustained_fire 连射散布（media/packages ak47.weapon：grow_step=0.40/发）：
-## 每放一箭散布热度 +0.40（上限 1.2），实际散布 σ × (1+热度)；恢复率原值 1.2/s
-## 是 ~10发/s 步枪节奏，我方弓 ~0.5发/s，按射速比缩到 0.10/s——连放 3 箭 σ≈1.6x、
-## 6 箭到顶 2.2x，脱战 ~12s 回满（"连射越打越散、会停火收敛"的距离感）
+## 每放一箭散布热度 +0.40（上限 1.2），实际散布 σ × (1+热度)。
+## 恢复率按"满热度回落全程 ≈ 一个射击间隔"重标定【待实测校准】：弓手实战节奏
+## ~0.26 发/s（间隔 3.85s）→ DIMINISH 0.40/s 下满热度 1.2 回落全程 3.0s < 间隔，
+## 单箭热度增量 0.4 一个间隔内衰减 1.54 ≫ 0.4——两箭之间热度必然可观恢复，
+## 拉弓间隙 σ 乘数回到 1.0 附近（此前 0.10/s：增长 0.104/s ≈ 恢复 0.10/s 且
+## sim 模式恢复链不跑，热度数学必然顶格 1.2 → σ 常驻 ×2.2，见
+## temp/诊断-箭矢弓手与盾.md §1.4 根因三）。极限射速（冷却 2.0s = 0.5 发/s）
+## 下每间隔衰减 0.8 仍 > 0.4，任何可达射速都不再钉顶。
 const SUSTAINED_FIRE_GROW := 0.40
-const SUSTAINED_FIRE_DIMINISH := 0.10
+const SUSTAINED_FIRE_DIMINISH := 0.40
 const SUSTAINED_FIRE_HEAT_MAX := 1.2
 ## 散布热度（0..HEAT_MAX；behavior_attack 据此做 RWR 点射停顿）
 var _sustained_fire_heat: float = 0.0
@@ -86,16 +91,18 @@ var BLOCK_DAMAGE_FACTOR: float = 0.15
 var BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
 var BLOCK_FRONT_DOT: float = 0.25
-## 各武器攻击射程（像素，含手臂长度）
-## STAFF 600 = SWL Magikill 施法距离（半屏级；原 90 是"法杖敲击"值，会造成
-## kite_range > 射程死锁：敌人一进保距圈就永远后撤永不还手）
-## BOW 1400 = SWL 弓手观感射程（约全屏宽）——抛物线弹道下站后排越顶抛射
+## 各武器攻击射程（像素，含手臂长度）——**取整十口径，唯一真相源 =
+## 观察场编制设计值**（tests/dev/battle_arena.gd 头注释：矛 120 卡线 / 剑 80 /
+## 杖 280 施法 / 弓 300 压制，见 docs/设计/命名与数值口径.md）。
+## 弓不再用 1400 全屏抛射——超远距抛物线落点散布吃掉命中率，火力压制造
+## 就"看着满天花雨实际没人中箭"；杖 280 对齐火力班编制（原 600 半屏施法
+## 与观察场纵深布阵脱节；kite 死锁警示仍成立：射程不得小于行为档案 kite_range）。
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
-	WeaponType.SPEAR: 200.0,
-	WeaponType.BOW: 1400.0,
+	WeaponType.SPEAR: 120.0,
+	WeaponType.BOW: 300.0,
 	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 600.0,
+	WeaponType.STAFF: 280.0,
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
 }
 ## HitStop 参数（命中顿帧）
@@ -218,6 +225,22 @@ var _hit_event_time: float = -1.0
 ## Hit 事件时间是否已解析（换武器时重置）
 var _hit_time_resolved: bool = false
 
+# ── 弓手瞄准表现窗（2026-09-30 实机验收：持瞄要有拉弓动作、移动要有脚步）──
+## true = 持瞄表现窗激活：站定播拉弓保持段（attack_bow_hold，定格拉满），
+## 移动让位走姿（镜像层按武器换 walk_bow）。出手（perform_attack）即关窗。
+var _aim_visual_active: bool = false
+## 表现窗截止时刻（_now() 秒）。AI 路径 = 瞄准开始 + 超时兜底（点射停顿 +
+## 冷却残段最长 ~4.9s，超时收弓防行为切换后残窗把人钉在拉满姿态）；
+## 玩家蓄力路径 = 无穷大（松手才收弓）+ 附身丢失守卫（cancel_charge 不经过
+## 本挂载，附身退出/死亡时靠 _process 的 is_possessed 检查收弓）。
+var _aim_visual_until: float = -1.0e9
+## 表现窗来源：true = 玩家蓄力路径（无超时，靠附身守卫收口）；false = AI 持瞄（超时兜底）
+var _aim_visual_player: bool = false
+## 瞄准表现窗超时（s）：burst 瞄准上限（0.9×3.2≈2.9）+ 冷却残段（≤2.0）再留余量
+const BOW_AIM_VISUAL_TIMEOUT: float = 5.0
+## 移动判定阈值（速度平方）：与 hd2d 镜像的 moving 口径一致（25 = 5px/s）
+const BOW_MOVE_SQ_THRESHOLD: float = 25.0
+
 # ── 治疗能力族（P7 批次 7b：Meric 实体层 CastHeal/CanCastHeal/IsCastingHeal 直译）──
 ## 当前治疗动画名（dump healingAnimation 字段直译，运行时经 StickmanAnims.pick_heal_anim 随机注入）
 var healing_animation: String = ""
@@ -259,11 +282,18 @@ func _mount_weapons() -> void:
 		return
 	# HD-2D 图（billboard 视觉）：2D 骨架树不创建（entity.rig 为 null），武器/盾
 	# 模型由 billboard 宿主 set_weapon_type 镜像挂载，此处只保战斗数据——
-	# 射程按武器类型照常生效（此前随挂骨失败一并早退，弓 1400/矛 200/杖 600
+	# 射程按武器类型照常生效（此前随挂骨失败一并早退，WEAPON_RANGE 各档
 	# 在 HD-2D 图全员退化为默认 80，行为层交战距离全错）
 	if owner_entity.get("rig") == null:
 		attack_range = 0.0 if weapon_type == WeaponType.NONE \
 				else float(WEAPON_RANGE.get(weapon_type, attack_range))
+		# 盾实例对 billboard 图放行（修"矛兵盾 100% 缺失→格挡从未发生"）：
+		# is_shield_blocking 第一重判定只认 _shield 实例存在，此前本分支早退
+		# 使 blockChance 0.35 在观察场从未掷出。2D 骨架未建 → 盾以隐藏逻辑
+		# 实例挂 WeaponMount 自身（数据与状态留 2D 侧），billboard 视觉由
+		# char_sprite_3d 镜像挂盾（渲染走镜像——HD-2D 铁律）。
+		if shield_visual_enabled():
+			_mount_shield(owner_entity)
 		return
 	var hand: Node2D = _find_hand_bone(owner_entity)
 	if hand == null:
@@ -286,20 +316,36 @@ func _mount_weapons() -> void:
 	# 副手盾牌（**绑定矛兵**：原版也只有 Spearton 持盾，其余兵种无盾——
 	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版；
 	# equipped_shield = 玩家背包副手装备盾，任意武器可配）
-	if (shield_enabled and weapon_type == WeaponType.SPEAR) or equipped_shield:
+	if shield_visual_enabled():
 		_mount_shield(owner_entity)
 	# 订阅动画内嵌事件（命中帧 + 音效钩子）
 	_connect_rig_events(owner_entity)
 
 
+## 盾视觉/逻辑是否应装备（2D 挂骨与 billboard 逻辑盾共用的单一规则出口：
+## 兵种默认盾绑定 SPEAR；equipped_shield = 玩家背包副手装备盾任意武器可配）
+func shield_visual_enabled() -> bool:
+	return (shield_enabled and weapon_type == WeaponType.SPEAR) or equipped_shield
+
+
 func _mount_shield(owner_entity: CharacterBody2D) -> void:
-	var off_hand: Node2D = _find_shield_bone(owner_entity)
-	if off_hand == null:
-		push_warning("[WeaponMount] 未找到副手骨骼（hand_outer），无法挂盾")
-		return
 	var scene: PackedScene = load(SHIELD_SCENE_PATH)
 	if scene == null:
 		push_warning("[WeaponMount] 盾牌场景加载失败: %s" % SHIELD_SCENE_PATH)
+		return
+	var off_hand: Node2D = _find_shield_bone(owner_entity)
+	if off_hand == null:
+		# HD-2D billboard 图（2D 骨架未创建，rig==null）：逻辑盾挂 WeaponMount
+		# 自身并隐藏——格挡判定（weapon_block 只看 _shield 实例存在性）由此
+		# 真实生效；本实例不进任何渲染（billboard 视觉由 char_sprite_3d 镜像
+		# 挂盾，数据与状态留 2D 侧、渲染走镜像）。2D 图走到这里 = 骨骼缺失，仍告警。
+		if owner_entity.get("rig") == null:
+			_shield = scene.instantiate() as Node2D
+			_shield.name = "Shield"
+			_shield.visible = false
+			add_child(_shield)
+		else:
+			push_warning("[WeaponMount] 未找到副手骨骼（hand_outer），无法挂盾")
 		return
 	_shield = _mount_one(scene, off_hand, "Shield")
 
@@ -417,6 +463,14 @@ func _reload_weapons() -> void:
 	# P5 数值校准（批次 2）：按武器类型从 BalanceConfig 读 SWL 真值覆盖默认
 	# （本体下沉 weapon_balance.gd）
 	WeaponBalance.apply(self)
+	# 武器走姿分层（2026-09-30 实机验收：持弓行走要有脚步+持弓姿态）：
+	# walk state 资源换装（盾姿态分层同款机制）。BOW → walk_bow（Archidon-Walk，
+	# 下肢走步 + 上肢保持持弓），其余兵种恢复通用走姿。HD-2D 镜像侧同步换装在
+	# char_sprite_3d.set_weapon_type（本实体侧 rig 在该图型下为 null）。
+	if owner_entity != null and "rig" in owner_entity:
+		var rig: Node = owner_entity.get("rig")
+		if rig != null and rig.has_method("set_state_anim"):
+			rig.set_state_anim("walk", Anims.walk_for_weapon(weapon_type))
 
 
 ## HP 校准只做一次（出生满血基线）；换武器只迁移伤害/冷却/爆头加值，
@@ -450,14 +504,21 @@ func _physics_process(delta: float) -> void:
 	# 步长经 sim_delta 携带速度档
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
+	# 格挡重置冷却两模通用（原版 blockResetInterval）：sim 模式冷却/strike/
+	# 放箭计时归 BattleSim 批推进，但本计时 BattleSim 不接管——此前递减放在
+	# sim 早退之后，sim 局一次成功格挡即永久锁死（节流永不过期，盾兵全场
+	# 只挡得成一击）
+	if _block_reset_timer > 0.0:
+		_block_reset_timer = maxf(0.0, _block_reset_timer - delta)
+	# RWR sustained_fire 停火恢复：**先于 sim 早退**执行（两模通吃）——原先挂在
+	# update_cooldown，而 sim 模式（观察场默认）本函数在此早退、update_cooldown
+	# 永不执行 → 热度只涨不消，叠加上面旧恢复率必然顶格（诊断 §1.4 根因三）
+	_recover_sustained_fire(delta)
 	# sim 模式（D 刀）：冷却/strike 命中帧/远程放箭计时由 BattleSim 批推进，
 	# 到点回调 sim_strike_now()/sim_fire_now()——本节点 _physics_process 停跑
 	if _sim() != null:
 		return
 	update_cooldown(delta)
-	# 格挡重置冷却（原版 blockResetInterval）
-	if _block_reset_timer > 0.0:
-		_block_reset_timer = maxf(0.0, _block_reset_timer - delta)
 	# 命中帧结算（Saga Strike 模式）
 	if not _strike_fired:
 		_pending_strike_elapsed += delta
@@ -474,6 +535,101 @@ func _physics_process(delta: float) -> void:
 				_pending_ranged_target = null
 		else:
 			_pending_ranged_target = null
+
+
+# ─────────────────────────────── 弓手瞄准表现窗 ────────────────────────────────
+## 持瞄拉弓 / 移动让位的逐帧仲裁。挂 _process 而非 _physics_process：
+## sim 模式（BattleSim 默认开）下本节点 _physics_process 早退，而表现仲裁是
+## 渲染率关注、且 AI 侧（behavior_attack）照常在实体上跑——_process 两模通吃。
+
+func _process(_delta: float) -> void:
+	if not _aim_visual_active:
+		return
+	if weapon_type != WeaponType.BOW:
+		_end_bow_aim_visual(false)
+		return
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	# 玩家蓄力窗的收口守卫：附身取消（cancel_charge 不经过本挂载）/ 附身丢失 /
+	# 死亡，都会让"按住全程"的无限窗失去归属——立刻收弓回站姿，别钉在拉满
+	if _aim_visual_player:
+		var possessed: bool = owner_entity != null \
+				and owner_entity.has_method("is_possessed") and owner_entity.is_possessed() \
+				and not (owner_entity.has_method("is_dead") and owner_entity.is_dead())
+		if not possessed:
+			_end_bow_aim_visual(true)
+			return
+	# 超时收弓（玩家蓄力路径无超时）：窗残而行为已切走时，别把人钉在拉满姿态
+	var now: float = _now()
+	if now > _aim_visual_until:
+		_end_bow_aim_visual(true)
+		return
+	if owner_entity == null:
+		return
+	var current: String = str(owner_entity.get("_current_anim"))
+	var moving: bool = owner_entity.velocity.length_squared() > BOW_MOVE_SQ_THRESHOLD
+	if moving:
+		# 移动让位走姿：attack_bow_hold 前缀会被 entity_motion 的攻击动画守卫
+		# 拦住 walk 切换（滑步定腿）——这里显式交还移动表现。walk state 资源
+		# 已被持瞄保持通道换装为 walk_bow_hold（上身拉满+下肢走步，窗开时
+		# _set_bow_aim_walk_override(true)），脚步动作与拉满上身同变体提供
+		if current == Anims.ANIM_ATTACK_BOW_HOLD:
+			_play_via_visual(Anims.ANIM_WALK)
+	else:
+		# 站定即拉弓绷住：motion 减速到 0 时会把状态写回 idle（表现窗拦不住
+		# 那一次写入），这里检测到待机/走姿残留就重新拉起拉弓保持段
+		if current == "idle" or current == Anims.ANIM_WALK or current == "run":
+			_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
+
+
+## 持瞄开始 → 起拉弓表现窗（拉弓保持段由 _process 仲裁落位）
+func _mark_bow_aim_started() -> void:
+	if weapon_type != WeaponType.BOW:
+		return
+	_aim_visual_active = true
+	_aim_visual_player = false  # AI 持瞄窗（超时兜底）；玩家窗只在 begin_player_draw 置位
+	_aim_visual_until = _now() + BOW_AIM_VISUAL_TIMEOUT
+	# 持瞄窗 walk 换装：窗内移动走 walk_bow_hold（上身拉满+下肢走步）
+	_set_bow_aim_walk_override(true)
+
+
+## 收瞄准表现窗。return_to_idle=true 且当前停在拉弓保持段时回站姿
+## （出手路径传 false——release 动画随后接管，不必插一脚 idle）。
+func _end_bow_aim_visual(return_to_idle: bool) -> void:
+	_aim_visual_active = false
+	_aim_visual_player = false
+	# 窗关即撤持瞄保持换装：walk state 回武器基础走姿（弓 = walk_bow）
+	_set_bow_aim_walk_override(false)
+	if not return_to_idle:
+		return
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	if str(owner_entity.get("_current_anim")) == Anims.ANIM_ATTACK_BOW_HOLD:
+		_play_via_visual("idle")
+
+
+## 持瞄窗 walk 换装开关（经实体 VisualController 的持瞄保持通道）：2D rig
+## set_state_anim 换装与 billboard 镜像（visual_controller.get_stance_anims
+## 观测口 → char_sprite_3d.set_stance_anims）两处同口径——状态留本挂载，
+## 名字解析与换装执行在 VisualController（walk state 资源替换，state 不增）。
+func _set_bow_aim_walk_override(on: bool) -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	var visual: Node = owner_entity.get("_visual")
+	if visual != null and visual.has_method("set_bow_aim_stance"):
+		visual.set_bow_aim_stance(on)
+
+
+## 经实体 VisualController 播动画（_current_anim 状态先行 + rig/HD-2D 镜像同走，
+## 死亡/动作锁定守卫在 play 内侧）。武器挂载不直写实体状态字段。
+func _play_via_visual(anim_name: String) -> void:
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null:
+		return
+	var visual: Node = owner_entity.get("_visual")
+	if visual != null and visual.has_method("play"):
+		visual.play(anim_name)
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -540,7 +696,12 @@ func get_cooldown_remaining() -> float:
 
 
 ## RWR sustained_fire 散布热度（0..1.2；behavior_attack 的点射停顿判定源）
+## ⚠ 双职责：behavior_attack._update_aim_rhythm 在**每次持瞄开始**恰好调用本函数
+## 一次（2026-09-30 核对为全库唯一调用点），弓手据此感知"持瞄开始"并拉起拉弓
+## 表现窗——AI 侧零改动（aim/** 归军师）。若该调用点挪走/新增别的调用方，
+## 必须同步迁走/摘除 _mark_bow_aim_started，否则拉弓时机会错。
 func get_sustained_fire_heat() -> float:
+	_mark_bow_aim_started()
 	return _sustained_fire_heat
 
 
@@ -569,7 +730,20 @@ func perform_attack(target: Node) -> Dictionary:
 		return result
 	# 弓：发射箭矢（命中由箭矢决定）；杖：延迟施法结算（本体下沉 weapon_ranged.gd）
 	if weapon_type == WeaponType.BOW or weapon_type == WeaponType.STAFF:
-		return _ranged.attack_ranged(target)
+		var ranged_result: Dictionary = _ranged.attack_ranged(target)
+		# 弓出手成功 → 收瞄准表现窗并播释放段（"绷住→放"衔接；拉弓保持段是
+		# 持瞄期的事，出手这拍不再回撤重拉）。kite 分支不调 play_attack，
+		# 释放段由这里兜底触发；in-range 分支随后 entity.play_attack() 重播
+		# 同名动画（镜像层按名去重，实体侧重播同帧同起点，无感）。
+		# 移动中出手（风筝还击）不播释放段：attack_* 前缀会触发 entity_motion
+		# 的攻击守卫拦住 walk 切换，1.33s 定腿滑步比无动作更糟——移动射击保持
+		# 裸发射，脚步表现交给走姿。
+		if weapon_type == WeaponType.BOW and str(ranged_result.get("reason")) == "fired":
+			_end_bow_aim_visual(false)
+			var shooter: CharacterBody2D = get_owner_entity()
+			if shooter == null or shooter.velocity.length_squared() <= BOW_MOVE_SQ_THRESHOLD:
+				_play_swing()
+		return ranged_result
 	var health: Node = _get_health(target)
 	if health == null or health.is_dead():
 		result["reason"] = "no_health_or_dead"
@@ -627,11 +801,19 @@ func perform_swing() -> bool:
 
 # ─────────────────────────────── 玩家蓄力操控（SWL ArcherControls PC 翻译）───
 
-## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：仅播攻击动画——不进冷却、
-## 不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
-## 蓄满 1000ms × 瞄准慢放 0.5 恰使 attack_bow 走到 Drawn@0.5 拉满帧。
+## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：弓播拉弓保持段（举弓-拉弦-
+## 绷住，定格拉满陪按住全程）；其余武器维持旧行为（播攻击动画）。
+## 不进冷却、不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
+## 蓄满 1000ms × 瞄准慢放 0.5 恰使拉弦动作走到 Drawn@0.5 拉满帧。
 func begin_player_draw() -> void:
-	_play_swing()
+	if weapon_type != WeaponType.BOW:
+		_play_swing()
+		return
+	_aim_visual_active = true
+	_aim_visual_player = true
+	_aim_visual_until = 1.0e9  # 玩家按住全程无超时，松手/附身丢失才收弓
+	_set_bow_aim_walk_override(true)  # 玩家窗同享持瞄保持行走（移动走 walk_bow_hold）
+	_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
 
 
 ## 玩家松手放箭（SWL AimReleased → UserControlledArrowReleased）：
@@ -639,8 +821,15 @@ func begin_player_draw() -> void:
 ## 返回箭矢实例（无出手为 null；箭矢镜头消费）。
 func release_player_shot(aim_dir: Vector2, power: float) -> Node2D:
 	if not can_attack():
+		_end_bow_aim_visual(true)  # 出手被拒也要收弓，别把玩家钉在拉满姿态
 		return null
 	var arrow: Node2D = _ranged.fire_arrow_manual(aim_dir, power)
+	# 松手 = 释放段（绷住→放）；出手被守卫拦下时 _end 已回站姿。
+	# 移动中松手不播释放段（同 perform_attack：定腿滑步比无动作更糟）
+	_end_bow_aim_visual(false)
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity == null or owner_entity.velocity.length_squared() <= BOW_MOVE_SQ_THRESHOLD:
+		_play_swing()
 	_cooldown_after_player_action()
 	return arrow
 
@@ -928,12 +1117,23 @@ func _resolve_hit_seconds() -> float:
 	return 0.0
 
 
-## 每帧递减冷却（也可由外部调用）
+## 每帧递减冷却（也可由外部调用）。散热恢复不在本函数：见 _recover_sustained_fire
+## （须两模通吃，挂 _physics_process 的 sim 早退之前）。
 func update_cooldown(delta: float) -> void:
 	if _cooldown_timer > 0.0:
 		_cooldown_timer = maxf(0.0, _cooldown_timer - delta)
-	# RWR sustained_fire 停火恢复（diminish_rate）：散布热度随时间回落
+
+
+## RWR sustained_fire 停火恢复（diminish_rate）：散布热度随时间线性回落。
+## 调用位 = _physics_process 的 sim 早退之前（两模通吃；单测直接步进本函数）。
+func _recover_sustained_fire(delta: float) -> void:
 	_sustained_fire_heat = maxf(0.0, _sustained_fire_heat - SUSTAINED_FIRE_DIMINISH * delta)
+
+
+## 连射散热记账（放箭时由 weapon_ranged.fire_arrow 调用）：热度增长 + 封顶。
+## 增长/恢复两个时间常数的唯一入口（单测步进 add/_recover 一对函数复算节奏）。
+func add_sustained_fire_heat() -> void:
+	_sustained_fire_heat = minf(_sustained_fire_heat + SUSTAINED_FIRE_GROW, SUSTAINED_FIRE_HEAT_MAX)
 
 
 ## 获取挂在手部的武器实例（null=未挂载）

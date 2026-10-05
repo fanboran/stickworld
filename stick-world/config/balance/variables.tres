@@ -279,11 +279,11 @@ variables = {
 		{
 			"id": "var_row_gap",
 			"category": "formation",
-			"value": 56,
+			"value": 80,
 			"min": 16,
-			"max": 160,
+			"max": 200,
 			"step": 1,
-			"description": "编队列间距（px）"
+			"description": "编队列间距（px；分离改椭圆口径后 ≥ 纵深半径 72+余量，待实测校准）"
 		},
 		{
 			"id": "var_catchup_run_dist",

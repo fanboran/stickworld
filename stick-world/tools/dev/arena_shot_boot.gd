@@ -9,11 +9,13 @@ extends Control
 ##   godot --path stick-world res://tools/dev/arena_shot_boot.tscn --resolution 1920x1080 -- --preset 1 --secs 20 --every 5 --tag mytag
 
 const DRIVER_SCRIPT := preload("res://tools/dev/arena_shot_driver.gd")
+const METRICS_DRIVER := preload("res://tools/dev/arena_metrics.gd")
 
 var _preset := 1
 var _secs := 20
 var _every := 5
 var _tag := "workbench"
+var _metrics := false
 
 
 func _ready() -> void:
@@ -29,6 +31,8 @@ func _ready() -> void:
 				_every = int(args[i + 1]); i += 2
 			"--tag":
 				_tag = args[i + 1]; i += 2
+			"--metrics":
+				_metrics = true; i += 1
 			_:
 				i += 1
 	call_deferred("_start")
@@ -39,8 +43,8 @@ func _start() -> void:
 	var arena_script: GDScript = load("res://tests/dev/battle_arena.gd")
 	arena_script._preset_idx = _preset
 	var driver := Node.new()
-	driver.set_script(DRIVER_SCRIPT)
-	driver.name = "ArenaShotDriver"
+	driver.set_script(METRICS_DRIVER if _metrics else DRIVER_SCRIPT)
+	driver.name = "ArenaMetricsDriver" if _metrics else "ArenaShotDriver"
 	get_tree().root.add_child(driver)
 	driver.call("run", _tag, _preset, _secs, _every)
 	get_tree().change_scene_to_file("res://tests/dev/battle_arena.tscn")

@@ -418,6 +418,55 @@ static func set_state_animation(sm: AnimationNodeStateMachine, state_name: Strin
 
 
 # ============================================================
+#  无 rig 数据访问器（billboard 镜像链/无头命中解析共用）
+# ============================================================
+## .tres 本身就是 Animation 资源：length / loop_mode / metadata 不依赖 rig
+## 实例即可直读。HD-2D billboard 图上实体 2D 骨架已删（rig==null）——
+## 命中帧解析（weapon_mount._resolve_hit_event_time）、攻击播完回切
+## （visual_controller 软件定时）、出手前预测（behavior_attack）都从这里
+## 拿动画数据，与 2D 富管线的 rig.get_anim_event_time 同一真相源。
+static var _rigless_cache: Dictionary = {}
+
+
+## 动画时长（秒）；资源不存在返回 -1
+static func rigless_anim_length(anim_name: String) -> float:
+	var res := _rigless_res(anim_name)
+	return res.length if res != null else -1.0
+
+
+## 动画内嵌事件时间（秒）；首个匹配事件的绝对时间，无事件/无资源返回 -1。
+## 与 rig.get_anim_event_time 同构（元数据同源）
+static func rigless_anim_event_time(anim_name: String, event_name: String) -> float:
+	var res := _rigless_res(anim_name)
+	if res == null or not res.has_meta("anim_events"):
+		return -1.0
+	for e in res.get_meta("anim_events"):
+		if str(e["name"]) == event_name:
+			return float(e["time"])
+	return -1.0
+
+
+## 是否单次动画（LOOP_NONE）——billboard 软件回切定时只对单次动画生效
+## （循环动画永不结束，rig._check_animation_finished 同口径）
+static func rigless_is_oneshot(anim_name: String) -> bool:
+	var res := _rigless_res(anim_name)
+	return res != null and res.loop_mode == Animation.LOOP_NONE
+
+
+static func _rigless_res(anim_name: String) -> Animation:
+	if anim_name.is_empty():
+		return null
+	if _rigless_cache.has(anim_name):
+		return _rigless_cache[anim_name]
+	var path := ANIM_DIR + anim_name + ".tres"
+	var res: Animation = null
+	if ResourceLoader.exists(path):
+		res = load(path) as Animation
+	_rigless_cache[anim_name] = res
+	return res
+
+
+# ============================================================
 #  内部辅助
 # ============================================================
 

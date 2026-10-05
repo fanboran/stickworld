@@ -293,15 +293,36 @@ func _sync_character_render() -> void:
 					flipped,
 					depth_scale_at(body.position.y),
 					lift)
+		# 动画镜像（战场观感重构批1 #8/#9）：优先走 visual_controller 镜像观测口
+		# ——单次变体（攻击/受击变体名）、同名重播序号（连续第二刀可见）、循环
+		# 速率（防脚底滑步）都从这出；无观测口（旧实体/桩）回落 _current_anim。
+		# 播完回切由实体侧软件计时驱动（visual_controller._physics_process），
+		# 回切后镜像自然换动画。
+		var visual: Variant = body.get("_visual")
+		var has_visual: bool = visual != null and is_instance_valid(visual)
 		if ch.has_method("set_anim"):
-			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
-			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
-			# set_anim 的变更检测天然完成（此前 attack 被强制降级 walk/idle，
-			# 挥镐/挥锤在街上不可见 = 干活与罚站无法区分，创始人 2026-09-15）
 			var anim: String = str(body.get("_current_anim"))
+			var seq: int = -1
+			var hit_variant := ""
+			if has_visual and visual.has_method("get_mirror_anim_state"):
+				var ms: Dictionary = visual.get_mirror_anim_state()
+				anim = str(ms.get("anim", anim))
+				seq = int(ms.get("seq", -1))
+				hit_variant = str(ms.get("hit_variant", ""))
+				if ch.has_method("set_anim_speed"):
+					ch.set_anim_speed(float(ms.get("speed", 1.0)))
 			if anim.is_empty():
 				anim = "walk" if moving else "idle"
-			ch.set_anim(anim)
+			ch.set_anim(anim, seq, hit_variant)
+		# 受击闪白脉冲（边沿消费）：play_hit 的视觉反馈——2D 链走 rig modulate
+		# 闪红，billboard 链走 shader flash（同款色相/节奏）
+		if has_visual and visual.has_method("consume_hit_flash") \
+				and ch.has_method("flash_hit") and visual.call("consume_hit_flash"):
+			ch.flash_hit()
+		# 尸体渐隐（#8）：实体死亡后自身 modulate.a 由淡出 tween 逐帧压低，
+		# 镜像整卡透明度同步跟值——实体 queue_free 那帧卡已近全透明，无瞬删跳变
+		if ch.has_method("set_master_alpha") and body.has_method("is_dead") and body.is_dead():
+			ch.set_master_alpha(float((body as CanvasItem).modulate.a))
 		# 劳作进度镜像：2D 进度条挂 RigHost 已随街景隐藏，billboard 用自带
 		# 3D 头顶条（-1 = 隐藏）。采集/派工/搬运同源（set_action_progress 通道）
 		if ch.has_method("set_work_progress") and body.has_method("get_action_progress"):
@@ -319,8 +340,7 @@ func _sync_character_render() -> void:
 		# 盾姿态镜像（盾姿态分层，计划 5）：2D 侧换装依赖 rig（billboard 图为 null
 		# 不生效），经 VisualController 观测口拿当前生效 walk/idle 动画名，镜像层
 		# 自行换装（举盾行军 block_walk / 举盾待命 block_crouch 在 billboard 可见）
-		var visual: Variant = body.get("_visual")
-		if visual != null and is_instance_valid(visual) \
+		if has_visual \
 				and visual.has_method("get_stance_anims") and ch.has_method("set_stance_anims"):
 			var stance: Dictionary = visual.get_stance_anims()
 			ch.set_stance_anims(str(stance.get("walk", "")), str(stance.get("idle", "")))

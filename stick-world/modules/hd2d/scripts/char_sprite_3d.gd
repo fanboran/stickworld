@@ -21,7 +21,7 @@ extends Node3D
 ## 一个 SubViewport 可以被 N 个 quad 共用（同姿态）；要每个角色不同动画相位，
 ## 必须一个角色一个 SubViewport（成本见汇报的性能读数）。
 
-const RIG_SCENE := "res://modules/stick_rig/scenes/stickman_test.tscn"
+const RIG_SCENE := preload("res://modules/stick_rig/api.gd").RIG_SCENE_PATH
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
@@ -71,6 +71,24 @@ static var _tier_seq := 0
 var _tier_phase := 0
 var _rescale_at_frame := -1   # >0 = 到帧后落地换档（错峰摊平 RT 重建峰值）
 var _world_zoom := -1.0       # set_outline_zoom 最近一次推入值（换档后重推）
+
+# ─── 镜像通道语义（战场观感重构批1：#8 #9）───
+var _anim_seq: int = -2              # feed 侧动画事件序号（同名重播识别；-2=未初始化）
+var _hit_variant_sent := ""          # 受击变体换装缓存（压重复 set_state_anim）
+var _anim_speed_sent: float = -1.0   # set_anim_speed 缓存（压重复设置）
+var _flash_left := 0.0               # 受击闪白剩余（秒，随 feed 每帧衰减）
+var _flash_amount_sent := -1.0       # 闪白强度缓存（0 时不再每帧推参）
+var _master_alpha := -1.0            # 整卡透明度缓存（尸体渐隐；-1=未设置）
+# 渲染帧插值（#9）：sim 30Hz 写位置 → 渲染帧台阶感；双缓冲 + 物理 tick 分数插值
+var _pos_prev := Vector3.ZERO
+var _pos_cur := Vector3.ZERO
+var _pos_pf := -1                    # 双缓冲已提交的物理帧号
+var _pos_valid := false
+var _moved_this_tick := false        # 本物理刻内是否已位移过（识别渲染驱动移动）
+# 受击闪白节奏与 2D 链受击闪红同款（rig modulate 红 0.06s 达峰 → 0.18s 回落），
+# 两链观感一致
+const FLASH_HOLD := 0.06
+const FLASH_TOTAL := 0.24
 
 ## ── 采集烘焙（spatial 管线直采 ViewportTexture 出 RGB 色散的绕行）──
 ## 现象与定位（2026-09-30 排查）：视口纹理本体干净（get_image 回读、2D 直显
@@ -489,22 +507,31 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 	var b := _cam_basis()
 	b = b.scaled(Vector3(depth, depth, depth))
 	_quad.basis = b
-	_quad.position = Vector3(x, ground_lift + quad_center_offset_y() * depth, z)
+	# 渲染帧插值（#9）：quad/影/框/劳作条统一用插值后的位置
+	var p := _interp_render_pos(Vector3(x, ground_lift + quad_center_offset_y() * depth, z))
+	_quad.position = p
 	if mat != null:
 		mat.set_shader_parameter("flip_uv", flip)
 	if _my_shadow != null:
-		_my_shadow.position = Vector3(x, ground_lift + 0.09, z)
+		_my_shadow.position = Vector3(p.x, ground_lift + 0.09, p.z)
 		_my_shadow.scale = Vector3(depth * SIZE_K, depth * SIZE_K, 1.0)
 	if _bracket_quad != null:
-		_bracket_quad.position = Vector3(x, ground_lift + 0.10, z + 0.35)
+		_bracket_quad.position = Vector3(p.x, ground_lift + 0.10, p.z + 0.35)
 		_bracket_quad.scale = Vector3(depth, depth, 1.0)
 	# 劳作条锚位：角色卡顶（卡中心 y + 半卡高）+ 净空，全部随 depth 缩放
 	if _wp_bg != null:
-		_wp_anchor = Vector3(x,
+		_wp_anchor = Vector3(p.x,
 				ground_lift + quad_center_offset_y() * depth
 						+ (SV_H * PX * SIZE_K * 0.5 + WP_LIFT) * depth,
-				z)
+				p.z)
 		_layout_work_bar()
+	# 受击闪白衰减（feed 每渲染帧调本函数，顺带推进；不活跃时零开销）
+	if _flash_left > 0.0:
+		_flash_left = maxf(0.0, _flash_left - get_process_delta_time())
+		var elapsed := FLASH_TOTAL - _flash_left
+		var amount := 1.0 if elapsed <= FLASH_HOLD \
+				else 1.0 - (elapsed - FLASH_HOLD) / (FLASH_TOTAL - FLASH_HOLD)
+		_apply_flash(maxf(amount, 0.0))
 
 
 ## 描边 zoom 补偿（宿主在世界变焦变化时推一次）：SubViewport 无相机，
@@ -554,13 +581,88 @@ func _apply_quality_tier() -> void:
 	mat.set_shader_parameter("alpha_soften", float(tier["soften"]))
 
 
-## 动画切换（只在变化时 play，避免每帧重置动画进度）
-func set_anim(anim: String) -> void:
-	if _anim == anim or rig == null:
+## 动画切换。seq = feed 侧动画事件序号（visual_controller.get_mirror_anim_state）：
+## 同名不同 seq = 同名重播（连续第二刀），必须重触发 rig.play（rig 侧 oneshot
+## 重播走 start() 分支）——只按名字做变更检测会把重复挥砍整个吞掉（#8 主症）。
+func set_anim(anim: String, seq: int = -1, hit_variant: String = "") -> void:
+	if rig == null:
+		return
+	# 受击变体换装（状态机只有 hit_front/hit_back 状态，变体动画资源经
+	# set_state_anim 换进状态——与 2D 富管线 play_hit 同构）
+	if not hit_variant.is_empty() and hit_variant != _hit_variant_sent:
+		_hit_variant_sent = hit_variant
+		if rig.has_method("set_state_anim"):
+			rig.set_state_anim(anim, hit_variant)
+	if anim == _anim and seq == _anim_seq:
 		return
 	_anim = anim
+	_anim_seq = seq
 	rig.play(anim)
 	_blit_next_frame = 0   # [采集烘焙] 姿态变化（含 idle 唤醒）立即排期烘焙
+
+
+## 循环动画速率镜像（#8 滑步治理）：走 rig.set_anim_speed——oneshot 内部强制
+## 1.0 保命中帧、循环 clamp ≤3.0，与 2D 富管线同一套规则（速率语义不另立）
+func set_anim_speed(scale: float) -> void:
+	if rig == null or is_equal_approx(scale, _anim_speed_sent):
+		return
+	_anim_speed_sent = scale
+	rig.set_anim_speed(scale)
+
+
+## 受击闪白脉冲（feed 经 visual_controller.consume_hit_flash 边沿触发）：强度
+## 0.06s 到峰、0.24s 归零，衰减随 set_world_pos 每渲染帧推进
+func flash_hit() -> void:
+	_flash_left = FLASH_TOTAL
+	_apply_flash(1.0)
+
+
+func _apply_flash(amount: float) -> void:
+	if is_equal_approx(amount, _flash_amount_sent):
+		return
+	_flash_amount_sent = amount
+	if mat != null:
+		mat.set_shader_parameter("flash_amount", amount)
+
+
+## 整卡透明度（尸体渐隐 #8）：乘进 quad 与接地影的最末 alpha。feed 在实体
+## 死亡期读 body.modulate.a 逐帧推入——与实体侧 2D 淡出 tween 完全同步，
+## 实体 queue_free 那帧卡已近全透明，无瞬删跳变
+func set_master_alpha(a: float) -> void:
+	if is_equal_approx(a, _master_alpha):
+		return
+	_master_alpha = a
+	if mat != null:
+		mat.set_shader_parameter("master_alpha", a)
+	if _shadow_mat != null:
+		_shadow_mat.set_shader_parameter("master_alpha", a)
+
+
+## 渲染帧插值（#9）：双缓冲 + Engine.get_physics_interpolation_fraction。
+## 位置只在物理刻推进（sim 写回）时提交 prev/cur，渲染帧在两者间按 tick 内
+## 分数插值；同一物理刻内二次位移 = 渲染驱动移动（附身玩家），插值会橡皮筋，
+## 直接贴齐。首帧未初始化也贴齐。
+func _interp_render_pos(target: Vector3) -> Vector3:
+	if not _pos_valid:
+		_pos_prev = target
+		_pos_cur = target
+		_pos_pf = Engine.get_physics_frames()
+		_pos_valid = true
+		_moved_this_tick = false
+		return target
+	var pf := Engine.get_physics_frames()
+	if pf != _pos_pf:
+		_pos_prev = _pos_cur
+		_pos_pf = pf
+		_moved_this_tick = false
+	if target != _pos_cur:
+		if _moved_this_tick:
+			_pos_prev = target
+			_moved_this_tick = false
+		else:
+			_moved_this_tick = true
+		_pos_cur = target
+	return _pos_prev.lerp(_pos_cur, Engine.get_physics_interpolation_fraction())
 
 
 ## 主手武器镜像（HD-2D billboard）：实体的武器挂在 2D 骨架手骨

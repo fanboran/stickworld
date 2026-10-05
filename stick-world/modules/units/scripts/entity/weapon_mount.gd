@@ -1073,10 +1073,14 @@ func _resolve_hit_event_time() -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity == null or not "rig" in owner_entity:
 		return
+	var anim_name := _attack_anim_name()
 	var rig: Node = owner_entity.get("rig")
-	if rig == null or not rig.has_method("get_anim_event_time"):
+	if rig != null and rig.has_method("get_anim_event_time"):
+		_hit_event_time = rig.get_anim_event_time(anim_name, "Hit")
 		return
-	_hit_event_time = rig.get_anim_event_time(_attack_anim_name(), "Hit")
+	# billboard 链（rig==null）：无 rig 帧表解析——.tres 元数据直读（镜像通道
+	# 语义补全 #3），命中时序与 2D 富管线同一真相源，不再退化为立即结算
+	_hit_event_time = Anims.rigless_anim_event_time(anim_name, "Hit")
 
 
 # ─────────────────────────────── BattleSim 接线（D 刀）────────────────────────────────
@@ -1107,13 +1111,18 @@ func _resolve_hit_seconds() -> float:
 	_resolve_hit_event_time()
 	if _hit_event_time >= 0.0:
 		return _hit_event_time
+	var anim_name := _attack_anim_name()
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity != null and "rig" in owner_entity:
 		var rig: Node = owner_entity.get("rig")
 		if rig != null and rig.has_method("get_anim_length"):
-			var anim_len: float = rig.get_anim_length(_attack_anim_name())
+			var anim_len: float = rig.get_anim_length(anim_name)
 			if anim_len > 0.0:
 				return anim_len * STRIKE_FRAME_RATIO_FALLBACK
+	# billboard 链（rig==null）：无 rig 时长回退走 .tres 直读
+	var rigless_len: float = Anims.rigless_anim_length(anim_name)
+	if rigless_len > 0.0:
+		return rigless_len * STRIKE_FRAME_RATIO_FALLBACK
 	return 0.0
 
 

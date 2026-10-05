@@ -887,25 +887,34 @@ func _strike_will_land(target: Node, attack_range: float) -> bool:
 
 ## 命中帧时长（s）：镜像 weapon_mount._resolve_hit_seconds 的解析序（Hit 事件真值 →
 ## 动画全长 × 0.45 兜底比例 → 0）——0 = 无动画计时（billboard 图/sim 即时结算），
-## 预测窗随环境自适应：观察场（无 rig）门槛自然退化为不拦截，带骨架的地图
-## （village 等真命中帧延迟）才启用预测。跨环境共用一档，无待校准自由数值。
+## 预测窗随环境自适应：带骨架的地图（village 等）走 rig 帧表；billboard 图
+## （rig==null）走 .tres 无 rig 直读——观察场也有真命中帧延迟，首挥守卫
+## 不再退化放行（镜像通道语义补全 #6）。跨环境共用一档，无待校准自由数值。
 func _hit_frame_seconds() -> float:
 	if entity == null or not is_instance_valid(entity) or not "rig" in entity:
 		return 0.0
-	var rig: Node = entity.get("rig")
-	if rig == null:
-		return 0.0
 	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var wt: int = int(weapon.weapon_type) if weapon != null and "weapon_type" in weapon else 0
-	var t: float = -1.0
-	if rig.has_method("get_anim_event_time"):
-		t = rig.get_anim_event_time(ScriptAnims.anim_for_weapon(wt), "Hit")
-	if t >= 0.0:
-		return t
-	if rig.has_method("get_anim_length"):
-		var anim_len: float = rig.get_anim_length(ScriptAnims.anim_for_weapon(wt))
-		if anim_len > 0.0:
-			return anim_len * 0.45
+	var attack_anim: String = ScriptAnims.anim_for_weapon(wt)
+	var rig: Node = entity.get("rig")
+	if rig != null:
+		var t: float = -1.0
+		if rig.has_method("get_anim_event_time"):
+			t = rig.get_anim_event_time(attack_anim, "Hit")
+		if t >= 0.0:
+			return t
+		if rig.has_method("get_anim_length"):
+			var anim_len: float = rig.get_anim_length(attack_anim)
+			if anim_len > 0.0:
+				return anim_len * 0.45
+		return 0.0
+	# billboard 链：与 weapon_mount._resolve_hit_seconds 同序的无 rig 回退
+	var t_rigless: float = ScriptAnims.rigless_anim_event_time(attack_anim, "Hit")
+	if t_rigless >= 0.0:
+		return t_rigless
+	var len_rigless: float = ScriptAnims.rigless_anim_length(attack_anim)
+	if len_rigless > 0.0:
+		return len_rigless * 0.45
 	return 0.0
 
 

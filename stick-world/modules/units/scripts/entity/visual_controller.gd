@@ -39,6 +39,78 @@ var _blocking: bool = false
 ## （get_stance_anims 镜像观测口 + 2D 侧 set_state_anim 换装）。
 var _bow_aim_active: bool = false
 
+# ─────────── billboard 镜像观测口（无 rig 链的状态出口，战场观感重构批1） ───────────
+## HD-2D billboard 图上 rig==null：动画完成信号/受击播报/速率这些"经 rig 生效"
+## 的语义全部断链。本组状态由 feed（hd2d_map_base._sync_character_render）逐帧
+## 轮询消费，让镜像侧拿到与 2D 富管线等价的语义：
+## - _mirror_seq：动画事件序号，每次 play/攻击变体/受击插播递增——镜像 set_anim
+##   靠它识别"同名重播"（连续第二刀可见）
+## - _mirror_override：单次动画（攻击变体/受击变体）实际动画名，非空时优先于
+##   _current_anim（_current_anim 是状态名如 "attack"，变体名不进它）
+## - _oneshot_left：单次动画软件计时（等价 rig.animation_finished 的触发源）
+## - _anim_speed_cached：最近一次 set_anim_speed 的生效值（镜像 set_anim_speed 消费）
+## - _hit_flash_seq：受击脉冲序号（feed 经 consume_hit_flash 边沿消费→镜像闪白）
+var _mirror_seq: int = 0
+var _mirror_override: String = ""
+var _mirror_base_anim: String = ""
+var _mirror_hit_variant: String = ""
+var _oneshot_left: float = -1.0
+var _anim_speed_cached: float = 1.0
+var _hit_flash_seq: int = 0
+var _hit_flash_seen: int = 0
+
+
+## 镜像状态观测口（feed 每帧调用）：anim=当前应显示动画（单次变体优先），
+## seq=动画事件序号（同名重播识别），speed=循环动画速率
+func get_mirror_anim_state() -> Dictionary:
+	var anim: String = _entity._current_anim if _entity != null else ""
+	var hit_variant := ""
+	if not _mirror_override.is_empty():
+		anim = _mirror_override
+		hit_variant = _mirror_hit_variant
+	return {"anim": anim, "seq": _mirror_seq, "speed": _anim_speed_cached,
+			"hit_variant": hit_variant}
+
+
+## 受击闪白脉冲边沿消费：每次 play_hit 后首个轮询返回 true（feed 据此触发镜像闪白）
+func consume_hit_flash() -> bool:
+	if _hit_flash_seq != _hit_flash_seen:
+		_hit_flash_seen = _hit_flash_seq
+		return true
+	return false
+
+
+## billboard 软件回切计时（等价 rig.animation_finished 的无 rig 触发源）。
+## oneshot 恒 1.0 速率（rig.set_anim_speed 同规：单次动画保命中帧不变速）；
+## 暂停由引擎总闸负责（树暂停时物理帧停跑本计时自然冻结）
+func _physics_process(_delta: float) -> void:
+	if _oneshot_left < 0.0:
+		return
+	_oneshot_left -= _delta
+	if _oneshot_left > 0.0:
+		return
+	_oneshot_left = -1.0
+	_mirror_override = ""
+	_mirror_hit_variant = ""
+	var base := _mirror_base_anim
+	_mirror_base_anim = ""
+	if not base.is_empty():
+		_on_rig_anim_finished(base)
+
+
+## 启动 billboard 单次动画软件计时（仅无 rig 链；有 rig 时 rig 信号是触发源，
+## 双触发会让回切跑两遍）。时长拿不到（资源缺失）时按 0.66s 兜底——多数
+## 攻击/受击动画在 0.4~1.4s，兜底宁可早回切不卡死
+func _start_oneshot_mirror(anim_name: String, base_anim: String,
+		length_anim: String = "") -> void:
+	var len: float = Anims.rigless_anim_length(
+			length_anim if not length_anim.is_empty() else anim_name)
+	if len < 0.0:
+		len = 0.66
+	_mirror_override = anim_name
+	_mirror_base_anim = base_anim
+	_oneshot_left = len
+
 
 func setup(entity: Node2D) -> void:
 	_entity = entity
@@ -117,7 +189,12 @@ func play(anim_name: String) -> void:
 	elif _bow_aim_active and not _blocking and not _entity._carrying and anim_name == "walk":
 		_apply_bow_aim_anim()
 	_entity._current_anim = anim_name
+	_mirror_seq += 1
 	if rig == null:
+		# billboard 镜像链：单次动画（arrive/block 等）软件计时回切
+		# （attack 不走 play，经 play_attack 的变体通道）
+		if Anims.rigless_is_oneshot(play_name):
+			_start_oneshot_mirror(play_name, anim_name)
 		return
 	rig.play(play_name)
 
@@ -238,7 +315,11 @@ func play_attack(anim_name: String, blocking: bool) -> void:
 func _play_attack_variant(base: String, variant: String) -> void:
 	var rig: Node2D = _entity.rig
 	_entity._current_anim = base   # 状态先行（同 play：billboard 镜像数据源）
+	_mirror_seq += 1               # 同名重挥也递增——镜像靠 seq 识别重播（连续第二刀可见）
 	if rig == null:
+		# billboard 镜像链：变体名进 override（镜像播变体而非基础 attack），
+		# 软件计时播完回切（等价 rig.animation_finished → _on_rig_anim_finished）
+		_start_oneshot_mirror(variant, base)
 		return
 	if rig.has_method("set_state_anim"):
 		rig.set_state_anim(base, variant)  # variant==base 即恢复基础动画
@@ -272,9 +353,12 @@ func refresh_idle_stance() -> void:
 ## 设置动画播放速率（按当前速度缩放；全局速度档再乘一层——4x 下循环动画
 ## 同步加速防"滑步"，oneshot 攻击动画在 rig.set_anim_speed 内强制 1.0 保命中帧对齐）。
 func set_anim_speed(v: float) -> void:
+	var sf: float = TimeManager.speed_factor() if TimeManager != null else 1.0
+	# 生效值缓存：billboard 镜像经 get_mirror_anim_state 轮询消费（rig==null 时
+	# rig 侧不生效，缓存是镜像链唯一速率来源）
+	_anim_speed_cached = maxf(v * sf, MIN_ANIM_SCALE)
 	if _entity.rig != null:
-		var sf: float = TimeManager.speed_factor() if TimeManager != null else 1.0
-		_entity.rig.set_anim_speed(maxf(v * sf, MIN_ANIM_SCALE))
+		_entity.rig.set_anim_speed(_anim_speed_cached)
 
 
 ## 设置搬运状态：搬运工持物时 walk 切换为 walk_carry 动画。
@@ -315,7 +399,19 @@ func clear_action() -> void:
 ## 变体池直译（SWL SelectHitAnimation）：big=强击 / head=头部部位 / blocking=举盾中被击
 func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking: bool = false) -> void:
 	var rig: Node2D = _entity.rig
-	if rig != null and rig.has_method("play_hit"):
+	if rig == null:
+		# billboard 镜像链：状态机只有 hit_front/hit_back 两个状态，变体
+		# （hit_mid_front_big 等）靠 set_state_anim 资源换装（2D 链同构）——
+		# override 给状态名、hit_variant 给变体名，镜像侧先换装再播状态；
+		# 计时长度按变体实际时长。闪白脉冲（feed 边沿消费触发镜像闪白）
+		var chosen: String = Anims.pick_hit_anim(from_front, big, head, blocking)
+		var state: String = "hit_front" if from_front else "hit_back"
+		_mirror_seq += 1
+		_hit_flash_seq += 1
+		_mirror_hit_variant = chosen if chosen != state else ""
+		_start_oneshot_mirror(state, "", chosen)
+		return
+	if rig.has_method("play_hit"):
 		rig.play_hit(from_front, big, head, blocking)
 
 

@@ -10,12 +10,14 @@ extends Control
 
 const DRIVER_SCRIPT := preload("res://tools/dev/arena_shot_driver.gd")
 const METRICS_DRIVER := preload("res://tools/dev/arena_metrics.gd")
+const PROBE_DRIVER := preload("res://tools/dev/arena_shadowprobe.gd")
 
 var _preset := 1
 var _secs := 20
 var _every := 5
 var _tag := "workbench"
 var _metrics := false
+var _probe := false
 
 
 func _ready() -> void:
@@ -33,6 +35,8 @@ func _ready() -> void:
 				_tag = args[i + 1]; i += 2
 			"--metrics":
 				_metrics = true; i += 1
+			"--probe":
+				_probe = true; i += 1
 			_:
 				i += 1
 	call_deferred("_start")
@@ -43,8 +47,9 @@ func _start() -> void:
 	var arena_script: GDScript = load("res://tests/dev/battle_arena.gd")
 	arena_script._preset_idx = _preset
 	var driver := Node.new()
-	driver.set_script(METRICS_DRIVER if _metrics else DRIVER_SCRIPT)
-	driver.name = "ArenaMetricsDriver" if _metrics else "ArenaShotDriver"
+	var script: GDScript = PROBE_DRIVER if _probe else (METRICS_DRIVER if _metrics else DRIVER_SCRIPT)
+	driver.set_script(script)
+	driver.name = "ArenaProbeDriver" if _probe else ("ArenaMetricsDriver" if _metrics else "ArenaShotDriver")
 	get_tree().root.add_child(driver)
 	driver.call("run", _tag, _preset, _secs, _every)
 	get_tree().change_scene_to_file("res://tests/dev/battle_arena.tscn")

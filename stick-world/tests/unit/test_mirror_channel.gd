@@ -34,7 +34,7 @@ func _ready() -> void:
 	_runner.add_test("镜像: 无rig访问器 walk 循环/缺资源 -1", _test_accessor_walk_missing)
 	_runner.add_test("镜像: 攻击播完软件回切 idle", _test_attack_return)
 	_runner.add_test("镜像: 同名重播 seq 递增", _test_seq_repeat)
-	_runner.add_test("镜像: 受击插播变体+闪白边沿消费", _test_hit_pulse)
+	_runner.add_test("镜像: 受击插播变体", _test_hit_pulse)
 	_runner.add_test("镜像: 速率缓存供 feed 轮询", _test_speed_cache)
 	_runner.run()
 	print(_runner.summary())
@@ -116,8 +116,6 @@ func _test_hit_pulse() -> void:
 	var swap_name := str(ms["swap"])
 	_runner.assert_true(swap_name.is_empty() or not swap_name.begins_with("hit"),
 			"攻击 swap 应为攻击变体或空，实际 %s" % swap_name)
-	_runner.assert_true(vc.call("consume_hit_flash"), "首次轮询应消费到闪白脉冲")
-	_runner.assert_false(vc.call("consume_hit_flash"), "闪白脉冲应只消费一次（边沿）")
 	# 插播播完回落 _current_anim（受击未改它，仍 idle）
 	vc.call("_physics_process", 2.0)
 	ms = vc.call("get_mirror_anim_state")

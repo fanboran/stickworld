@@ -36,6 +36,10 @@ func run(_tag: String, _preset: int, secs: int, every: int) -> void:
 			waited = true
 			break
 	print("[ArenaMetrics] cover gone=%s，采样 %ds" % [waited, secs])
+	# 等旧图退场（arena"旧图延迟销毁"：遮罩撤除后旧村图还挂几帧，
+	# 截图/采样落在窗内会把村舍残影当战场）——揭幕后稳定一小段再动作
+	for i in 12:
+		await get_tree().process_frame
 	_t0 = Time.get_ticks_msec() / 1000.0
 	var next_report := _t0 + maxf(every, 5)
 	while _elapsed() < secs:

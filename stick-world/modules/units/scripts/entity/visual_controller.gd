@@ -51,15 +51,12 @@ var _bow_aim_active: bool = false
 ##   等）——状态机只有状态节点，编号变体靠 set_state_anim 资源换装（2D 链同构）
 ## - _oneshot_left：单次动画软件计时（等价 rig.animation_finished 的触发源）
 ## - _anim_speed_cached：最近一次 set_anim_speed 的生效值（镜像 set_anim_speed 消费）
-## - _hit_flash_seq：受击脉冲序号（feed 经 consume_hit_flash 边沿消费→镜像闪白）
 var _mirror_seq: int = 0
 var _mirror_override: String = ""
 var _mirror_base_anim: String = ""
 var _mirror_swap: String = ""
 var _oneshot_left: float = -1.0
 var _anim_speed_cached: float = 1.0
-var _hit_flash_seq: int = 0
-var _hit_flash_seen: int = 0
 
 
 ## 镜像状态观测口（feed 每帧调用）：anim=当前应显示动画（单次变体优先），
@@ -72,14 +69,6 @@ func get_mirror_anim_state() -> Dictionary:
 		swap = _mirror_swap
 	return {"anim": anim, "seq": _mirror_seq, "speed": _anim_speed_cached,
 			"swap": swap}
-
-
-## 受击闪白脉冲边沿消费：每次 play_hit 后首个轮询返回 true（feed 据此触发镜像闪白）
-func consume_hit_flash() -> bool:
-	if _hit_flash_seq != _hit_flash_seen:
-		_hit_flash_seen = _hit_flash_seq
-		return true
-	return false
 
 
 ## billboard 软件回切计时（等价 rig.animation_finished 的无 rig 触发源）。
@@ -413,7 +402,6 @@ func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking:
 		var chosen: String = Anims.pick_hit_anim(from_front, big, head, blocking)
 		var state: String = "hit_front" if from_front else "hit_back"
 		_mirror_seq += 1
-		_hit_flash_seq += 1
 		_start_oneshot_mirror(state, "", chosen if chosen != state else "", chosen)
 		return
 	if rig.has_method("play_hit"):

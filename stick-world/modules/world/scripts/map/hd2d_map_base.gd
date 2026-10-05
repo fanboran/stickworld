@@ -293,6 +293,8 @@ func _sync_character_render() -> void:
 					flipped,
 					depth_scale_at(body.position.y),
 					lift)
+			# 探针对账口：喂入时刻的原始 2D 坐标（零公式同空间比对用）
+			ch.last_fed_xz = Vector2(body.position.x, body.position.y)
 		# 动画镜像（战场观感重构批1 #8/#9）：优先走 visual_controller 镜像观测口
 		# ——单次变体（攻击/受击变体名）、同名重播序号（连续第二刀可见）、循环
 		# 速率（防脚底滑步）都从这出；无观测口（旧实体/桩）回落 _current_anim。
@@ -314,11 +316,6 @@ func _sync_character_render() -> void:
 			if anim.is_empty():
 				anim = "walk" if moving else "idle"
 			ch.set_anim(anim, seq, swap)
-		# 受击闪白脉冲（边沿消费）：play_hit 的视觉反馈——2D 链走 rig modulate
-		# 闪红，billboard 链走 shader flash（同款色相/节奏）
-		if has_visual and visual.has_method("consume_hit_flash") \
-				and ch.has_method("flash_hit") and visual.call("consume_hit_flash"):
-			ch.flash_hit()
 		# 尸体渐隐（#8）：实体死亡后自身 modulate.a 由淡出 tween 逐帧压低，
 		# 镜像整卡透明度同步跟值——实体 queue_free 那帧卡已近全透明，无瞬删跳变
 		if ch.has_method("set_master_alpha") and body.has_method("is_dead") and body.is_dead():

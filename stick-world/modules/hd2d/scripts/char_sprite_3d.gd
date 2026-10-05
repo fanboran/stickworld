@@ -77,19 +77,16 @@ var _anim_seq: int = -2              # feed 侧动画事件序号（同名重播
 var _swap_state := ""                # 已换装状态名缓存（压重复 set_state_anim）
 var _swap_anim := ""                 # 已换装变体名缓存
 var _anim_speed_sent: float = -1.0   # set_anim_speed 缓存（压重复设置）
-var _flash_left := 0.0               # 受击闪白剩余（秒，随 feed 每帧衰减）
-var _flash_amount_sent := -1.0       # 闪白强度缓存（0 时不再每帧推参）
 var _master_alpha := -1.0            # 整卡透明度缓存（尸体渐隐；-1=未设置）
+var _baked_once := false             # 首烘成功标记（影子随首烘现身，防孤儿影）
+var last_fed_xz := Vector2.ZERO      # 最近一次 feed 喂入的格坐标（探针对账用）
 # 渲染帧插值（#9）：sim 30Hz 写位置 → 渲染帧台阶感；双缓冲 + 物理 tick 分数插值
 var _pos_prev := Vector3.ZERO
 var _pos_cur := Vector3.ZERO
 var _pos_pf := -1                    # 双缓冲已提交的物理帧号
 var _pos_valid := false
 var _moved_this_tick := false        # 本物理刻内是否已位移过（识别渲染驱动移动）
-# 受击闪白节奏与 2D 链受击闪红同款（rig modulate 红 0.06s 达峰 → 0.18s 回落），
-# 两链观感一致
-const FLASH_HOLD := 0.06
-const FLASH_TOTAL := 0.24
+
 
 ## ── 采集烘焙（spatial 管线直采 ViewportTexture 出 RGB 色散的绕行）──
 ## 现象与定位（2026-09-30 排查）：视口纹理本体干净（get_image 回读、2D 直显
@@ -150,6 +147,12 @@ func _blit_capture() -> void:
 	_blit_tex_size = Vector2i(img.get_width(), img.get_height())
 	if mat != null:
 		mat.set_shader_parameter("char_tex", _blit_tex)
+	# 影子随首烘现身：卡未烘时整卡不可见，影子若先出来就是"只有影子没有人"
+	# 的孤儿影（出生帧烘焙洪峰期成片出现，实测 38/98）
+	if not _baked_once:
+		_baked_once = true
+		if _my_shadow != null and is_instance_valid(_my_shadow):
+			_my_shadow.visible = true
 	# 下次到拍（到这里纹理已有效，休眠才安全）：动画中按 BLIT_FPS 节拍；
 	# idle 姿态静止，休眠到 set_anim 唤醒
 	_blit_next_frame = Engine.get_process_frames() \
@@ -184,7 +187,10 @@ func _blit_schedule() -> void:
 	if now >= _blit_next_frame and not _blit_queued.has(id):
 		_blit_queued[id] = true
 		_blit_queue.append(id)
-	while _blit_used < BLIT_BUDGET and not _blit_queue.is_empty():
+	# 出生洪峰加速排水：队列积压超过常备预算时临时放宽（98 卡首烘 ≈ 4 帧排完，
+	# 落在揭幕淡出窗内，玩家看不到渐次弹入）；单次首烘 ~0.3ms，峰值帧成本可控
+	var budget := BLIT_BUDGET if _blit_queue.size() <= BLIT_BUDGET else BLIT_BUDGET * 3
+	while _blit_used < budget and not _blit_queue.is_empty():
 		var head_id: int = _blit_queue.pop_front()
 		_blit_queued.erase(head_id)
 		var head: Node = instance_from_id(head_id)
@@ -355,6 +361,7 @@ func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
 		sh.rotation = Vector3(deg_to_rad(-90), 0, 0)
 		sh.name = "Shadow_%d" % quads.size()
 		sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		sh.visible = false   # 首烘成功才现身（防孤儿影，见 _blit_capture）
 		add_child(sh)
 		if _shadow == null:
 			_shadow = sh
@@ -526,6 +533,7 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 	_blit_schedule()
 	_flip = flip
 	_depth = depth
+	last_fed_xz = Vector2(x, z)
 	# 缩放并入 basis 一次赋值（scale setter 与 basis 先后赋值互相覆盖）；
 	# 朝向翻转走 shader 的 UV 镜像（basis 镜像会把俯仰轴一起翻——旧 bug）
 	var b := _cam_basis()
@@ -549,13 +557,6 @@ func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 						+ (SV_H * PX * SIZE_K * 0.5 + WP_LIFT) * depth,
 				p.z)
 		_layout_work_bar()
-	# 受击闪白衰减（feed 每渲染帧调本函数，顺带推进；不活跃时零开销）
-	if _flash_left > 0.0:
-		_flash_left = maxf(0.0, _flash_left - get_process_delta_time())
-		var elapsed := FLASH_TOTAL - _flash_left
-		var amount := 1.0 if elapsed <= FLASH_HOLD \
-				else 1.0 - (elapsed - FLASH_HOLD) / (FLASH_TOTAL - FLASH_HOLD)
-		_apply_flash(maxf(amount, 0.0))
 
 
 ## 描边 zoom 补偿（宿主在世界变焦变化时推一次）：SubViewport 无相机，
@@ -641,21 +642,6 @@ func set_anim_speed(scale: float) -> void:
 		return
 	_anim_speed_sent = scale
 	rig.set_anim_speed(scale)
-
-
-## 受击闪白脉冲（feed 经 visual_controller.consume_hit_flash 边沿触发）：强度
-## 0.06s 到峰、0.24s 归零，衰减随 set_world_pos 每渲染帧推进
-func flash_hit() -> void:
-	_flash_left = FLASH_TOTAL
-	_apply_flash(1.0)
-
-
-func _apply_flash(amount: float) -> void:
-	if is_equal_approx(amount, _flash_amount_sent):
-		return
-	_flash_amount_sent = amount
-	if mat != null:
-		mat.set_shader_parameter("flash_amount", amount)
 
 
 ## 整卡透明度（尸体渐隐 #8）：乘进 quad 与接地影的最末 alpha。feed 在实体

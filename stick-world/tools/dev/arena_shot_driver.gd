@@ -22,6 +22,10 @@ func run(tag: String, preset: int, secs: int, every: int) -> void:
 			waited = true
 			break
 	print("[ArenaWorkbench] cover gone=%s" % waited)
+	# 等旧图退场（arena"旧图延迟销毁"：遮罩撤除后旧村图还挂几帧，
+	# 截图/采样落在窗内会把村舍残影当战场）——揭幕后稳定一小段再动作
+	for i in 12:
+		await get_tree().process_frame
 	var t0 := Time.get_ticks_msec() / 1000.0
 	for t in range(0, secs + 1, maxi(every, 1)):
 		var target := t0 + float(t)

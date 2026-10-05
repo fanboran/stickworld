@@ -41,10 +41,6 @@ uniform float alpha_cut : hint_range(0.0, 0.5) = 0.004;
 // 与「2x 烘培 + 线性过滤」的建筑卡边缘同一种柔和度（创始人反馈"火柴人边缘
 // 与环境格格不入"）。0 = 不处理，0.35 ≈ 屏幕上 ~1px 的过渡带。
 uniform float alpha_soften : hint_range(0.0, 1.0) = 0.35;
-// 受击闪白（战场观感重构批1 #8）：0=关；峰值 1.0 = 整卡压向受击色
-uniform float flash_amount : hint_range(0.0, 1.0) = 0.0;
-// 受击色（与 2D 链受击闪红 rig.modulate 同款观感：红 0.06s 达峰回落）
-uniform vec3 flash_color : source_color = vec3(1.0, 0.3, 0.3);
 // 整卡透明度（尸体渐隐 #8）：feed 在实体死亡期逐帧推入 modulate.a——
 // 实体 queue_free 前卡已渐隐至 0，无瞬删跳变
 uniform float master_alpha : hint_range(0.0, 1.0) = 1.0;
@@ -66,8 +62,6 @@ void fragment() {
 		a = smoothstep(0.0, alpha_soften, c.a);
 	}
 	a = clamp(a * (1.0 + alpha_soften), 0.0, 1.0);
-	vec3 rgb = c.rgb * tint + light_add * a;
-	rgb = mix(rgb, flash_color, flash_amount);
-	ALBEDO = rgb;
+	ALBEDO = c.rgb * tint + light_add * a;
 	ALPHA = a * master_alpha;
 }

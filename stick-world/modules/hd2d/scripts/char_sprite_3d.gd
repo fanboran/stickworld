@@ -74,7 +74,8 @@ var _world_zoom := -1.0       # set_outline_zoom 最近一次推入值（换档�
 
 # ─── 镜像通道语义（战场观感重构批1：#8 #9）───
 var _anim_seq: int = -2              # feed 侧动画事件序号（同名重播识别；-2=未初始化）
-var _hit_variant_sent := ""          # 受击变体换装缓存（压重复 set_state_anim）
+var _swap_state := ""                # 已换装状态名缓存（压重复 set_state_anim）
+var _swap_anim := ""                 # 已换装变体名缓存
 var _anim_speed_sent: float = -1.0   # set_anim_speed 缓存（压重复设置）
 var _flash_left := 0.0               # 受击闪白剩余（秒，随 feed 每帧衰减）
 var _flash_amount_sent := -1.0       # 闪白强度缓存（0 时不再每帧推参）
@@ -117,22 +118,23 @@ var _blit_next_frame := 0
 
 ## 把视口当帧内容烘焙进 _blit_tex（由公平队列驱动，见 _blit_queue 注释）
 func _blit_capture() -> void:
-	# 下次到拍：动画中按 BLIT_FPS 节拍；idle 姿态静止，休眠到 set_anim 唤醒
-	_blit_next_frame = Engine.get_process_frames() \
-			+ maxi(1, int(Engine.get_frames_per_second() / BLIT_FPS)) + (_tier_phase % 3)
-	if _anim == "idle":
-		_blit_next_frame = 0x7FFFFFFF
+	# 失败必须重试、休眠必须晚于成功：旧写法在函数顶部先定下次到拍（idle 即
+	# 休眠 0x7FFFFFFF），若首烘撞上视口未就绪（空图 return / 白帧闸），休眠
+	# 已落定 → 永不再采 → char_tex 停在占位/默认纹理。出生即站桩的单位
+	# （防守方全员）因此整卡白块直到首次换动画（实测 48v48 出生帧半队白掉）
 	var t0 := Time.get_ticks_usec()
 	var img := viewport.get_texture().get_image()
 	if img == null or img.is_empty():
+		_blit_next_frame = Engine.get_process_frames() + 2   # 视口未就绪，稍后重试
 		return
-	# 白帧闸：视口首渲完成前的回读会拿到全白不透明帧——视作无效采集，弃用并
-	# 延后重试（正常帧背景 transparent_bg，四角 alpha≈0，不会误伤真实内容）
+	# 白帧闸：只查四角——正常帧背景 transparent_bg 四角 alpha≈0；白底帧
+	# （视口首渲前回读/透明背景失效）四角必为实心白。身体中点**不**采样：
+	# 站姿躯干恰在视口中心，白底带身体的坏帧会被旧五点判据漏过
 	var w := img.get_width()
 	var h := img.get_height()
 	var all_opaque_white := true
 	for p: Vector2i in [Vector2i(2, 2), Vector2i(w - 3, 2), Vector2i(2, h - 3),
-			Vector2i(w - 3, h - 3), Vector2i(w / 2, h / 2)]:
+			Vector2i(w - 3, h - 3)]:
 		var c := img.get_pixel(p.x, p.y)
 		if not (c.a > 0.95 and c.r > 0.95 and c.g > 0.95 and c.b > 0.95):
 			all_opaque_white = false
@@ -148,6 +150,12 @@ func _blit_capture() -> void:
 	_blit_tex_size = Vector2i(img.get_width(), img.get_height())
 	if mat != null:
 		mat.set_shader_parameter("char_tex", _blit_tex)
+	# 下次到拍（到这里纹理已有效，休眠才安全）：动画中按 BLIT_FPS 节拍；
+	# idle 姿态静止，休眠到 set_anim 唤醒
+	_blit_next_frame = Engine.get_process_frames() \
+			+ maxi(1, int(Engine.get_frames_per_second() / BLIT_FPS)) + (_tier_phase % 3)
+	if _anim == "idle":
+		_blit_next_frame = 0x7FFFFFFF
 	_blit_usec += Time.get_ticks_usec() - t0
 	_blit_count += 1
 	if _blit_count >= 600:
@@ -169,15 +177,18 @@ func _blit_schedule() -> void:
 		_blit_frame = now
 		_blit_used = 0
 	# 出队执行（本帧预算内，FIFO）。到拍即入队（idle 也能首烘；重复烘焙由
-	# _blit_capture 里的 idle 休眠抑制）
+	# _blit_capture 里的 idle 休眠抑制）。队列存 instance_id 而非对象引用——
+	# 宿主（尸体）可能在排队期间被释放，存对象引用会让类型化出队赋值炸
+	# "invalid previously freed instance"（实测每场 ~25 条）；id 出队后按需解析
 	var id := get_instance_id()
 	if now >= _blit_next_frame and not _blit_queued.has(id):
 		_blit_queued[id] = true
-		_blit_queue.append(self)
+		_blit_queue.append(id)
 	while _blit_used < BLIT_BUDGET and not _blit_queue.is_empty():
-		var head: Node = _blit_queue.pop_front()
-		_blit_queued.erase(head.get_instance_id())
-		if not is_instance_valid(head):
+		var head_id: int = _blit_queue.pop_front()
+		_blit_queued.erase(head_id)
+		var head: Node = instance_from_id(head_id)
+		if head == null:
 			continue
 		_blit_used += 1
 		head.call("_blit_capture")
@@ -282,8 +293,10 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	mat = ShaderMaterial.new()
 	mat.shader = CHAR_SHADER
 	# billboard 不直采视口 RT（spatial 采样画布 RT 出色散，见 _blit_capture 注释块）：
-	# 喂烘焙平纹理。_blit_tex 首次烘焙才有内容，此前采样默认黑 → 被 alpha_cut 剔除，
-	# 首帧短暂无角色属预期
+	# 喂烘焙平纹理。首烘前必须显式给 1x1 透明占位——spatial shader 未绑定采样器
+	# 的默认纹理是纯白（不是此前注释以为的黑），不占位则整卡渲成不透明白块
+	# 且深度写穿遮挡身后单位（实测 48v48 出生帧半队白掉，见 _blit_capture）
+	mat.set_shader_parameter("char_tex", _transparent_tex())
 	mat.set_shader_parameter("tint", Color(1, 1, 1))
 	# 硬边切割（目标旧版=干净直轮廓）：软羽化边在明亮地面上会透出彩边
 	mat.set_shader_parameter("alpha_soften", 0.0)
@@ -291,6 +304,17 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 
 	_shadow_mat = ShaderMaterial.new()
 	_shadow_mat.shader = SHADOW_SHADER
+
+
+## 1x1 全透明占位纹理（全卡共享一份）：char_tex 未烘时的安全初值——
+## alpha_cut 全剔，卡片不可见而非白块
+static var _transparent_tex_cache: ImageTexture = null
+
+static func _transparent_tex() -> ImageTexture:
+	if _transparent_tex_cache == null or not is_instance_valid(_transparent_tex_cache):
+		_transparent_tex_cache = ImageTexture.create_from_image(
+				Image.create(1, 1, false, Image.FORMAT_RGBA8))
+	return _transparent_tex_cache
 
 
 ## quad 世界中心（沿相机 up 轴）。契约：quad 覆盖整个 SubViewport，
@@ -584,15 +608,24 @@ func _apply_quality_tier() -> void:
 ## 动画切换。seq = feed 侧动画事件序号（visual_controller.get_mirror_anim_state）：
 ## 同名不同 seq = 同名重播（连续第二刀），必须重触发 rig.play（rig 侧 oneshot
 ## 重播走 start() 分支）——只按名字做变更检测会把重复挥砍整个吞掉（#8 主症）。
-func set_anim(anim: String, seq: int = -1, hit_variant: String = "") -> void:
+func set_anim(anim: String, seq: int = -1, swap: String = "") -> void:
 	if rig == null:
 		return
-	# 受击变体换装（状态机只有 hit_front/hit_back 状态，变体动画资源经
-	# set_state_anim 换进状态——与 2D 富管线 play_hit 同构）
-	if not hit_variant.is_empty() and hit_variant != _hit_variant_sent:
-		_hit_variant_sent = hit_variant
+	# 变体换装（状态机只有 attack/hit_front/hit_back 等状态节点，编号变体
+	# （attack_spear_3/hit_mid_front_big…）是动画资源，经 set_state_anim 换进
+	# 状态——与 2D 富管线 play_attack/play_hit 同构）。换走另一状态时旧状态
+	# 保留换装无妨（下次换回会重设）；本次无变体且旧缓存正是本状态 → 恢复基础
+	if not swap.is_empty():
+		if _swap_state != anim or _swap_anim != swap:
+			if rig.has_method("set_state_anim"):
+				rig.set_state_anim(anim, swap)
+			_swap_state = anim
+			_swap_anim = swap
+	elif _swap_state == anim:
 		if rig.has_method("set_state_anim"):
-			rig.set_state_anim(anim, hit_variant)
+			rig.set_state_anim(anim, anim)
+		_swap_state = ""
+		_swap_anim = ""
 	if anim == _anim and seq == _anim_seq:
 		return
 	_anim = anim

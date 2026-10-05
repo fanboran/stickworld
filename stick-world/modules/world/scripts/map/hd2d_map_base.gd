@@ -303,17 +303,17 @@ func _sync_character_render() -> void:
 		if ch.has_method("set_anim"):
 			var anim: String = str(body.get("_current_anim"))
 			var seq: int = -1
-			var hit_variant := ""
+			var swap := ""
 			if has_visual and visual.has_method("get_mirror_anim_state"):
 				var ms: Dictionary = visual.get_mirror_anim_state()
 				anim = str(ms.get("anim", anim))
 				seq = int(ms.get("seq", -1))
-				hit_variant = str(ms.get("hit_variant", ""))
+				swap = str(ms.get("swap", ""))
 				if ch.has_method("set_anim_speed"):
 					ch.set_anim_speed(float(ms.get("speed", 1.0)))
 			if anim.is_empty():
 				anim = "walk" if moving else "idle"
-			ch.set_anim(anim, seq, hit_variant)
+			ch.set_anim(anim, seq, swap)
 		# 受击闪白脉冲（边沿消费）：play_hit 的视觉反馈——2D 链走 rig modulate
 		# 闪红，billboard 链走 shader flash（同款色相/节奏）
 		if has_visual and visual.has_method("consume_hit_flash") \
@@ -355,7 +355,9 @@ func _sync_character_render() -> void:
 	# 清理已消失实体（死亡/切图）
 	for id in _char_map.keys():
 		if not alive.has(id):
-			var ch: Node3D = _char_map[id]
+			# 无类型取值：卡可能在场景切换等路径被释放，类型化赋值会炸
+			# "invalid previously freed instance"
+			var ch = _char_map[id]
 			if ch != null and is_instance_valid(ch):
 				ch.queue_free()
 			_char_map.erase(id)

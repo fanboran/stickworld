@@ -45,15 +45,17 @@ var _bow_aim_active: bool = false
 ## 轮询消费，让镜像侧拿到与 2D 富管线等价的语义：
 ## - _mirror_seq：动画事件序号，每次 play/攻击变体/受击插播递增——镜像 set_anim
 ##   靠它识别"同名重播"（连续第二刀可见）
-## - _mirror_override：单次动画（攻击变体/受击变体）实际动画名，非空时优先于
-##   _current_anim（_current_anim 是状态名如 "attack"，变体名不进它）
+## - _mirror_override：单次动画的**状态名**（attack/hit_front/hit_back），非空时
+##   优先于 _current_anim
+## - _mirror_swap：该状态应换装的**变体资源名**（attack_spear_3/hit_mid_front_big
+##   等）——状态机只有状态节点，编号变体靠 set_state_anim 资源换装（2D 链同构）
 ## - _oneshot_left：单次动画软件计时（等价 rig.animation_finished 的触发源）
 ## - _anim_speed_cached：最近一次 set_anim_speed 的生效值（镜像 set_anim_speed 消费）
 ## - _hit_flash_seq：受击脉冲序号（feed 经 consume_hit_flash 边沿消费→镜像闪白）
 var _mirror_seq: int = 0
 var _mirror_override: String = ""
 var _mirror_base_anim: String = ""
-var _mirror_hit_variant: String = ""
+var _mirror_swap: String = ""
 var _oneshot_left: float = -1.0
 var _anim_speed_cached: float = 1.0
 var _hit_flash_seq: int = 0
@@ -64,12 +66,12 @@ var _hit_flash_seen: int = 0
 ## seq=动画事件序号（同名重播识别），speed=循环动画速率
 func get_mirror_anim_state() -> Dictionary:
 	var anim: String = _entity._current_anim if _entity != null else ""
-	var hit_variant := ""
+	var swap := ""
 	if not _mirror_override.is_empty():
 		anim = _mirror_override
-		hit_variant = _mirror_hit_variant
+		swap = _mirror_swap
 	return {"anim": anim, "seq": _mirror_seq, "speed": _anim_speed_cached,
-			"hit_variant": hit_variant}
+			"swap": swap}
 
 
 ## 受击闪白脉冲边沿消费：每次 play_hit 后首个轮询返回 true（feed 据此触发镜像闪白）
@@ -91,7 +93,7 @@ func _physics_process(_delta: float) -> void:
 		return
 	_oneshot_left = -1.0
 	_mirror_override = ""
-	_mirror_hit_variant = ""
+	_mirror_swap = ""
 	var base := _mirror_base_anim
 	_mirror_base_anim = ""
 	if not base.is_empty():
@@ -101,14 +103,15 @@ func _physics_process(_delta: float) -> void:
 ## 启动 billboard 单次动画软件计时（仅无 rig 链；有 rig 时 rig 信号是触发源，
 ## 双触发会让回切跑两遍）。时长拿不到（资源缺失）时按 0.66s 兜底——多数
 ## 攻击/受击动画在 0.4~1.4s，兜底宁可早回切不卡死
-func _start_oneshot_mirror(anim_name: String, base_anim: String,
-		length_anim: String = "") -> void:
+func _start_oneshot_mirror(state_name: String, base_anim: String,
+		swap: String = "", length_anim: String = "") -> void:
 	var len: float = Anims.rigless_anim_length(
-			length_anim if not length_anim.is_empty() else anim_name)
+			length_anim if not length_anim.is_empty() else state_name)
 	if len < 0.0:
 		len = 0.66
-	_mirror_override = anim_name
+	_mirror_override = state_name
 	_mirror_base_anim = base_anim
+	_mirror_swap = swap
 	_oneshot_left = len
 
 
@@ -317,9 +320,12 @@ func _play_attack_variant(base: String, variant: String) -> void:
 	_entity._current_anim = base   # 状态先行（同 play：billboard 镜像数据源）
 	_mirror_seq += 1               # 同名重挥也递增——镜像靠 seq 识别重播（连续第二刀可见）
 	if rig == null:
-		# billboard 镜像链：变体名进 override（镜像播变体而非基础 attack），
-		# 软件计时播完回切（等价 rig.animation_finished → _on_rig_anim_finished）
-		_start_oneshot_mirror(variant, base)
+		# billboard 镜像链：override=状态名（attack），swap=变体资源名（池空时
+		# variant==base，swap 留空走基础动画）；软件计时播完回切（等价
+		# rig.animation_finished → _on_rig_anim_finished）。计时长度按变体时长
+		#（变体 Hit 点/时长与基础动画不同）
+		_start_oneshot_mirror(base, base,
+				variant if variant != base else "", variant)
 		return
 	if rig.has_method("set_state_anim"):
 		rig.set_state_anim(base, variant)  # variant==base 即恢复基础动画
@@ -402,14 +408,13 @@ func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking:
 	if rig == null:
 		# billboard 镜像链：状态机只有 hit_front/hit_back 两个状态，变体
 		# （hit_mid_front_big 等）靠 set_state_anim 资源换装（2D 链同构）——
-		# override 给状态名、hit_variant 给变体名，镜像侧先换装再播状态；
+		# override=状态名、swap=变体资源名，镜像侧先换装再播状态；
 		# 计时长度按变体实际时长。闪白脉冲（feed 边沿消费触发镜像闪白）
 		var chosen: String = Anims.pick_hit_anim(from_front, big, head, blocking)
 		var state: String = "hit_front" if from_front else "hit_back"
 		_mirror_seq += 1
 		_hit_flash_seq += 1
-		_mirror_hit_variant = chosen if chosen != state else ""
-		_start_oneshot_mirror(state, "", chosen)
+		_start_oneshot_mirror(state, "", chosen if chosen != state else "", chosen)
 		return
 	if rig.has_method("play_hit"):
 		rig.play_hit(from_front, big, head, blocking)

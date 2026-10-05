@@ -101,13 +101,21 @@ func _test_hit_pulse() -> void:
 	vc.call("play_hit", true, false, false, false)
 	var ms: Dictionary = vc.call("get_mirror_anim_state")
 	_runner.assert_equal(str(ms["anim"]), "hit_front", "正面基础受击应显示 hit_front 状态")
-	_runner.assert_equal(str(ms["hit_variant"]), "", "基础受击无变体换装")
+	_runner.assert_equal(str(ms["swap"]), "", "基础受击无变体换装")
 	# 强击受击：变体池换装（状态仍是 hit_front，变体动画资源另出）
 	vc.call("play_hit", true, true, false, false)
 	ms = vc.call("get_mirror_anim_state")
 	_runner.assert_equal(str(ms["anim"]), "hit_front", "强击受击状态仍为 hit_front（变体换装不换状态）")
-	_runner.assert_true(not str(ms["hit_variant"]).is_empty() and str(ms["hit_variant"]) != "hit_front",
-			"强击受击应带变体动画名，实际 %s" % ms["hit_variant"])
+	_runner.assert_true(not str(ms["swap"]).is_empty() and str(ms["swap"]) != "hit_front",
+			"强击受击应带变体资源名，实际 %s" % ms["swap"])
+	# 攻击变体：override=状态名 attack、swap=编号变体（状态机无变体节点，
+	# 旧实现把变体名当状态播 = rig.play 报错且换装丢失）
+	vc.call("play_attack", "attack", false)
+	ms = vc.call("get_mirror_anim_state")
+	_runner.assert_equal(str(ms["anim"]), "attack", "攻击 override 应为状态名 attack")
+	var swap_name := str(ms["swap"])
+	_runner.assert_true(swap_name.is_empty() or not swap_name.begins_with("hit"),
+			"攻击 swap 应为攻击变体或空，实际 %s" % swap_name)
 	_runner.assert_true(vc.call("consume_hit_flash"), "首次轮询应消费到闪白脉冲")
 	_runner.assert_false(vc.call("consume_hit_flash"), "闪白脉冲应只消费一次（边沿）")
 	# 插播播完回落 _current_anim（受击未改它，仍 idle）

@@ -140,10 +140,11 @@ static func apply(target: Node, p: Params) -> float:
 	if p.splash_radius > 0.0 and p.inflictor != null:
 		_apply_splash(target, p)
 
-	# 伤害飘字（Demo 打磨：白=普通 / 金=暴击·爆头；表现层经 FxLibrary，不回写战斗逻辑）
+	# 伤害飘字（Demo 打磨：白=普通 / 金=暴击·爆头；表现层经 FxLibrary，不回写战斗逻辑）。
+	# 传 target 让数字跟随目标（命中后目标继续移动/被击退，定死出生点=蹦空气）
 	if final_amount > 0.0 and target is Node2D:
 		var crit_look: bool = p.is_crit or p.is_head_shot
-		FxLibrary.spawn_damage_text(target.get_tree(), (target as Node2D).global_position, final_amount, crit_look)
+		FxLibrary.spawn_damage_text(target.get_tree(), (target as Node2D).global_position, final_amount, crit_look, target)
 
 	return final_amount
 

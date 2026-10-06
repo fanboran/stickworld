@@ -14,7 +14,7 @@ StickmanEntity (CharacterBody2D)        ← 物理+碰撞
 ├── StickmanRig (Skeleton2D)            ← ✅ 已有，纯渲染骨架
 ├── Hitbox (Area2D)                     ← 受击判定
 ├── WeaponMount (Node2D)                ← 武器挂载
-├── HealthComponent (Node)              ← HP/士气
+├── HealthComponent (Node)              ← HP
 ├── AIController (Node)                 ← 决策大脑
 │   └── BehaviorStateMachine
 └── PossessionInterface (Node)          ← 玩家附身接口
@@ -282,11 +282,9 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 
 `StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
 
-> **实现状态**：决策优先级当前**确定性硬编码**（压制避战 > 命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；单位级强制溃逃链已随裁决【删溃逃、立避战】删除（士气=避战打分输入，避战行为态经 `AIController.is_disengaging()` 查询）；§7.4 第一层概率钩子**已在役**（档案参数化，生效层开关表见 12-游戏AI系统.md §7.3），第二层战场导演情绪标签未接通（`battle_ai_director.gd` 在库待接线）。
+> **实现状态**：决策优先级当前**确定性硬编码**（压制避战 > 命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；单位级强制溃逃链已随裁决【删溃逃、立避战】删除（避战行为态经 `AIController.is_disengaging()` 查询）；§7.4 概率钩子**已在役**（档案参数化，生效层开关表见 12-游戏AI系统.md §7.3）。
 
-### 7.4 小兵步枪式灵动性 — 两层实现
-
-**第一层：行为层概率钩子**
+### 7.4 小兵步枪式灵动性 — 行为层概率钩子
 
 每个战斗行为内置可配置概率：
 ```gdscript
@@ -301,17 +299,7 @@ func update(delta):
         _push_forward()
 ```
 
-**第二层：战场导演情绪标签**
-
-`battle_ai_director.gd` 周期性（每 2~5s）给单位打"情绪标签"：
-- `HESITANT` — 犹豫（命中率-30%、移动减速）
-- `EXCITED` — 亢奋（追击倾向+50%、忽视指令概率+10%）
-- `PANICKED` — 恐慌（找掩体优先级最高、大概率触发避战脱离）
-- `STEADY` — 稳定（默认）
-
 **卡死看门狗**：`ai_controller._watchdog_tick` O(1)（只记上次采样位置 + 计时，零扫描零分配）——有移动意图（>10px/s）但窗口 2s 内净位移 <12px 判卡死，处置 = 重进 attack（enter 清目标/持瞄，下一拍重选）+ 0.25s 随机方向分离推力；无移动意图自动清零豁免（站桩输出/压制/硬直/待命不误伤）。档案键 `stuck_watchdog_*` 五键（12-游戏AI系统.md §7.3）。
-
-情绪概率受：指挥官能力、部队士气、文化传统、自主决策权限影响。
 
 ### 7.5 玩家附身
 
@@ -363,7 +351,6 @@ modules/combat/
 │   ├── formation_system.gd         # 编队/框选/分组
 │   ├── tactical_orders.gd          # 预设号令（前进/冲刺/掩护/撤退）
 │   ├── command_chain.gd            # 指挥链（逐层下达+延迟）
-│   ├── morale_system.gd            # 士气（影响AI行为选择）
 │   ├── cover_system.gd             # 掩体（查询接口供AI调用）
 │   ├── suppression_system.gd       # 火力压制（区域debuff）
 │   └── battle_ai_director.gd       # 战场导演（灵动性来源）
@@ -446,7 +433,7 @@ modules/combat/
 
 **火力组层**（班内指挥分组，RL v3 编制地基【提案/待定】）：组 = 班内成员子集 + 组寻址 id（`fireteam_N`），**不占军衔不入组织树**（组长 = 组内首员，无标记）——只是号令的粒度，不是行政单位。API（`FormationSystem` 实例方法）：`create_fireteam(squad_id, units, name)` / `get_squad_fireteams(squad_id)` / `get_fireteam_units(ft_id)` / `get_unit_fireteam(unit)` / `get_fireteam_squad(ft_id)` / `is_fireteam(id)` / `get_fireteam_leader(ft_id)` / `disband_fireteam(ft_id)`。号令寻址：`TacticalOrders.issue` 对 ft_id 直令（收令成员 = 组员、战斗职责沿父班、不触发班粒度相位计划——军师规划器仍按班下令），按班下令原语义不变。组不拆散班聚结（一次性归队锚点仍是班长）；组随成员阵亡收缩、空组自动消亡；战斗域本地聚合（同排口径，不进跨图快照，`disband_all_squads` 一并清空）。
 
-**缺口语义**：排长阵亡 = 该排指挥链缺口——该排全部班**失去集火号令**（共享目标决策权归排长，`_decide_squad_targets` 按排查权属：排内班 rep=排长、缺口即 erase 不退化；独立班保留旧口径：班长决策、失效退化首个存活队员）与**排长士气光环**（排长存活 → 排内全员恢复；独立班保留班长光环旧口径），到战斗结束无法补员。班长轮转（组织侧补位回写 `commander_assigned` → 重写 squad.leader + 重算军衔）不受排长缺口影响。一人多职（如排长被补位选中兼任班长）军衔按现任职务取最高（`_recompute_unit_rank`）。
+**缺口语义**：排长阵亡 = 该排指挥链缺口——该排全部班**失去集火号令**（共享目标决策权归排长，`_decide_squad_targets` 按排查权属：排内班 rep=排长、缺口即 erase 不退化；独立班保留旧口径：班长决策、失效退化首个存活队员），到战斗结束无法补员。班长轮转（组织侧补位回写 `commander_assigned` → 重写 squad.leader + 重算军衔）不受排长缺口影响。一人多职（如排长被补位选中兼任班长）军衔按现任职务取最高（`_recompute_unit_rank`）。
 
 **观察场编成**（`battle_arena.gd` PRESETS，`platoons` = 班下标分组建排）：遭遇战·16 = 1 排（2 班 ×8）；标准战役·48 = 2 排 ×2 班（4 班 ×12）；大军压境·96 = 4 排 ×2 班（8 班 ×12）。兵种结构落到班级（矛先锋/剑中坚/火力压制），出生纵深分排矛前→剑→杖→弓后。每班劈两个火力组（一号/二号，劈法 = 班长外按出生序对半——出生序 = 武器行主序，前半靠前接敌、后半靠后火力支援）。一屏战场几何（创始人：战场范围限定在屏幕一样大）：出生中心 ±700、全部武器行按纵深行距 50 均匀收排（相邻行 Δx≥50 > 分离椭圆横半径 48，任意纵距不违反分离不变式；行内纵距下限 72）、指挥官阵列再后退 120——三档全场跨度最大 ≈ ±1170，观战缩放 0.75（缩放条 100% 档，可见半宽 1280）整场一屏内可见【提案/待定·待实测校准】。
 

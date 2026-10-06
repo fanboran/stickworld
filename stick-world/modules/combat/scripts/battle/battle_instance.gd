@@ -19,7 +19,6 @@ extends Node
 ## 不再悬挂，溃兵留在战场（战斗引用解除，不再重开）。
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
-const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/battle_ai_director.gd")
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 ## D 刀：数据化批模拟内核（ProjectSettings sim/battle_sim 开关，见 BattleSim.is_enabled）
@@ -40,16 +39,10 @@ enum State {
 	DRAW,           ## 平局（双方同时覆灭）
 }
 
-# ─────────────────────────────── 常量（士气）────────────────────────────────
-## 伤亡恐慌：队友死亡时同阵营单位的最大士气损失（距离衰减）
-const ALLY_DEATH_MORALE_LOSS: float = 12.0
-## 伤亡恐慌影响半径（px）
-const MORALE_AFFECT_RANGE: float = 600.0
-
+# ─────────────────────────────── 常量 ────────────────────────────────
 ## 防集火计数的新鲜窗口（ms）：超过此间隔未再登记的攻击者视为停手，不再计数
 const ATTACKER_FRESH_WINDOW_MS: int = 3000
 
-# ─────────────────────────────── 常量 ────────────────────────────────
 ## 进攻方阵营 ID
 const FACTION_ATTACKER: int = 1
 ## 防守方阵营 ID
@@ -60,8 +53,6 @@ const FACTION_DEFENDER: int = 2
 var _map: Node2D = null
 ## 掩体系统
 var _cover: ScriptCoverSystem = null
-## 战场导演
-var _director: ScriptBattleAIDirector = null
 ## 进攻方单位列表
 var _units_attacker: Array = []
 ## 防守方单位列表
@@ -111,13 +102,11 @@ var _crowd: ScriptCrowdRenderer = null
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
-## 初始化：注入地图，创建掩体系统和导演。
+## 初始化：注入地图，创建掩体系统。
 func setup(map: Node2D) -> void:
 	_map = map
 	_cover = ScriptCoverSystem.new()
 	_cover.setup(map)
-	_director = ScriptBattleAIDirector.new()
-	_director.setup(self)
 	# D 刀 A/B 开关：启用时参战 AI 单位模拟状态进 BattleSim（移动/分离/冷却/
 	# 命中时序批处理）；附身单位不注册（玩家交互链不动）
 	if ScriptBattleSim.is_enabled() and map != null and is_instance_valid(map):
@@ -210,16 +199,12 @@ func _physics_process(delta: float) -> void:
 	var sim: float = TimeManager.sim_delta(delta) if TimeManager != null else delta
 	_duration += sim
 	# D 刀：sim 批循环先行（分离/积分/冷却/命中帧/写回代理）——
-	# AI 决策（director/behavior）读到本刻最新位置
+	# AI 决策（behavior 状态机）读到本刻最新位置
 	if _sim != null:
 		_sim.tick(sim)
 	# §十四 小兵渲染代理（sim 之后：读最新位置/朝向；物理刻驱动即暂停门禁同 sim）
 	if _crowd != null:
 		_crowd.tick(sim)
-	# 判空同 _sim/_crowd：单测直接拍 ENGAGED 不走 setup()（test_battle_settlement）
-	# 时 _director 尚未创建，不守卫会逐物理帧报 Nil tick
-	if _director != null:
-		_director.tick(sim)
 	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
 	for faction in _team_ai.keys():
 		var tai: ScriptTeamAi = _team_ai[faction]
@@ -243,29 +228,6 @@ func on_unit_died(unit: Node) -> void:
 		_casualties_defender += 1
 	# 清理该目标上的攻击者计数（死亡后不再被围攻）
 	_target_attackers.erase(unit.get_instance_id())
-	# 伤亡恐慌（行业最佳实践）：同阵营存活单位按距离衰减掉士气（见队友倒下）
-	if unit.has_method("get_faction"):
-		_apply_casualty_morale_loss(unit.get_faction(), unit.global_position)
-
-
-## 伤亡恐慌：同阵营存活单位按距离衰减掉士气。
-## 距离 MORALE_AFFECT_RANGE 内的单位损失 LOSS × (1 - dist/range)。
-func _apply_casualty_morale_loss(faction: int, pos: Vector2) -> void:
-	for ally in get_allies_of(faction):
-		if not is_instance_valid(ally) or ally == null:
-			continue
-		if ally.has_method("is_dead") and ally.is_dead():
-			continue
-		if not ally.has_method("get_health"):
-			continue
-		var health: Node = ally.get_health()
-		if health == null or not health.has_method("lose_morale"):
-			continue
-		var dist: float = pos.distance_to(ally.global_position)
-		if dist > MORALE_AFFECT_RANGE:
-			continue
-		var loss: float = ALLY_DEATH_MORALE_LOSS * (1.0 - dist / MORALE_AFFECT_RANGE)
-		health.lose_morale(loss)
 
 
 # ─────────────────────────────── 攻击者计数（防集火重叠）────────────────────────────────
@@ -413,11 +375,6 @@ func get_nearest_enemy(unit: Node) -> Node:
 ## 获取掩体系统
 func get_cover() -> ScriptCoverSystem:
 	return _cover
-
-
-## 获取战场导演
-func get_director() -> ScriptBattleAIDirector:
-	return _director
 
 
 ## 战斗是否进行中

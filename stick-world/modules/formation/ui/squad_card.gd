@@ -5,7 +5,7 @@ extends PanelContainer
 ## 所属 L1 编制）时显示，选择清空/小队消亡即收起。
 ##
 ## 只答三问（信息密度服从管理层级 §1.3，L1 稀疏大字，不做字段堆砌）：
-##   现在怎么样 → 头部状态徽标（org state × 成员行为聚合）+ 成员行士气微型条/单兵状态
+##   现在怎么样 → 头部状态徽标（org state × 成员行为聚合）+ 成员行单兵状态
 ##   在干什么   → 号令栏（EventBus.order_issued）+ 相位徽标（A5 计划 get_phase_name 直译）
 ##   听谁的     → 班长栏（指挥官 + get_squad_authority 权威值/星级）
 ##              + 权威值择班表达（UI-W4a §3.3①）：本班权威/星级 + 邻近可投奔班权威对比
@@ -22,11 +22,11 @@ extends PanelContainer
 ##        逐个 get_squad_authority + should_switch_squad，全部真实查询；
 ##   角色/相位 → squad_phase_plan 经宿主私有表 duck 取用（debug_info_panel.gd 先例），
 ##        刷新走 phase_changed / roles_reassigned 两信号（A5/W1 已补，不逐帧轮询）；
-##   士气/单兵状态 → 单位侧只读口 get_health().get_morale_ratio()/AIController.is_disengaging()、
+##   单兵状态 → 单位侧只读口 AIController.is_disengaging()、
 ##        get_status_effects().has_suppressed()/has_effect(HEAL|STUN)；组件缺失跳过；
 ##   组织态 FORMING 招兵位 → organization_api.get_organization().state；
 ##   号令 → EventBus.order_issued（瞬时事件：换绑小队即清空，无存量查询口——见交接遗留）。
-## 例外：士气流/权威值等缓变值走 POLL_INTERVAL 低频节拍（team_ai_hud 同惯例），
+## 例外：权威值等缓变值走 POLL_INTERVAL 低频节拍（team_ai_hud 同惯例），
 ## 相位/角色/号令/编制变动全部信号驱动。
 ##
 ## 核心操作只用既有 API：任命班长（FormationSystem.assign_leader → 组织侧
@@ -83,7 +83,7 @@ const ROLE_ZH: Dictionary = {"fighter": "战士", "builder": "建造工", "worke
 
 ## 成员行显示上限（超出压成一行计数，防面板被长花名册淹没——§1.3 稀疏纪律）
 const ROW_MAX: int = 8
-## 缓变值轮询间隔（s；相位/角色/号令/编制变动均信号驱动，此处只兜士气流）
+## 缓变值轮询间隔（s；相位/角色/号令/编制变动均信号驱动，此处只兜权威值）
 const POLL_INTERVAL: float = 0.25
 ## 每颗威望星代表的权威值（get_squad_authority 量纲：班长 1.0 + 指挥官 0.5 + 玩家 0.2）
 const AUTHORITY_PER_STAR: float = 0.5
@@ -412,7 +412,7 @@ func _refresh_members(units: Array) -> void:
 		var role := str(roles.get(u.get_instance_id(), ""))
 		if role.is_empty():
 			role = _data_part._role_of(u)
-		_rows[i].set_data(u, role, SquadCardData.morale_of(u), SquadCardData.state_flags(u))
+		_rows[i].set_data(u, role, SquadCardData.state_flags(u))
 		_rows[i].set_selected(_selected_unit != null and is_instance_valid(_selected_unit) and u == _selected_unit)
 	_overflow_label.visible = units.size() > ROW_MAX
 	if _overflow_label.visible:

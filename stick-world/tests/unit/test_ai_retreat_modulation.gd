@@ -28,7 +28,7 @@ func _ready() -> void:
 	_runner.add_test("候选因子：战线崩坏/个人恶化 → 避战统一出口（fallback）", _test_dual_tier)
 	_runner.add_test("掷骰节流：评估周期内只掷一次", _test_throttle)
 	_runner.add_test("种子确定性：同种子同决策序列", _test_seed_determinism)
-	_runner.add_test("withdraw 档行为：朝锚点行军、抵达收束、士气恢复", _test_withdraw_behavior)
+	_runner.add_test("withdraw 档行为：朝锚点行军、抵达收束", _test_withdraw_behavior)
 	_runner.add_test("withdraw 降级：锚点不可用回退 fallback / evacuate 优先", _test_withdraw_degrade)
 	_runner.add_test("fallback 收敛：贴边无路可退 → 收束交还决策（不走边缘）", _test_fallback_jam_finishes)
 	_runner.add_test("W1 get_retreat_mod_state：观测快照（enabled/因子/掷骰/节流余量）", _test_w1_state_getter)
@@ -53,8 +53,6 @@ func _test_profile_defaults() -> void:
 	var p2: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 	_runner.assert_approx(float(p2.get("retreat_mod_hp_ratio", -1.0)), 0.49, 0.001,
 			"hp 阈值 = 0.49（CoH retreat_capacity_percentage）")
-	_runner.assert_approx(float(p2.get("retreat_mod_morale_ratio", -1.0)), 0.35, 0.001,
-			"士气阈值 = 0.35（语义映射初值）")
 	_runner.assert_approx(float(p2.get("retreat_mod_ally_break_ratio", -1.0)), 0.51, 0.001,
 			"友军崩坏比例阈值 = 0.51（CoH retreat_suppressed_percentage）")
 	_runner.assert_approx(float(p2.get("retreat_mod_ally_radius", -1.0)), 300.0, 0.001,
@@ -69,9 +67,6 @@ func _test_profile_defaults() -> void:
 			"withdraw 抵达半径 = 80px")
 	_runner.assert_approx(float(p2.get("retreat_mod_withdraw_max_time", -1.0)), 12.0, 0.001,
 			"withdraw 超时 = 12s")
-	# 士气阈值须 ≥ 强制链低士气阈值 0.25（只补中间带，不越权强制链）
-	_runner.assert_true(float(p2.get("retreat_mod_morale_ratio", 0.0)) >= 0.25,
-			"士气阈值 ≥ 强制链 0.25（中间带约束）")
 
 
 func _test_personality_rows() -> void:
@@ -98,18 +93,16 @@ func _test_mod_off_zero_regression() -> void:
 	var ctx := _make_ctx({}, false)  # 开关保持默认关（零回归基线）
 	# 候选条件全满足（血量 0.4 < 0.49、近身威胁），但开关关 → 不走调制，落 attack
 	ctx.health.hp_ratio = 0.4
-	ctx.health.morale_ratio = 0.5
 	ctx.ai._try_combat()
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "开关关不撤退（零回归）")
 	ctx.teardown()
 
 
 func _test_candidate_causality() -> void:
-	# chance=1（掷骰必过）但三因子全不成立（血量/士气健康、友军完好）→ 不撤退：
+	# chance=1（掷骰必过）但两因子全不成立（血量健康、友军完好）→ 不撤退：
 	# 概率是执行机制不是因果——候选判定仍是真实战况（设计原则 3）
 	var ctx := _make_ctx({"retreat_mod_chance": 1.0})
 	ctx.health.hp_ratio = 0.9
-	ctx.health.morale_ratio = 0.9
 	ctx.ai._try_combat()
 	_runner.assert_not_equal(ctx.ai.get_current_behavior(), "retreat", "健康战况 chance=1 也不撤")
 	ctx.teardown()
@@ -142,7 +135,6 @@ func _test_dual_tier() -> void:
 	# 战线崩坏：判定半径内友军全部避战/阵亡（比例 1.0 ≥ 0.51）→ 候选成立
 	var ctxw := _make_ctx({"retreat_mod_chance": 1.0})
 	ctxw.health.hp_ratio = 0.9  # 个人战况健康，只崩战线
-	ctxw.health.morale_ratio = 0.9
 	ctxw.add_ally(Vector2(800, 300), true, false)   # 避战友军
 	ctxw.add_ally(Vector2(1000, 280), false, true)  # 阵亡友军
 	ctxw.ai._try_combat()
@@ -252,7 +244,6 @@ func _test_withdraw_behavior() -> void:
 	_runner.assert_true(entity.global_position.distance_to(battle.anchor) <= 60.0 + 0.1,
 			"实体停在锚点带内（距 %.0f）" % entity.global_position.distance_to(battle.anchor))
 	_runner.assert_true(entity.stopped, "收束时停步（ai_stop）")
-	_runner.assert_gt(health.recovered_total, 0.0, "撤退途中士气恢复（重整分量）")
 	retreat.free()
 	health.free()
 	entity.free()
@@ -302,7 +293,6 @@ func _test_fallback_jam_finishes() -> void:
 	# 贴带顶（pos.y <= ground_y + 20）+ 贴右缘（map_right - 50 内收带）
 	entity.global_position = Vector2(1755.0, 20.0)
 	var health := _FakeHealth.new()
-	health.morale_ratio = 0.2  # 低于 SAFE_MORALE_RATIO(0.6)：士气恢复不会提前收束
 	entity.health = health
 	var battle := _FakeBattle.new()
 	# 敌人正下方 80px：撤退方向朝上出带（被夹死），且在 SAFE_DISTANCE(320) 内
@@ -328,7 +318,6 @@ func _test_fallback_jam_finishes() -> void:
 	entity2.ground_bottom = 400.0
 	entity2.global_position = Vector2(900.0, 20.0)
 	var health2 := _FakeHealth.new()
-	health2.morale_ratio = 0.2
 	entity2.health = health2
 	var battle2 := _FakeBattle.new()
 	var enemy2 := _FakeAlly.new()
@@ -496,17 +485,9 @@ class _FakeEntity extends CharacterBody2D:
 
 class _FakeHealth extends Node:
 	var hp_ratio: float = 1.0
-	var morale_ratio: float = 1.0
-	var recovered_total: float = 0.0
 
 	func get_hp_ratio() -> float:
 		return hp_ratio
-
-	func get_morale_ratio() -> float:
-		return morale_ratio
-
-	func restore_morale(amount: float) -> void:
-		recovered_total += amount
 
 
 class _FakeAlly extends Node2D:

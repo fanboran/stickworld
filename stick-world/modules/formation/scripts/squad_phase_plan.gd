@@ -286,7 +286,7 @@ func _enter(phase: int) -> void:
 
 ## 单波次跃进推进（core_wave=true 核心+Scout / false 双翼）：
 ##   - 波次成员逐一取 11b 槽位落点（get_squad_dest mode="formation"，复用槽位基建）；
-##   - 守卫成员（士气行为/接战/他人号令）本拍不打断；同目标号令不重发（防重入）；
+##   - 守卫成员（撤退类行为/接战/他人号令）本拍不打断；同目标号令不重发（防重入）；
 ##   - 全员到位（或移动超时）→ 进入等待相位；末跳（跃进线即终点）完成 → 计划完成。
 func _tick_leap(units: Array, core_wave: bool) -> void:
 	var wave_roles: Array = [ROLE_CORE, ROLE_SCOUT] if core_wave else [ROLE_RFLANK, ROLE_LFLANK]
@@ -301,7 +301,7 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 			continue  # 已到位
 		all_set = false
 		if _member_guarded(u):
-			continue  # 接战/士气行为/玩家号令：本拍不打断（超时兜底推进相位）
+			continue  # 接战/撤退类行为/玩家号令：本拍不打断（超时兜底推进相位）
 		if _ordered_to(u, dest):
 			continue  # 号令在途且目标未变，防重入重播
 		_issue_move(u, dest)
@@ -325,7 +325,7 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 ##     信号，消费未达压制门槛的瞄射/擦伤成员）；
 ##   - 背敌：推进方向反半平面 back_enemy_radius 内有存活敌人（reaction-plan
 ##     DT_AWAY_FROM_TARGET 语义映射）。
-## 守卫成员（士气行为/接战中/他人号令）不介入——接战成员交还战斗行为。
+## 守卫成员（撤退类行为/接战中/他人号令）不介入——接战成员交还战斗行为。
 func _contact_reaction(units: Array) -> void:
 	var now_real: float = Time.get_ticks_msec() / 1000.0
 	var window: float = float(_p.get("threat_window", 3.0))
@@ -451,7 +451,7 @@ func _ai_of(u: Node) -> Node:
 
 
 ## 成员是否处于"本拍不打断"守卫（与编队跟队 tick 同口径）：
-##   士气驱动行为（retreat/seek_cover）/ 射程内接战（交还战斗行为）/ 玩家与上级号令。
+##   撤退类行为（retreat/seek_cover）/ 射程内接战（交还战斗行为）/ 玩家与上级号令。
 func _member_guarded(u: Node) -> bool:
 	var ai: Node = _ai_of(u)
 	if ai == null:

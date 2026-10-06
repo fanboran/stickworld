@@ -2,7 +2,7 @@ extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
 ## 单元测试：状态调制（反编译参考实装 E）——低血狂暴 / 被围背墙背水一战。
-## 决策层：AIController._compute_state_modifiers + _should_rage（士气分叉 + 被围背墙强制狂暴）
+## 决策层：AIController._compute_state_modifiers + _should_rage（低血分叉 + 被围背墙强制狂暴）
 ## 行为层：behavior_attack 狂暴时跳过"低血找掩体 finish"。
 ## 不进场景树（ai_controller 不调 _ready / behavior 不挂状态机），确定性。
 
@@ -17,13 +17,9 @@ var _runner: TestRunner
 class FakeHealth:
 	extends Node
 	var _hp_ratio: float = 1.0
-	var _morale_ratio: float = 1.0
 
 	func get_hp_ratio() -> float:
 		return _hp_ratio
-
-	func get_morale_ratio() -> float:
-		return _morale_ratio
 
 
 class FakeEnemy:
@@ -124,8 +120,7 @@ func _ready() -> void:
 	_runner.add_test("状态调制: 背墙检测（身后有掩体）", _test_backed_to_wall)
 	_runner.add_test("状态调制: 低血检测", _test_low_hp)
 	_runner.add_test("狂暴判定: 被围+背墙强制狂暴", _test_rage_surrounded_wall)
-	_runner.add_test("狂暴判定: 低血+士气高狂暴", _test_rage_low_hp_high_morale)
-	_runner.add_test("狂暴判定: 低血+士气低不狂暴", _test_rage_low_hp_low_morale)
+	_runner.add_test("狂暴判定: 低血狂暴", _test_rage_low_hp)
 	_runner.add_test("狂暴判定: 避战不狂暴", _test_rage_disengaging)
 	_runner.add_test("狂暴行为: 狂暴跳过低血找掩体 finish", _test_attack_rage_no_finish)
 	_runner.add_test("狂暴行为: 非狂暴低血+掩体 finish", _test_attack_normal_finish)
@@ -178,31 +173,20 @@ func _test_rage_surrounded_wall() -> void:
 		battle.enemies.append(e)
 	cover._in_cover_positions = [entity.position + Vector2(-80, 0)]
 	var mods: Dictionary = ai._compute_state_modifiers(battle, entity.health)
-	_runner.assert_true(ai._should_rage(mods, entity.health), "被围+背墙应强制狂暴")
+	_runner.assert_true(ai._should_rage(mods), "被围+背墙应强制狂暴")
 
 
-func _test_rage_low_hp_high_morale() -> void:
+func _test_rage_low_hp() -> void:
 	var w: Dictionary = _make_world()
 	var ai: Node = w["ai"]
 	var entity: FakeEntity = w["entity"]
 	entity.health._hp_ratio = 0.2
-	entity.health._morale_ratio = 0.6
 	var mods: Dictionary = ai._compute_state_modifiers(w["battle"], entity.health)
-	_runner.assert_true(ai._should_rage(mods, entity.health), "低血+士气高应狂暴")
-
-
-func _test_rage_low_hp_low_morale() -> void:
-	var w: Dictionary = _make_world()
-	var ai: Node = w["ai"]
-	var entity: FakeEntity = w["entity"]
-	entity.health._hp_ratio = 0.2
-	entity.health._morale_ratio = 0.3
-	var mods: Dictionary = ai._compute_state_modifiers(w["battle"], entity.health)
-	_runner.assert_false(ai._should_rage(mods, entity.health), "低血+士气低不应狂暴（走避战调制）")
+	_runner.assert_true(ai._should_rage(mods), "低血应狂暴")
 
 
 func _test_rage_disengaging() -> void:
-	# 裁决【删溃逃、立避战】：避战是行为态（set_disengaging 置位），非士气阈值——
+	# 裁决【删溃逃、立避战】：避战是行为态（set_disengaging 置位）——
 	# 避战中的单位不狂暴（脱离接火的单位不背水一战）
 	var w: Dictionary = _make_world()
 	var ai: Node = w["ai"]
@@ -217,7 +201,7 @@ func _test_rage_disengaging() -> void:
 	ai.set_disengaging(true)
 	var mods: Dictionary = ai._compute_state_modifiers(battle, entity.health)
 	_runner.assert_true(bool(mods.get("disengaging", false)), "避战行为态应进 mods")
-	_runner.assert_false(ai._should_rage(mods, entity.health), "避战不应狂暴")
+	_runner.assert_false(ai._should_rage(mods), "避战不应狂暴")
 
 
 ## 构造一个进入 update 的行为：battle 有 1 敌、battle active、entity 低血
@@ -226,7 +210,6 @@ func _make_attack_behavior(rage: bool) -> Dictionary:
 	var entity: FakeEntity = w["entity"]
 	var battle: FakeBattle = w["battle"]
 	entity.health._hp_ratio = 0.2
-	entity.health._morale_ratio = 0.5
 	# 掩体在实体附近（触发 _has_cover_nearby）
 	(w["cover"] as FakeCover)._in_cover_positions = [entity.position]
 	var e := FakeEnemy.new()

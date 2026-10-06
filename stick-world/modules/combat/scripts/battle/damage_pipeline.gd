@@ -6,7 +6,7 @@ extends RefCounted
 ## 与原版一致的分层：
 ##   ① 入参打包 DamageParameters（伤害来源上下文）
 ##   ② 修饰链（结算前）：爆头加值 / 暴击倍率 / 格挡减免 / 单位类型减伤（雕像 0.3、巨人 0.66）
-##   ③ 入血结算：HealthComponent.take_damage（伴随士气下降）
+##   ③ 入血结算：HealthComponent.take_damage
 ##   ④ 反伤链（结算后）：暴击自伤 critBonusDamageInflictedToSelf + ApplyDamageReflect
 ##      （受击方 reflect_damage 配置反弹给攻击者，受 CanReceiveReflectDamage 约束）
 ##   ⑤ 表现链（结算后）：受击方向动画 / 血溅 / 音效钩子 / 死亡处理

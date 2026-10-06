@@ -120,7 +120,7 @@ func _unpossess_player() -> void:
 			e.set_possessed(false)
 
 
-## 生成一个战斗单位，设置低 HP/士气加速战斗
+## 生成一个战斗单位，设置低 HP 加速战斗
 func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
 	var e: Node2D = map.spawn_entity(STICKMAN_SCENE, pos)
 	if e == null:
@@ -131,12 +131,12 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
 	# 取消附身（AI 接管）
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)
-	# 设置低 HP/士气加速战斗
+	# 设置低 HP 加速战斗
 	if e.has_method("get_health"):
 		var h: Node = e.get_health()
 		if h != null:
 			h.max_hp = BATTLE_HP
-			h.hp = BATTLE_HP  # 士气保持组件默认满值（收敛类测试不看避战，C6 有专项单测）
+			h.hp = BATTLE_HP  # 收敛类测试不看避战（C6 有专项单测）
 	return e
 
 

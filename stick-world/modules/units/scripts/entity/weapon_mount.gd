@@ -122,15 +122,6 @@ var equip_speed_mult: float = 1.0
 const USER_CONTROLLED_SPLASH_HIT_LIMIT: int = 4
 const USER_CONTROLLED_SPLASH_MODIFIER: float = 0.2
 
-# ─────────────────────────────── 情绪标签（§7.4，battle_ai_director 设置）────────────────────────────────
-## 战场导演打的情绪标签，影响命中与冷却
-enum Mood {
-	STEADY,     ## 稳定（默认）
-	HESITANT,   ## 犹豫（命中率-30%）
-	EXCITED,    ## 亢奋（命中率+10%，冷却-15%）
-	PANICKED,   ## 恐慌（命中率-50%）
-}
-
 # ─────────────────────────────── @export ────────────────────────────────
 ## 主手武器类型（默认剑）
 @export var weapon_type: WeaponType = WeaponType.SWORD:
@@ -209,8 +200,6 @@ var _cooldown_timer: float = 0.0
 var _weapon: Node2D = null
 ## 副手盾牌实例（挂 hand_outer 骨骼）
 var _shield: Node2D = null
-## 当前情绪标签
-var _mood: Mood = Mood.STEADY
 ## 延迟结算：pending 目标与倒计时（弓=拉弓满弓放箭 / 杖=施法前摇到点结算，
 ## 视觉对齐各自攻击动画）
 var _pending_ranged_target: Node = null
@@ -973,8 +962,8 @@ func _do_strike() -> void:
 	if wt != WeaponType.BOW:
 		var ang: float = (target.global_position - owner_entity.global_position).angle()
 		FxLibrary.spawn_slash_arc(owner_entity.get_tree(), owner_entity.global_position + Vector2(0, -30), ang, wt == WeaponType.SWORD)
-	# 情绪修正命中率（犹豫/恐慌时挥空）
-	if randf() > _get_effective_hit_chance():
+	# 命中掷骰（未中=挥空）
+	if randf() > base_hit_chance:
 		return
 	# 暴击掷骰（原版 isCrit；暴击附带自伤代价 critBonusDamageInflictedToSelf）
 	var is_crit: bool = randf() < crit_chance
@@ -1293,37 +1282,9 @@ func _get_health(target: Node) -> Node:
 	return target.get_node_or_null("HealthComponent")
 
 
-## 设置情绪标签（由 battle_ai_director 调用，§7.4）
-func set_mood(mood: Mood) -> void:
-	_mood = mood
-
-
-## 获取当前情绪标签
-func get_mood() -> Mood:
-	return _mood
-
-
-## 根据情绪标签计算实际命中率
-func _get_effective_hit_chance() -> float:
-	match _mood:
-		Mood.HESITANT:
-			return base_hit_chance * 0.7
-		Mood.EXCITED:
-			return minf(1.0, base_hit_chance * 1.1)
-		Mood.PANICKED:
-			return base_hit_chance * 0.5
-		_:
-			return base_hit_chance
-
-
-## 根据情绪标签计算实际冷却
+## 实际冷却（附身攻速乘子 × 装备攻速乘子；speed_mult>1 更快 → 冷却变短）
 func _get_effective_cooldown() -> float:
-	var base: float = cooldown
-	match _mood:
-		Mood.EXCITED:
-			base = cooldown * 0.85
-		_:
-			base = cooldown * _user_controlled_speed_mult()
+	var base: float = cooldown * _user_controlled_speed_mult()
 	# 装备攻速乘子（speed_mult>1 更快 → 冷却变短；缺省 1.0 零回归）
 	return base / maxf(0.05, equip_speed_mult)
 

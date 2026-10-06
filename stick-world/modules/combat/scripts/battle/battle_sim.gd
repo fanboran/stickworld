@@ -16,7 +16,7 @@ extends RefCounted
 ##     渲染侧攻击动画只是观感）
 ## 不迁移（保持 Node 侧）：
 ##   - AI 决策/行为状态机（低频决策，行为库与实体深度耦合）
-##   - DamagePipeline / 箭矢弹道 / 状态效果 / 士气 / 存血量（低频事件链，
+##   - DamagePipeline / 箭矢弹道 / 状态效果 / 存血量（低频事件链，
 ##     HealthComponent 仍是血量权威）
 ##   - 附身单位（玩家交互链不动，不注册 sim）
 ##
@@ -303,7 +303,7 @@ func _sid_alive(sid: int) -> bool:
 # ─────────────────────────────── 攻击登记 ────────────────────────────────
 
 ## 登记近战 strike（WeaponMount.perform_attack sim 分支调用）。
-## 结算时回调 weapon.sim_strike_now()（复用旧结算链：AOE/mood/hitstop）。
+## 结算时回调 weapon.sim_strike_now()（复用旧结算链：AOE/hitstop）。
 ## hit_time 由登记方解析为绝对秒（Hit 事件真值；无事件数据时按动画时长 ×
 ## fallback 比例换算）——sim 无动画进度概念，只收绝对秒。
 func register_strike(sid: int, weapon: Node, hit_time: float) -> void:

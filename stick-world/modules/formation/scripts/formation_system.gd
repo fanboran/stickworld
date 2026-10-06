@@ -16,7 +16,7 @@ extends Node
 ## 排聚合层（现实军衔体系重排，创始人裁决）：排 = 2~3 个班 + 排长 1 名（rank 2）。
 ##   - 班是现役最低编制单元（8~12 人小班、硬顶 15），班长 rank 1——阵亡经组织侧
 ##     补位（_run_succession → commander_assigned 回写）免费无缝轮转；
-##   - 排长是排级指挥链：**阵亡即缺口**——该排全部班失去集火号令与排长士气光环，
+##   - 排长是排级指挥链：**阵亡即缺口**——该排全部班失去集火号令，
 ##     到战斗结束无法补员。排是本系统战斗域本地聚合（不入组织树），组织侧继任
 ##     只认班的指挥官——"屏蔽继任"由构造保证，无特判；
 ##   - 连/战场层（2~4 排 + 连长或指挥官 rank 3）由指挥官批次接入，挂载点 =
@@ -95,8 +95,6 @@ var ROW_GAP: float = FormationSpacing.ROW_GAP_DEFAULT
 ## 追赶奔跑阈值（px，11b）：距槽位落点超过此值转奔跑追赶
 ## （SWL UpdateCatchingUpToFormation；无 dump 真值，待实测校准）
 var CATCHUP_RUN_DIST: float = 140.0
-## 指挥官光环士气恢复速率（每秒；排长存活时队员士气恢复，AI 完善批次 3）
-const LEADER_MORALE_AURA: float = 3.0
 ## 共享目标选择内核（tactics TargetFinder；显式 preload 走 tactics/api.gd 契约出口，
 ## headless 防御惯例 §七.3）。缺省 opts 语义 = 最近存活敌人（faction_id 阵营口径 +
 ## battle 存活列表），小队共享目标与战斗目标过滤同源。
@@ -127,7 +125,7 @@ signal squad_created(squad_id: String, unit_ids: Array)
 signal squad_disbanded(squad_id: String)
 ## 排创建：platoon_id + 班 id 数组
 signal platoon_created(platoon_id: String, squad_ids: Array)
-## 排长阵亡（指挥链缺口）：该排集火号令与排长士气光环随之中断，战斗结束前不补员
+## 排长阵亡（指挥链缺口）：该排集火号令随之中断，战斗结束前不补员
 signal platoon_leader_lost(platoon_id: String)
 
 # ─────────────────────────────── 状态 ────────────────────────────────
@@ -285,7 +283,7 @@ func _process(_delta: float) -> void:
 					if _org_api != null and _org_api.has_method("remove_commander"):
 						_org_api.remove_commander(squad_id)
 				# 排长阵亡核对（军衔重排）：排长死亡 = 该排指挥链缺口（无补位无继任，
-				# 该排班集火清空、士气光环中断，到战斗结束）
+				# 该排班集火号令中断，到战斗结束）
 				_check_platoon_leader_death(u)
 				# 清除编队派生角色（单位仍有效时）
 				if u.has_method("set_role"):
@@ -301,58 +299,11 @@ func _process(_delta: float) -> void:
 		disband_squad(sid)
 	# 队伍级目标决策（反编译参考实装 D-B）：排长决策 → 队员执行
 	_decide_squad_targets(_delta)
-	# 指挥官光环（AI 完善批次 3）：排长存活 → 队员士气恢复
-	_apply_leader_morale_aura(_delta)
 	# A5 小队相位计划（C8）：按 L2 节拍驱动活跃计划（缺省关闭时零开销空转）
 	_tick_phase_plans(_delta)
 	# A9+ 权威值自主跳槽（R4）：按 L2 节拍周期性评估成员择班（缺省关闭时零开销空转）
 	_tick_authority_switch(_delta)
 
-
-## 士气光环（军衔重排后口径）：排长存活 → 该排全部战斗班成员持续恢复士气（排长提振）；
-## 独立班（无排）保留旧口径——班长存活 → 本班成员恢复。排长缺口 = 光环中断。
-func _apply_leader_morale_aura(delta: float) -> void:
-	if _squads.is_empty():
-		return
-	# 排口径：排长 → 排内各战斗班全员（每排一遍，成员不重复计入）
-	for pid_v in _platoons.keys():
-		var pid := String(pid_v)
-		var leader: Node = _platoons[pid]["leader"]
-		if leader == null or not is_instance_valid(leader) \
-				or (leader.has_method("is_dead") and leader.is_dead()):
-			continue
-		for sid_v in _platoons[pid]["squads"]:
-			var sid := String(sid_v)
-			if not _squads.has(sid) or not is_combat_squad(sid):
-				continue
-			for u in _squads[sid]["units"]:
-				_apply_morale_restore(u, leader, delta)
-	# 独立班口径：班长 → 本班成员（排内班已由排长光环覆盖，不重复恢复）
-	for squad_id_v in _squads.keys():
-		var squad_id := String(squad_id_v)
-		if not get_platoon_of_squad(squad_id).is_empty():
-			continue
-		if not is_combat_squad(squad_id):
-			continue
-		var leader: Node = get_squad_leader(squad_id)
-		if leader == null or not is_instance_valid(leader) \
-				or (leader.has_method("is_dead") and leader.is_dead()):
-			continue
-		for u in _squads[squad_id]["units"]:
-			_apply_morale_restore(u, leader, delta)
-
-
-## 单位士气恢复（光环内核）：无健康组件/已死/施光环者本人跳过。
-func _apply_morale_restore(u: Node, leader: Node, delta: float) -> void:
-	if u == leader or not is_instance_valid(u):
-		return
-	if u.has_method("is_dead") and u.is_dead():
-		return
-	if not u.has_method("get_health"):
-		return
-	var health: Node = u.get_health()
-	if health != null and health.has_method("restore_morale"):
-		health.restore_morale(LEADER_MORALE_AURA * delta)
 
 
 # ─────────────────────────────── 核心 API ────────────────────────────────
@@ -841,7 +792,7 @@ func get_unit_platoon(unit: Node) -> String:
 	return get_platoon_of_squad(get_unit_squad(unit))
 
 
-## 排内全部单位（各班成员拼合；士气光环等排级作用域用）。
+## 排内全部单位（各班成员拼合；排级作用域遍历用）。
 func get_platoon_units(platoon_id: String) -> Array:
 	if not _platoons.has(platoon_id):
 		return []
@@ -892,7 +843,7 @@ func has_squad_command_chain(squad_id: String) -> bool:
 ##   - 只是命令的粒度，不是组织树节点/编制实体——不动组织模块、不占军衔
 ##    （组长 = 组内首员，无任何标记）；战斗中组随成员阵亡收缩，不重组不跳槽；
 ##   - 不拆散班聚结：一次性归队锚点仍是班长（squad_cohesion 零改动），班内
-##     槽位/集火/士气全按班走——火力组只回答「号令发给谁」（TacticalOrders.issue
+##     槽位/集火全按班走——火力组只回答「号令发给谁」（TacticalOrders.issue
 ##     对 ft_id 寻址分流，按班下令原语义不变）；
 ##   - 战斗域本地聚合（同排 platoon 口径）：不入组织树、不进跨图快照，
 ##     disband_all_squads 一并清空。

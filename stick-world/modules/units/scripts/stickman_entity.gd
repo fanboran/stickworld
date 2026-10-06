@@ -246,10 +246,6 @@ const CORPSE_FADE: float = 1.2
 var _corpse_fade_timer: float = -1.0
 ## 最近受击时刻（ms，脱火恢复判定）
 var _last_hit_ms: int = -999999
-## 战斗中脱火恢复：距上次受击超过此秒数视为脱离火线
-const COMBAT_MORALE_RECOVER_DELAY: float = 3.0
-## 脱火恢复速率倍率（相对 REST_MORALE_REGEN）
-const COMBAT_MORALE_RECOVER_FACTOR: float = 0.5
 ## 脱战回血延迟（s）：距上次受击超过此秒数才开始回（9j；缺陷表口径"脱战 5s 后回"）
 const OUT_OF_COMBAT_HP_REGEN_DELAY: float = 5.0
 ## 脱战回血速率（HP/s，整十口径；待实测校准）
@@ -267,8 +263,6 @@ var _ai_tick_counter: int = 0
 var _ai_phase: int = 0
 var _ai_rate_div: int = 2
 var _sep_rate_div: int = 2
-## 脱离战斗士气恢复速率（每秒；AI 完善批次 3）
-const REST_MORALE_REGEN: float = 4.0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
 ## 分离检测半径（真身与推力参数在 entity_motion.gd；bench_units_main.gd 直读本壳）。
@@ -568,8 +562,7 @@ func _physics_process(delta: float) -> void:
 	if _sim_active():
 		# sim 模式：移动/分离/边界/击退衰减/z_index 全由 BattleSim 批处理；
 		# 实体只保留 AI 决策节流（上方）+ 意图速度标量/动画（_handle_ai_input→
-		# _apply_movement 末尾写 sim）+ 士气/硬直/markers。
-		_apply_rest_morale_recovery(delta)
+		# _apply_movement 末尾写 sim）+ 硬直/markers。
 		_apply_rest_hp_recovery(delta)
 		if _hit_stun_timer > 0.0:
 			_hit_stun_timer = maxf(0.0, _hit_stun_timer - delta)
@@ -602,8 +595,6 @@ func _physics_process(delta: float) -> void:
 			velocity = prev_velocity * TimeManager.speed_factor()
 		move_and_slide()
 		velocity = prev_velocity
-	# 士气自然恢复（AI 完善批次 3，行业最佳实践）：脱离战斗后逐渐回士气，防永久溃逃
-	_apply_rest_morale_recovery(delta)
 	# 脱战回血（9j）：脱离火线 5s 后 HP 缓慢恢复（上限 25% max_hp；附身单位走 _possess_regen）
 	_apply_rest_hp_recovery(delta)
 	# 击退冲量衰减
@@ -845,7 +836,7 @@ var _rest_regen_accum: float = 0.0
 
 
 ## 脱战回血（9j 最简版：数值先通，血条渐补表现不做）：脱离火线（5s 未受击，
-## 与士气恢复同源的 _last_hit_ms 判定）后 HP 缓慢恢复，最多回到血上限的 25%
+## 脱离火线判定（_last_hit_ms 距今超窗）后 HP 缓慢恢复，最多回到血上限的 25%
 ## （战损留痕）。附身单位不叠此通道（走 SWL 真值 _possess_regen 慢回）。
 func _apply_rest_hp_recovery(delta: float) -> void:
 	if possessed or health_component == null:
@@ -1268,9 +1259,7 @@ var _se_has_stun: bool = false
 @warning_ignore("unused_private_class_variable")
 var _se_has_speed_mult: bool = false
 var _se_checked: bool = false
-## health/战斗实例方法存在性缓存（同上，_apply_rest_morale_recovery 每物理帧消费）
-var _health_morale_checked: bool = false
-var _health_has_morale: bool = false
+## 战斗实例方法存在性缓存（同上，_apply_rest_hp_recovery 每物理帧消费）
 var _battle_has_is_active: bool = false
 ## weapon_mount 方法/字段存在性缓存（@onready 装配后不变；举盾移速/受击每帧消费）
 @warning_ignore("unused_private_class_variable")
@@ -1304,34 +1293,6 @@ func is_stunned() -> bool:
 		_se_checked = true
 		_se_has_stun = se.has_method("has_stun")
 	return _se_has_stun and se.has_stun()
-
-
-## 士气自然恢复（AI 完善批次 3）：不在战斗中时全速回；**战斗中但 ≥3s 未受击
-## （脱离火线）半速回**（2026-09-01 观察场反馈：怯战者退到后排后士气永不恢复 =
-## 原地再也不动——战斗不结束就该有机会重整再战）。
-func _apply_rest_morale_recovery(delta: float) -> void:
-	if health_component == null:
-		return
-	# restore_morale 方法存在性不变 → 首次查一次记布尔（每物理帧 has_method 反射是大群开销）
-	if not _health_morale_checked:
-		_health_morale_checked = true
-		_health_has_morale = health_component.has_method("restore_morale")
-	if not _health_has_morale:
-		return
-	var in_battle: bool = false
-	var bi: Node = _battle_instance
-	if bi != null and is_instance_valid(bi):
-		# is_active 方法存在性随战斗实例注入而定 → 首次查一次记布尔（状态查询本身保留每帧调）
-		if not _battle_has_is_active:
-			_battle_has_is_active = bi.has_method("is_active")
-		in_battle = _battle_has_is_active and bi.is_active()
-	if not in_battle:
-		health_component.restore_morale(REST_MORALE_REGEN * delta)
-		return
-	# 战斗中脱火恢复：3s 未受击 → 半速（受火线压制时不回）
-	var since_hit: float = (Time.get_ticks_msec() - _last_hit_ms) / 1000.0
-	if since_hit >= COMBAT_MORALE_RECOVER_DELAY:
-		health_component.restore_morale(REST_MORALE_REGEN * COMBAT_MORALE_RECOVER_FACTOR * delta)
 
 
 ## 播放攻击动画（反编译参考实装 C）：攻击命中帧触发攻击动画，

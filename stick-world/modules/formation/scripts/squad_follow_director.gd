@@ -97,7 +97,7 @@ func update_follow(squad_id: String, follow_default_gap: float, catchup_run_dist
 			continue
 		if ai.has_method("get_current_behavior") \
 				and ai.get_current_behavior() in ["retreat", "seek_cover"]:
-			continue  # 士气驱动行为，不拽回队列
+			continue  # 撤退类行为（避战/找掩体），不拽回队列
 		if _host._member_enemy_in_range(u):
 			continue  # 射程内有敌（含风筝窗口），交还给战斗行为
 		var slot: Vector2 = _host.get_squad_dest(squad_id, u, anchor, "formation")

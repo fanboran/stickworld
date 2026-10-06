@@ -2,10 +2,10 @@ extends RefCounted
 ## 自对弈 Benchmark 选手基类 —— 算法（选手）与战场之间的唯一通道。
 ##
 ## 封装层铁律（创始人 2026-09-30 定）：选手与**附身玩家同权**，分两面——
-## 【观察面：全开】玩家在画面上能看到的一切（各单位位置/血量/士气/旗点/战局）
+## 【观察面：全开】玩家在画面上能看到的一切（各单位位置/血量/旗点/战局）
 ## 选手都能经观察接口拿到，这不是作弊——信息面与玩家等价。
 ## 【操作面：只走接口】只能经本基类的个人级/编制级命令门面下指令，禁止直改
-## 单位/战斗内部状态（改血、瞬移、直接清冷却/士气之类——玩家做不到的都不行）。
+## 单位/战斗内部状态（改血、瞬移、直接清冷却之类——玩家做不到的都不行）。
 ## 判据：玩家附身操控该角色时能做与能看的，选手才能做与能看。
 ## 修改时区分"封装层内"（接口语义不变，改实现，随便改）与"封装层外"
 ## （改变可做之事，必须先立接口契约再实现）。
@@ -18,7 +18,7 @@ extends RefCounted
 ## 自由度分层（创始人 2026-09-30 定的封装口径）：
 ##   个人级 —— unit_order()：对单个单位下覆盖令（单位自己还在打仗，同时接令执行）
 ##   编制级 —— squad_order()：对班下号令（走 TacticalOrders，传播链照旧）
-##   观察级 —— snapshot()/flags()：拿到双方兵力/士气/位置/旗点的只读快照
+##   观察级 —— snapshot()/flags()：拿到双方兵力/位置/旗点的只读快照
 ## 输入=战场信息，输出=决策；不同岗位（矛/剑/弓/杖/祭司、班长/排长）的
 ## 决策差异由选手自己在这两层命令里表达，或配合 behavior_profiles 参数表。
 ##
@@ -52,7 +52,7 @@ func enemy_units() -> Array:
 	return _alive_units(1 - int(ctx.faction))
 
 
-## 战场快照（只读，值拷贝）：{pos, hp_ratio, morale_ratio, disengaging}
+## 战场快照（只读，值拷贝）：{pos, hp_ratio, disengaging}
 func snapshot(units: Array) -> Array:
 	var out: Array = []
 	for u in units:
@@ -63,7 +63,6 @@ func snapshot(units: Array) -> Array:
 			"node": u,
 			"pos": (u as Node2D).global_position,
 			"hp_ratio": hp.get_health_ratio() if hp.has_method("get_health_ratio") else 1.0,
-			"morale_ratio": float(hp.morale) / float(hp.max_morale) if "morale" in hp and hp.max_morale > 0 else 1.0,
 			"disengaging": _is_disengaging(u),
 		})
 	return out

@@ -141,7 +141,7 @@ func _append_ai_info(lines: Array[String], e: Node2D) -> void:
 		if bool(st.get("enabled", false)):
 			var f: Dictionary = st.get("last_factors", {})
 			var hits: Array[String] = []
-			for k in ["hp_low", "morale_low", "line_collapsed"]:
+			for k in ["hp_low", "line_collapsed"]:
 				if bool(f.get(k, false)):
 					hits.append(k)
 			var factor_txt := "无因子"

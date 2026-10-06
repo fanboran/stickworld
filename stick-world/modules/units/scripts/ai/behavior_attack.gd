@@ -8,7 +8,7 @@ extends BehaviorBase
 ## 完成条件（finish 后由 AIController 决策切换）：
 ##   - 无敌人 / 战斗结束
 ##   - 自身重伤且附近有掩体 -> AIController 切 seek_cover
-##   （裁决【删溃逃、立避战】：低士气不再打断攻击——保持还击，去留由 C6 调制裁决）
+##   （裁决【删溃逃、立避战】：不因低血打断攻击——保持还击，去留由 C6 调制裁决）
 ##
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
@@ -61,7 +61,7 @@ var _hesitate_check_timer: float = 0.0
 ## 犹豫持续计时器（>0 时停滞）
 var _hesitate_timer: float = 0.0
 ## 狂暴标记（反编译参考实装 E）：低血狂暴/被围背墙时由 AIController 传入。
-## 狂暴时跳过"低血找掩体"、冲锋概率提升、不因士气波动收手。
+## 狂暴时跳过"低血找掩体"、冲锋概率提升、不轻易收手。
 var _rage: bool = false
 ## 兵种行为档案（RWR 式基线+覆盖）：enter 时按武器类型解析，
 ## 覆盖冲锋/犹豫/追击/保距等参数——兵种个性 = 参数差（见 behavior_profiles.gd）。
@@ -255,7 +255,7 @@ func update(delta: float) -> void:
 				return
 
 	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
-	# 旧 is_routed/低士气 finish 自检随溃逃退役——低士气单位保持还击，去留由
+	# 旧 is_routed finish 自检随溃逃退役——被打单位保持还击，去留由
 	# ai_controller 的 C6 概率调制裁决，避免逐拍 finish→重 travel 抖动）
 	var health: Node = entity.get_health() if _cap_get_health else null
 	if health != null:

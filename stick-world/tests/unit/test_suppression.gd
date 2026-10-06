@@ -5,7 +5,7 @@ signal test_done(code: int)
 ## CoH pinned-reaction-plan isInterruptablePlan=false + 等 7.5s 真值见逆向笔记 §4.2）。
 ## 覆盖：档案新键默认值（开关默认关=零回归）/ SUPPRESSED 状态落地与过期 / 触发门槛
 ## （远程命中/近战重击/格挡残余不触发）/ 豁免规则（死亡/附身/兵种免疫）/
-## 同 type 刷新不叠加 / 压制期士气流失（不伤血）/ ai_controller 压制避战
+## 同 type 刷新不叠加 / ai_controller 压制避战
 ## （脱离接火+号令挂起续行+幂等）/ 无组件零回归 / behavior_attack 在途兜底 /
 ## squad_phase_plan 真实压制替换点 / **箭矢近失压制**（开关关零回归、总门约束、
 ## 半径内外边界、豁免集复用、只压制不伤害）。
@@ -34,7 +34,6 @@ func _ready() -> void:
 	_runner.add_test("触发：近战重击达下限压制 / 轻击不压制", _test_melee_trigger)
 	_runner.add_test("豁免：已溃逃/已死亡/玩家附身/兵种免疫", _test_exemptions)
 	_runner.add_test("同 type 刷新不叠加：再受击重置时长", _test_refresh)
-	_runner.add_test("士气流失：压制期 tick 经 lose_morale，不伤血", _test_morale_drain)
 	_runner.add_test("ai_controller 压制避战：脱离接火 + 号令挂起，解除后续行", _test_ban_stall_order)
 	_runner.add_test("压制避战幂等：已在避战不重 travel", _test_suppress_disengage_idempotent)
 	_runner.add_test("避战还击：避战态被贴脸切 attack，敌脱离收窗（带打带跑）", _test_disengage_counterattack)
@@ -156,7 +155,7 @@ func _test_near_miss_exemptions() -> void:
 
 
 func _test_near_miss_no_damage() -> void:
-	# 近失压制只走行为禁令 + 士气流失通道：不产生伤害、不即时扣士气（tick 制），
+	# 近失压制只走行为禁令通道：不产生伤害，
 	# 也不触碰命中路径参数（伤害量/锁定目标）——两条触发源互不污染
 	_arm_near_miss_profiles(true, 80.0, true)
 	var v := _make_near_miss_victim(Vector2(40.0, 0.0))
@@ -165,7 +164,6 @@ func _test_near_miss_no_damage() -> void:
 	arrow._stick_ground()
 	_runner.assert_true(v.effects.has_suppressed(), "插地近失终态施加压制")
 	_runner.assert_approx(v.hp.hp, 100.0, 0.0, "近失不产生伤害（hp 不变，未走 DamagePipeline）")
-	_runner.assert_approx(v.hp.morale_lost, 0.0, 0.0, "近失不即时流失士气（0.5s tick 制）")
 	_runner.assert_approx(arrow._damage, 10.0, 0.0, "近失不篡改箭矢伤害量")
 	_runner.assert_true(arrow._target == null, "近失不改动锁定目标（命中路径前提不变）")
 	arrow.free()
@@ -193,8 +191,6 @@ func _test_profile_defaults() -> void:
 			"远程命中触发下限 = 4.0（格挡残余 0.45~3 不触发）")
 	_runner.assert_approx(float(p2.get("suppression_melee_min_damage", -1.0)), 12.0, 0.001,
 			"近战重击触发下限 = 12.0（对齐 HIT_BIG_DAMAGE_THRESHOLD）")
-	_runner.assert_approx(float(p2.get("suppression_morale_per_tick", -1.0)), 2.0, 0.001,
-			"压制期士气流失 = 2.0/0.5s tick")
 	_runner.assert_false(bool(p2.get("suppression_immune", true)), "兵种免疫豁免默认关")
 
 
@@ -289,20 +285,6 @@ func _test_refresh() -> void:
 	_runner.assert_true(until_2 >= until_1, "刷新后时长重置（until 不前移）")
 	ctx.teardown()
 
-
-func _test_morale_drain() -> void:
-	# power = 每 0.5s tick 士气流失点数；只损士气不伤血（lose_morale 语义）
-	var ctx := _make_sup_ctx({})
-	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
-	for i in 3:
-		ctx.se._physics_process(0.5)  # 每次恰好跨一个 tick
-	_runner.assert_approx(ctx.health.morale_lost, 6.0, 0.001, "3 tick × 2.0 = 流失 6")
-	_runner.assert_approx(ctx.health.hp, 100.0, 0.001, "压制流失不伤血")
-	# tick 未满间隔不结算
-	var lost: float = ctx.health.morale_lost
-	ctx.se._physics_process(0.2)
-	_runner.assert_approx(ctx.health.morale_lost, lost, 0.001, "tick 未满不流失")
-	ctx.teardown()
 
 
 func _test_ban_stall_order() -> void:
@@ -494,7 +476,6 @@ func _arm_near_miss_profiles(near_miss_enabled: bool, radius: float,
 	sw["suppression_enabled"] = true
 	sw["suppression_immune"] = false
 	sw["suppression_duration"] = 4.5
-	sw["suppression_morale_per_tick"] = 2.0
 
 
 ## 近失箭矢夹具：真实 ArrowProjectile（非树，候选经 near_miss_candidates_override
@@ -697,11 +678,10 @@ class _SupWeapon extends Node:
 	var weapon_type: int = ScriptBehaviorProfiles.SWORD
 
 
-## 假生命组件：damaged 信号（触发源）+ 决策链查询面 + 士气流失记录
+## 假生命组件：damaged 信号（触发源）+ 决策链查询面
 class _SupHealth extends Node:
 	signal damaged(amount: float, source: Node)
 	var dead: bool = false
-	var morale_lost: float = 0.0
 	var hp: float = 100.0
 
 	func is_dead() -> bool:
@@ -709,12 +689,6 @@ class _SupHealth extends Node:
 
 	func get_hp_ratio() -> float:
 		return 1.0
-
-	func get_morale_ratio() -> float:
-		return 1.0
-
-	func lose_morale(amount: float) -> void:
-		morale_lost += amount
 
 	## 测试用受击入口（生产链路 = HealthComponent.take_damage → damaged.emit）
 	func take_hit(amount: float, source: Node = null) -> void:

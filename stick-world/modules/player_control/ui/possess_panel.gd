@@ -4,7 +4,7 @@ extends Control
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.1、§7.5。
 ## 显示附身单位的状态信息：
-##   - HP / 士气
+##   - HP
 ##   - 武器冷却 / 情绪标签
 ##   - 当前行为 / 朝向
 ##   - 坐标
@@ -111,18 +111,12 @@ func _refresh_info() -> void:
 	if health != null:
 		var hp: float = health.hp
 		var max_hp: float = health.max_hp
-		var morale: float = health.morale
-		var max_morale: float = health.max_morale
 		parts.append("HP: %d/%d" % [int(hp), int(max_hp)])
-		parts.append("士气: %d/%d" % [int(morale), int(max_morale)])
 	# 武器
 	var weapon: Node2D = entity.get_weapon() if entity.has_method("get_weapon") else null
 	if weapon != null:
 		var cd: float = weapon.get_cooldown_remaining() if weapon.has_method("get_cooldown_remaining") else 0.0
-		var mood: int = weapon.get_mood() if weapon.has_method("get_mood") else 0
-		var mood_str: String = _mood_to_string(mood)
 		parts.append("冷却: %.1fs" % cd)
-		parts.append("情绪: %s" % mood_str)
 	# 行为
 	var ai: Node = entity.get_ai_controller() if entity.has_method("get_ai_controller") else null
 	if ai != null and ai.has_method("get_current_behavior"):
@@ -133,15 +127,6 @@ func _refresh_info() -> void:
 	# 坐标
 	parts.append("pos: (%d, %d)" % [int(entity.global_position.x), int(entity.global_position.y)])
 	_info_label.text = "  |  ".join(parts)
-
-
-func _mood_to_string(mood: int) -> String:
-	match mood:
-		0: return "稳定"
-		1: return "犹豫"
-		2: return "亢奋"
-		3: return "恐慌"
-		_: return "未知"
 
 
 # ─────────────────────────────── 按钮回调 ────────────────────────────────

@@ -98,11 +98,15 @@ var _moved_this_tick := false        # 本物理刻内是否已位移过（识�
 ## mip 链，缩小采样也顺带治好）喂 billboard。回读是 sync 点必须节流：每帧
 ## 最多 BLIT_BUDGET 次，各角色按相位轮转，节奏 = BLIT_FPS。
 const BLIT_BUDGET := 10
-## LOD 烘焙节拍（帧）：按采集分档给节奏——近景档高频（近战动作连贯）、
-## 远景档低频省预算。配合公平队列预算上限：全员近景时按预算摊薄（FIFO 公平），
-## 少数近战接火时前排吃到 30Hz，远景行军维持 12Hz——旧 10Hz 均一节拍下
-## 1.4×速动画每烘跳 8+ 帧，是"动作闪现"的成分之一
-const BLIT_CADENCE_TIERS: Array[int] = [2, 5, 12]
+## LOD 烘焙节拍（帧，按 60fps 渲染折算）：按采集分档给节奏——近景档 30Hz、
+## 中档 15Hz、远景档 10Hz（地板对齐 SW3 sim 15Hz 的量级：低于 10Hz 的姿态采样
+## 在 1.0× 动画速率下逐姿势跳变=频闪，2026-10-06 创始人验收"动作姿态反复跳变
+## 闪烁"后从远档 12 帧(5Hz)收紧）。预算超载时由公平队列 FIFO 摊薄，全体均分
+## 不饿死
+const BLIT_CADENCE_TIERS: Array[int] = [2, 4, 6]
+## idle 慢档节拍（帧，≈5Hz）：站姿循环动画（呼吸/摇摆）低频续烘——冻住=定格
+## PPT（2026-10-06），全速烘又费预算，呼吸量级 5Hz 足够平滑
+const IDLE_BLIT_CADENCE: int = 12
 ## 烘焙最小间隔（帧）：两次成功烘焙之间的硬下限——set_anim 的唤醒排期与
 ## 队列突发排水再热也不许逐帧连烘（出生洪峰实测同卡连帧烘焙，读回竞态
 ## 概率被放大到必现 = 大色块直接来源）
@@ -155,12 +159,14 @@ func _blit_capture() -> void:
 		if _my_shadow != null and is_instance_valid(_my_shadow):
 			_my_shadow.visible = true
 	# 下次到拍（到这里纹理已有效，休眠才安全）：按距离分档节拍（近景高频）；
-	# idle 姿态静止，休眠到 set_anim 唤醒。两次烘焙间至少隔 BLIT_MIN_GAP 帧
-	#（防逐帧重烘风暴放大读回竞态）
+	# 两次烘焙间至少隔 BLIT_MIN_GAP 帧（防逐帧重烘风暴放大读回竞态）。
+	# idle 不再休眠（2026-10-06 创始人验收"每 ~2s PPT 跳变"）：站姿变体是
+	# 循环动画（呼吸/摇摆），冻住一格=定格；改为慢档续烘（IDLE_CADENCE ≈5Hz，
+	# 呼吸量级足够平滑，预算可控）
 	_blit_next_frame = Engine.get_process_frames() \
 			+ maxi(BLIT_MIN_GAP, BLIT_CADENCE_TIERS[_tier]) + (_tier_phase % 3)
 	if _anim == "idle":
-		_blit_next_frame = 0x7FFFFFFF
+		_blit_next_frame = Engine.get_process_frames() + IDLE_BLIT_CADENCE + (_tier_phase % 3)
 	_blit_usec += Time.get_ticks_usec() - t0
 	_blit_count += 1
 	if _blit_count >= 600:
@@ -747,6 +753,7 @@ func set_weapon_type(wt: int) -> void:
 		# 清姿态缓存：上面的换装覆盖了 walk state，下一拍 feed 的
 		# set_stance_anims 需重放举盾变体（缓存命中会跳过）
 		_stance_walk = ""
+		_stable_idle_variant = ""   # 站姿变体按武器分型，换武器重挑
 	if _weapon_instance != null and is_instance_valid(_weapon_instance):
 		_weapon_instance.queue_free()
 		_weapon_instance = null
@@ -842,6 +849,10 @@ func set_shield_visible(on: bool) -> void:
 ## （命中帧对齐依赖动画进度，重播会把挥砍拉回起点）。
 var _stance_walk: String = ""
 var _stance_idle: String = ""
+## 本卡稳定站姿变体：攻后举盾翻转在混战里 ~2s 一轮，每次空名回退都随机重挑
+## = 姿势随机跳变（2026-10-06 创始人验收"跳变成什么动作非常随机"）；改为每卡
+## 挑一次，换武器时随 set_weapon_type 清缓存重挑
+var _stable_idle_variant: String = ""
 
 func set_stance_anims(walk_anim: String, idle_anim: String) -> void:
 	if _pure_sim or (walk_anim == _stance_walk and idle_anim == _stance_idle):
@@ -855,7 +866,9 @@ func set_stance_anims(walk_anim: String, idle_anim: String) -> void:
 	else:
 		rig.set_state_anim("walk", walk_anim)
 	if idle_anim.is_empty():
-		rig.set_state_anim("idle", ANIMS.pick_stand_variant_for(_weapon_type_cached))
+		if _stable_idle_variant.is_empty():
+			_stable_idle_variant = ANIMS.pick_stand_variant_for(_weapon_type_cached)
+		rig.set_state_anim("idle", _stable_idle_variant)
 	else:
 		rig.set_state_anim("idle", idle_anim)
 	# 不重播（churn 治理）：换装 = 换 state 内动画资源，播放位置连续——重播会把

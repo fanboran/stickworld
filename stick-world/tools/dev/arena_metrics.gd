@@ -8,9 +8,12 @@ extends Node
 
 
 const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
-const WALK_ANIM_BASE := 75.0
-const RUN_ANIM_BASE := 156.0
-const ANIM_SPEED_MULT := 1.4
+## 滑步基准单一真相源＝entity_motion 常量（2026-10-06 校准为满走/满跑速后，
+## 本文件旧副本 75/156/1.4 与真值漂移＝度量衡假红，滑步比虚报 0.64）
+const Motion := preload("res://modules/units/scripts/entity/entity_motion.gd")
+const WALK_ANIM_BASE: float = Motion.WALK_ANIM_BASE
+const RUN_ANIM_BASE: float = Motion.RUN_ANIM_BASE
+const ANIM_SPEED_MULT: float = Motion.ANIM_SPEED_MULT
 const COVER_WAIT_FRAMES := 4200
 ## 命中偏差只统计近战（弓两段动画 hold/release 的动画起点对不上 Hit 表）
 const MELEE_WEAPONS := [0, 1, 3]   # SWORD / SPEAR / PICKAXE

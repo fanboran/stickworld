@@ -342,8 +342,14 @@ func _alloc_slot() -> int:
 
 # ─────────────────────────────── 批循环 ────────────────────────────────
 
+## 系统顺序契约（确定性模拟核心 P0，docs/技术/架构/场景与战斗/确定性模拟核心.md）：
+## 顺序是确定性的一部分——同类事件同一刻的结算顺序改变，回放/复现即漂移。
+## 新系统只允许**追加到既有系统之间有明确语义理由的位置**并同步更新本表。
+## 现表：①分离修正(节流 SEP_RATE_DIV) → ②移动积分+击退+边界 → ③武器冷却/strike
+## → ④写回渲染代理。P1 找目标/命中事件、P3 编队将插入：目标 → 分离 → 编队 →
+## 积分 → 命中结算 → 写回（对齐 SW3 FindTargetAi → Movement/Formation →
+## MeleeAttack 的系统序）
 ## 每物理刻推进（BattleInstance._physics_process 开头调用）。
-## 单 pass 顺序：分离 → 积分+击退+边界 → 冷却/strike → 写回。
 func tick(delta: float) -> void:
 	var n: int = entities.size()
 	if n == 0:

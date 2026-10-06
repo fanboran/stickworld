@@ -18,8 +18,9 @@ const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 ## 兵种行为档案（盾姿态分层：持盾动画组/池按武器类型查档案，计划 5）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
-## 动画整体播放倍率（×1.4 加速）
-const ANIM_SPEED_MULT: float = 1.4
+## 动画整体播放倍率（1.0=原作步频直出；历史值 1.4 是无设计档出处的遗留加速，
+## 2026-10-06 创始人验收"画面跟开了倍速一样"后复位，与 entity_motion 同步）
+const ANIM_SPEED_MULT: float = 1.0
 ## walk 动画最低播放速率（0.6 而非 0.2：过低会让起步/停止段动画几乎定格在
 ## "四肢伸直"的起步帧 → 人已滑步四肢却僵直；0.6 倍速下起步即明显摆动）
 const MIN_ANIM_SCALE: float = 0.6

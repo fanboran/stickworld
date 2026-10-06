@@ -200,10 +200,13 @@ var _action_locked: bool = false
 var _player_build_timer: float = 0.0
 ## 朝向（1=右，-1=左）
 var _facing: int = 1
-## 朝向节流时戳（try_set_facing 消费；SWL Ai.lastDirectionChangeTime 直译）
-var _last_direction_change_at: float = -1.0
-## 朝向最小变更间隔（s，SWL Ai.DIRECTION_CHANGE_FREQUENCY = 0.5【事实】const 直译）
-const DIRECTION_CHANGE_FREQUENCY: float = 0.5
+## 朝向节流基准帧（try_set_facing 消费；SW3 Movement.LastFacingChangeFrame 直译：
+## 帧号制 = 确定性可回放，墙钟制在掉帧/变速下行为漂移）
+var _last_direction_change_frame: int = -1
+## 朝向最小变更间隔（物理帧；SW3 Movement.LimitFacingChangeRate 直译。
+## 0.5s × 30Hz = 15 帧——SW3 官方注释原话"Anti-jitter for very fast melee units
+## that overshoot their melee point"）
+const FACING_RATE_LIMIT_FRAMES: int = 15
 ## 当前动画名
 var _current_anim: String = "idle"
 ## 散步模式（true=只走不跑，按 Alt 切换）
@@ -1364,18 +1367,19 @@ func face_towards(pos: Vector2) -> void:
 	try_set_facing(1 if dx > 0.0 else -1)
 
 
-## 朝向变更节流（SWL Ai.DIRECTION_CHANGE_FREQUENCY = 0.5【事实】const 直译，
-## 佐证 lastDirectionChangeTime 时戳对）：facing 0.5s 内只许翻一次。移动意图
-## 高频反号（分离推挤穿椭圆、目标在两侧间拍频）此前逐帧翻面 = 全员左右甩头；
-## 节流后翻面呈"转身"节奏。玩家附身豁免（IsBeingUserControlledByPro 同语义：
-## 手控输入不经 AI 节拍）。返回是否生效（false=节流窗内，保持原朝向）
+## 朝向变更节流（SW3 Movement.LimitFacingChangeRate/LastFacingChangeFrame 直译，
+## 帧号制）：0.5s（15 物理）内只许翻一次。移动意图高频反号（分离推挤穿椭圆、
+## 目标在两侧间拍频）此前逐帧翻面 = 全员左右甩头；节流后翻面呈"转身"节奏。
+## 玩家附身豁免（手控输入不经 AI 节拍）。返回是否生效（false=节流窗内，
+## 保持原朝向）
 func try_set_facing(new_facing: int) -> bool:
 	if new_facing == _facing:
 		return true
-	var now: float = Time.get_ticks_msec() / 1000.0
-	if not is_possessed() and now - _last_direction_change_at < DIRECTION_CHANGE_FREQUENCY:
+	var pf := Engine.get_physics_frames()
+	if not is_possessed() and _last_direction_change_frame >= 0 \
+			and pf - _last_direction_change_frame < FACING_RATE_LIMIT_FRAMES:
 		return false
-	_last_direction_change_at = now
+	_last_direction_change_frame = pf
 	_facing = new_facing
 	_apply_scale()
 	return true

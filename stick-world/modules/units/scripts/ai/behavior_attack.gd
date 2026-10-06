@@ -236,7 +236,7 @@ func update(delta: float) -> void:
 					"battle": _battle,
 					"ignore_current_attackers": true,
 					"prefer_large": _p("prefer_large", 0.0),
-					"only_forward": true,
+					"only_forward": false,
 				})
 			# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
 			# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选

@@ -24,13 +24,17 @@ func _init(entity: Node) -> void:
 
 
 # ─────────────────────────────── 运动常量 ────────────────────────────────
-## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
-const WALK_ANIM_BASE: float = 75.0   # 24px 换轨（旧 100；格/秒口径不变 → 动画相位不变）
-## run 动画基准速率（跑速=RUN_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT，即原校准点；
-## 动画速率随 RUN_SPEED 等比联动——跑得越快步频越快，防滑步）
-const RUN_ANIM_BASE: float = 156.0   # 24px 换轨（旧 208×0.75；run_speed 同比 320→240）
-## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
-const ANIM_SPEED_MULT: float = 1.4
+## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0）。滑步/倍速治理
+## 2026-10-06：基准必须=满走速 WALK_SPEED(160)——旧值 75 是 32→24px 换轨遗留，
+## 配 ×1.4 倍率后满走播速 2.99×、满跑 2.87×，全员 locomotion 约三倍速播放
+## ＝"画面像开倍速+滑步"的总根
+const WALK_ANIM_BASE: float = 160.0
+## run 动画基准速率（跑速=RUN_ANIM_BASE 时 anim_speed=1.0）＝RUN_SPEED(320)，
+## 动画速率随跑速联动——跑得越快步频越快，防滑步
+const RUN_ANIM_BASE: float = 320.0
+## 动画整体播放倍率（1.0=原作步频直出；历史值 1.4 是无设计档出处的遗留加速，
+## 2026-10-06 创始人验收"画面跟开了倍速一样"后复位）
+const ANIM_SPEED_MULT: float = 1.0
 ## 切到 idle 的速度阈值（减速停止判定；原实体常量随减速公式迁入）
 const IDLE_THRESHOLD: float = 5.0
 ## 分离检测半径（px）：与友军/任何单位过近时互相推开。数值与不变式（体宽 <

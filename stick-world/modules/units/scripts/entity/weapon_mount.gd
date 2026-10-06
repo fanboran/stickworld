@@ -43,6 +43,9 @@ const WeaponBalance := preload("res://modules/units/scripts/entity/weapon_balanc
 const WeaponRanged := preload("res://modules/units/scripts/entity/weapon_ranged.gd")
 ## 持盾格挡助手（三重判定 + blockResetInterval 节流）
 const WeaponBlock := preload("res://modules/units/scripts/entity/weapon_block.gd")
+## 批模拟内核类型经 combat api 契约出口引用（禁直连 class_name BattleSim，
+## 重命名即静默断多处——见 audit §4.3）
+const ScriptBattleSim := preload("res://modules/combat/api.gd").BATTLE_SIM_SCRIPT
 
 ## 武器类型与表现场景映射的真相源在 stick_rig api（武器视觉词汇归 L1）；
 ## 此处 const 转发保持 WeaponMount.WeaponType / WEAPON_SCENE_PATHS 旧引用点不变
@@ -755,7 +758,7 @@ func perform_attack(target: Node) -> Dictionary:
 	_pending_strike_owner = owner_entity
 	_strike_fired = false
 	_cancel_window_latched = false
-	# 进入冷却（含情绪修正）；sim 模式计时归 BattleSim（冷却 + strike 命中帧）
+	# 进入冷却；sim 模式计时归 BattleSim（冷却 + strike 命中帧）
 	var s := _sim()
 	if s != null:
 		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
@@ -962,11 +965,11 @@ func _do_strike() -> void:
 	if wt != WeaponType.BOW:
 		var ang: float = (target.global_position - owner_entity.global_position).angle()
 		FxLibrary.spawn_slash_arc(owner_entity.get_tree(), owner_entity.global_position + Vector2(0, -30), ang, wt == WeaponType.SWORD)
-	# 命中掷骰（未中=挥空）
-	if randf() > base_hit_chance:
+	# 命中掷骰（未中=挥空）——单位种子 RNG（可注入可复现，P4 回放前置）
+	if _roll_dice() > base_hit_chance:
 		return
 	# 暴击掷骰（原版 isCrit；暴击附带自伤代价 critBonusDamageInflictedToSelf）
-	var is_crit: bool = randf() < crit_chance
+	var is_crit: bool = _roll_dice() < crit_chance
 	# ── AOE 挥击：身前扇形内按 number_of_units_that_can_hit 结算多个目标 ──
 	var victims: Array = _collect_strike_targets(owner_entity, target)
 	for i in victims.size():
@@ -1075,13 +1078,13 @@ func _resolve_hit_event_time() -> void:
 # ─────────────────────────────── BattleSim 接线（D 刀）────────────────────────────────
 
 ## 宿主实体的 BattleSim（null = 未注册/未启用/已死——所有 sim 分支的统一入口判定）。
-func _sim() -> BattleSim:
+func _sim() -> ScriptBattleSim:
 	var e := get_owner_entity()
 	if e == null or not is_instance_valid(e):
 		return null
 	if not e.has_method("get_battle_sim"):
 		return null
-	var s: BattleSim = e.get_battle_sim()
+	var s: ScriptBattleSim = e.get_battle_sim()
 	if s == null or e.get_battle_sim_sid() < 0 or e.is_dead():
 		return null
 	return s
@@ -1287,6 +1290,22 @@ func _get_effective_cooldown() -> float:
 	var base: float = cooldown * _user_controlled_speed_mult()
 	# 装备攻速乘子（speed_mult>1 更快 → 冷却变短；缺省 1.0 零回归）
 	return base / maxf(0.05, equip_speed_mult)
+
+
+# ── 命运骰 RNG（单位种子隔离：与全局 randf 断开，P4 回放"每单位可注入种子"前置）──
+var _dice_rng := RandomNumberGenerator.new()
+var _dice_seeded: bool = false
+
+
+## 命运骰（命中/暴击掷骰统一出口）：首掷按宿主实体实例 id 派生种子
+## （每单位不同；对齐 ai_controller._resolve_jitter_seed 惯例），测试可直接
+## 重掷 _dice_rng.seed 复现序列。
+func _roll_dice() -> float:
+	if not _dice_seeded:
+		_dice_seeded = true
+		var e := get_owner_entity()
+		_dice_rng.seed = int(e.get_instance_id()) if e != null else 20261006
+	return _dice_rng.randf()
 
 
 ## 装备后有效伤害（基础值 × 装备乘子；所有出手结算统一走本出口）

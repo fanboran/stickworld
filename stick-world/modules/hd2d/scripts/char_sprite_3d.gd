@@ -2,7 +2,7 @@ extends Node3D
 ## char_sprite_3d.gd —— HD-2D 核心机制：「2D 绘制 → SubViewport → 3D quad」
 ##
 ## 数据流：
-##   Node2D 火柴人（modules/units 的 StickmanRig：Skeleton2D + 骨骼 + MultiMesh 批渲染）
+##   Node2D 火柴人（modules/stick_rig 的 StickmanRig：Skeleton2D + 骨骼 + MultiMesh 批渲染）
 ##     → SubViewport（transparent_bg，只跑 2D）
 ##       → ViewportTexture
 ##         → char_billboard.gdshader 贴到与相机同基的 QuadMesh 上
@@ -760,9 +760,9 @@ func set_weapon_type(wt: int) -> void:
 	if _weapon_follow != null and is_instance_valid(_weapon_follow):
 		_weapon_follow.queue_free()
 		_weapon_follow = null
-	if rig == null or wt == int(WeaponMount.WeaponType.NONE):
+	if rig == null or wt == int(StickRigAPI.WeaponType.NONE):
 		return
-	var scene_path: String = str(WeaponMount.WEAPON_SCENE_PATHS.get(wt, ""))
+	var scene_path: String = str(StickRigAPI.WEAPON_SCENE_PATHS.get(wt, ""))
 	if scene_path.is_empty():
 		return
 	var bone: Node2D = rig.get_node_or_null(

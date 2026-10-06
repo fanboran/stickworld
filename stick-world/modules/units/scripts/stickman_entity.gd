@@ -6,9 +6,9 @@ extends CharacterBody2D
 ## 在已有 StickmanRig（纯渲染骨架）外包一层 CharacterBody2D，
 ## 承担物理移动、碰撞、附身接口。
 ##
-## P0 阶段：
-##   - 玩家附身时 WASD 控制移动
-##   - 未附身时静止 idle（AI 留到阶段 0.3）
+## 移动与驱动：
+##   - 玩家附身时 WASD 控制移动/攻击（entity_possession）
+##   - 未附身时由 AIController 决策驱动（战斗/工作/采集/闲逛行为全量在役）
 ##
 ## 子节点结构：
 ##   StickmanEntity (CharacterBody2D)
@@ -57,6 +57,9 @@ const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/enti
 const _PossessionScript: GDScript = preload("res://modules/units/scripts/entity/entity_possession.gd")
 ## 缩放/骨架同步助手脚本（渲染判定缩放/markers 同步，方法体所在）
 const _ScaleRigScript: GDScript = preload("res://modules/units/scripts/entity/entity_scale_rig.gd")
+## 批模拟内核类型经 combat api 契约出口引用（禁直连 class_name BattleSim，
+## 重命名即静默断多处——见 audit §4.3）
+const ScriptBattleSim := preload("res://modules/combat/api.gd").BATTLE_SIM_SCRIPT
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 是否被玩家附身（true=玩家控制，false=AI 控制）
@@ -124,7 +127,7 @@ var _ai_running: bool = false
 ## BattleSim 批模拟注册（D 刀：参战 AI 单位模拟状态出节点树）。
 ## 非 null 时本实体的移动/分离/边界/冷却/命中时序由 sim 批处理，
 ## 实体降级为渲染/受击代理（_physics_process 跳过 move_and_slide 等）。
-var _sim: BattleSim = null
+var _sim: ScriptBattleSim = null
 ## 本实体在 sim SoA 里的下标（<0 = 未注册）
 var _sim_sid: int = -1
 ## Construction 模块 API 引用（由 GameRoot spawn 时注入的是 ConstructionApi 实例，供 AIController 查询派工；可能为 null）
@@ -951,12 +954,12 @@ func is_possessed() -> bool:
 
 
 ## BattleSim 注册注入（BattleInstance.add_unit 调用；sid<0 = 注册失败/未启用）。
-func set_battle_sim(sim: BattleSim, sid: int) -> void:
+func set_battle_sim(sim: ScriptBattleSim, sid: int) -> void:
 	_sim = sim
 	_sim_sid = sid if sim != null else -1
 
 
-func get_battle_sim() -> BattleSim:
+func get_battle_sim() -> ScriptBattleSim:
 	return _sim
 
 

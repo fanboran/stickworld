@@ -187,7 +187,8 @@ func _test_breach_and_resume() -> void:
 	_runner.assert_true(ai.has_order(), "号令粘性：打通期原号令不清空")
 	_runner.assert_equal(ai.get_ordered_params().get("target", Vector2.ZERO), Vector2(400, 0),
 			"号令粘性：原目标参数不降级")
-	_runner.assert_equal(ai.get_state_machine().get("_current_behavior").get("_forced_target"),
+	# P1 拆分：forced_target 状态迁 target_acquire（行为持 _acq）
+	_runner.assert_equal(ai.get_state_machine().get("_current_behavior").get("_acq").get("_forced_target"),
 			blocker, "攻击行为应锁定拦路者（forced_target）")
 	# 攻击拍：向拦路者出手（hesitate 掷骰有随机窗，循环推进到出手消抖）
 	var attacked: bool = false

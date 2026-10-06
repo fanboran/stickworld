@@ -180,8 +180,10 @@ func _test_r3_gate_cycle() -> void:
 		atk._register_burst_shot()
 	# 达 3 发 → 插停顿，门禁关
 	_runner.assert_true(not atk._burst_gate(), "达点数后停顿窗内禁射")
-	# 停顿窗过（拨针）→ 恢复，计数清零可再连 3 发
-	atk._burst_wait_until = Time.get_ticks_msec() / 1000.0 - 1.0
+	# 停顿窗过（拨针：burst 时基 = 行为累积钟 _clock，非墙钟——把钟拨过截止时刻）
+	# → 恢复，计数清零可再连 3 发
+	atk._clock = 5.0
+	atk._burst_wait_until = 4.0
 	_runner.assert_true(atk._burst_gate(), "停顿窗过恢复出手")
 	for i in 2:
 		atk._register_burst_shot()

@@ -103,6 +103,11 @@ var _domain_next_at: Dictionary = {}
 ## W2 出生错峰专用 RNG（与全局 randf 隔离：种子可注入 = 单测确定性；
 ## 装配置一次种子，逐通道各抽一次 = 通道间独立错峰）
 var _jitter_rng := RandomNumberGenerator.new()
+## 命运骰 RNG（决策域概率掷骰统一出口：村民闲逛/看门狗推力方向——
+## 与全局 randf 隔离，P4 回放「每单位可注入种子」全覆盖收口；种子按实体
+## 实例 id 派生（同 _resolve_jitter_seed 惯例），测试重掷 _dice_rng.seed 可复现）
+var _dice_rng := RandomNumberGenerator.new()
+var _dice_seeded: bool = false
 ## 上一帧是否被附身（用于检测附身状态变化）
 var _was_possessed: bool = false
 ## A3 · C6 撤退掷骰专用 RNG（与全局 randf 隔离：固定默认种子锁确定性，
@@ -289,7 +294,7 @@ func _make_decision() -> void:
 		# 其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）。
 		# 村民 wander 锚定村庄中心（批次 4）：待业村民全天闲逛，无锚会累积
 		# 漂出村子/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
-		if _is_villager() and randf() < villager_wander_probability:
+		if _is_villager() and _dice() < villager_wander_probability:
 			_state_machine.travel("wander", _villager_wander_params())
 			return
 		# 没有派工，原地待机（工人无事做原地待命）
@@ -350,7 +355,7 @@ func _watchdog_tick(delta: float) -> void:
 
 ## 卡死触发处置：换目标（战斗中重进 attack）+ 分离推力 + 可关调试日志。
 func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
-	_wd_nudge_dir = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+	_wd_nudge_dir = Vector2(_dice_range(-1.0, 1.0), _dice_range(-1.0, 1.0)).normalized()
 	_wd_nudge_until = _world_time + 0.25
 	if _state_machine != null and _state_machine.get_current_behavior_name() == "attack":
 		# 打通态卡死：重进 attack 保留 forced_target（否则 enter 清目标后自由选敌，
@@ -616,7 +621,29 @@ func _roll_decision_interval() -> float:
 	var p: Dictionary = _get_behavior_profile()
 	var base: float = float(p.get("decision_interval", ScriptDecisionClock.DECISION_INTERVAL))
 	var variance: float = maxf(float(p.get("decision_variance", 0.0)), 0.0)
-	return maxf(base + randf_range(-variance, variance), ScriptDecisionClock.MIN_DECISION_INTERVAL)
+	# 间隔方差掷骰走 _jitter_rng（决策时钟族专用 RNG——种子随装配注入，单测锁
+	# 种子可复现间隔序列；旧全局 randf 是确定性收口的漏网点）
+	return maxf(base + _jitter_rng.randf_range(-variance, variance),
+			ScriptDecisionClock.MIN_DECISION_INTERVAL)
+
+
+## 命运骰掷点（决策域概率：闲逛/推力方向；首掷按实体实例 id 派生种子）
+func _dice() -> float:
+	_seed_dice_once()
+	return _dice_rng.randf()
+
+
+func _dice_range(from: float, to: float) -> float:
+	_seed_dice_once()
+	return _dice_rng.randf_range(from, to)
+
+
+func _seed_dice_once() -> void:
+	if _dice_seeded:
+		return
+	_dice_seeded = true
+	_dice_rng.seed = int(_entity.get_instance_id()) \
+			if _entity != null and is_instance_valid(_entity) else 20261006
 
 
 # ─────────────────── W2 决策时钟族壳转发（逻辑在 ai_decision_clock.gd）───────────────────

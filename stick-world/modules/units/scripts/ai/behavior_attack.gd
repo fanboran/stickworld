@@ -13,25 +13,23 @@ extends BehaviorBase
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
 
-# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）；
-# TargetFinder 为 tactics 对外公共类型（tactics/api.gd 契约出口）
-const ScriptTargetFinder := preload("res://modules/tactics/api.gd").Finder
+# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）。
+# TargetFinder 为 tactics 对外公共类型（tactics/api.gd 契约出口）——消费点已随
+# P1 找目标系统拆分迁 target_acquire.gd（该文件自持 preload）
 ## 兵种行为档案（RWR 式基线+覆盖，见 behavior_profiles.gd）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
+## 找目标系统（SW3 FindTargetAiSystem 直译 P1：增量换靶/滞回/驻留时长/分层阈值）
+const ScriptTargetAcquire := preload("res://modules/units/scripts/ai/target_acquire.gd")
 ## 攻击动画名映射（9s 出手预测读 Hit 事件真值用；stick_rig 为 L1，units L2 依赖方向合规）
 const ScriptAnims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 目标刷新间隔（秒）
-const ACQUIRE_INTERVAL: float = 0.5
 ## 犹豫检查间隔（秒）
 const HESITATE_CHECK_INTERVAL: float = 0.5
 ## 低 HP 阈值（低于此值且附近有掩体触发找掩体）
 const LOW_HP_THRESHOLD: float = 0.3
 ## 掩体查询范围（附近多少像素内有掩体算"附近"）
 const COVER_NEARBY_RANGE: float = 200.0
-## 追击范围倍数（行业最佳实践：目标超出攻击范围 × LEASH_MULT 则放弃追击，防追到天涯海角）
-const LEASH_MULT: float = 4.0
 ## y 对齐死区（px，dump 无真值 → 待实测校准）：|Δy| 小于此值视为已对齐不再走位
 const Y_ALIGN_DY_THRESHOLD: float = 16.0
 ## IsTargetReallyClose 阈值倍数（半射程近似，dump 无真值 → 待实测校准）
@@ -48,14 +46,21 @@ const RAGE_PUSH_PROB: float = 0.35
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
 var _battle: Node = null
-## 当前目标敌人
+## 当前目标敌人（每物理帧自 _acq 同步；下游消费与测试观测面——目标状态的
+## 唯一权威在 _acq，写侧经 target_acquire 的选举/强制目标通道）
 var _target: Node = null
-## 强制目标（遇阻接战"打通"态）：behavior_move/AIController 经 params 注入的
-## 拦路者——路径敌人未必是最近敌，目标选择优先于集火/自主寻敌。死亡/失效/
-## 超追击范围即失效回落正常选敌（打通态生命周期由 AIController 维护）。
-var _forced_target: Node = null
-## 目标刷新计时器
-var _acquire_timer: float = 0.0
+## 找目标系统（SW3 FindTargetAiSystem 直译 P1）：目标状态/选举/驻留/滞回/
+## 分层阈值全在 helper——enter 装配 + update 懒装配兜底（测试直构不进 enter
+## 也能跑）
+var _acq: ScriptTargetAcquire = null
+## 行为累积钟（s）：update 每拍累加 delta，暂停/减速与物理帧同步冻结——
+## 禁墙钟（ai_decision_clock 纪律：暂停/hitstop 期实时钟空转破坏节拍契约）。
+## post_block/burst 等行为内窗口的时基
+var _clock: float = 0.0
+## 命运骰 RNG（单位种子隔离：首掷按实体实例 id 派生，测试可重掷 _rng.seed
+## 复现序列——P4 回放「每单位可注入种子」的前置收口）
+var _rng := RandomNumberGenerator.new()
+var _rng_seeded: bool = false
 ## 犹豫检查计时器
 var _hesitate_check_timer: float = 0.0
 ## 犹豫持续计时器（>0 时停滞）
@@ -136,7 +141,6 @@ func enter(previous: String, params: Dictionary) -> void:
 	if _battle == null and entity != null and entity.has_method("get_battle_instance"):
 		_battle = entity.get_battle_instance()
 	_rage = params.get("rage", false)
-	_forced_target = params.get("forced_target", null)
 	# 兵种档案解析（按主手武器类型；取不到武器回落空档案 = 全基线）
 	_profile = {}
 	if entity != null and is_instance_valid(entity) and entity.has_method("get_weapon"):
@@ -144,7 +148,10 @@ func enter(previous: String, params: Dictionary) -> void:
 		if w != null and "weapon_type" in w:
 			_profile = ScriptBehaviorProfiles.get_profile(int(w.weapon_type))
 	_target = null
-	_acquire_timer = 0.0
+	_ensure_acq()
+	# 强制目标（遇阻接战"打通"态）：params 注入的拦路者——路径敌人未必是最近敌，
+	# 目标选择最高优先；死亡/失效/超追击范围由 _acq 清除回落正常选敌
+	_acq.set_forced_target(params.get("forced_target", null))
 	_hesitate_check_timer = 0.0
 	_hesitate_timer = 0.0
 	_aiming = false
@@ -164,6 +171,9 @@ func update(delta: float) -> void:
 	if _cap_is_dead and entity.is_dead():
 		finish()
 		return
+	# 行为累积钟（时基声明见字段注释）——先于一切早退路径累加：压制/硬直/
+	# 风筝停滞期窗口照常流逝（停滞的是单位不是时间）
+	_clock += delta
 	# 压制禁令消费段（A6 · C9）：压制期停滞——不追不打不调整，同受击硬直口径。
 	# 决策链已在 ai_controller 拦截新行为，此处兜底"压制发生在两拍之间的在途
 	# 攻击行为"（禁令立即生效，不等下一决策拍）。受击反馈/被推挤在物理层不受
@@ -182,9 +192,9 @@ func update(delta: float) -> void:
 	var stunned: bool = _cap_hit_stun and entity.is_in_hit_stun()
 	if stunned:
 		if not _in_stun_prev and _evade_hold <= 0.0:
-			if randf() < 0.30:
+			if _roll() < 0.30:
 				_evade_hold = 0.35
-				_evade_dir = 1.0 if randf() < 0.5 else -1.0
+				_evade_dir = 1.0 if _roll() < 0.5 else -1.0
 		_in_stun_prev = true
 		if _cap_ai_stop:
 			entity.ai_stop()
@@ -201,58 +211,16 @@ func update(delta: float) -> void:
 		finish()
 		return
 
-	# 刷新目标
-	_acquire_timer -= delta
-	if _target == null or not is_instance_valid(_target) or (_target.has_method("is_dead") and _target.is_dead()) or _is_beyond_leash() or _acquire_timer <= 0.0:
-		# 强制目标（打通态拦路者）：有效且未超追击范围则最高优先锁定——路径敌人
-		# 优先于集火/自主寻敌；失效（死亡/失效/超追击范围）清除回落正常选敌
-		if _refresh_forced_target():
-			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
-		else:
-			# 队伍级共享目标（反编译参考实装 D-B）：排长决策 → 队员执行（集火）。
-			# 所属小队有共享攻击目标时优先用它，否则回退各自寻敌。
-			var squad_target: Node = _get_squad_target()
-			if squad_target != null:
-				# 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：当前目标仍有效时
-				# 仅当集火目标显著更近才换过去——排长重选节拍（0.5s）与队员扫视节拍
-				# （0.4s）同量级，无条件跟随 = 全队追着排长的"最近敌"来回横跳
-				#（追逐振荡 + 每次换靶重置持瞄 = 弓手永远差一步不放箭）。
-				# 当前目标死亡/失效/超追击范围仍立即换（集火语义保持）。
-				if _should_accept_squad_target(squad_target):
-					_target = squad_target
-			elif _target != null and is_instance_valid(_target) and not (_target.has_method("is_dead") and _target.is_dead()) and not _is_beyond_leash():
-				# 目标切换滞后（行业最佳实践 sticky target）：当前目标仍有效且未超追击范围则锁定保留，
-				# 不因刷新周期重选（避免频繁换目标导致攻击输出丢失）
-				pass
-			else:
-				# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
-				# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
-				# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
-				# only_forward = 只取身前目标（SWL OnlyTargetsUnitsForward/
-				# IsValidForForwardOnlyTarget 直译）：背后之敌不可为目——混战线互穿后
-				# "全图最近"落在背后 = 掉头对穿（2026-10-06 创始人点正：敌人在正面，
-				# 要变也是变 y；左右横跑主因）
-				_target = ScriptTargetFinder.find_target(entity, {
-					"battle": _battle,
-					"ignore_current_attackers": true,
-					"prefer_large": _p("prefer_large", 0.0),
-					"only_forward": false,
-				})
-			# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
-			# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选
-			# 不追 → finish 待命，敌人近身（进入 leash）后自然选中自卫。只作用指挥官，
-			# 普通单位的追击语义不变（leash 对他们仍只作换靶触发）。
-			if _target != null and entity != null and is_instance_valid(entity) \
-					and entity.has_method("is_commander") and entity.is_commander() \
-					and _is_beyond_leash():
-				_target = null
-			# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
-			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
-			if _target == null:
-				if _cap_ai_stop:
-					entity.ai_stop()
-				finish()
-				return
+	# 找目标系统推进（SW3 FindTargetAiSystem 直译 P1——增量换靶/滞回/驻留时长/
+	# 分层阈值/强制目标/集火号令/指挥官守卫全在 target_acquire.gd；感知节奏按
+	# 兵种档案 acquire_interval）。null = 无目标可打交还决策层
+	_ensure_acq()
+	_target = _acq.advance(delta)
+	if _target == null:
+		if _cap_ai_stop:
+			entity.ai_stop()
+		finish()
+		return
 
 	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
 	# 旧 is_routed finish 自检随溃逃退役——被打单位保持还击，去留由
@@ -274,12 +242,12 @@ func update(delta: float) -> void:
 	_hesitate_check_timer -= delta
 	if _hesitate_check_timer <= 0.0:
 		_hesitate_check_timer = HESITATE_CHECK_INTERVAL
-		if randf() < _p("hesitate_prob", prob_hesitate):
+		if _roll() < _p("hesitate_prob", prob_hesitate):
 			var ht: Vector2 = _p_v2("hesitate_time", Vector2(0.3, 0.8))
 			var night_mult: float = _p("night_hesitate_mult", 1.0)
 			if night_mult != 1.0 and _is_night():
 				ht *= night_mult
-			_hesitate_timer = randf_range(ht.x, ht.y)
+			_hesitate_timer = _roll_range(ht.x, ht.y)
 			if _cap_ai_stop:
 				entity.ai_stop()
 			return
@@ -346,16 +314,16 @@ func update(delta: float) -> void:
 			_aiming = false
 			# 攻击后举盾（cooldownAfterAttackForBlock）：矛兵攻击完一拍盾防反打
 			if _p("block_after_attack", 0.0) > 0.0:
-				_post_block_until = Time.get_ticks_msec() / 1000.0 + _p("block_after_attack", 0.0)
+				_post_block_until = _clock + _p("block_after_attack", 0.0)
 			# 攻击命中帧触发攻击动画（反编译参考实装 C）：播完由 rig.animation_finished 回切
 			if _cap_play_attack:
 				entity.play_attack()
 		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉
 		_strafe_timer -= delta
 		if _strafe_timer <= 0.0:
-			_strafe_timer = randf_range(1.5, 3.5)
-			if randf() < 0.35:
-				_strafe_dir = 1.0 if randf() < 0.5 else -1.0
+			_strafe_timer = _roll_range(1.5, 3.5)
+			if _roll() < 0.35:
+				_strafe_dir = 1.0 if _roll() < 0.5 else -1.0
 				_strafe_hold = 0.30
 		if _strafe_hold > 0.0:
 			_strafe_hold -= delta
@@ -386,7 +354,7 @@ func update(delta: float) -> void:
 		dir = _apply_flank(dir)
 		# DetermineXRunPower（SWL 直译）：远跑近走；近身爆发交给冲锋掷骰
 		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
-		if not run and randf() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
+		if not run and _roll() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
 			run = true
 		if _cap_ai_move:
 			entity.ai_move(dir, run)
@@ -417,7 +385,7 @@ func _burst_gate() -> bool:
 	var shots: int = int(_p("burst_shots", 0.0))
 	if shots <= 0:
 		return true
-	return Time.get_ticks_msec() / 1000.0 >= _burst_wait_until
+	return _clock >= _burst_wait_until
 
 
 ## 出手成功登记（R3）：连射计数 +1，达 burst_shots 重掷停顿窗口。
@@ -429,7 +397,7 @@ func _register_burst_shot() -> void:
 	if _burst_count >= shots:
 		_burst_count = 0
 		var wait: Vector2 = _p_v2("burst_wait", Vector2(1.2, 1.8))
-		_burst_wait_until = Time.get_ticks_msec() / 1000.0 + randf_range(wait.x, wait.y)
+		_burst_wait_until = _clock + _roll_range(wait.x, wait.y)
 
 
 ## 夜间判定（R3 昼/夜反应分段消费）：环境光照亮度 < 0.55——与 fx 视觉层
@@ -469,7 +437,7 @@ func _update_aim_rhythm(delta: float) -> bool:
 		var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 		if weapon != null and weapon.has_method("get_sustained_fire_heat") \
 				and weapon.get_sustained_fire_heat() >= BURST_HEAT_THRESHOLD:
-			_aim_timer *= randf_range(BURST_WAIT_MULT.x, BURST_WAIT_MULT.y)
+			_aim_timer *= _roll_range(BURST_WAIT_MULT.x, BURST_WAIT_MULT.y)
 	_aim_timer -= delta
 	return _aim_timer <= 0.0
 
@@ -508,11 +476,12 @@ func _update_arrow_threat_block(weapon: Node) -> void:
 		return
 	var want: bool = false
 	if bool(_profile.get("arrow_threat_block", false)):
-		var now: float = Time.get_ticks_msec() / 1000.0
+		# 威胁账本时基 = 物理帧钟（weapon_ranged 写入侧同源，暂停冻结、回放确定）
+		var now: float = _frame_now()
 		var last: float = float(entity.get("arrow_threat_time")) if "arrow_threat_time" in entity else -999.0
 		want = now - last < _p("arrow_block_hold", 0.8)
 	if not want and _p("block_after_attack", 0.0) > 0.0:
-		want = Time.get_ticks_msec() / 1000.0 < _post_block_until
+		want = _clock < _post_block_until
 	weapon.set_blocking(want)
 
 
@@ -621,8 +590,8 @@ func _determine_y_component(delta: float) -> float:
 	_drift_timer -= delta
 	if _drift_timer <= 0.0:
 		var iv: Vector2 = _profile.get("y_drift_interval", Vector2(0.5, 1.2))
-		_drift_timer = randf_range(iv.x, iv.y)
-		_drift_offset = randf_range(-_p("y_drift_band", 0.0), _p("y_drift_band", 0.0))
+		_drift_timer = _roll_range(iv.x, iv.y)
+		_drift_offset = _roll_range(-_p("y_drift_band", 0.0), _p("y_drift_band", 0.0))
 	var dy: float = _adjust_goal_y() - entity.global_position.y
 	if absf(dy) < 10.0:
 		return 0.0
@@ -640,10 +609,10 @@ func _adjust_goal_y() -> float:
 	return ty
 
 
-## Box-Muller 高斯采样（SWL NextGaussian 对齐）
+## Box-Muller 高斯采样（SWL NextGaussian 对齐；单位种子 RNG 驱动）
 func _gauss(mean: float, sigma: float) -> float:
-	var u1: float = maxf(randf(), 0.0001)
-	return mean + sqrt(-2.0 * log(u1)) * cos(TAU * randf()) * sigma
+	var u1: float = maxf(_roll(), 0.0001)
+	return mean + sqrt(-2.0 * log(u1)) * cos(TAU * _roll()) * sigma
 
 
 # ─────────────────────────────── 召唤护卫（SWL MagikillAi 直译）────────────────────────────────
@@ -847,27 +816,6 @@ func _get_squad_target() -> Node:
 	return fs.get_squad_target(squad_id)
 
 
-## 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：当前目标无效（死亡/失效/
-## 超追击范围）→ 立即接受排长目标（集火语义保持）；当前目标还活着 → 仅当集火
-## 目标显著更近（距离 < 当前目标距离 × target_switch_ratio）才换——排长重选节拍
-## 与队员扫视节拍同量级，无条件跟随 = 全队追着排长的"最近敌"来回横跳。
-## target_switch_ratio <= 0 = 关闭滞回（回旧"始终换"语义）。
-func _should_accept_squad_target(candidate: Node) -> bool:
-	if candidate == null or not is_instance_valid(candidate):
-		return false
-	if _target == null or not is_instance_valid(_target):
-		return true
-	if _target.has_method("is_dead") and _target.is_dead():
-		return true
-	if _is_beyond_leash():
-		return true
-	var ratio: float = _p("target_switch_ratio", 0.6)
-	if ratio <= 0.0:
-		return true
-	return entity.global_position.distance_to(candidate.global_position) \
-			< entity.global_position.distance_to(_target.global_position) * ratio
-
-
 ## 是否远程武器（弓/杖——弹道延迟结算且解算自带移动目标预判）。
 func _is_ranged_weapon(weapon: Node) -> bool:
 	var wt: int = int(weapon.weapon_type) if weapon != null and "weapon_type" in weapon else 0
@@ -923,35 +871,11 @@ func _hit_frame_seconds() -> float:
 	return 0.0
 
 
-## 追击范围检查（行业最佳实践）：当前目标是否已超出攻击范围 × 追击倍数（兵种档案 leash_mult）。
-## 超范围视为"追丢了"，触发重新选目标（避免追杀单个敌人到天涯海角）。
+## 追击范围检查（行业最佳实践）：当前目标是否已超出攻击范围 × 追击倍数
+## （兵种档案 leash_mult）。判定本体在 _acq（tier_of 分层），此处为测试/调试
+## 观测转发
 func _is_beyond_leash() -> bool:
-	return _target_leashed(_target)
-
-
-## 追击范围检查（任意目标版，_refresh_forced_target 消费）。
-func _target_leashed(t: Node) -> bool:
-	if t == null or not is_instance_valid(t) or entity == null:
-		return false
-	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
-	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
-	return entity.global_position.distance_to(t.global_position) > attack_range * _p("leash_mult", LEASH_MULT)
-
-
-## 强制目标（打通态）有效性维护：死亡/失效/超追击范围 → 清除并返回 false；
-## 有效 → 锁定为当前目标并返回 true。
-func _refresh_forced_target() -> bool:
-	if _forced_target == null:
-		return false
-	var valid: bool = is_instance_valid(_forced_target) \
-			and not (_forced_target.has_method("is_dead") and _forced_target.is_dead())
-	if valid and _target_leashed(_forced_target):
-		valid = false
-	if not valid:
-		_forced_target = null
-		return false
-	_target = _forced_target
-	return true
+	return _acq != null and _acq.is_beyond_leash()
 
 ## 检查附近是否有掩体（用于"重伤找掩体"决策）
 func _has_cover_nearby() -> bool:
@@ -968,6 +892,45 @@ func _has_cover_nearby() -> bool:
 	return false
 
 
-## 获取当前目标（供测试/调试）
+## 获取当前目标（供测试/调试；目标状态权威在 _acq）
 func get_target() -> Node:
-	return _target
+	return _acq.get_target() if _acq != null else _target
+
+
+# ─────────────────────────────── 时钟与命运骰 ────────────────────────────────
+
+## 找目标系统装配（enter 显式 + update 懒兜底；幂等——重入重绑宿主引用）
+func _ensure_acq() -> void:
+	if _acq == null:
+		_acq = ScriptTargetAcquire.new()
+	_acq.setup(entity, _battle, _profile)
+	if not _acq.squad_target_fn.is_valid():
+		_acq.squad_target_fn = Callable(self, "_get_squad_target")
+
+
+## 物理帧钟（s）：Engine.get_physics_frames / ticks_per_second——跨模块共享账本
+## （arrow_threat_time 的写入侧 weapon_ranged / 消费侧 team_ai_snapshot、
+## squad_phase_plan）的统一时基：暂停冻结、回放确定。与行为内 _clock 并存
+## （_clock = 本行为视角的累积秒，帧钟 = 全局物理时刻，两者速率同源不同零点）
+func _frame_now() -> float:
+	return float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second)
+
+
+## 命运骰掷点（单位种子 RNG；首掷按实体实例 id 派生种子 = 每单位不同序列，
+## 对齐 ai_controller._resolve_jitter_seed 惯例；测试重掷 _rng.seed 可复现）
+func _roll() -> float:
+	_seed_rng_once()
+	return _rng.randf()
+
+
+func _roll_range(from: float, to: float) -> float:
+	_seed_rng_once()
+	return _rng.randf_range(from, to)
+
+
+func _seed_rng_once() -> void:
+	if _rng_seeded:
+		return
+	_rng_seeded = true
+	_rng.seed = int(entity.get_instance_id()) \
+			if entity != null and is_instance_valid(entity) else 20261006

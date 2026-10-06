@@ -295,6 +295,9 @@ func fire_arrow(target: Node) -> void:
 	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
 		target.incoming_arrow_damage += _mount.effective_damage()
 	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
-	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
+	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾。时基 = 物理帧钟
+	# （消费侧 behavior_attack/team_ai_snapshot/squad_phase_plan 同源；
+	# 暂停冻结、回放确定，禁墙钟）
 	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
-		target.arrow_threat_time = Time.get_ticks_msec() / 1000.0
+		target.arrow_threat_time = float(Engine.get_physics_frames()) \
+				/ float(Engine.physics_ticks_per_second)

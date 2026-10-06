@@ -408,12 +408,12 @@ func _test_phase_plan() -> void:
 	sup_member.se = ScriptStatusEffects.new()
 	sup_member.se._owner = sup_member
 	sup_member.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 0.0, null)
-	sup_member.arrow_threat_time = Time.get_ticks_msec() / 1000.0
+	sup_member.arrow_threat_time = float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second)
 	plan._contact_reaction([sup_member])
 	_runner.assert_equal(sup_member.ai.orders.size(), 0, "压制成员不发 seek_cover（禁令本体已锁死）")
 	# 未压制成员（仅被瞄准）→ 既有代理触发 seek_cover
 	var proxy_member := _make_plan_member()
-	proxy_member.arrow_threat_time = Time.get_ticks_msec() / 1000.0
+	proxy_member.arrow_threat_time = float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second)
 	plan._contact_reaction([proxy_member])
 	_runner.assert_equal(proxy_member.ai.orders_for("seek_cover"), 1, "未压制成员走 arrow_threat_time 代理")
 	sup_member.free()

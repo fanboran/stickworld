@@ -43,6 +43,13 @@ enum State {
 ## 防集火计数的新鲜窗口（ms）：超过此间隔未再登记的攻击者视为停手，不再计数
 const ATTACKER_FRESH_WINDOW_MS: int = 3000
 
+## sim↔单位 AI 树序契约（审计 §三5，P4 前置钉死）：本节点 _physics_process
+## 先 sim.tick 再由各单位 AI 读位置写意图——顺序原本由场景树序隐式决定（树结构
+## 调整即静默改变时序语义）。setup() 把本节点固化到负优先组（先于一切默认 0
+## 优先组的单位节点，Godot 处理序：优先级升序 → 同级树序），与树序解耦；
+## 顺序断言测试 tests/unit/test_sim_tree_order.gd 钉死
+const SIM_FIRST_PRIORITY: int = -100
+
 ## 进攻方阵营 ID
 const FACTION_ATTACKER: int = 1
 ## 防守方阵营 ID
@@ -104,6 +111,8 @@ var _crowd: ScriptCrowdRenderer = null
 
 ## 初始化：注入地图，创建掩体系统。
 func setup(map: Node2D) -> void:
+	# 树序契约固化（SIM_FIRST_PRIORITY 注释）：负优先组先于单位节点推进
+	process_physics_priority = SIM_FIRST_PRIORITY
 	_map = map
 	_cover = ScriptCoverSystem.new()
 	_cover.setup(map)
@@ -199,7 +208,9 @@ func _physics_process(delta: float) -> void:
 	var sim: float = TimeManager.sim_delta(delta) if TimeManager != null else delta
 	_duration += sim
 	# D 刀：sim 批循环先行（分离/积分/冷却/命中帧/写回代理）——
-	# AI 决策（behavior 状态机）读到本刻最新位置
+	# AI 决策（behavior 状态机）读到本刻最新位置。处理序由
+	# process_physics_priority = SIM_FIRST_PRIORITY 固化（见常量注释），
+	# 不再依赖 BattleAnchor 与单位节点的树序
 	if _sim != null:
 		_sim.tick(sim)
 	# §十四 小兵渲染代理（sim 之后：读最新位置/朝向；物理刻驱动即暂停门禁同 sim）

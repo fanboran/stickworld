@@ -108,7 +108,8 @@ const BASELINE: Dictionary = {
 	                                        ##   开闸走 .tres 生效层（RWR 方差比 0.5×节拍 0.3 → 保守可取 0.1，待实测校准）：
 	                                        ##   代码基线被 test_ai_spawn_jitter「缺载兜底 0.3」与 test_ai_param_panel
 	                                        ##   「baseline.decision_variance = 0（零回归）」双锁锁定，基线翻非零必挂测试）
-	"target_switch_ratio": 0.6,             ## 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：集火目标距离 < 当前目标距离 × 此值才换靶；<=0 = 关滞回回旧"始终换"语义（待实测校准）
+	"target_switch_ratio": 0.6,             ## 换靶滞回（SW3 RestoreBestTarget hysteresis 直译，P1）：同层新目标距离 < 当前 × 此值才换靶（集火号令与自主寻敌同门）；<=0 = 关滞回回旧"始终换"语义（待实测校准）
+	"target_dwell_min": 2.0,                ## 目标驻留时长门槛（s，SW3 NotBeenOnTargetForEnoughTime 直译，P1）：当前目标未驻留满此时长不做选举性换靶——号令粘性/决策承诺感（02 一-A.5"最短保持期"）；<0.05 = 关（换靶只受滞回约束，待实测校准）
 	# ── 9h 卡死看门狗（消费点 ai_controller._watchdog_tick，O(1) 无扫描；
 	#    默认开——对齐"有移动意图却钉死不动"的观察场主诉，关 = 既有无看门狗语义）──
 	"stuck_watchdog_enabled": true,         ## 卡死看门狗总开关

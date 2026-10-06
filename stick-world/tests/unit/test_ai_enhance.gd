@@ -3,7 +3,7 @@ extends Node
 signal test_done(code: int)
 ## 单元测试：AI 完善项批次 1——目标选择增强。
 ## 1.1 防集火重叠：battle 攻击者计数（register/unregister/死亡清理）+ TargetFinder 过滤 + 兜底
-## 1.2 追击范围 leash：behavior_attack 目标超攻击范围 × LEASH_MULT 判"追丢"
+## 1.2 追击范围 leash：target_acquire（P1 拆分自 behavior_attack）目标超攻击范围 × 追击倍数判"追丢"
 ## 不进场景树，确定性。
 
 @warning_ignore("shadowed_global_identifier")
@@ -11,6 +11,7 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battle_instance.gd")
 const ScriptTargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
+const ScriptTargetAcquire := preload("res://modules/units/scripts/ai/target_acquire.gd")
 
 var _runner: TestRunner
 
@@ -230,26 +231,25 @@ func _test_finder_forward_fallback() -> void:
 
 func _test_leash_far() -> void:
 	var w: Dictionary = _make_battle()
-	var beh: Node = ScriptBehaviorAttack.new()
-	beh.entity = w["attacker"]
-	var e1: FakeUnit = w["e1"]
-	e1.position = Vector2(0, 0)
+	# P1 拆分：追击判定本体在 target_acquire（tier_of 分层），直测 helper
+	var acq: ScriptTargetAcquire = ScriptTargetAcquire.new()
+	acq.setup(w["attacker"], w["battle"], {})
 	# 目标在 500px 外（attack_range 默认 100 × 4 = 400）→ 超 leash
 	var far := FakeUnit.new()
 	far.position = Vector2(500, 0)
-	beh._target = far
-	_runner.assert_true(beh._is_beyond_leash(), "目标超攻击范围×4 应判追丢")
+	acq._target = far
+	_runner.assert_true(acq.is_beyond_leash(), "目标超攻击范围×4 应判追丢")
 
 
 func _test_leash_near() -> void:
 	var w: Dictionary = _make_battle()
-	var beh: Node = ScriptBehaviorAttack.new()
-	beh.entity = w["attacker"]
+	var acq: ScriptTargetAcquire = ScriptTargetAcquire.new()
+	acq.setup(w["attacker"], w["battle"], {})
 	# 目标在 150px 内 → 不超 leash
 	var near := FakeUnit.new()
 	near.position = Vector2(150, 0)
-	beh._target = near
-	_runner.assert_false(beh._is_beyond_leash(), "目标在攻击范围×4 内不应判追丢")
+	acq._target = near
+	_runner.assert_false(acq.is_beyond_leash(), "目标在攻击范围×4 内不应判追丢")
 
 
 ## 受击硬直：behavior_attack 在 entity 硬直时停止行动（ai_stop 被调、不推进攻击）
@@ -287,7 +287,7 @@ func _test_sticky_target() -> void:
 	beh.update(0.01)  # 首次刷新选目标（最近 = e1，100px）
 	var first: Node = beh._target
 	_runner.assert_true(first != null, "首次应选到目标")
-	# 强制刷新周期到期，目标仍有效 → sticky 保留
-	beh._acquire_timer = -1.0
+	# 强制刷新周期到期，目标仍有效 → 驻留+滞回保留（P1 后判定本体在 _acq）
+	beh._acq._acquire_timer = -1.0
 	beh.update(0.01)
 	_runner.assert_equal(beh._target, first, "目标有效时应 sticky 保留不换")

@@ -327,7 +327,10 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 ##     DT_AWAY_FROM_TARGET 语义映射）。
 ## 守卫成员（撤退类行为/接战中/他人号令）不介入——接战成员交还战斗行为。
 func _contact_reaction(units: Array) -> void:
-	var now_real: float = Time.get_ticks_msec() / 1000.0
+	# arrow_threat_time 时基 = 物理帧钟（写入侧 weapon_ranged、消费侧
+	# team_ai_snapshot/behavior_attack 同源；暂停冻结、回放确定）
+	var now_real: float = float(Engine.get_physics_frames()) \
+			/ float(Engine.physics_ticks_per_second)
 	var window: float = float(_p.get("threat_window", 3.0))
 	var radius: float = float(_p.get("back_enemy_radius", 260.0))
 	var back_dot: float = float(_p.get("back_enemy_dot", -0.25))

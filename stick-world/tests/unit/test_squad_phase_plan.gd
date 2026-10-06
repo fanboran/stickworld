@@ -402,7 +402,8 @@ func _test_suppressed_cover() -> void:
 	var sid: String = w["sid"]
 	_enable(fs)
 	# 被压制代理：u0 刚被瞄准（arrow_threat_time 新鲜）、u1 无登记 → 只 u0 找掩体
-	units[0].arrow_threat_time = Time.get_ticks_msec() / 1000.0 - 1.0
+	# arrow_threat_time 时基 = 物理帧钟（生产写入侧 weapon_ranged 同源）
+	units[0].arrow_threat_time = float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second) - 1.0
 	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
 	fs._tick_phase_plans(0.5)
 	_runner.assert_gt(units[0].ai.orders_for("seek_cover"), 0, "被瞄准成员应被派去找掩体")

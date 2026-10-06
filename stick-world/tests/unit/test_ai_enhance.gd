@@ -74,6 +74,8 @@ func _ready() -> void:
 	_runner.add_test("攻击者计数: unregister 递减", _test_unregister)
 	_runner.add_test("TargetFinder: 防集火过滤超限目标", _test_finder_filter)
 	_runner.add_test("TargetFinder: 全被围攻时兜底最近", _test_finder_fallback)
+	_runner.add_test("TargetFinder: only_forward 背后之敌不可为目", _test_finder_forward_only)
+	_runner.add_test("TargetFinder: only_forward 兜底不越半平面", _test_finder_forward_fallback)
 	_runner.add_test("追击范围: 超 leash 判追丢", _test_leash_far)
 	_runner.add_test("追击范围: 未超 leash 不追丢", _test_leash_near)
 	_runner.add_test("受击硬直: 硬直中停止行动", _test_hit_stun)
@@ -173,6 +175,57 @@ func _test_finder_fallback() -> void:
 	battle.register_attacker(e1, a)
 	var t: Node = ScriptTargetFinder.find_target(a, { "battle": battle, "ignore_current_attackers": true })
 	_runner.assert_equal(t, e1, "唯一目标即使被围攻也应兜底选中")
+
+
+## 前向过滤（SWL OnlyTargetsUnitsForward/IsValidForForwardOnlyTarget 直译）：
+## 背后之敌不可为目——混战线互穿后"全图最近"落在背后 = 掉头对穿（左右横跑主因）
+func _test_finder_forward_only() -> void:
+	var w: Dictionary = _make_battle()
+	var battle: Node = w["battle"]
+	var a: FakeUnit = w["attacker"]
+	var e1: FakeUnit = w["e1"]      # (100,0) 身前（facing 默认 1）
+	var e2: FakeUnit = w["e2"]      # (200,0) 身前
+	var behind := FakeUnit.new()    # (-150,0) 背后且更近
+	behind.name = "EnemyBehind"
+	behind.faction_id = 2
+	behind.position = Vector2(-150, 0)
+	battle.add_unit(behind, 2)
+	# 只开前向过滤：背后虽最近（150px vs e1 100px——把 e1 挪远加大反差）也不可选
+	e1.position = Vector2(400, 0)
+	e2.position = Vector2(500, 0)
+	var t: Node = ScriptTargetFinder.find_target(a, {
+		"battle": battle, "ignore_current_attackers": true, "only_forward": true })
+	_runner.assert_equal(t, e1, "背后之敌更近也不可选，应选身前的 e1")
+	# 全部敌人在背后 → 返回 null（不兜底回头）
+	e1.position = Vector2(-200, 0)
+	e2.position = Vector2(-300, 0)
+	t = ScriptTargetFinder.find_target(a, {
+		"battle": battle, "ignore_current_attackers": true, "only_forward": true })
+	_runner.assert_true(t == null, "全部候选在背后应返回 null，不可掉头选背后敌")
+
+
+## 前向过滤的兜底边界：前向候选存在但全被围攻 → 兜底只在前向池内挑，
+## 不得扫到背后
+func _test_finder_forward_fallback() -> void:
+	var w: Dictionary = _make_battle()
+	var battle: Node = w["battle"]
+	var a: FakeUnit = w["attacker"]
+	var e1: FakeUnit = w["e1"]      # 身前，被围攻超限
+	var e2: FakeUnit = w["e2"]      # 身前，无围攻
+	var behind := FakeUnit.new()    # 背后最近
+	behind.name = "EnemyBehind2"
+	behind.faction_id = 2
+	behind.position = Vector2(-50, 0)
+	battle.add_unit(behind, 2)
+	# e1 围攻超限需 3 个**不同**攻击者（register_attacker 同者去重，见 _test_register）
+	var extra1 := FakeUnit.new()
+	var extra2 := FakeUnit.new()
+	battle.register_attacker(e1, a)
+	battle.register_attacker(e1, extra1)
+	battle.register_attacker(e1, extra2)
+	var t: Node = ScriptTargetFinder.find_target(a, {
+		"battle": battle, "ignore_current_attackers": true, "only_forward": true })
+	_runner.assert_equal(t, e2, "前向候选被围攻滤空后兜底应选前向的 e2，不得回头选背后敌")
 
 
 func _test_leash_far() -> void:

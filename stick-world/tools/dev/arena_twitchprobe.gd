@@ -256,16 +256,22 @@ func _phase_twitch_sample(secs: int) -> void:
 					and rec["mount"].has_method("shield_visual_enabled"):
 				shield = 1 if rec["mount"].shield_visual_enabled() else 0
 			var dir: Vector2 = e.get("_ai_move_dir")
+			var face: int = e.get_facing() if e.has_method("get_facing") else 1
+			var ts: float = float(e.get("_last_direction_change_at")) if "_last_direction_change_at" in e else -99.0
+			var poss: bool = bool(e.get("possessed")) if "possessed" in e else false
 			(rec["data"] as Array).append([body.position.x, body.position.y,
 					vel.x, vel.y, anim, seq, stance, shield,
-					0.0 if dir == null else dir.x])
+					0.0 if dir == null else dir.x, face, ts, poss])
 	# ── 统计 ──
-	print("[TwitchProbe] 采样 %d 物理 = %.1fs，实体 %d" % [frames,
-			Time.get_ticks_msec() / 1000.0 - t0, series.size()])
+	var wall_elapsed := Time.get_ticks_msec() / 1000.0 - t0
+	print("[TwitchProbe] 采样 %d 物理 = %.1fs（物理 %.1fHz）实体 %d" % [frames,
+			wall_elapsed, float(frames) / maxf(wall_elapsed, 0.001), series.size()])
 	var churn_tot := 0
 	var churn_worst: Array = []
 	var flips_tot := 0.0
 	var flips_worst: Array = []
+	var face_flips_tot := 0.0
+	var face_flips_worst: Array = []
 	var idle_wander_tot := 0.0
 	var stance_flap_tot := 0
 	var shield_flap_tot := 0
@@ -295,9 +301,17 @@ func _phase_twitch_sample(secs: int) -> void:
 				flips += 1
 			if s != 0:
 				last_s = s
-		var dur := float(d.size()) / 60.0
+		var dur := wall_elapsed   # 速率分母 = 实测墙钟（物理帧非 60Hz，旧 frames/60 虚高 6 倍）
 		flips_tot += flips / dur
 		flips_worst.append([flips / dur, id])
+		# 2b) 朝向翻面率（次/秒）：创始人看到的"左右甩头"直接指标——
+		# DIRECTION_CHANGE_FREQUENCY=0.5s 节流后理论上限 2 次/s
+		var face_flips := 0
+		for i in range(1, d.size()):
+			if int(d[i][9]) != int(d[i - 1][9]):
+				face_flips += 1
+		face_flips_tot += face_flips / dur
+		face_flips_worst.append([face_flips / dur, id])
 		# 3) 待机漂移：anim==idle 期间的位移总和（px）
 		var wander := 0.0
 		for i in range(1, d.size()):
@@ -312,10 +326,42 @@ func _phase_twitch_sample(secs: int) -> void:
 				shield_flap_tot += 1
 	churn_worst.sort_custom(func(a, b) -> bool: return a[0] > b[0])
 	flips_worst.sort_custom(func(a, b) -> bool: return a[0] > b[0])
+	face_flips_worst.sort_custom(func(a, b) -> bool: return a[0] > b[0])
 	print("[TwitchProbe] 同名重播churn 总数=%d（worst5: %s）" % [churn_tot,
 			str(churn_worst.slice(0, 5)).replace("[", "").replace("]", "")])
 	print("[TwitchProbe] vx翻转率 均值=%.2f/s（worst5: %s）" % [flips_tot / maxi(series.size(), 1),
 			str(flips_worst.slice(0, 5)).replace("[", "").replace("]", "")])
+	print("[TwitchProbe] 朝向翻面率 均值=%.2f/s（worst5: %s）| 节流上限 2.0/s" % [
+			face_flips_tot / maxi(series.size(), 1),
+			str(face_flips_worst.slice(0, 5)).replace("[", "").replace("]", "")])
+	# worst 翻面者的翻面帧距（节流生效则任意相邻翻面 ≥30 帧）
+	if not face_flips_worst.is_empty():
+		var wrec: Dictionary = series.get(face_flips_worst[0][1], {})
+		if not wrec.is_empty():
+			var wd: Array = wrec["data"]
+			var gaps: Array = []
+			var last_flip := -1
+			for i in range(wd.size()):
+				if i > 0 and int(wd[i][9]) != int(wd[i - 1][9]):
+					if last_flip >= 0:
+						gaps.append(i - last_flip)
+					last_flip = i
+			print("[TwitchProbe]   worst翻面者帧距: %s（节流生效=全部≥30）" % str(gaps.slice(0, 12)))
+			# 翻面点前后 3 帧的节流时戳与附身标志（判节流为何未拦）
+			var flip_frames: Array = []
+			last_flip = -1
+			for i in range(wd.size()):
+				if i > 0 and int(wd[i][9]) != int(wd[i - 1][9]):
+					flip_frames.append(i)
+					if flip_frames.size() >= 4:
+						break
+			for ff_v in flip_frames:
+				var ff: int = int(ff_v)
+				var ctx: Array = []
+				for k in range(maxi(ff - 1, 0), mini(ff + 2, wd.size())):
+					ctx.append("f%d:face=%d ts=%.2f poss=%s" % [k, int(wd[k][9]),
+							float(wd[k][10]), str(bool(wd[k][11]))])
+				print("[TwitchProbe]   翻面@%d → %s" % [ff, " | ".join(ctx)])
 	print("[TwitchProbe] 待机漂移总和=%.0fpx | 姿态换装翻转=%d | 盾态翻转=%d" % [
 			idle_wander_tot, stance_flap_tot, shield_flap_tot])
 	# 抽 1 个 churn 最高的实体打 12 帧原始序列（肉眼对时序）

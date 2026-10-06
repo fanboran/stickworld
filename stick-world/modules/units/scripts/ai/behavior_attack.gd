@@ -228,10 +228,15 @@ func update(delta: float) -> void:
 				# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
 				# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
 				# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
+				# only_forward = 只取身前目标（SWL OnlyTargetsUnitsForward/
+				# IsValidForForwardOnlyTarget 直译）：背后之敌不可为目——混战线互穿后
+				# "全图最近"落在背后 = 掉头对穿（2026-10-06 创始人点正：敌人在正面，
+				# 要变也是变 y；左右横跑主因）
 				_target = ScriptTargetFinder.find_target(entity, {
 					"battle": _battle,
 					"ignore_current_attackers": true,
 					"prefer_large": _p("prefer_large", 0.0),
+					"only_forward": true,
 				})
 			# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
 			# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选

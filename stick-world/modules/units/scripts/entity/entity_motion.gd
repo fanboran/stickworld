@@ -331,10 +331,9 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 		if dir.length() > 1.0:
 			dir = dir.normalized()
 		if dir.x != 0:
-			var new_facing := 1 if dir.x > 0 else -1
-			if new_facing != _entity._facing:
-				_entity._facing = new_facing
-				_entity._apply_scale()
+			# 朝向节流走闸（SWL DIRECTION_CHANGE_FREQUENCY=0.5 直译）：节流窗内
+			# 保持原朝向（人向新向走、脸缓半拍转——SWL 转身节奏），不逐帧甩头
+			_entity.try_set_facing(1 if dir.x > 0 else -1)
 		if run:
 			_entity._is_running = true
 			_entity._current_speed = _entity.RUN_SPEED * _terrain_speed_mult() * _entity.move_speed_mult

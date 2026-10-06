@@ -200,6 +200,10 @@ var _action_locked: bool = false
 var _player_build_timer: float = 0.0
 ## 朝向（1=右，-1=左）
 var _facing: int = 1
+## 朝向节流时戳（try_set_facing 消费；SWL Ai.lastDirectionChangeTime 直译）
+var _last_direction_change_at: float = -1.0
+## 朝向最小变更间隔（s，SWL Ai.DIRECTION_CHANGE_FREQUENCY = 0.5【事实】const 直译）
+const DIRECTION_CHANGE_FREQUENCY: float = 0.5
 ## 当前动画名
 var _current_anim: String = "idle"
 ## 散步模式（true=只走不跑，按 Alt 切换）
@@ -1357,10 +1361,24 @@ func face_towards(pos: Vector2) -> void:
 	var dx: float = pos.x - global_position.x
 	if absf(dx) < 1.0:
 		return
-	var new_facing := 1 if dx > 0.0 else -1
-	if new_facing != _facing:
-		_facing = new_facing
-		_apply_scale()
+	try_set_facing(1 if dx > 0.0 else -1)
+
+
+## 朝向变更节流（SWL Ai.DIRECTION_CHANGE_FREQUENCY = 0.5【事实】const 直译，
+## 佐证 lastDirectionChangeTime 时戳对）：facing 0.5s 内只许翻一次。移动意图
+## 高频反号（分离推挤穿椭圆、目标在两侧间拍频）此前逐帧翻面 = 全员左右甩头；
+## 节流后翻面呈"转身"节奏。玩家附身豁免（IsBeingUserControlledByPro 同语义：
+## 手控输入不经 AI 节拍）。返回是否生效（false=节流窗内，保持原朝向）
+func try_set_facing(new_facing: int) -> bool:
+	if new_facing == _facing:
+		return true
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if not is_possessed() and now - _last_direction_change_at < DIRECTION_CHANGE_FREQUENCY:
+		return false
+	_last_direction_change_at = now
+	_facing = new_facing
+	_apply_scale()
+	return true
 
 
 ## 立即换持械站姿（换武器时由 WeaponMount 调用）：

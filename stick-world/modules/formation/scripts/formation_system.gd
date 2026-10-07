@@ -95,6 +95,11 @@ var ROW_GAP: float = FormationSpacing.ROW_GAP_DEFAULT
 ## 追赶奔跑阈值（px，11b）：距槽位落点超过此值转奔跑追赶
 ## （SWL UpdateCatchingUpToFormation；无 dump 真值，待实测校准）
 var CATCHUP_RUN_DIST: float = 140.0
+## 战斗驻防锚结算节拍（s，批5 远程槽位锚定）：与队伍目标决策共用 0.5s 量级
+const COMBAT_ANCHOR_TICK: float = 0.5
+## 危险重冻结比（批5）：敌方压近锚线 < 成员最短射程 × 此比 → 锚以当前质心重冻结，
+## 方阵整体有序后撤（SWL MoveInFormation 队伍平移语义），替代人各自散架
+const COMBAT_ANCHOR_DANGER_RATIO: float = 0.4
 ## 共享目标选择内核（tactics TargetFinder；显式 preload 走 tactics/api.gd 契约出口，
 ## headless 防御惯例 §七.3）。缺省 opts 语义 = 最近存活敌人（faction_id 阵营口径 +
 ## battle 存活列表），小队共享目标与战斗目标过滤同源。
@@ -135,7 +140,8 @@ var _org_api: Node = null
 ##              "work_types": Array[String], "role": String, "name": String,
 ##              "follow_squad_id": String, "follow_gap": float,
 ##              "slots": Dictionary(iid -> Vector2i(col, row), 11b 编队槽位),
-##              "upc": int（本班现役每列人数——随班人数按 4~6 自适应，几何分配时落盘）}
+##              "upc": int（本班现役每列人数——随班人数按 4~6 自适应，几何分配时落盘）,
+##              "combat_anchor": {"pos", "facing"}（战斗驻防锚，批5——接战冻结/危险重冻结/脱战清除）}
 var _squads: Dictionary = {}
 ## unit.get_instance_id() -> squad_id（快速反查）
 var _unit_to_squad: Dictionary = {}
@@ -299,6 +305,8 @@ func _process(_delta: float) -> void:
 		disband_squad(sid)
 	# 队伍级目标决策（反编译参考实装 D-B）：排长决策 → 队员执行
 	_decide_squad_targets(_delta)
+	# 战斗驻防锚（批5 远程槽位锚定）：接战班冻结锚点，远程行为按锚收拢方阵
+	_tick_combat_anchors(_delta)
 	# A5 小队相位计划（C8）：按 L2 节拍驱动活跃计划（缺省关闭时零开销空转）
 	_tick_phase_plans(_delta)
 	# A9+ 权威值自主跳槽（R4）：按 L2 节拍周期性评估成员择班（缺省关闭时零开销空转）
@@ -1211,6 +1219,97 @@ func is_unit_in_formation(unit: Node) -> bool:
 	var anch: Dictionary = _squad_anchor(squad_id)
 	return unit.global_position.distance_to(_slot_world(slot, anch["centroid"], anch["facing"], squad_id)) \
 			<= FOLLOW_DEADZONE
+
+
+# ──────────────────────── 战斗驻防锚（批5 远程槽位锚定）────────────────────────
+# SWL 阵地战真相：远程组（CASTERS/ARCHERS）接战后按 Formation 槽位**原地成排**齐射，
+# 阵线 x 由队伍 GetFormationPositionX 外生给定——不从成员实时质心回引（后列归位会把
+# 质心越拖越退，方阵整体后爬不收敛）。本层等价：
+#   - 接战冻结：任一成员主手射程内有敌 → 以当刻班质心+平均面向冻结锚（外生锚）；
+#   - 危险重冻结：敌方压近锚线（< 成员最短射程 × COMBAT_ANCHOR_DANGER_RATIO）→
+#     以当前质心重冻结——方阵整体有序后撤（MoveInFormation 队伍平移语义）；
+#   - 脱战清除：全员射程内无敌 → 清锚，下次接战在新战线重冻结；
+#   - 消费方：BehaviorAttack 远程射程内分支按 get_unit_combat_slot 走位收拢方阵。
+
+## 战斗锚结算节拍计时器
+var _combat_anchor_timer: float = 0.0
+
+## 战斗锚 tick（_process 驱动，COMBAT_ANCHOR_TICK 节流）
+func _tick_combat_anchors(delta: float) -> void:
+	_combat_anchor_timer -= delta
+	if _combat_anchor_timer > 0.0:
+		return
+	_combat_anchor_timer = COMBAT_ANCHOR_TICK
+	for squad_id in _squads.keys():
+		var squad: Dictionary = _squads[squad_id]
+		var engaged: bool = false
+		var min_range: float = 1.0e9
+		var probe: Node = null
+		for u in squad["units"]:
+			if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
+				continue
+			if _member_enemy_in_range(u):
+				engaged = true
+			var w: Node = u.get_weapon() if u.has_method("get_weapon") else null
+			if w != null and "attack_range" in w:
+				min_range = minf(min_range, float(w.attack_range))
+			probe = u
+		if not engaged:
+			if squad.has("combat_anchor"):
+				squad.erase("combat_anchor")
+			continue
+		var anchor: Dictionary = squad.get("combat_anchor", {})
+		if not anchor.is_empty() and _anchor_in_danger(anchor["pos"], probe, min_range):
+			anchor = {}
+		if anchor.is_empty():
+			var fr: Dictionary = _squad_anchor(squad_id)
+			if fr["facing"] == Vector2.ZERO:
+				continue  # 无可计成员（全桩无位置），不冻结
+			squad["combat_anchor"] = {"pos": fr["centroid"], "facing": fr["facing"]}
+
+
+## 锚线是否已被敌方压近（危险重冻结判定）：锚点到最近存活敌 < min_range × 比。
+## probe 取班内任一存活成员（借道其战斗实例查敌列表）；无战斗/无武器档跳过。
+func _anchor_in_danger(pos: Vector2, probe: Node, min_range: float) -> bool:
+	if probe == null or min_range >= 1.0e9:
+		return false
+	if not probe.has_method("get_battle_instance"):
+		return false
+	var bi: Node = probe.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_enemies_of"):
+		return false
+	var faction: int = probe.get_faction() if probe.has_method("get_faction") else 0
+	if faction == 0:
+		return false
+	var danger: float = min_range * COMBAT_ANCHOR_DANGER_RATIO
+	for e in bi.get_enemies_of(faction):
+		if e == null or not is_instance_valid(e):
+			continue
+		if e.has_method("is_dead") and e.is_dead():
+			continue
+		if pos.distance_to(e.global_position) < danger:
+			return true
+	return false
+
+
+## 单位的战斗驻防槽位（BehaviorAttack 远程射程内分支消费）：以班战斗锚为基的
+## 槽位世界坐标（前列贴锚线，后列沿面向反侧退 ROW_GAP，同列横展 SPREAD_SPACING）。
+## 无班/无锚/无槽位返回 Vector2.INF（消费方回落原站桩语义）。
+func get_unit_combat_slot(unit: Node) -> Vector2:
+	if unit == null or not is_instance_valid(unit):
+		return Vector2.INF
+	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return Vector2.INF
+	var squad: Dictionary = _squads[squad_id]
+	var anchor: Dictionary = squad.get("combat_anchor", {})
+	if anchor.is_empty():
+		return Vector2.INF
+	var slot: Vector2i = (squad.get("slots", {}) as Dictionary).get(
+			unit.get_instance_id(), Vector2i(-1, -1))
+	if slot.x < 0:
+		return Vector2.INF
+	return _slot_world(slot, anchor["pos"], anchor["facing"], squad_id)
 
 
 # ──────────────────────── 编队动态跟队（内部）────────────────────────────────

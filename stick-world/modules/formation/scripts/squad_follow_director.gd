@@ -45,6 +45,11 @@ func update_follow(squad_id: String, follow_default_gap: float, catchup_run_dist
 	# 与"跟随玩家"模式互斥（跟随玩家由 BehaviorFollow 决策，锚定号令会打断它）
 	if squad.get("follow_player", false):
 		return
+	# 批5 战斗锚定期整班跳过（远程槽位锚定驻防接管）：锚定期成员的站位目标 =
+	# 战斗槽位（接敌改道 + 射程内收拢），支援推进号令会与槽位收拢互拔
+	# （0.5s 重下号令 travel 重入 = 收拢舞步不收敛）。锚清除（脱战）自动恢复跟队。
+	if squad.has("combat_anchor"):
+		return
 	var front_id: String = squad.get("follow_squad_id", "")
 	if front_id.is_empty():
 		return

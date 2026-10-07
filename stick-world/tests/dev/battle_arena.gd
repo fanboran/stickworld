@@ -273,6 +273,8 @@ var _ft_label: Label = null
 var _preset_buttons: Array = []
 var _attacker: Array = []
 var _defender: Array = []
+## 本场已出生的远程班计数（方阵出生横移错班用；每场 _spawn_and_start 重置）
+var _ranged_spawn_count: int = 0
 ## 夺点实例列表（tactics CapturePoint；布点顺序 = 左/中/右）
 var _capture_points: Array = []
 ## 意图规划器（faction -> SquadIntentPlanner；夺点模式每方一台）
@@ -383,6 +385,7 @@ func _spawn_and_start() -> void:
 			rig.snap_to_follow_target()
 	# 按编制分排出生（左攻右守，镜像）
 	var squad_defs: Array = PRESETS[_preset_idx]["squads"]
+	_ranged_spawn_count = 0
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
@@ -391,46 +394,99 @@ func _spawn_and_start() -> void:
 		var l_units: Array = []
 		var r_units: Array = []
 		var rows: Array = def["rows"]
-		for ri in rows.size():
-			var row: Dictionary = rows[ri]
-			var x_off: float = float(def["front_x"]) - ri * ROW_GAP
-			var count: int = int(row["count"])
-			# 行内间距按行宽自适应压缩，但下限 = 分离椭圆纵深半径（MIN_ROW_GAP）：
-			# 压缩穿底会把友邻纵距压到 43~57px < 72px → 分离力常驻 + 位置伺服极限环
-			# （诊断 A1）。单排放不下改奇偶错排（相邻 x 错开 ≥ 椭圆横半径 48，纵距
-			# 再近也不违反分离不变式），不再压间距。
-			var half_span: float = (count - 1) * 0.5 * LINE_GAP
-			# 一屏战场行动带半宽（02 二-A.2「半屏高」：地面行动带 ≈ 半屏地面深，
-			# 1.0 缩放视高 45 格、天空占上 1/3 → 地面 ~30 格 → 半宽 ~15 格=360px）：
-			# 行展开超此宽自动进错排（纵距减半/横向错开），部队收在行动带内
-			# ——资产带 85 格深是旧全景档口径，1.0 一屏装不下也不该装
-			var max_half: float = ACTION_BAND_HALF_PX
-			var staggered: bool = false
-			var gap: float = LINE_GAP
-			if half_span > max_half:
-				var gap_single: float = (max_half * 2.0) / float(maxi(count - 1, 1))
-				if gap_single >= MIN_ROW_GAP:
-					gap = gap_single
-				else:
-					# 奇偶错排：纵距减半（同列间距 = 2×gap ≥ MIN_ROW_GAP），
-					# 相邻同学横向错开 STAGGER_X
-					staggered = true
-					gap = clampf(gap_single, MIN_ROW_GAP * 0.5, LINE_GAP * 0.5)
-			for k in count:
-				var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * gap
-				# 错排横向偏移：偶数位 −STAGGER_X/2、奇数位 +STAGGER_X/2（相邻 Δx=50，
-				# 阵列中线不动）；右军镜像取反保持两军点对称
-				var stag_x: float = 0.0
-				if staggered:
-					stag_x = -STAGGER_X * 0.5 if k % 2 == 0 else STAGGER_X * 0.5
-				var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off + stag_x, y), int(row["weapon"]), fs)
-				if lt != null:
-					l_units.append(lt)
-					_attacker.append(lt)
-				var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - x_off - stag_x, y), int(row["weapon"]), fs)
-				if rt != null:
-					r_units.append(rt)
-					_defender.append(rt)
+		# 远程班方阵出生（批5 远程槽位锚定配套）：整班直接落在与编队槽位同构的
+		# upc 宽 × N 深方阵上——开局即成块，不再单条纵列挤一行。槽序 = 行序 =
+		# 入队序（与 formation_geometry.assign_formation_slots 的索引序一致，
+		# 出生位≈未来槽位，接战收拢步幅最小）；staff 行在前 = SWL formationOrder
+		# 的 CASTERS 在 ARCHERS 前。横距取 max(槽距, 纵半径+8)：出生即满足
+		# 分离椭圆不变式，无出生互推。
+		var all_ranged: bool = not rows.is_empty()
+		for row in rows:
+			if int(row["weapon"]) != W_BOW and int(row["weapon"]) != W_STAFF:
+				all_ranged = false
+				break
+		if all_ranged:
+			var total: int = 0
+			for row in rows:
+				total += int(row["count"])
+			# 班现役列高（与 formation_geometry.squad_units_per_column 同式：
+			# ceil(n/3) 夹 [UNITS_PER_COLUMN, 6]）
+			var upc: int = clampi(ceili(float(total) / 3.0), FormationSpacing.UNITS_PER_COLUMN, 6)
+			var spawn_gap: float = maxf(fs.SPREAD_SPACING, MIN_ROW_GAP + 8.0)
+			var block_depth: float = float(ceili(float(total) / float(upc)) - 1) * fs.ROW_GAP
+			# 整块钳入看门狗域（保块形平移，不逐人钳制压扁方阵）：后列不越
+			# mid ± ARENA_X_HALF（留 30px 余量）——深预设后置火力班超预算时
+			# 前移整块而不是被看门狗压成一条线
+			var fx: float = maxf(float(def["front_x"]),
+					-(ARENA_X_HALF - TEAM_OFFSET_X) + block_depth + 30.0)
+			# 多个远程班同预算平移后 x 重叠 → 上/下半带错班（轮换横移半块宽），
+			# 避免叠块出生互推
+			_ranged_spawn_count += 1
+			var center_y: float = spawn_y
+			if _ranged_spawn_count > 1:
+				center_y += (1.0 if _ranged_spawn_count % 2 == 0 else -1.0) \
+						* (upc * spawn_gap * 0.55)
+			var idx: int = 0
+			for ri in rows.size():
+				var row_r: Dictionary = rows[ri]
+				for k in int(row_r["count"]):
+					var slot := Vector2i(floori(float(idx) / float(upc)), idx % upc)
+					var lateral: float = (float(slot.y) - float(upc - 1) * 0.5) * spawn_gap
+					var depth: float = float(slot.x) * fs.ROW_GAP
+					var y_r: float = center_y + lateral
+					# 左军面向 +x：后列向自方退（−depth）；右军镜像（+depth）
+					var xl: float = mid_x - TEAM_OFFSET_X + fx - depth
+					var xr: float = mid_x + TEAM_OFFSET_X - fx + depth
+					var lt := _spawn_unit(map, Vector2(xl, y_r), int(row_r["weapon"]), fs)
+					if lt != null:
+						l_units.append(lt)
+						_attacker.append(lt)
+					var rt := _spawn_unit(map, Vector2(xr, y_r), int(row_r["weapon"]), fs)
+					if rt != null:
+						r_units.append(rt)
+						_defender.append(rt)
+					idx += 1
+		else:
+			for ri in rows.size():
+				var row: Dictionary = rows[ri]
+				var x_off: float = float(def["front_x"]) - ri * ROW_GAP
+				var count: int = int(row["count"])
+				# 行内间距按行宽自适应压缩，但下限 = 分离椭圆纵深半径（MIN_ROW_GAP）：
+				# 压缩穿底会把友邻纵距压到 43~57px < 72px → 分离力常驻 + 位置伺服极限环
+				# （诊断 A1）。单排放不下改奇偶错排（相邻 x 错开 ≥ 椭圆横半径 48，纵距
+				# 再近也不违反分离不变式），不再压间距。
+				var half_span: float = (count - 1) * 0.5 * LINE_GAP
+				# 一屏战场行动带半宽（02 二-A.2「半屏高」：地面行动带 ≈ 半屏地面深，
+				# 1.0 缩放视高 45 格、天空占上 1/3 → 地面 ~30 格 → 半宽 ~15 格=360px）：
+				# 行展开超此宽自动进错排（纵距减半/横向错开），部队收在行动带内
+				# ——资产带 85 格深是旧全景档口径，1.0 一屏装不下也不该装
+				var max_half: float = ACTION_BAND_HALF_PX
+				var staggered: bool = false
+				var gap: float = LINE_GAP
+				if half_span > max_half:
+					var gap_single: float = (max_half * 2.0) / float(maxi(count - 1, 1))
+					if gap_single >= MIN_ROW_GAP:
+						gap = gap_single
+					else:
+						# 奇偶错排：纵距减半（同列间距 = 2×gap ≥ MIN_ROW_GAP），
+						# 相邻同学横向错开 STAGGER_X
+						staggered = true
+						gap = clampf(gap_single, MIN_ROW_GAP * 0.5, LINE_GAP * 0.5)
+				for k in count:
+					var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * gap
+					# 错排横向偏移：偶数位 −STAGGER_X/2、奇数位 +STAGGER_X/2（相邻 Δx=50，
+					# 阵列中线不动）；右军镜像取反保持两军点对称
+					var stag_x: float = 0.0
+					if staggered:
+						stag_x = -STAGGER_X * 0.5 if k % 2 == 0 else STAGGER_X * 0.5
+					var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off + stag_x, y), int(row["weapon"]), fs)
+					if lt != null:
+						l_units.append(lt)
+						_attacker.append(lt)
+					var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - x_off - stag_x, y), int(row["weapon"]), fs)
+					if rt != null:
+						r_units.append(rt)
+						_defender.append(rt)
 		squads_left.append(l_units)
 		squads_right.append(r_units)
 		await get_tree().process_frame

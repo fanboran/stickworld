@@ -282,19 +282,26 @@ func update(delta: float) -> void:
 			_register_burst_shot()
 			_aiming = false
 	elif dist <= attack_range:
-		# 在射程内：停止移动并攻击。弓手先进瞄准节奏（SWL ShouldAim）：持瞄随机
-		# 时长再放箭，放箭瞬间重掷（GenerateNextShotRandomness），节奏不再是卡冷却平A
-		if _cap_ai_stop:
+		# 在射程内：攻击。远程先进槽位锚定驻防（批5 提前落地的远程部分，
+		# SWL Formation 战斗驻防真相：远程组接战后按槽位原地成排齐射）：
+		# 站位目标 = 编队槽位（班战斗锚冻结的方阵），而不是"敌进射程那一刻"
+		# 各自停步的自站位——否则整班摊成一条线（单排挤在一处）。
+		# 无班/无锚回落原站桩语义（测试桩/未编队单位零回归）。
+		var anchored: bool = false
+		if _is_ranged_weapon(weapon):
+			anchored = _hold_formation_slot(dist, kite_range)
+		if not anchored and _cap_ai_stop:
 			entity.ai_stop()
 		_face_target()  # 开火面向目标（走位/漂移后可能侧身）
 		# 9p（SWL ShouldAim/CanAttack 的 y 门槛，档案 y_aim_tolerance）：|Δy| 超容忍时
 		# 先 y 走位保证接近水平持平、距离以水平为主导——否则横轴观感=故意射空。
 		# 9u 修正：连续超容忍超过 y_aim_grace 必放行开火——混战中目标被推挤/换靶后
 		# y 差可能永不收敛，原"超容忍不出手"会退化成永久禁射（抛物线弹道解算本身
-		# 吸收 y 差，放行的观感代价远小于"弓手站桩不放箭"）
+		# 吸收 y 差，放行的观感代价远小于"弓手站桩不放箭"）。
+		# 槽位锚定单位例外：槽位即 y 权威（y 对齐游走会把方阵打散成斜线）
 		var aim_tol: float = _p("y_aim_tolerance", 0.0)
 		var dy_align: float = _target.global_position.y - entity.global_position.y
-		var y_misaligned: bool = aim_tol > 0.0 and absf(dy_align) > aim_tol \
+		var y_misaligned: bool = not anchored and aim_tol > 0.0 and absf(dy_align) > aim_tol \
 				and _can_adjust_y_position_only(attack_range)
 		if y_misaligned:
 			_y_misalign_time += delta
@@ -322,21 +329,29 @@ func update(delta: float) -> void:
 			# 攻击命中帧触发攻击动画（反编译参考实装 C）：播完由 rig.animation_finished 回切
 			if _cap_play_attack:
 				entity.play_attack()
-		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉
-		_strafe_timer -= delta
-		if _strafe_timer <= 0.0:
-			_strafe_timer = _roll_range(1.5, 3.5)
-			if _roll() < 0.35:
-				_strafe_dir = 1.0 if _roll() < 0.5 else -1.0
-				_strafe_hold = 0.30
-		if _strafe_hold > 0.0:
-			_strafe_hold -= delta
-			if _cap_ai_move:
-				entity.ai_move(Vector2(0.0, _strafe_dir), false)
+		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉。
+		# 槽位锚定单位跳过（随机游走会把方阵打散——成排齐射优先于"不安分"）
+		if not anchored:
+			_strafe_timer -= delta
+			if _strafe_timer <= 0.0:
+				_strafe_timer = _roll_range(1.5, 3.5)
+				if _roll() < 0.35:
+					_strafe_dir = 1.0 if _roll() < 0.5 else -1.0
+					_strafe_hold = 0.30
+			if _strafe_hold > 0.0:
+				_strafe_hold -= delta
+				if _cap_ai_move:
+					entity.ai_move(Vector2(0.0, _strafe_dir), false)
 		# 射手容错间距（SWL PushApartTolerance）：站桩输出时与友军保持间距
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)
 	else:
+		# 批5 远程槽位锚定：班战斗锚已立（火力线定档）时，射程外成员的接敌目标 =
+		# 自身槽位而不是敌阵——整班在锚线收拢方阵，不再各自压到射程环再折返
+		# （收拢舞步）。到槽站定待敌（面向锁定朝敌），敌进射程自然转入锚定射击；
+		# 全班脱战锚清除后恢复常态接敌。
+		if _is_ranged_weapon(weapon) and _approach_via_slot():
+			return
 		var to_target: Vector2 = _target.global_position - entity.global_position
 		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈等位，直接压上
 		var really_close: bool = _is_target_really_close(dist, attack_range)
@@ -378,6 +393,72 @@ func exit(next: String) -> void:
 
 
 # ─────────────────────────────── 兵种机制（legacy 直译）────────────────────────────────
+
+# ─────────────────────── 槽位锚定驻防（批5 远程部分）─────────────────────────
+
+## 槽位锚定死区（px）：距槽位 ≤ 此值站定不追（SWL FormationPositionIsStable 防抖同源）
+const SLOT_HOLD_DEADZONE: float = 48.0
+## 近身危险带倍数：敌 < kite_range × 此值时不向槽位走——槽位若在敌向前方，
+## 回槽=迎着贴脸敌走；此带内站定还击，再近由风筝分支接管
+const SLOT_DANGER_MULT: float = 1.5
+## 距槽位超此值转奔跑归位（方阵重排/危险重冻结后的整队追赶）
+const SLOT_RUN_DIST: float = 240.0
+
+## 槽位锚定驻防：射程内远程单位的站位目标 = 编队槽位（formation_system 的班
+## 战斗锚方阵，get_unit_combat_slot）。距槽位超死区且不在近身危险带 → 走向槽位
+## （边走边射——本分支后续开火逻辑照常执行，战斗朝向锁保证倒退归位不翻面）；
+## 死区内站定。锚定期间 y 对齐游走/随机微移步由调用方跳过（槽位是 y 权威）。
+## 返回是否处于锚定态（无班/无锚/无编队系统 = false，回落原站桩语义零回归）。
+func _hold_formation_slot(dist: float, kite_range: float) -> bool:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_formation_system"):
+		return false
+	var fs: Node = entity.get_formation_system()
+	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_combat_slot"):
+		return false
+	var slot: Vector2 = fs.get_unit_combat_slot(entity)
+	if is_inf(slot.x):
+		return false
+	# 近身危险带：槽位在敌远侧（后撤归位）才走——迎着贴脸敌的回槽禁止，
+	# 站定还击，再近由风筝分支接管（危险重冻结会把锚整体后移，后撤方向的
+	# 槽位永远合法 → 方阵整体有序后撤）
+	if kite_range > 0.0 and dist < kite_range * SLOT_DANGER_MULT:
+		var slot_farther: bool = _target.global_position.distance_to(slot) > dist + 20.0
+		if not slot_farther:
+			if _cap_ai_stop:
+				entity.ai_stop()
+			return true
+	var d_slot: float = entity.global_position.distance_to(slot)
+	if d_slot <= SLOT_HOLD_DEADZONE:
+		if _cap_ai_stop:
+			entity.ai_stop()
+		return true
+	var dir: Vector2 = (slot - entity.global_position).normalized()
+	if _cap_ai_move:
+		entity.ai_move(dir, d_slot > SLOT_RUN_DIST)
+	return true
+
+
+## 锚定期接敌改道（批5 远程部分，approach 分支消费）：班战斗锚存在时射程外
+## 成员走向自身槽位（远处奔跑归位）。到槽死区内站定待敌——不追敌不空走，
+## SWL 远程组接战常态：站在方阵里等敌人进射程。无班/无锚返回 false 走原接敌。
+func _approach_via_slot() -> bool:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_formation_system"):
+		return false
+	var fs: Node = entity.get_formation_system()
+	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_combat_slot"):
+		return false
+	var slot: Vector2 = fs.get_unit_combat_slot(entity)
+	if is_inf(slot.x):
+		return false
+	var d_slot: float = entity.global_position.distance_to(slot)
+	if d_slot <= SLOT_HOLD_DEADZONE:
+		if _cap_ai_stop:
+			entity.ai_stop()
+		return true
+	if _cap_ai_move:
+		entity.ai_move((slot - entity.global_position).normalized(), d_slot > SLOT_RUN_DIST)
+	return true
+
 
 ## RWR 点射停顿（ai_burst_wait_time[_variance] 语义适配）：连射散布过热时
 ## 下一箭前插入长停顿（持瞄 ×1.8~3.2 随机倍）等散布恢复——"会点射不无脑扫射"

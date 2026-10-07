@@ -29,6 +29,12 @@ signal relay_arrived(relay_id: String, order_type: int, from_org: String, to_org
 ## 抵达留痕上限（UI 打开晚于下令时的补放数据源；FIFO）
 const RELAY_HISTORY_MAX: int = 32
 
+## AI 号令班内错峰投递窗（秒，02 二-B #10 去齐步化）：AI 号令（source_tier>0）
+## 的全班 set_order 在此窗内按编制序散布送达——消除全班同帧改向的波浪抽动；
+## 玩家号令（tier=0）恒即时（操作反馈不延迟）。timer process_always=false，
+## 暂停期错峰一并冻结【提案/待定·待实测校准】
+const AI_STAGGER_WINDOW: float = 0.35
+
 ## 在途跳登记（relay_id -> 项）与抵达到期留痕（FIFO）
 var _relay_seq: int = 0
 var _in_flight: Dictionary = {}
@@ -46,17 +52,19 @@ func setup_formation(formation: Node) -> void:
 
 # ─────────────────────────────── 核心 API ────────────────────────────────
 
-## 下达号令到指定单位列表（恒即时送达——延迟由传输层在接力链上承担）。
+## 下达号令到指定单位列表（玩家号令恒即时；AI 号令班内错峰散布——见
+## AI_STAGGER_WINDOW，去齐步化）。
 ## order_type: TacticalOrders.OrderType
 ## squad_id: 目标小队 ID
 ## units: StickmanEntity 节点数组
 ## behavior_name: 要设置的行为名（如 "move", "idle", "retreat"）
 ## params: 行为参数（如 {"target": Vector2}）
-## source_tier/squad_tier: 签名兼容保留（旧延迟公式已退役，不再参与计算）
+## source_tier: 发令层级（0=玩家即时；>0=AI 号令，班内错峰散布）
+## squad_tier: 签名兼容保留（旧延迟公式已退役，不再参与计算）
 ## spread_mode: 队伍级目标点分配（反编译参考实装 D）：
 ##   "formation" row/col 阵列（推进/冲刺）/ "line" 横排散开 / "rally" 围圈（集合）/ "" 不散开。
 func deliver(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary, source_tier: int = 0, squad_tier: int = 1, spread_mode: String = "") -> void:
-	_execute_delivery(order_type, squad_id, units, behavior_name, params, spread_mode)
+	_execute_delivery(order_type, squad_id, units, behavior_name, params, spread_mode, source_tier)
 
 
 ## 组织级逐层接力投递（§4.2.4 协程，TacticalOrders.issue_to_org 入口调用）。
@@ -235,8 +243,14 @@ func _mirror_relay_arrived(relay_id: String, order_type: int, from_org: String, 
 
 ## 实际执行号令送达：设置每个单位的 AIController 命令。
 ## spread_mode 非空且有 formation 时，为每个单位个性化目标点（队内散开）。
-func _execute_delivery(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary, spread_mode: String = "") -> void:
+func _execute_delivery(order_type: int, squad_id: String, units: Array, behavior_name: String, params: Dictionary, spread_mode: String = "", source_tier: int = 0) -> void:
 	var unit_ids: Array = []
+	# AI 号令班内错峰（去齐步化）：全班同帧 set_order = 同帧改向的波浪抽动；
+	# 按编制序在 AI_STAGGER_WINDOW 内散布。玩家号令（tier=0）零延迟。
+	var stagger_step: float = 0.0
+	if source_tier > 0 and units.size() > 1:
+		stagger_step = AI_STAGGER_WINDOW / float(units.size())
+	var idx: int = 0
 	for u in units:
 		if not is_instance_valid(u):
 			continue
@@ -250,6 +264,24 @@ func _execute_delivery(order_type: int, squad_id: String, units: Array, behavior
 				p = params.duplicate()
 				var dest: Vector2 = _formation.get_squad_dest(squad_id, u, p["target"], spread_mode)
 				p["target"] = dest
-			ai.set_order(behavior_name, p)
+			if stagger_step > 0.0:
+				_staggered_set_order(ai, behavior_name, p, stagger_step * float(idx))
+			else:
+				ai.set_order(behavior_name, p)
 		unit_ids.append(u.get_instance_id())
+		idx += 1
 	order_delivered.emit(order_type, squad_id, unit_ids)
+
+
+## 错峰投递：delay 秒后 set_order（timer 暂停冻结；送达时单位/AI 可能已亡故，
+## 双重判活后静默放弃——错峰窗 0.35s 内的正常竞态）。未入树（测试桩等）无
+## timer 可用 → 回退即时（错峰是观感优化不是语义保证）
+func _staggered_set_order(ai: Node, behavior_name: String, params: Dictionary, delay: float) -> void:
+	var tree: SceneTree = get_tree()
+	if tree == null or delay <= 0.0:
+		ai.set_order(behavior_name, params)
+		return
+	tree.create_timer(delay, false).timeout.connect(func() -> void:
+		if is_instance_valid(ai) and ai.has_method("set_order"):
+			ai.set_order(behavior_name, params)
+	)

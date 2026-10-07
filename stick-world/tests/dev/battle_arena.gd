@@ -35,12 +35,14 @@ extends Node
 ##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
 ##   兵种行为档案（冲脸/持阵/风筝）接管；排长阵亡该排失去集火但班仍执行规划器号令。
 ##
-## 夺点模式（CAPTURE_ENABLED 默认开）：中线布 3 个夺点（左/中/右，y 错开），双方各一台
-##   班级意图规划器（tactics SquadIntentPlanner，0.5s 节拍）按打分给每班选意图
-##   （攻点/驻防/接火 + 惯性防抖）并翻译成 TacticalOrders 下发；到旗边先停驻观察
+## 夺点模式（CAPTURE_ENABLED 默认开）：纵深里程碑布点（批4，02 二-A.3——中线中立
+##   + 双方阵线/后排各一初始归属己方：争中线 → 压敌阵 → 端后排），双方各一台
+##   班级意图规划器（tactics SquadIntentPlanner，0.5s 节拍做结算/事件检测/相位推进；
+##   意图重判走粘性门——最短保持期 4s + 事件触发例外「里程碑易主/要地被贴脸含斩首
+##   威胁」，周期重判退役），选定后翻译成 TacticalOrders 下发；到旗边先停驻观察
 ##   约 0.8s 再入场（Ravenfield"先看再进"）。夺点接手后开战推进/跟队锚定与 TeamAi
 ##   姿态号令全部让位（规划器独占号令权，防双脑互覆）。控制面板战况板加旗点状态行
-##   （"旗：左我/中敌/右争夺"）。开关关闭 = 完整回退上面一段的旧开战逻辑。
+##   （"旗：中线争/蓝阵我/红阵敌/…"）。开关关闭 = 完整回退旧开战逻辑。
 ##   规划器打分权重/风格表 = RL 搜索变量集（待实测校准），见 squad_intent_planner.gd。
 ##
 ## 相机（审计 P0-6 + 批2 稳定锚）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑
@@ -198,16 +200,19 @@ const SQUAD_PRESET := "fp_combat_squad"
 const CAPTURE_ENABLED: bool = true
 ## 夺点占领半径（px）【提案/待定·待实测校准】（RL v3 一屏口径 120；v2 战场是 180）
 const CAPTURE_RADIUS: float = 120.0
-## 相邻夺点横向间距（px，相对中线左右展开）【提案/待定·待实测校准】
-##（v2 口径 ±500：三旗铺开占满战场宽度，两翼有兵——±260 收拢版实测全军
-## 挤在中带、两翼空无一人，创始人验收点正）
+## ── 纵深里程碑布点（02 二-A.3：占领目标从横向三旗改为纵深推进的里程碑——
+## 中线争夺带 → 敌阵 → 敌后排/斩首线，五点双方共用：中线 1（中立）+ 双方阵线/
+## 后排各 1（初始归属各自方）。横向三旗是拉扯感来源之一（目标横向铺开→横移）──
+## 阵线里程碑距中线（px，敌出生阵列前沿内侧）【提案/待定·待实测校准】
 const CAPTURE_X_SPREAD: float = 480.0
-## 夺点纵向错开偏移（px，相对行走带中心）
+## 后排里程碑距中线（px，指挥官/护卫阵地前 = 斩首线）【提案/待定·待实测校准】
+const CAPTURE_REAR_X: float = 860.0
+## 夺点纵向错开偏移（px，相对行走带中心；阵线上带/后旗下带 = 浅车道近似参差）
 const CAPTURE_Y_OFFSET: float = 200.0
 ## 纵向夹紧安全边距（px：点心离行走带上下沿至少此值，再取整十）
 const CAPTURE_Y_MARGIN: float = 100.0
-## 旗点状态行用方位标签（与布点顺序一一对应：左/中/右）
-const CAPTURE_POINT_LABELS: Array = ["左", "中", "右"]
+## 旗点状态行用方位标签（与布点顺序一一对应：中线/蓝阵/红阵/蓝后排/红后排）
+const CAPTURE_POINT_LABELS: Array = ["中线", "蓝阵", "红阵", "蓝后排", "红后排"]
 
 ## ── 指挥官（斩首规则）：双方后方各 1 名，阵亡 = 该方立即战败 ──
 const COMMANDER_ENABLED: bool = true
@@ -705,18 +710,23 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 
 # ─────────────────────────────── 夺点模式 ────────────────────────────────
 
-## 布夺点 + 装双方意图规划器（夺点模式开战逻辑）：三点横排中线、y 错开、行走带内
-## 夹紧取整十；规划器接管开战推进——号令经 TacticalOrders 下发（AI 口径 tier=1），
-## 单位数据经 provider 回传（tactics L2 零出向，本观察场是注入方）。
+## 布纵深里程碑 + 装双方意图规划器（夺点模式开战逻辑）：中线（中立）+ 双方
+## 阵线/后排各一（初始归属各自方）——推进叙事 = 争中线 → 压敌阵 → 端后排
+##（02 二-A.3 纵深轴）；y 错开浅车道参差、行走带内夹紧取整十；规划器接管开战
+## 推进——号令经 TacticalOrders 下发（AI 口径 tier=1），单位数据经 provider 回传
+##（tactics L2 零出向，本观察场是注入方）。
 func _setup_capture_mode(mid_x: float, spawn_y: float, map: Node2D, fs: Node, to: Node,
 		left_squad_ids: Array, right_squad_ids: Array) -> void:
 	_arena_formation = fs
 	var band_top: float = map.ground_y + CAPTURE_Y_MARGIN
 	var band_bottom: float = map.ground_bottom - CAPTURE_Y_MARGIN
+	## owner 初始归属：0 中立 / 1 蓝（左=攻方）/ 2 红（右=守方）
 	var defs: Array = [
-		{ "id": "capture_left", "pos": Vector2(mid_x - CAPTURE_X_SPREAD, spawn_y - CAPTURE_Y_OFFSET) },
-		{ "id": "capture_center", "pos": Vector2(mid_x, spawn_y) },
-		{ "id": "capture_right", "pos": Vector2(mid_x + CAPTURE_X_SPREAD, spawn_y + CAPTURE_Y_OFFSET) },
+		{ "id": "mid_line", "owner": 0, "pos": Vector2(mid_x, spawn_y) },
+		{ "id": "blue_line", "owner": 1, "pos": Vector2(mid_x - CAPTURE_X_SPREAD, spawn_y - CAPTURE_Y_OFFSET) },
+		{ "id": "red_line", "owner": 2, "pos": Vector2(mid_x + CAPTURE_X_SPREAD, spawn_y - CAPTURE_Y_OFFSET) },
+		{ "id": "blue_rear", "owner": 1, "pos": Vector2(mid_x - CAPTURE_REAR_X, spawn_y + CAPTURE_Y_OFFSET) },
+		{ "id": "red_rear", "owner": 2, "pos": Vector2(mid_x + CAPTURE_REAR_X, spawn_y + CAPTURE_Y_OFFSET) },
 	]
 	for d in defs:
 		var pos: Vector2 = d["pos"]
@@ -724,7 +734,7 @@ func _setup_capture_mode(mid_x: float, spawn_y: float, map: Node2D, fs: Node, to
 		pos.x = snappedf(pos.x, 10.0)
 		# CapturePoint 是 RefCounted（非 Node）：无类型注解承接，防赋值类型炸
 		var point = _TacticsAPI.CapturePoint.new()
-		point.setup(d["id"], pos, CAPTURE_RADIUS)
+		point.setup(d["id"], pos, CAPTURE_RADIUS, int(d["owner"]))
 		point.capture_owner_changed.connect(_on_capture_owner_changed)
 		_capture_points.append(point)
 		# 旗视觉（观察场侧渲染件）：CapturePoint 纯逻辑零渲染，旗面/占领圈/进度

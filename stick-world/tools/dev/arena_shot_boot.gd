@@ -14,6 +14,7 @@ const PROBE_DRIVER := preload("res://tools/dev/arena_shadowprobe.gd")
 const TWITCH_DRIVER := preload("res://tools/dev/arena_twitchprobe.gd")
 const ANIMPROBE_DRIVER := preload("res://tools/dev/arena_animprobe.gd")
 const P2PROBE_DRIVER := preload("res://tools/dev/arena_p2probe.gd")
+const P4PROBE_DRIVER := preload("res://tools/dev/arena_p4probe.gd")
 
 var _preset := 1
 var _secs := 20
@@ -24,6 +25,7 @@ var _probe := false
 var _twitch := false
 var _animprobe := false
 var _p2probe := false
+var _p4probe := false
 var _lineup := false
 
 
@@ -50,6 +52,8 @@ func _ready() -> void:
 				_animprobe = true; i += 1
 			"--p2probe":
 				_p2probe = true; i += 1
+			"--p4probe":
+				_p4probe = true; i += 1
 			"--lineup":
 				_lineup = true; i += 1
 			_:
@@ -63,9 +67,9 @@ func _start() -> void:
 	arena_script._preset_idx = _preset
 	arena_script.lineup_mode = _lineup
 	var driver := Node.new()
-	var script: GDScript = P2PROBE_DRIVER if _p2probe else (TWITCH_DRIVER if _twitch else (PROBE_DRIVER if _probe else (ANIMPROBE_DRIVER if _animprobe else (METRICS_DRIVER if _metrics else DRIVER_SCRIPT))))
+	var script: GDScript = P4PROBE_DRIVER if _p4probe else (P2PROBE_DRIVER if _p2probe else (TWITCH_DRIVER if _twitch else (PROBE_DRIVER if _probe else (ANIMPROBE_DRIVER if _animprobe else (METRICS_DRIVER if _metrics else DRIVER_SCRIPT)))))
 	driver.set_script(script)
-	driver.name = "ArenaTwitchDriver" if _twitch else ("ArenaProbeDriver" if _probe else ("ArenaAnimProbeDriver" if _animprobe else ("ArenaMetricsDriver" if _metrics else "ArenaShotDriver")))
+	driver.name = "ArenaP4Driver" if _p4probe else ("ArenaP2Driver" if _p2probe else ("ArenaTwitchDriver" if _twitch else ("ArenaProbeDriver" if _probe else ("ArenaAnimProbeDriver" if _animprobe else ("ArenaMetricsDriver" if _metrics else "ArenaShotDriver")))))
 	get_tree().root.add_child(driver)
 	driver.call("run", _tag, _preset, _secs, _every)
 	get_tree().change_scene_to_file("res://tests/dev/battle_arena.tscn")

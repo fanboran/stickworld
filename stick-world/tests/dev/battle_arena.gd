@@ -185,12 +185,17 @@ const MIN_ROW_GAP: float = FormationSpacing.SEPARATION_RADIUS_Y
 ## 单位 x 错开超横半径，任意纵距都不违反分离不变式（椭圆判别恒 >1），
 ## 只须保同列纵距 ≥ MIN_ROW_GAP
 const STAGGER_X: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
-## 左右两团出生中心 x 相对地图中线的偏移。一屏战场（创始人：战场范围限定在屏幕
-## 一样大）：观战缩放 0.75（缩放条 100% 档）下可见半宽 = 1920/(2×0.75) = 1280px——
-## ±700 出生 + 阵列纵深朝中线内收（96 档最末行 -350）+ 指挥官再后退 120，
-## 全场横向跨度最大 ≈ ±1170（96 档含指挥官），整场一屏内可见。
+## 左右两团出生中心 x 相对地图中线的偏移。一屏战场（创始人两次定口径：地图 =
+## 正常游玩缩放 1.0 下一屏，双方视野各半）：1.0 可见宽 1920px——出生 ±430 +
+## 阵列纵深（48 档最前 150 最深 -100）+ 指挥官后撤，全场跨度 ≈ ±640，
+## 整场在游玩视野内。
 ##【提案/待定·待实测校准】
-const TEAM_OFFSET_X: float = 700.0
+const TEAM_OFFSET_X: float = 430.0
+## 行动带半宽（px）：一屏战场「半屏高」口径的地面行动带半宽（见出生段注释）
+const ACTION_BAND_HALF_PX: float = 360.0
+## 行动带前缘推入 3D 取景兜底锚（覆盖地图的资产带前缘——85 格资产带是旧全景
+## 档口径；一屏战场取景以行动带前缘兜底，1.0 下地平线回到半屏构图）
+const ACTION_BAND_FRONT_MARGIN: float = 60.0
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -326,6 +331,11 @@ func _spawn_and_start() -> void:
 		await get_tree().process_frame
 	var mid_x: float = (map.map_left + map.map_right) * 0.5
 	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
+	# 行动带前缘覆盖取景兜底锚（地图推的是 85 格资产带前缘——旧全景档口径；
+	# 一屏战场以行动带前缘兜底，1.0 取景地平线回到半屏构图）
+	var hd: Node = map.get("_hd") if map.get("_hd") != null else null
+	if hd != null and is_instance_valid(hd) and hd.has_method("set_bf_band_front_z"):
+		hd.set_bf_band_front_z((spawn_y + ACTION_BAND_HALF_PX + ACTION_BAND_FRONT_MARGIN - map.ground_y) / 24.0)
 	# 接管相机（审计 P0-6）：不停用 rig——滚轮缩放/边界钳制/平滑全保留；
 	# 居中模式跟随"质心代理"；缩放让整场一屏内可见：一屏战场全宽最大 ≈2340px
 	#（96 档 ±1170 含指挥官）< 0.75 缩放可见宽 2560px（1920/0.75），全宽入画
@@ -336,13 +346,10 @@ func _spawn_and_start() -> void:
 		# 南漂时大军沉出屏幕下沿；RTS 观战开 Y 跟随，rig 侧带内钳制）
 		if rig.has_method("set_follow_target_y"):
 			rig.set_follow_target_y(true)
-		# 缩放取半屏构图档 0.46（rig base_zoom=1.0@1080p，_hd 实收 uz=0.46）：
-		# 半屏地平线契约（02-战斗系统 二-A）要求可见地面深 = h_v/2/sinθ ≥ 带前缘
-		# z93.1 → uz ≤ 22.5/(sin26°×93.1) ≈ 0.464（rig ZOOM_MIN 已配套放宽到 0.45）。
-		# 本档地平线钉中线、带前缘恰在屏幕底沿；更近档带前缘兜底锚生效
-		#（不出界，地面相应加深）
+		# 一屏战场（创始人两次定口径：地图 = 正常游玩缩放一屏大，双方视野各半
+		# ——全场即视野，不设全景档）：全程 1.0 游玩缩放
 		if rig.has_method("set_user_zoom"):
-			rig.set_user_zoom(0.46)
+			rig.set_user_zoom(1.0)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)
@@ -372,7 +379,11 @@ func _spawn_and_start() -> void:
 			# （诊断 A1）。单排放不下改奇偶错排（相邻 x 错开 ≥ 椭圆横半径 48，纵距
 			# 再近也不违反分离不变式），不再压间距。
 			var half_span: float = (count - 1) * 0.5 * LINE_GAP
-			var max_half: float = (map.ground_bottom - map.ground_y) * 0.5 - 40.0
+			# 一屏战场行动带半宽（02 二-A.2「半屏高」：地面行动带 ≈ 半屏地面深，
+			# 1.0 缩放视高 45 格、天空占上 1/3 → 地面 ~30 格 → 半宽 ~15 格=360px）：
+			# 行展开超此宽自动进错排（纵距减半/横向错开），部队收在行动带内
+			# ——资产带 85 格深是旧全景档口径，1.0 一屏装不下也不该装
+			var max_half: float = ACTION_BAND_HALF_PX
 			var staggered: bool = false
 			var gap: float = LINE_GAP
 			if half_span > max_half:

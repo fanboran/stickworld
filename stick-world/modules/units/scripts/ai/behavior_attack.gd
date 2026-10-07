@@ -25,9 +25,6 @@ const ScriptAnims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 
 # ─────────────────────────────── 常量
 
-## 风筝保距边距（px）：保距线 = 射程 − 此值——撤出射程内缘即站定开火
-##【提案/待定·待实测校准】
-const KITE_MARGIN: float = 40.0
 ## 犹豫检查间隔（秒）
 const HESITATE_CHECK_INTERVAL: float = 0.5
 ## 低 HP 阈值（低于此值且附近有掩体触发找掩体）
@@ -266,13 +263,11 @@ func update(delta: float) -> void:
 	_update_summon(dist, delta)
 	# 姿态举盾聚合（SWL 直译）：推进/接敌/风筝全程生效
 	_update_arrow_threat_block(weapon)
-	# 风筝（ArcherAi.ShouldKite 直译语义：卡极限射程拉扯）：档案 kite_range>0
-	# = 启用，实际保距线 = attack_range − KITE_MARGIN——敌人进"射程内缘"就撤、
-	# 撤出即停，永远贴在能打到敌人的最远边缘输出（旧固定 280 窄带抄丢了
-	# "卡极限距离"语义，创始人点正）
-	var kite_range: float = 0.0
-	if _p("kite_range", 0.0) > 0.0:
-		kite_range = attack_range - KITE_MARGIN
+	# 风筝 = 近身兜底（ArcherAi.ShouldKite 真意：敌贴脸才撤）：档案 kite_range
+	# 即"近身危险线"——敌进此线（远小于射程）背向短撤，撤出即站定继续射。
+	# **不与射程绑定**（曾误设射程−40：敌进射程内缘就撤 → 弓手全程乱跑，
+	# 站位散乱——SWL 弓手常态是站在射程线原地成排射击）
+	var kite_range: float = _p("kite_range", 0.0)
 	if kite_range > 0.0 and dist < kite_range:
 		var away: Vector2 = (entity.global_position - _target.global_position).normalized()
 		if _cap_ai_move:

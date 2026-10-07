@@ -194,9 +194,8 @@ const CLASS_PROFILES: Dictionary = {
 		"stand_pool": ["idle_spear_v2", "idle_spear_v3"],
 	},
 	BOW: {
-		# 旧死锁（保距线 ≥ 射程 → 持瞄路径不可达、弓手光跑不射）随公式化解除：
-		# 保距线 = 射程 − KITE_MARGIN 恒在射程内缘
-		"kite_range": 1.0,             ## 卡极限射程风筝（值仅作启用开关，距离=射程−40）
+		# 近身兜底线（ShouldKite 真意）：敌贴到 180 内才背撤，撤出即站定成排射
+		"kite_range": 180.0,
 		"aggressive_push_prob": 0.0,
 		"hesitate_prob": 0.02,
 		"leash_mult": 5.0,
@@ -221,8 +220,7 @@ const CLASS_PROFILES: Dictionary = {
 		"hesitate_prob": 0.08,
 	},
 	STAFF: {
-		"kite_range": 1.0,              ## 卡极限射程风筝启用（创始人裁决：法师远程保距——
-										##   SWL 靠召唤护卫挡脸，无召唤体系则至少拉开距离施法）
+		"kite_range": 200.0,            ## 近身兜底线（同弓手语义：贴脸才退，正常站定施法）
 		"hesitate_prob": 0.06,
 		"hesitate_time": Vector2(0.5, 1.1),
 		"leash_mult": 5.0,

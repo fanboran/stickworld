@@ -191,11 +191,16 @@ const STAGGER_X: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
 ## 整场在游玩视野内。
 ##【提案/待定·待实测校准】
 const TEAM_OFFSET_X: float = 430.0
-## 行动带半宽（px）：一屏战场「半屏高」口径的地面行动带半宽（见出生段注释）
+## 行动带半宽（px）：一屏战场的地面行动带半宽（见出生段注释）
 const ACTION_BAND_HALF_PX: float = 360.0
-## 行动带前缘推入 3D 取景兜底锚（覆盖地图的资产带前缘——85 格资产带是旧全景
-## 档口径；一屏战场取景以行动带前缘兜底，1.0 下地平线回到半屏构图）
-const ACTION_BAND_FRONT_MARGIN: float = 60.0
+## ── 一屏战场竖直构图（02 二-A.2「半屏高」直给参数，z 从草远端 BF_HORIZON_Z 起算）──
+## 地面占屏幕比例：0.5 = 地面占屏下 1/2、天空占上 1/2
+const BF_GROUND_RATIO: float = 0.5
+## 单位带中心（格）：居中于可见地面带（可见地面深 = 0.5×h_v/sin ≈ 51.4 格，
+## 带中心 = 25.7 格；取 23 留出前缘余量防脚贴底沿）
+const BF_UNIT_BAND_CENTER_Z: float = 23.0
+## 单位带半径（格）= 行动带半宽 360px / 24
+const BF_UNIT_BAND_HALF_Z: float = 15.0
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -330,13 +335,13 @@ func _spawn_and_start() -> void:
 	for i in 3:
 		await get_tree().process_frame
 	var mid_x: float = (map.map_left + map.map_right) * 0.5
-	var spawn_y: float = map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
-	# 行动带中心锚（一屏战场终极口径）：屏幕中线 = 行动带正中——战场带居中
-	# 半屏（02 二-A.2「半屏高」），脚出屏几何上不可能；z 口径同地图
-	#（z(y) = (y - ground_y) / CELL_PX）
+	# 单位带中心 = 构图参数（z 从草远端起算落回 2D y）——旧"资产带中点"在
+	# 半屏构图里偏前（脚贴底沿）
+	var spawn_y: float = map.ground_y + BF_UNIT_BAND_CENTER_Z * 24.0
+	# 地面占比锚（半屏高直给）：草远端钉屏上 1/2 处——地面=屏下 1/2
 	var hd: Node = map.get("_hd") if map.get("_hd") != null else null
-	if hd != null and is_instance_valid(hd) and hd.has_method("set_bf_band_center_z"):
-		hd.set_bf_band_center_z((spawn_y - map.ground_y) / 24.0)
+	if hd != null and is_instance_valid(hd) and hd.has_method("set_bf_ground_ratio"):
+		hd.set_bf_ground_ratio(BF_GROUND_RATIO)
 	# 接管相机（审计 P0-6）：不停用 rig——滚轮缩放/边界钳制/平滑全保留；
 	# 居中模式跟随"质心代理"；缩放让整场一屏内可见：一屏战场全宽最大 ≈2340px
 	#（96 档 ±1170 含指挥官）< 0.75 缩放可见宽 2560px（1920/0.75），全宽入画
@@ -853,8 +858,9 @@ func _fireteam_status_text() -> String:
 ## 地图=视野（创始人口径），任何原因（分离推挤/追击/风筝）出界立即拉回，
 ## 脚出屏在几何上不可能。【钳制域=出生域+追击余量，非硬贴边】
 const ARENA_X_HALF: float = 700.0
-const ARENA_Y_MARGIN_TOP: float = 90.0
-const ARENA_Y_MARGIN_BOTTOM: float = 130.0
+## 可走域 y = 单位带 ± 60px 余量（追击/分离出界拉回；带本身在可见地面内，
+## 脚出屏几何不可能）
+const ARENA_Y_MARGIN: float = 60.0
 
 
 func _clamp_units_into_view() -> void:
@@ -862,8 +868,8 @@ func _clamp_units_into_view() -> void:
 	if map == null:
 		return
 	var mid_x: float = (map.map_left + map.map_right) * 0.5
-	var y_top: float = map.ground_y + ARENA_Y_MARGIN_TOP
-	var y_bottom: float = map.ground_bottom - ARENA_Y_MARGIN_BOTTOM
+	var y_top: float = map.ground_y + (BF_UNIT_BAND_CENTER_Z - BF_UNIT_BAND_HALF_Z) * 24.0 - ARENA_Y_MARGIN
+	var y_bottom: float = map.ground_y + (BF_UNIT_BAND_CENTER_Z + BF_UNIT_BAND_HALF_Z) * 24.0 + ARENA_Y_MARGIN
 	for u in _attacker + _defender:
 		if not is_instance_valid(u):
 			continue

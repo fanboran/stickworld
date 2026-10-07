@@ -255,16 +255,16 @@ var battlefield := false          # 战场模式（城东开阔野地：无墙�
 var _bf_band_front_z := 0.0
 ## 最近一次 set_cam_zoom 的原始入参（set_bf_band_front_z 迟到时重算取景用）
 var _last_user_zoom := -1.0
-## 战场带中心锚（格，一屏战场口径）：推入后屏幕中线 = 带中心——战场带居中
-## 半屏（02 二-A.2），脚出屏几何上不可能；优先级高于带前缘兜底
-var _bf_band_center_z := NAN
+## 战场地面占比锚（02 二-A.2「半屏高」直给参数）：推入后草地远端（BF_HORIZON_Z）
+## 钉在屏上 (1-p) 处——p=0.5 即地面占屏下 1/2；优先级高于带前缘兜底
+var _bf_ground_ratio := -1.0
 
 
-## 战场带中心推入（一屏战场宿主调；同带前缘的迟到重算语义）
-func set_bf_band_center_z(z: float) -> void:
-	if not battlefield or (is_nan(z) and is_nan(_bf_band_center_z)) 			or (not is_nan(z) and not is_nan(_bf_band_center_z) and absf(z - _bf_band_center_z) < 0.001):
+## 战场地面占比推入（一屏战场宿主调；同带前缘的迟到重算语义）
+func set_bf_ground_ratio(p: float) -> void:
+	if not battlefield or absf(p - _bf_ground_ratio) < 0.001:
 		return
-	_bf_band_center_z = z
+	_bf_ground_ratio = p
 	if _last_user_zoom > 0.0:
 		set_cam_zoom(_last_user_zoom)
 
@@ -1046,9 +1046,9 @@ func set_cam_zoom(user_zoom: float) -> void:
 		# 之外（战线贴前缘 = 整团出界）。取 max：半屏能装下时地平线恒中线；
 		# 装不下时以带前缘+余量为底锚（地平线相应上移），任意缩放档带内单位
 		# 永不出屏。推导同 village 分支：P.z = z_bottom − h_v/(2 sinθ) + P.y/tanθ
-		if not is_nan(_bf_band_center_z):
-			# 带中心=屏幕中线（一屏战场）：屏幕底沿 = 带中心 + 半屏地面深
-			z_bottom = _bf_band_center_z + h_v * 0.5 / sin(t)
+		if _bf_ground_ratio > 0.0:
+			# 地面占比锚（半屏高直给）：屏幕底沿 = 草远端 + 占比×整屏地面深
+			z_bottom = BF_HORIZON_Z + _bf_ground_ratio * h_v / sin(t)
 		else:
 			z_bottom = maxf(BF_HORIZON_Z + h_v * 0.5 / sin(t), _bf_band_front_z)
 		_cam.position.z = z_bottom - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)

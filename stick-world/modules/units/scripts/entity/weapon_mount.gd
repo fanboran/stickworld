@@ -94,18 +94,17 @@ var BLOCK_DAMAGE_FACTOR: float = 0.15
 var BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
 var BLOCK_FRONT_DOT: float = 0.25
-## 各武器攻击射程（像素，含手臂长度）——**取整十口径，唯一真相源 =
-## 观察场编制设计值**（tests/dev/battle_arena.gd 头注释：矛 120 卡线 / 剑 80 /
-## 杖 280 施法 / 弓 300 压制，见 docs/设计/命名与数值口径.md）。
-## 弓不再用 1400 全屏抛射——超远距抛物线落点散布吃掉命中率，火力压制造
-## 就"看着满天花雨实际没人中箭"；杖 280 对齐火力班编制（原 600 半屏施法
-## 与观察场纵深布阵脱节；kite 死锁警示仍成立：射程不得小于行为档案 kite_range）。
+## 各武器攻击射程（像素，含手臂长度）——取整十口径，数值源 =
+## 观察场编制设计（矛 120 卡线 / 剑 80 贴身），远程族对齐 SWL 观感
+##（创始人裁决：弓手法师站后排覆盖战场中线、卡极限射程风筝——弓 420 ≈
+## 战场全宽 1/4，杖 380 次之；旧 300/280 是观察场小尺度下的收缩值，
+## 远程班与近战线挤成一团的主因）。
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
 	WeaponType.SPEAR: 120.0,
-	WeaponType.BOW: 300.0,
+	WeaponType.BOW: 420.0,
 	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 280.0,
+	WeaponType.STAFF: 380.0,
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
 }
 ## HitStop 参数（命中顿帧）

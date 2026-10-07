@@ -23,7 +23,11 @@ const ScriptTargetAcquire := preload("res://modules/units/scripts/ai/target_acqu
 ## 攻击动画名映射（9s 出手预测读 Hit 事件真值用；stick_rig 为 L1，units L2 依赖方向合规）
 const ScriptAnims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 
-# ─────────────────────────────── 常量 ────────────────────────────────
+# ─────────────────────────────── 常量
+
+## 风筝保距边距（px）：保距线 = 射程 − 此值——撤出射程内缘即站定开火
+##【提案/待定·待实测校准】
+const KITE_MARGIN: float = 40.0
 ## 犹豫检查间隔（秒）
 const HESITATE_CHECK_INTERVAL: float = 0.5
 ## 低 HP 阈值（低于此值且附近有掩体触发找掩体）
@@ -171,6 +175,10 @@ func update(delta: float) -> void:
 	if _cap_is_dead and entity.is_dead():
 		finish()
 		return
+	# 战斗朝向锁（AttackWhileRunning 语义）：有活跃攻击目标即锁——朝向归开火
+	# 瞄准管，移动翻面让位（边退边射倒退跑）；行为退出在 exit 解锁
+	if entity.has_method("set_combat_face_lock"):
+		entity.set_combat_face_lock(_target != null and is_instance_valid(_target))
 	# 行为累积钟（时基声明见字段注释）——先于一切早退路径累加：压制/硬直/
 	# 风筝停滞期窗口照常流逝（停滞的是单位不是时间）
 	_clock += delta
@@ -261,9 +269,13 @@ func update(delta: float) -> void:
 	_update_summon(dist, delta)
 	# 姿态举盾聚合（SWL 直译）：推进/接敌/风筝全程生效
 	_update_arrow_threat_block(weapon)
-	# 风筝（兵种档案 kite_range > 0，ArcherAi/MagikillAi 保持距离）：敌人逼近时
-	# 背向撤离不贴脸输出——即使已在射程内也先拉开（远程兵种存活优先）
-	var kite_range: float = _p("kite_range", 0.0)
+	# 风筝（ArcherAi.ShouldKite 直译语义：卡极限射程拉扯）：档案 kite_range>0
+	# = 启用，实际保距线 = attack_range − KITE_MARGIN——敌人进"射程内缘"就撤、
+	# 撤出即停，永远贴在能打到敌人的最远边缘输出（旧固定 280 窄带抄丢了
+	# "卡极限距离"语义，创始人点正）
+	var kite_range: float = 0.0
+	if _p("kite_range", 0.0) > 0.0:
+		kite_range = attack_range - KITE_MARGIN
 	if kite_range > 0.0 and dist < kite_range:
 		var away: Vector2 = (entity.global_position - _target.global_position).normalized()
 		if _cap_ai_move:
@@ -367,6 +379,9 @@ func exit(next: String) -> void:
 		var weapon: Node = entity.get_weapon()
 		if weapon != null and weapon.has_method("set_blocking"):
 			weapon.set_blocking(false)
+	# 清战斗朝向锁（否则单位永久朝向锁死——锁只在本行为活跃期有效）
+	if entity != null and is_instance_valid(entity) and entity.has_method("set_combat_face_lock"):
+		entity.set_combat_face_lock(false)
 	super.exit(next)
 
 

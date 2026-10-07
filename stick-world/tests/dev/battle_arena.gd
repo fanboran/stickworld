@@ -86,7 +86,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "中坚火力班", "front_x": 100.0, "follow_gap": 150.0,
+				"name": "中坚火力班", "front_x": 100.0, "follow_gap": 380.0,
 				"rows": [
 					{ "weapon": W_SWORD, "count": 4 }, { "weapon": W_STAFF, "count": 1 },
 					{ "weapon": W_BOW, "count": 2 }, { "weapon": W_MERIC, "count": 1 },
@@ -113,7 +113,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力班", "front_x": -50.0, "follow_gap": 150.0,
+				"name": "火力班", "front_x": -50.0, "follow_gap": 380.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -149,11 +149,11 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力一班", "front_x": -200.0, "follow_gap": 150.0,
+				"name": "火力一班", "front_x": -200.0, "follow_gap": 380.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 			{
-				"name": "火力二班", "front_x": -300.0, "follow_gap": 150.0,
+				"name": "火力二班", "front_x": -300.0, "follow_gap": 380.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],

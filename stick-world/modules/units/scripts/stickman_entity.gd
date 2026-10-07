@@ -1343,6 +1343,11 @@ func face_towards(pos: Vector2) -> void:
 func try_set_facing(new_facing: int) -> bool:
 	if new_facing == _facing:
 		return true
+	# 战斗朝向锁（SWL/SW3 AttackWhileRunning 语义：移动方向与朝向解耦）——
+	# 攻击行为活跃期由开火瞄准独占朝向，移动翻面让位（边退边射 = 倒退跑，
+	# 脸永远朝敌人；旧实现移动侧抢闸导致背身拉弓，创始人点正）
+	if _combat_face_lock:
+		return false
 	var pf := Engine.get_physics_frames()
 	if not is_possessed() and _last_direction_change_frame >= 0 \
 			and pf - _last_direction_change_frame < FACING_RATE_LIMIT_FRAMES:
@@ -1353,7 +1358,16 @@ func try_set_facing(new_facing: int) -> bool:
 	return true
 
 
-## 立即换持械站姿（换武器时由 WeaponMount 调用）：
+## 战斗朝向锁（behavior_attack 置位：有活跃攻击目标时 true——朝向归
+## _face_target 开火瞄准管，移动不翻面）
+var _combat_face_lock: bool = false
+
+
+func set_combat_face_lock(locked: bool) -> void:
+	_combat_face_lock = locked
+
+
+## 立即换持械站姿（换武器时 WeaponMount 调用）：
 ## 仅待机态立即生效；移动/攻击等状态不打断，回 idle 时按新武器自动选姿。
 func refresh_stance() -> void:
 	if _visual != null and _visual.has_method("refresh_idle_stance"):

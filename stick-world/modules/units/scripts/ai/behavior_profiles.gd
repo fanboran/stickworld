@@ -44,7 +44,8 @@ const SKILL_AIM_HOLD_MULT: Dictionary = {
 ##   hesitate_time        犹豫时长范围 Vector2(min, max)（s）
 ##   aggressive_push_prob 擅自冲锋概率（每次接近时）
 ##   leash_mult           追击放弃倍数（目标超出射程 × 此值即"追丢了"）
-##   kite_range           保距射击距离（px，>0 时敌人近于此距离边打边撤）
+##   kite_range           保距开关（>0 = 启用卡极限射程风筝；实际保距线 =
+##                        attack_range − KITE_MARGIN，见 behavior_attack）
 ##   kite_run             后撤时是否奔跑
 const BASELINE: Dictionary = {
 	"acquire_interval": 0.5,
@@ -201,10 +202,9 @@ const CLASS_PROFILES: Dictionary = {
 		"stand_pool": ["idle_spear_v2", "idle_spear_v3"],
 	},
 	BOW: {
-		# 保距撤离距离必须 < attack_range(300)：否则敌未进射程就先进入后撤态，
-		# 持瞄路径永不可达（实测 50 万采样 aim=0，弓手光跑不射）——留 20px
-		# "边打边撤"窄带，【待实测校准】
-		"kite_range": 280.0,
+		# 旧死锁（保距线 ≥ 射程 → 持瞄路径不可达、弓手光跑不射）随公式化解除：
+		# 保距线 = 射程 − KITE_MARGIN 恒在射程内缘
+		"kite_range": 1.0,             ## 卡极限射程风筝（值仅作启用开关，距离=射程−40）
 		"aggressive_push_prob": 0.0,
 		"hesitate_prob": 0.02,
 		"leash_mult": 5.0,
@@ -229,9 +229,8 @@ const CLASS_PROFILES: Dictionary = {
 		"hesitate_prob": 0.08,
 	},
 	STAFF: {
-		"kite_range": 0.0,              ## 保持 0：被 test_rout_enhance「STAFF kite_range=0.0 覆盖」锁定；
-										##   开保距走此行覆盖值（施法射程 600 已无死锁，锚点取弓手 500 档下浮
-										##   480 待实测校准）——与 decision_variance 同走协调批
+		"kite_range": 1.0,              ## 卡极限射程风筝启用（创始人裁决：法师远程保距——
+										##   SWL 靠召唤护卫挡脸，无召唤体系则至少拉开距离施法）
 		"hesitate_prob": 0.06,
 		"hesitate_time": Vector2(0.5, 1.1),
 		"leash_mult": 5.0,

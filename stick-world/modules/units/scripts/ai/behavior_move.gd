@@ -180,10 +180,12 @@ func update(delta: float) -> void:
 		if _catching_up:
 			_catching_up = false
 			_update_formation_block(true)
-		# 编队成员到达队形位 → 播列阵动画并短暂滞留（对应传奇 ArriveAtFormationAnimationSystem）
+		# 编队成员到达队形位 → 短暂滞留一拍（列阵节奏；对应传奇
+		# ArriveAtFormationAnimationSystem 的"到位站定"）。**不播列阵动画**：
+		# SWL 的到达动画属造兵场景（单位逐个走出、落位一次礼节），战斗内
+		# 全员落位齐播 = 举手姿势穿帮（素材语义错配，创始人两次点正）——
+		# 动画只留给生产场景（recruit_manager 招募落位）
 		if _is_squad_member():
-			if entity.has_method("play_arrive"):
-				entity.play_arrive()
 			_arrive_hold = ARRIVE_HOLD_DURATION
 		elif not _hold_on_arrive:
 			finish()

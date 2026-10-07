@@ -96,15 +96,15 @@ var BLOCK_RESET_INTERVAL: float = 0.6
 var BLOCK_FRONT_DOT: float = 0.25
 ## 各武器攻击射程（像素，含手臂长度）——取整十口径，数值源 =
 ## 观察场编制设计（矛 120 卡线 / 剑 80 贴身），远程族对齐 SWL 观感
-##（创始人裁决：弓手法师站后排覆盖战场中线、卡极限射程风筝——弓 420 ≈
-## 战场全宽 1/4，杖 380 次之；旧 300/280 是观察场小尺度下的收缩值，
+##（创始人裁决：弓手法师站后排覆盖战场中线、卡极限射程风筝——弓 650 ≈
+## 战场视宽 1/3（SWL 观感：远程站己方后排即覆盖敌阵前沿），杖 550 次之；旧 300/280 是观察场小尺度下的收缩值，
 ## 远程班与近战线挤成一团的主因）。
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
 	WeaponType.SPEAR: 120.0,
-	WeaponType.BOW: 420.0,
+	WeaponType.BOW: 650.0,
 	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 380.0,
+	WeaponType.STAFF: 550.0,
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
 }
 ## HitStop 参数（命中顿帧）

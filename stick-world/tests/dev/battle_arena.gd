@@ -86,7 +86,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "中坚火力班", "front_x": 100.0, "follow_gap": 380.0,
+				"name": "中坚火力班", "front_x": 100.0, "follow_gap": 600.0,
 				"rows": [
 					{ "weapon": W_SWORD, "count": 4 }, { "weapon": W_STAFF, "count": 1 },
 					{ "weapon": W_BOW, "count": 2 }, { "weapon": W_MERIC, "count": 1 },
@@ -113,7 +113,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力班", "front_x": -50.0, "follow_gap": 380.0,
+				"name": "火力班", "front_x": -50.0, "follow_gap": 600.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -149,11 +149,11 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力一班", "front_x": -200.0, "follow_gap": 380.0,
+				"name": "火力一班", "front_x": -200.0, "follow_gap": 600.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 			{
-				"name": "火力二班", "front_x": -300.0, "follow_gap": 380.0,
+				"name": "火力二班", "front_x": -300.0, "follow_gap": 600.0,
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -224,9 +224,9 @@ const COMMANDER_ENABLED: bool = true
 ##【提案/待定·待实测校准】（批2 拉大到 200：120px 在观战缩放 0.46 下仅 ~55px
 ## 屏距，指挥官+护卫小群与主力贴成一团辨不出「后方阵地」）
 const COMMANDER_REAR_OFFSET: float = 200.0
-## 指挥官出生 y 相对带中心的错开（px；避开编队出生带中位，防出生重叠遭分离推挤
-## 把指挥官挤离留守位）
-const COMMANDER_Y_OFFSET: float = 300.0
+## 指挥官出生 y 相对带中心的错开（px）。**0 = 居中**（创始人多次定口径居中；
+## 旧 300 防挤参数已无必要——x 向已在阵列后 200+ 与主力天然错开）
+const COMMANDER_Y_OFFSET: float = 0.0
 ## 指挥官武器（佩剑；持旗视觉后议，机制先行）
 const COMMANDER_WEAPON: int = W_SWORD
 
@@ -340,6 +340,15 @@ func _spawn_and_start() -> void:
 	# 居中模式跟随"质心代理"；缩放让整场一屏内可见：一屏战场全宽最大 ≈2340px
 	#（96 档 ±1170 含指挥官）< 0.75 缩放可见宽 2560px（1920/0.75），全宽入画
 	var rig: Node = _game_root.get("camera_rig")
+	# 一屏战场：小地图/相机边界 = 战场行动区（创始人口径：战场就只有视野这么大
+	# ——地图资产 ±3072 是地图口径，若小地图显示整图，战场缩成中间一小段）
+	var arena_left: float = mid_x - 720.0
+	var arena_right: float = mid_x + 720.0
+	if rig != null and rig.has_method("set_map_bounds"):
+		rig.set_map_bounds(arena_left, arena_right)
+	var minimap: Node = _game_root.get("_minimap")
+	if minimap != null and is_instance_valid(minimap) and minimap.has_method("set_map_info"):
+		minimap.set_map_info(arena_left, arena_right, map.ground_y, map.ground_ratio)
 	if rig != null and rig.has_method("set_centered_mode"):
 		rig.set_centered_mode(true)
 		# 纵向贴住战场质心（rig 默认把视野下边界锚死 ground_bottom，混战线

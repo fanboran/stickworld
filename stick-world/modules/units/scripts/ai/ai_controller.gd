@@ -235,10 +235,10 @@ func _make_decision() -> void:
 	# 压制避战（RA 压制式脱离）：被压制 → 立即脱离接火（优先找掩体，无掩体走
 	# fallback 短距后撤）；号令挂起不清除，压制结束由命令覆盖段自动续行
 	if _is_suppressed():
-		# 指挥官豁免（斩首规则，诊断 B4）：守位自卫逻辑已有（leash 内迎击 + C6
-		# 既有豁免），压制→避战链对其豁免——不被矛投掷连击压出守位斩杀；
+		# 守位者豁免（指挥官/阵地护卫，诊断 B4）：守位自卫逻辑已有（leash 内迎击
+		# + C6 既有豁免），压制→避战链对其豁免——不被矛投掷连击压出守位斩杀；
 		# 压制期维持当前行为（在途攻击由行为层兜底停滞 = 守位冻结，免的是驱赶）
-		if _is_commander():
+		if _holds_post():
 			return
 		# 避战还击（诊断 B2 带打带跑）：避战态被敌人贴进近战范围 → 开还击窗就地
 		# 迎击，不再一味后撤停战（停战螺旋治理）；窗未开走强制避战
@@ -426,9 +426,9 @@ func _try_combat() -> bool:
 ## withdraw 档保留为命令路径语义（可下令的 RETREAT / TeamAi ROUT 撤离），C6 不再下发。
 ## 返回 true 表示已切入避战行为。
 func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bool:
-	# 指挥官避战豁免（斩首规则）：永不脱离接火——is_disengaging 恒 false，
-	# 指挥官跑不了，被近身就地还击（_seek_cover 低血分支保留：就近掩体仍属还击）。
-	if _is_commander():
+	# 守位者避战豁免（指挥官/阵地护卫）：永不脱离接火——is_disengaging 恒 false，
+	# 守位者跑不了，被近身就地还击（_seek_cover 低血分支保留：就近掩体仍属还击）。
+	if _holds_post():
 		return false
 	# 压制与 C6 互斥（诊断 B1，同拍不叠加）：被压期走强制避战通道（_make_decision
 	# 首位拦截），C6 掷骰不评估——近失压制近 1:1 转避战再叠 0.30 掷骰 = 双通道
@@ -941,12 +941,10 @@ func set_order(behavior_name: String, params: Dictionary = {}) -> void:
 	if _state_machine != null and not _state_machine.has_behavior(behavior_name):
 		push_warning("[AIController] 拒绝未注册行为命令: %s" % behavior_name)
 		return
-	# 指挥官守卫（斩首规则）：rank>=3 不接推进/撤离类号令——指挥官留守后方，
-	# 只做被近身自卫（行为层 LEASH 内迎击），任何来路的号令都拉不走他。
+	# 守位者号令守卫（指挥官/阵地护卫）：守位者不接推进/撤离类号令——留守本方
+	# 阵地，只做被近身自卫（行为层 LEASH 内迎击），任何来路的号令都拉不走。
 	# idle（HOLD_POSITION）放行——留守语义兼容。
-	if _entity != null and is_instance_valid(_entity) \
-			and _entity.has_method("is_commander") and _entity.is_commander() \
-			and behavior_name in ["move", "retreat", "seek_cover"]:
+	if _holds_post() and behavior_name in ["move", "retreat", "seek_cover"]:
 		return
 	_ordered_behavior = behavior_name
 	_ordered_params = params
@@ -986,10 +984,11 @@ func has_order() -> bool:
 
 # ─────────────────────────────── 压制避战（裁决【删溃逃、立避战】：RA 压制式脱离）────────────────────────────────
 
-## 是否指挥官（斩首规则，duck；多个消费点共用：压制豁免/C6 豁免/号令守卫）
-func _is_commander() -> bool:
+## 是否守位者（守位行为面 duck；多个消费点共用：压制豁免/C6 豁免/号令守卫）。
+## 指挥官（rank>=3）与阵地护卫（guard_post）同款：留守+被近身自卫，不脱位。
+func _holds_post() -> bool:
 	return _entity != null and is_instance_valid(_entity) \
-			and _entity.has_method("is_commander") and _entity.is_commander()
+			and _entity.has_method("holds_post") and _entity.holds_post()
 
 
 ## 是否被压制：查询状态效果组件 SUPPRESSED 态（duck；组件缺失/压制未启用

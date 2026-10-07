@@ -3,7 +3,8 @@ extends Node
 signal test_done(code: int)
 ## 单元测试：找目标系统（SW3 FindTargetAiSystem 直译，确定性模拟核心 P1）。
 ## 覆盖：分层阈值边界 / 增量换靶滞回 / 驻留时长门槛 / 层提升立即换 /
-## 追丢即换 / 强制目标生命周期 / 集火号令不落穿自主寻敌 / 指挥官守卫。
+## 追丢即换 / 强制目标生命周期 / 集火号令不落穿自主寻敌 / 守位者守卫（指挥官
+## 与阵地护卫共口）。
 ## 不进场景树，确定性（无 RNG 依赖路径——掷骰不在本系统）。
 
 @warning_ignore("shadowed_global_identifier")
@@ -23,6 +24,7 @@ class FakeUnit:
 	var faction_id: int = 1
 	var weapon: FakeWeapon = FakeWeapon.new()
 	var _commander: bool = false
+	var _guard_post: bool = false
 
 	func get_weapon() -> FakeWeapon:
 		return weapon
@@ -35,6 +37,10 @@ class FakeUnit:
 
 	func is_commander() -> bool:
 		return _commander
+
+	## 守位判定口（真身 StickmanEntity.holds_post：rank>=3 or guard_post）
+	func holds_post() -> bool:
+		return _commander or _guard_post
 
 
 class FakeEnemy:
@@ -63,7 +69,8 @@ func _ready() -> void:
 	_runner.add_test("追丢: 超追击带即换（不等节拍）", _test_leash_re_elect)
 	_runner.add_test("强制目标: 注入即锁 失效回落", _test_forced_target)
 	_runner.add_test("集火号令: 存在时不落穿自主寻敌", _test_squad_no_fallthrough)
-	_runner.add_test("指挥官守卫: 超追击带自主目标拒选", _test_commander_guard)
+	_runner.add_test("守位者守卫: 超追击带自主目标拒选", _test_post_guard)
+	_runner.add_test("阵地护卫: 非指挥官守位同享追击带门", _test_guard_post_unit)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -213,7 +220,7 @@ func _test_squad_no_fallthrough() -> void:
 	_runner.assert_true(acq.get_target() != far_squad, "更远号令目标被滞回拦下")
 
 
-func _test_commander_guard() -> void:
+func _test_post_guard() -> void:
 	# 指挥官自主目标必须在追击带内：唯一候选超带 → 拒选（finish 待命自卫）
 	var w := _make_acq([500.0])
 	var acq: ScriptTargetAcquire = w["acq"]
@@ -225,3 +232,19 @@ func _test_commander_guard() -> void:
 	acq._acquire_timer = -1.0
 	t = acq.advance(0.1)
 	_runner.assert_equal(t, near, "指挥官对追击带内目标正常自卫接敌")
+
+
+func _test_guard_post_unit() -> void:
+	# 阵地护卫（02 一-A.4）：非指挥官守位者（guard_post）同享追击带门——
+	# 留守阵地不冲锋，敌近身才自卫；且不触发斩首语义（is_commander 恒 false）
+	var w := _make_acq([500.0])
+	var acq: ScriptTargetAcquire = w["acq"]
+	var unit := w["entity"] as FakeUnit
+	unit._guard_post = true
+	_runner.assert_false(unit.is_commander(), "护卫非指挥官（斩首登记不收）")
+	var t: Node = acq.advance(0.1)
+	_runner.assert_true(t == null, "护卫对超追击带候选拒选（守阵地不冲锋）")
+	var near := _add_enemy(w["battle"], 150.0)
+	acq._acquire_timer = -1.0
+	t = acq.advance(0.1)
+	_runner.assert_equal(t, near, "护卫对追击带内目标正常自卫接敌")

@@ -117,14 +117,14 @@ func _elect() -> void:
 	var forced: Node = _valid_forced()
 	if forced != null:
 		_accept(forced)
-		_commander_guard()
+		_post_guard()
 		return
 	# 2. 小队共享目标（排长集火号令）：存在则在此层消化（队员不自选）
 	var squad: Node = _squad_target()
 	if squad != null:
 		if _should_switch_to(squad):
 			_accept(squad)
-		_commander_guard()
+		_post_guard()
 		return
 	# 3. 自主寻敌（增量改进）：扫最优候选，滞回/驻留/分层判定换靶
 	var best: Node = ScriptFinder.find_target(entity, {
@@ -135,7 +135,7 @@ func _elect() -> void:
 	})
 	if best != null and _should_switch_to(best):
 		_accept(best)
-	_commander_guard()
+	_post_guard()
 
 
 ## 换靶判定（滞回 + 驻留 + 分层阈值）：
@@ -197,12 +197,13 @@ func _squad_target() -> Node:
 	return t
 
 
-## 指挥官守卫（斩首规则）：自主接战目标必须在追击带内——无此门无班的指挥官
-## 会跨半个战场冲锋（留守失效）。超带不选不追 → 待命，敌近身后自然选中自卫。
-func _commander_guard() -> void:
+## 守位者守卫（指挥官/阵地护卫）：自主接战目标必须在追击带内——无此门无班的
+## 守位者会跨半个战场冲锋（留守失效）。超带不选不追 → 待命，敌近身后自然选中
+## 自卫。
+func _post_guard() -> void:
 	if _target == null or entity == null or not is_instance_valid(entity):
 		return
-	if entity.has_method("is_commander") and entity.is_commander() \
+	if entity.has_method("holds_post") and entity.holds_post() \
 			and _tier_of(_target) >= TargetTier.UNREACHABLE:
 		_target = null
 

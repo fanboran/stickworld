@@ -17,9 +17,12 @@ extends Node
 ##   失去集火号令，到战斗结束无法补员（班长轮转不受影响）。
 ##   兵种结构落到班级：矛兵班（先锋，射程 120 卡线）→ 剑士班（中坚）→
 ##   火力班（杖+弓，射程 300 压制）。三档编成（"platoons" = 班下标分组建排）：
-##     遭遇战·16 = 1 排（矛兵班 8 + 中坚火力班 8，2 班 ×8 人）——设计观感标定主档
+##     遭遇战·16 = 指挥官直统 2 班（矛兵班 8 + 中坚火力班 8；Tier0 小档不设
+##       排长层，02 一-A.1）+ 阵地护卫 0 名（9v9 档口径）——设计观感标定主档
 ##     密度压力·48 = 2 排 ×2 班（矛 12 + 矛剑混编 12 ｜ 剑 12 + 火 12，4 班 ×12 人）
+##       + 阵地护卫 2 名
 ##     极端压力·96 = 4 排 ×2 班（矛×2 ｜ 混编+剑 ｜ 剑×2 ｜ 火×2，8 班 ×12 人）
+##       + 阵地护卫 3 名（96 档封存，仅作极端压力对照）
 ##   （观感验收默认档 = 16 = 设计口径「每侧最多十几二十几」；48/96 为密度/极端
 ##   压力档——高于设计标定 2~3 倍，观感问题可能被密度放大，验收对号入座）
 ##   一屏战场（创始人：战场范围限定在屏幕一样大）：出生中心 ±700、全部武器行按
@@ -40,10 +43,11 @@ extends Node
 ##   （"旗：左我/中敌/右争夺"）。开关关闭 = 完整回退上面一段的旧开战逻辑。
 ##   规划器打分权重/风格表 = RL 搜索变量集（待实测校准），见 squad_intent_planner.gd。
 ##
-## 相机（审计 P0-6）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑全可用），
-##   居中模式跟随"质心代理"（每帧 lerp）+ 开纵向跟随（rig 侧钳在行走带内）；
-##   缩放 0.75（缩放条 100% 档）——3D 侧战场契约把地面钉半屏高（地平线在屏幕中线），
-##   地面恒占 2/3（HD-2D街景系统.md §4.1）。
+## 相机（审计 P0-6 + 批2 稳定锚）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑
+##   全可用），居中模式跟随"稳定锚代理"——锚 = 双方前线（修剪均值）的中点，
+##   死区 + 限速（02 二-B #11 治理：质心代理死亡/换令即跳变 = 镜头级拉扯感）；
+##   开纵向跟随（rig 侧钳在行走带内）；缩放 0.75（缩放条 100% 档）——3D 侧战场
+##   契约把地面钉半屏高（地平线在屏幕中线），地面恒占 2/3（HD-2D街景系统.md §4.1）。
 ##
 ## 热键：ESC 确认后回主菜单（DevSceneEscape 统一弹窗拦截）· R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
 
@@ -53,6 +57,8 @@ const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 const _TacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 ## tactics 模块契约出口（夺点/意图规划器；跨模块 preload 走 api.gd 惯例）
 const _TacticsAPI: GDScript = preload("res://modules/tactics/api.gd")
+## 夺点旗视觉件（本目录渲染件；preload 防新 class_name 未进全局缓存期抖动）
+const _CaptureFlagView: GDScript = preload("res://tests/dev/capture_flag_view.gd")
 
 ## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
 const W_SWORD: int = 0
@@ -87,8 +93,9 @@ const PRESETS: Array = [
 				],
 			},
 		],
-		# 1 排 ×2 班（每班 8 人 = 16）
-		"platoons": [[0, 1]],
+		# Tier0 主档（02 二-A.1 小档不设排长层）：2 班编不足一排的规模由
+		# 指挥官直接统班，不另设排长；阵地护卫 0 名（9v9 档口径）
+		"guards": 0,
 	},
 	{
 		"name": "密度压力·48",
@@ -110,7 +117,8 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
-		# 2 排 ×2 班（每班 12 人 = 48）
+		# 2 排 ×2 班（每班 12 人 = 48）；阵地护卫 2 名（人数多时两三个）
+		"guards": 2,
 		"platoons": [[0, 1], [2, 3]],
 	},
 	{
@@ -149,7 +157,9 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
-		# 4 排 ×2 班（每班 12 人 = 96）：矛排 ｜ 混编+剑排 ｜ 剑排 ｜ 火排
+		# 4 排 ×2 班（每班 12 人 = 96）：矛排 ｜ 混编+剑排 ｜ 剑排 ｜ 火排；
+		# 阵地护卫 3 名（设计上限口径）
+		"guards": 3,
 		"platoons": [[0, 1], [2, 3], [4, 5], [6, 7]],
 	},
 ]
@@ -189,8 +199,9 @@ const CAPTURE_ENABLED: bool = true
 ## 夺点占领半径（px）【提案/待定·待实测校准】（RL v3 一屏口径 120；v2 战场是 180）
 const CAPTURE_RADIUS: float = 120.0
 ## 相邻夺点横向间距（px，相对中线左右展开）【提案/待定·待实测校准】
-##（一屏收拢 ±260；120 半径下相邻旗圈不重叠，v2 战场是 ±500）
-const CAPTURE_X_SPREAD: float = 260.0
+##（v2 口径 ±500：三旗铺开占满战场宽度，两翼有兵——±260 收拢版实测全军
+## 挤在中带、两翼空无一人，创始人验收点正）
+const CAPTURE_X_SPREAD: float = 480.0
 ## 夺点纵向错开偏移（px，相对行走带中心）
 const CAPTURE_Y_OFFSET: float = 200.0
 ## 纵向夹紧安全边距（px：点心离行走带上下沿至少此值，再取整十）
@@ -202,13 +213,35 @@ const CAPTURE_POINT_LABELS: Array = ["左", "中", "右"]
 const COMMANDER_ENABLED: bool = true
 ## 指挥官出生在本方阵列最末行再后退的纵深（px；一屏口径收紧——v2 战场 200，
 ## 阵列收拢后 120 即可脱离接战第一排；越界由实体地面约束钳到图缘）
-##【提案/待定·待实测校准】
-const COMMANDER_REAR_OFFSET: float = 120.0
+##【提案/待定·待实测校准】（批2 拉大到 200：120px 在观战缩放 0.46 下仅 ~55px
+## 屏距，指挥官+护卫小群与主力贴成一团辨不出「后方阵地」）
+const COMMANDER_REAR_OFFSET: float = 200.0
 ## 指挥官出生 y 相对带中心的错开（px；避开编队出生带中位，防出生重叠遭分离推挤
 ## 把指挥官挤离留守位）
 const COMMANDER_Y_OFFSET: float = 300.0
 ## 指挥官武器（佩剑；持旗视觉后议，机制先行）
 const COMMANDER_WEAPON: int = W_SWORD
+
+## ── 阵地护卫（02 一-A.4：指挥前方阵地配 0~3 名，各档人数见 PRESETS guards）──
+## 护卫守位行为面与指挥官同款（guard_post 职责：留守+LEASH 迎击+号令拦截），
+## 但不触发斩首（rank 0 士兵）——守位判定口 StickmanEntity.holds_post()。
+## 护卫相对指挥官的前向偏移（px，朝中线方向 = 指挥前方"阵地"）
+##【提案/待定·待实测校准】
+const GUARD_FORWARD_OFFSET: float = 90.0
+## 多名护卫间纵向错开（px；≥分离纵半径防出生互推）
+const GUARD_Y_STAGGER: float = 90.0
+## 护卫武器（剑：近身自卫）
+const GUARD_WEAPON: int = W_SWORD
+
+## ── 相机稳定锚（批2，02 二-B #11：质心代理死亡/换令即跳变 → 稳定锚）──
+## 锚 = 双方「前线」的中点。前线取修剪均值（朝敌方最前分位的存活单位均值）：
+## 个别人死亡/逃兵的单点扰动被修剪分位吸收，锚只随战线整体推移而动。
+## 前线修剪分位（每方取最前 25% 存活单位）【提案/待定·待实测校准】
+const FRONT_QUANTILE: float = 0.25
+## 锚点死区（px）：前线中点漂移不出此窗相机不动（滞回，防拉锯微动）
+const ANCHOR_DEAD_ZONE: float = 60.0
+## 锚点跟随速率（1/s，越小越缓）：镜头永远缓，不追瞬态（旧质心代理 3.0 的 40%）
+const ANCHOR_SMOOTH: float = 1.2
 
 var _game_root: Node = null
 var _left_alive_label: Label = null
@@ -237,9 +270,11 @@ var _arena_formation: Node = null
 var _arena_fireteams: Dictionary = {}
 ## 双方指挥官（faction -> 单位；斩首规则 HUD 消费）
 var _arena_commanders: Dictionary = {}
-## 相机跟随代理（camera_rig 居中模式目标；每帧 lerp 到存活质心）
+## 相机跟随代理（camera_rig 居中模式目标；缓动到稳定锚——前线中点）
 var _cam_proxy: Marker2D = null
-## 战斗开始后开启质心跟随
+## 稳定锚目标（死区过滤后的双方前线中点；相机缓动终点）
+var _cam_anchor: Vector2 = Vector2.ZERO
+## 战斗开始后开启锚跟随
 var _camera_following: bool = false
 ## 开场遮罩（防闪现主场景：GameRoot 先装配默认村图数帧才切 battlefield）
 var _cover: ColorRect = null
@@ -309,6 +344,8 @@ func _spawn_and_start() -> void:
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)
 		_cam_proxy.global_position = Vector2(mid_x, spawn_y)
+		# 稳定锚初值 = 战场中心（双方对峙的中点即初始前线中点）
+		_cam_anchor = Vector2(mid_x, spawn_y)
 		if rig.has_method("set_follow_target"):
 			rig.set_follow_target(_cam_proxy)
 		if rig.has_method("snap_to_follow_target"):
@@ -391,6 +428,21 @@ func _spawn_and_start() -> void:
 			r_cmd.set_rank(3)
 			_defender.append(r_cmd)
 			_arena_commanders[2] = r_cmd
+		# 阵地护卫（02 一-A.4）：指挥官前方（阵地）配 0~3 名——守位行为面同指挥官
+		#（guard_post：留守+LEASH 迎击+号令拦截），不触发斩首（rank 0 士兵）。
+		# 站位 = 指挥官前向 GUARD_FORWARD_OFFSET（阵地），多名时纵向对称错开
+		# GUARD_Y_STAGGER（≥分离纵半径，防出生互推）。
+		var guards_n: int = int(PRESETS[_preset_idx].get("guards", 0))
+		for gi in guards_n:
+			var g_y: float = cmd_y + (float(gi) - float(guards_n - 1) * 0.5) * GUARD_Y_STAGGER
+			var l_guard := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + rear_x + GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs)
+			var r_guard := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - rear_x - GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs)
+			if l_guard != null:
+				l_guard.set("guard_post", true)
+				_attacker.append(l_guard)
+			if r_guard != null:
+				r_guard.set("guard_post", true)
+				_defender.append(r_guard)
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
 	print("[Arena] 预设[%s] 战斗开始: battle=%s 左 %d 人 vs 右 %d 人" % [PRESETS[_preset_idx]["name"], battle, _attacker.size(), _defender.size()])
 	# 开战自动暂停豁免（TimeManager._on_battle_started，game/auto_pause_battle 默认
@@ -675,6 +727,12 @@ func _setup_capture_mode(mid_x: float, spawn_y: float, map: Node2D, fs: Node, to
 		point.setup(d["id"], pos, CAPTURE_RADIUS)
 		point.capture_owner_changed.connect(_on_capture_owner_changed)
 		_capture_points.append(point)
+		# 旗视觉（观察场侧渲染件）：CapturePoint 纯逻辑零渲染，旗面/占领圈/进度
+		# 由 CaptureFlagView 只读快照绘制；挂 entity_host 参与单位 y_sort 前后排序
+		var flag: Node2D = _CaptureFlagView.new()
+		flag.position = pos
+		flag.set("point", point)
+		map.entity_host.add_child(flag)
 	# 双方各一台规划器；占领结算权归攻方那台（同局恰好一台，防双份积分——
 	# 结算权纪律见 squad_intent_planner.gd 文件头）。规划器同为 RefCounted。
 	var provider := Callable(self, "_capture_unit_snapshot")
@@ -780,20 +838,48 @@ var _hud_timer: float = 0.0
 
 
 ## 质心跟随（审计 P0-6：每帧 lerp 平滑，替代旧 0.5s 定时器硬切）
+## 相机稳定锚（批2，02 二-B #11 治理）：锚 = 双方前线（修剪均值）的中点。
+## 治理对象 = 旧质心代理的镜头级拉扯（死亡/换令的瞬时质心跳变、全班同帧改向的
+## 摆动）——修剪分位 + 死区 + 限速三层吸收，镜头只随战线整体推移缓慢平移。
 func _update_camera(delta: float) -> void:
 	if not _camera_following or _cam_proxy == null:
 		return
-	var sum: Vector2 = Vector2.ZERO
-	var n: int = 0
-	for u in _attacker + _defender:
+	var front_l: Variant = _front_line(_attacker, 1.0)
+	var front_r: Variant = _front_line(_defender, -1.0)
+	# 一方全灭（前线无解）= 战斗将收束，保持末锚不动
+	if front_l == null or front_r == null:
+		return
+	var anchor: Vector2 = ((front_l as Vector2) + (front_r as Vector2)) * 0.5
+	# 死区（滞回）：锚漂移不出窗不更新目标——战线小幅拉锯镜头纹丝不动
+	if absf(anchor.x - _cam_anchor.x) > ANCHOR_DEAD_ZONE:
+		_cam_anchor.x = anchor.x
+	if absf(anchor.y - _cam_anchor.y) > ANCHOR_DEAD_ZONE:
+		_cam_anchor.y = anchor.y
+	var k: float = minf(1.0, ANCHOR_SMOOTH * delta)
+	var cur: Vector2 = _cam_proxy.global_position
+	_cam_proxy.global_position = Vector2(
+		lerpf(cur.x, _cam_anchor.x, k),
+		lerpf(cur.y, _cam_anchor.y, k))
+
+
+## 单方前线（修剪均值）：朝敌方最前 FRONT_QUANTILE 分位存活单位的位置均值。
+## 修剪均值抗单点扰动——个别人死亡/逃兵不动前线，成建制推进/后撤才动。
+## dir = 敌方方向符号（攻方 +1 = x 大者为前；守方 -1 = x 小者为前）。
+## 无存活单位返回 null（全灭信号）。
+func _front_line(units: Array, dir: float) -> Variant:
+	var alive: Array = []
+	for u in units:
 		if is_instance_valid(u) and not u.is_dead():
-			sum += u.global_position
-			n += 1
-	if n > 0:
-		var target: Vector2 = sum / float(n)
-		_cam_proxy.global_position.x = lerpf(_cam_proxy.global_position.x, target.x, minf(1.0, 3.0 * delta))
-		# 纵深也跟随（HD-2D 俯角把带深压扁 2.3 倍——只跟 X 时大军会沉在屏幕下沿）
-		_cam_proxy.global_position.y = lerpf(_cam_proxy.global_position.y, target.y, minf(1.0, 3.0 * delta))
+			alive.append(u.global_position)
+	if alive.is_empty():
+		return null
+	alive.sort_custom(func(a: Vector2, b: Vector2) -> bool:
+		return a.x * dir > b.x * dir)
+	var take: int = maxi(1, int(ceilf(alive.size() * FRONT_QUANTILE)))
+	var sum: Vector2 = Vector2.ZERO
+	for i in take:
+		sum += alive[i]
+	return sum / float(take)
 
 
 func _unhandled_input(event: InputEvent) -> void:

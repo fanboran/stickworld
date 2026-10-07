@@ -144,6 +144,10 @@ var faction_id: int = 0
 ## 消费方：BattleInstance.add_unit 斩首登记 / AIController 号令守卫与避战豁免 /
 ## 血条军衔点渲染（set_rank 已做转发挂点，渲染侧未接线时静默跳过）。
 var rank: int = 0
+## 守位职责（阵地护卫，02 一-A.4：指挥官前方阵地配 0~3 名护卫）：守位行为面
+## 与指挥官同款（留守+LEASH 内迎击+号令拦截），但**不触发斩首**——守位判定口
+## 见 holds_post()，斩首登记仍只认 is_commander()（rank>=3）。
+var guard_post: bool = false
 ## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
 ## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
 ## 实体保留不销毁（溃兵视觉）；BattleInstance add_unit/_end 复位。
@@ -1357,7 +1361,16 @@ func refresh_stance() -> void:
 
 
 ## 播放列阵到位动画（AI 完善批次 4）：到达队形位时立正挺胸，播完回 idle。
+## 每单位仅首次——SWL 造兵落位礼节的节奏就是一生一次（后续是移动/战斗）；
+## 战场规划器高频改令重落位若重播 = 全场反复挺胸的怪姿势（创始人验收点正），
+## 班重组等需要复活重播的场景再开口子。
+var _arrive_anim_done: bool = false
+
+
 func play_arrive() -> void:
+	if _arrive_anim_done:
+		return
+	_arrive_anim_done = true
 	if _visual != null and _visual.has_method("play"):
 		_visual.play("arrive")
 
@@ -1396,6 +1409,14 @@ func get_rank() -> int:
 ## BattleInstance.add_unit 斩首登记。
 func is_commander() -> bool:
 	return rank >= 3
+
+
+## 是否守位者（留守行为面的语义判定口：指挥官与阵地护卫共用）。守位 = 留守
+## 本方阵地、只做被近身自卫（LEASH 内迎击），任何来路的推进/撤离号令都拉不走。
+## 消费方：AIController 号令守卫/压制豁免/避战豁免、TargetAcquire 追击带门。
+## 斩首登记**不走此口**（只认 is_commander，护卫阵亡不判败）。
+func holds_post() -> bool:
+	return rank >= 3 or guard_post
 
 
 ## 获取阵营 ID

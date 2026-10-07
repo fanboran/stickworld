@@ -1260,12 +1260,20 @@ func _tick_combat_anchors(delta: float) -> void:
 			continue
 		var anchor: Dictionary = squad.get("combat_anchor", {})
 		if not anchor.is_empty() and _anchor_in_danger(anchor["pos"], probe, min_range):
-			anchor = {}
+			# 危险重冻结回落纯质心（不带走射程前置）：前置是给"首停者在最大
+			# 射程"的初冻结补纵深预算的；重冻结若再 +depth，锚每拍向敌前爬
+			# 一格纵深——被近战压住时整班被吸进绞肉团（slotv2 探针蓝班实录）
+			var back: Dictionary = _squad_anchor(squad_id)
+			squad["combat_anchor"] = {"pos": back["centroid"], "facing": back["facing"]}
+			continue
 		if anchor.is_empty():
 			var fr: Dictionary = _squad_anchor(squad_id)
 			if fr["facing"] == Vector2.ZERO:
 				continue  # 无可计成员（全桩无位置），不冻结
-			squad["combat_anchor"] = {"pos": fr["centroid"], "facing": fr["facing"]}
+			squad["combat_anchor"] = {
+				"pos": _combat_anchor_pos(squad_id, fr),
+				"facing": fr["facing"],
+			}
 
 
 ## 锚线是否已被敌方压近（危险重冻结判定）：锚点到最近存活敌 < min_range × 比。
@@ -1290,6 +1298,36 @@ func _anchor_in_danger(pos: Vector2, probe: Node, min_range: float) -> bool:
 		if pos.distance_to(e.global_position) < danger:
 			return true
 	return false
+
+
+## 战斗锚落点（批5 视觉修正：方阵整体入射程）：槽位前列贴锚、后列沿面向反侧
+## 退纵深——若锚冻在最前接战成员位（= 首停者的射程线），末列再退纵深就掉出
+## 射程哑火站桩。落法：锚（前列线）= 班内最前投影 + 面向×纵深，让**末列**恰贴
+## 射程线、前列更近照样打；横向（垂直面向）分量取班质心。
+func _combat_anchor_pos(squad_id: String, fr: Dictionary) -> Vector2:
+	var facing: Vector2 = fr["facing"]
+	var depth: float = _squad_block_depth(squad_id)
+	var front_proj: float = -1.0e9
+	if _squads.has(squad_id):
+		for u in _squads[squad_id]["units"]:
+			if not is_instance_valid(u) or (u.has_method("is_dead") and u.is_dead()):
+				continue
+			if not ("global_position" in u):
+				continue
+			front_proj = maxf(front_proj, u.global_position.dot(facing))
+	if front_proj <= -1.0e8:
+		return fr["centroid"]
+	return fr["centroid"] + facing * (front_proj + depth - fr["centroid"].dot(facing))
+
+
+## 班方阵纵深（px）：槽位最大列 × 列间距（无槽位/单列 = 0）
+func _squad_block_depth(squad_id: String) -> float:
+	if not _squads.has(squad_id):
+		return 0.0
+	var max_col: int = -1
+	for slot in (_squads[squad_id].get("slots", {}) as Dictionary).values():
+		max_col = maxi(max_col, (slot as Vector2i).x)
+	return float(maxi(max_col, 0)) * ROW_GAP
 
 
 ## 单位的战斗驻防槽位（BehaviorAttack 远程射程内分支消费）：以班战斗锚为基的

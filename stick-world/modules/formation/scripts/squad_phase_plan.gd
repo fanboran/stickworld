@@ -103,6 +103,10 @@ var _final_target: Vector2 = Vector2.ZERO  ## 推进终点（号令目标点）
 var _leap_line: Vector2 = Vector2.ZERO     ## 当前跃进线（本轮波次落点基准）
 var _advance_dir: Vector2 = Vector2.RIGHT  ## 推进方向（终点 - 小队质心，退化 +x）
 var _phase: int = PH_IDLE           ## 当前相位
+var _wave_dests: Dictionary = {}    ## 波次落点缓存（iid -> 世界坐标）：跃进相位内逐成员
+                                    ## 冻结——落点锚定的是跃进线不是活体质心，成员陆续
+                                    ## 到位引起的质心漂移/锚向歪斜不得回引晃动落点
+                                    ## （否则到位判定在容差边缘反复横跳，波次靠超时兜底）
 var _phase_timer: float = 0.0       ## 当前相位已耗时（s）
 var _wait_duration: float = 0.0     ## 当前等待相位总时长（进入等待时掷骰定局）
 var _roles: Dictionary = {}         ## 成员角色：unit.get_instance_id() -> ROLE_*（每循环重排自愈掉员）
@@ -282,6 +286,8 @@ func _enter(phase: int) -> void:
 			_roll_wait(false)
 		_:
 			pass
+	if phase == PH_CORE_LEAP or phase == PH_FLANK_LEAP:
+		_wave_dests.clear()   # 新波次：落点缓存随相位重建（见 _tick_leap）
 
 
 ## 单波次跃进推进（core_wave=true 核心+Scout / false 双翼）：
@@ -296,7 +302,12 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 		var role := get_role_of(u)
 		if not (role in wave_roles):
 			continue
-		var dest: Vector2 = _host.get_squad_dest(_squad_id, u, _leap_line, "formation")
+		# 波次落点冻结（首拍计算后缓存）：活体锚（质心/平均面向）随成员到位而漂移，
+		# 逐拍重算会让已到位成员的落点又漂出容差——波次语义是"到这条线"，不是"追活锚"
+		var iid: int = u.get_instance_id()
+		if not _wave_dests.has(iid):
+			_wave_dests[iid] = _host.get_squad_dest(_squad_id, u, _leap_line, "formation")
+		var dest: Vector2 = _wave_dests[iid]
 		if u.global_position.distance_to(dest) <= tolerance:
 			continue  # 已到位
 		all_set = false

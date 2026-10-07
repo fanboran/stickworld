@@ -20,6 +20,7 @@ var _runner: TestRunner
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("战斗锚: 接战冻结（班质心+平均面向）/ 槽位查询", _test_anchor_freeze_and_slot)
+	_runner.add_test("战斗锚: 多列班冻结带射程预算（前列线 = 最前成员 + 纵深）", _test_anchor_range_budget)
 	_runner.add_test("战斗锚: 脱战清除（无槽位回落 INF）", _test_anchor_clear)
 	_runner.add_test("战斗锚: 危险重冻结（敌压锚线 → 当前质心重冻结）", _test_anchor_danger_refreeze)
 	_runner.add_test("行为: 远程射程内走向槽位（边走边射不站桩）", _test_behavior_walk_to_slot)
@@ -58,6 +59,54 @@ func _test_anchor_freeze_and_slot() -> void:
 	_runner.assert_true(is_inf(fx.fs.get_unit_combat_slot(stranger).x), "无班成员槽位 = INF")
 	stranger.free()
 	fx.teardown()
+
+
+func _test_anchor_range_budget() -> void:
+	# 8 人班（列高 4 → 2 列）：冻结锚须带射程预算——前列线 = 最前成员 + 纵深
+	# （末列恰贴首停成员的射程线，前列更近照样打；锚冻在质心会让末列掉出射程哑火）
+	var fs: Node = ScriptFormationSystem.new()
+	var org: Node = FakeOrgApi.new()
+	fs.setup(org)
+	var battle := FakeBattle.new()
+	var enemy := FakeEnemy.new()
+	enemy.global_position = Vector2(700.0, 900.0)
+	battle.enemies.append(enemy)
+	var units: Array = []
+	for i in 8:
+		var u := FakeUnit.new()
+		u.name = "B%d" % i
+		u.global_position = Vector2(100.0, 500.0 + i * 100.0)
+		var w := FakeWeapon.new()
+		w.weapon_type = ScriptBehaviorProfiles.BOW
+		u.weapon = w
+		u.add_child(w)
+		u.battle = battle
+		units.append(u)
+	var sid: String = fs.create_squad(units, "两列班")
+	fs_tick(fs, 1.0)
+	var anchor: Dictionary = fs._squads[sid].get("combat_anchor", {})
+	_runner.assert_false(anchor.is_empty(), "两列班应冻结战斗锚")
+	if not anchor.is_empty():
+		_runner.assert_approx(float(anchor["pos"].x), 100.0 + fs.ROW_GAP, 0.5,
+				"前列线 = 最前成员 x + 方阵纵深（末列贴射程线）")
+		# 末列成员槽位 x = 锚 x − ROW_GAP = 100（首停线），前列 = 100 + ROW_GAP（更近）
+		var any_rear: bool = false
+		var any_front: bool = false
+		for u in units:
+			var slot: Vector2 = fs.get_unit_combat_slot(u)
+			if is_inf(slot.x):
+				continue
+			if absf(slot.x - 100.0) < 1.0:
+				any_rear = true
+			if absf(slot.x - (100.0 + fs.ROW_GAP)) < 1.0:
+				any_front = true
+		_runner.assert_true(any_rear, "存在末列槽位（x = 首停线）")
+		_runner.assert_true(any_front, "存在前列槽位（x = 首停线 + 纵深）")
+	fs.free()
+	org.free()
+	battle.free()
+	for u in units:
+		u.free()
 
 
 func _test_anchor_clear() -> void:
@@ -123,7 +172,7 @@ func _test_behavior_danger_band() -> void:
 	# 敌近侧槽（锚注到实体与敌之间，槽落在敌近侧）：危险带内（250 <
 	# kite 180×1.5=270，未到风筝线）禁走（迎着贴脸敌回槽），站定
 	var ctx := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
-	ctx.fs._squads[ctx.sid]["combat_anchor"] = {"pos": Vector2(700.0, 400.0), "facing": Vector2.RIGHT}
+	ctx.fs._squads[ctx.sid]["combat_anchor"] = {"pos": Vector2(700.0, 240.0), "facing": Vector2.RIGHT}
 	ctx.slot = ctx.fs.get_unit_combat_slot(ctx.entity)
 	ctx.enemy.global_position = ctx.entity.global_position + Vector2(250.0, 0.0)
 	ctx.entity.stopped = false
@@ -135,6 +184,8 @@ func _test_behavior_danger_band() -> void:
 	# 敌远侧槽（槽背向敌）：后撤归位永远合法——危险重冻结后方阵整体后撤的
 	# 走位来源（槽位到敌距离 > 自身到敌距离 + 20）
 	var ctx2 := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
+	ctx2.fs._squads[ctx2.sid]["combat_anchor"] = {"pos": Vector2(400.0, 300.0), "facing": Vector2.RIGHT}
+	ctx2.slot = ctx2.fs.get_unit_combat_slot(ctx2.entity)
 	ctx2.enemy.global_position = ctx2.entity.global_position + Vector2(250.0, 0.0)
 	ctx2.entity.stopped = false
 	ctx2.entity.last_move = Vector2.ZERO
@@ -151,7 +202,7 @@ func _test_behavior_danger_band() -> void:
 func _test_behavior_approach_via_slot() -> void:
 	var ctx := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
 	# 敌拉出射程（dist 900 > 650）：锚定期接敌改道 → 走向槽位而非敌阵
-	ctx.enemy.global_position = Vector2(1400.0, 400.0)
+	ctx.enemy.global_position = Vector2(1400.0, 240.0)
 	ctx.entity.stopped = false
 	ctx.entity.last_move = Vector2.ZERO
 	ctx.attack.update(0.016)
@@ -166,7 +217,7 @@ func _test_behavior_approach_via_slot() -> void:
 	_runner.assert_true(ctx.entity.stopped, "到槽站定待敌")
 	# 无锚：恢复常态接敌（压向目标攻击环）
 	ctx.fs._squads[ctx.sid].erase("combat_anchor")
-	ctx.entity.global_position = Vector2(500.0, 400.0)
+	ctx.entity.global_position = Vector2(500.0, 240.0)
 	ctx.entity.stopped = false
 	ctx.entity.last_move = Vector2.ZERO
 	ctx.attack.update(0.016)
@@ -415,7 +466,7 @@ class _AnchorEntity extends CharacterBody2D:
 
 
 ## 行为侧夹具：1 员班（BOW/SWORD 档案按参）+ 白盒注入战斗锚 (500,300)
-## 实体 (500,400)（距槽 >100px = 超死区），敌 (900,400)（射程 650 内/危险带外）
+## 实体 (500,240)（距槽 105px = 超死区不达奔跑档），敌 (900,240)（射程 650 内/危险带外）
 class _BehaviorCtx extends RefCounted:
 	var fs: Node = null
 	var org: Node = null
@@ -437,10 +488,10 @@ class _BehaviorCtx extends RefCounted:
 		fs.setup(org)
 		battle = FakeBattle.new()
 		enemy = FakeEnemy.new()
-		enemy.global_position = Vector2(900.0, 400.0)
+		enemy.global_position = Vector2(900.0, 240.0)
 		battle.enemies.append(enemy)
 		entity = _AnchorEntity.new()
-		entity.global_position = Vector2(500.0, 400.0)
+		entity.global_position = Vector2(500.0, 240.0)
 		var w := FakeWeapon.new()
 		w.weapon_type = wtype
 		entity.weapon = w

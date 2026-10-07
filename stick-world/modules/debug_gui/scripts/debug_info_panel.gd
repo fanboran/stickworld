@@ -129,30 +129,10 @@ func _append_ai_info(lines: Array[String], e: Node2D) -> void:
 			parts.append(di_txt)
 		if prof.has("burst_shots") and int(prof["burst_shots"]) > 0:
 			parts.append("连射%d" % int(prof["burst_shots"]))
-		if prof.has("retreat_mod_enabled"):
-			parts.append("概率撤退%s" % ("开" if bool(prof["retreat_mod_enabled"]) else "关"))
 		if not parts.is_empty():
 			lines.append("  AI参数: %s" % " ".join(parts))
 	# 相位与角色（A5 相位计划：经编队系统查询，无计划/未激活/查询不可用跳过）
 	_append_phase_info(lines, e)
-	# 撤退调制状态（W1 · §2.6 接口缺口补齐的只读 getter）
-	if ai.has_method("get_retreat_mod_state"):
-		var st: Dictionary = ai.get_retreat_mod_state()
-		if bool(st.get("enabled", false)):
-			var f: Dictionary = st.get("last_factors", {})
-			var hits: Array[String] = []
-			for k in ["hp_low", "line_collapsed"]:
-				if bool(f.get(k, false)):
-					hits.append(k)
-			var factor_txt := "无因子"
-			if not hits.is_empty():
-				factor_txt = "因子:" + "+".join(hits)
-			var roll_txt := "未评估"
-			var chance: float = float(st.get("last_chance", NAN))
-			if not is_nan(chance):
-				roll_txt = "掷%.2f/%.2f%s" % [float(st.get("last_roll", 0.0)), chance,
-						"触" if bool(st.get("last_result", false)) else "未触"]
-			lines.append("  撤退调制: %s · %s" % [roll_txt, factor_txt])
 
 
 ## 相位/角色行（方案 §2.1）：小队相位计划查询（get_phase_name/get_role_of 既有

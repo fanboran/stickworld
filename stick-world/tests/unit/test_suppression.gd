@@ -5,7 +5,7 @@ signal test_done(code: int)
 ## CoH pinned-reaction-plan isInterruptablePlan=false + 等 7.5s 真值见逆向笔记 §4.2）。
 ## 覆盖：档案新键默认值（开关默认关=零回归）/ SUPPRESSED 状态落地与过期 / 触发门槛
 ## （远程命中/近战重击/格挡残余不触发）/ 豁免规则（死亡/附身/兵种免疫）/
-## 同 type 刷新不叠加 / ai_controller 压制避战
+## 同 type 刷新不叠加 / ai_controller 压制禁令（纯行为禁令，自动避战已根除）
 ## （脱离接火+号令挂起续行+幂等）/ 无组件零回归 / behavior_attack 在途兜底 /
 ## squad_phase_plan 真实压制替换点 / **箭矢近失压制**（开关关零回归、总门约束、
 ## 半径内外边界、豁免集复用、只压制不伤害）。
@@ -34,10 +34,8 @@ func _ready() -> void:
 	_runner.add_test("触发：近战重击达下限压制 / 轻击不压制", _test_melee_trigger)
 	_runner.add_test("豁免：已溃逃/已死亡/玩家附身/兵种免疫", _test_exemptions)
 	_runner.add_test("同 type 刷新不叠加：再受击重置时长", _test_refresh)
-	_runner.add_test("ai_controller 压制避战：脱离接火 + 号令挂起，解除后续行", _test_ban_stall_order)
-	_runner.add_test("压制避战幂等：已在避战不重 travel", _test_suppress_disengage_idempotent)
-	_runner.add_test("避战还击：避战态被贴脸切 attack，敌脱离收窗（带打带跑）", _test_disengage_counterattack)
-	_runner.add_test("避战还击豁免：撤离档（evacuate）被压继续撤离不回头", _test_counter_gate_command_path)
+	_runner.add_test("压制禁令：被压永不脱离接火 + 号令保持", _test_ban_stall_order)
+	_runner.add_test("命令撤离不受压制打断（玩家/指挥链意图）", _test_command_retreat_under_suppression)
 	_runner.add_test("零回归：无状态效果组件实体决策原样", _test_no_component_regression)
 	_runner.add_test("behavior_attack 兜底：压制期在途行为立即停", _test_attack_segment)
 	_runner.add_test("squad_phase_plan 替换点：压制成员跳过/未压制走代理", _test_phase_plan)
@@ -288,80 +286,36 @@ func _test_refresh() -> void:
 
 
 func _test_ban_stall_order() -> void:
-	# 压制期：强制避战（RA 压制式脱离，裁决【删溃逃、立避战】）——夹具战斗无掩体
-	# → 统一出口走 fallback 后撤；号令挂起不清除；解除后号令自动续行
+	# 压制 = 纯行为禁令（创始人裁决根除自动避战）：被压单位**永不脱离接火**——
+	# 无号令被压不切 retreat（保持 idle 站桩），有号令照常持有号令（不被打断）
 	var ctx := _make_ai_ctx({"suppression_enabled": true})
 	ctx.ai.set_order("move", {"target": Vector2(1200, 300)})
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "move", "号令已下达")
 	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
 	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制期脱离接火（retreat 避战）")
-	_runner.assert_equal(ctx.ai.get_ordered_behavior(), "move", "号令挂起不清除（玩家意图保留）")
-	# 压制结束（白盒清效果）：命令覆盖段检测 cur != ordered 自动续行
+	_runner.assert_not_equal(ctx.ai.get_current_behavior(), "retreat",
+			"有号令被压不脱离（无避战切换）")
+	_runner.assert_equal(ctx.ai.get_ordered_behavior(), "move", "号令保持")
 	ctx.se._effects.erase(ScriptStatusEffects.Type.SUPPRESSED)
 	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "move", "压制解除后号令续行")
+	_runner.assert_equal(ctx.ai.get_ordered_behavior(), "move", "解除后号令照常")
 	ctx.teardown()
-	# 无号令压制：同样脱离接火
+	# 无号令被压：站桩（不切 retreat / 不切 attack 自主）
 	var ctx2 := _make_ai_ctx({"suppression_enabled": true})
 	ctx2.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
 	ctx2.ai._make_decision()
-	_runner.assert_equal(ctx2.ai.get_current_behavior(), "retreat", "无号令压制期同样避战")
+	_runner.assert_not_equal(ctx2.ai.get_current_behavior(), "retreat", "无号令被压不避战")
 	ctx2.teardown()
 
 
-func _test_suppress_disengage_idempotent() -> void:
-	# 压制避战幂等：已在避战行为（retreat 进行中）且**无敌贴脸**时，压制期决策拍
-	# 不重 travel（重 travel 会重播 enter/清避战计时——幂等保持是"压制结束自动
-	# 续行"的前提；贴脸还击走 _test_disengage_counterattack 的新语义）
+func _test_command_retreat_under_suppression() -> void:
+	# 命令路径撤离（RETREAT 号令/TeamAi ROUT 撤仗）是**玩家/指挥链意图**，
+	# 不在根除范围：被压照常撤离（无自动还击窗回切）
 	var ctx := _make_ai_ctx({"suppression_enabled": true})
+	ctx.ai.set_order("retreat", {})
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "命令撤离已下达")
 	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
 	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制期切入避战")
-	# 敌挪出近战范围（> COUNTER_RANGE 200）：还击窗不开，纯避战幂等场景
-	ctx.battle.enemies[0].global_position = Vector2(1500, 300)
-	ctx.ai.get_state_machine()._current_behavior._timer = 3.0  # 白盒：避战进行中
-	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "已在避战保持（不重 travel）")
-	_runner.assert_approx(ctx.ai.get_state_machine()._current_behavior._timer, 3.0, 0.001,
-			"避战计时未被重置（enter 未重播）")
-	ctx.teardown()
-
-
-func _test_disengage_counterattack() -> void:
-	# 诊断 B2 带打带跑：避战态被敌人贴进近战范围（COUNTER_RANGE 200）→ 开还击窗
-	# 切 attack 就地迎击（窗口带闩，压制期敌不出范围不收回）；敌拉开后收窗回避战
-	var ctx := _make_ai_ctx({"suppression_enabled": true})
-	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
-	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "压制先切入避战")
-	_runner.assert_true(ctx.ai.is_disengaging(), "避战行为态置位")
-	ctx.ai._make_decision()  # 夹具敌在 100px < COUNTER_RANGE 200：开窗还击
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "避战态被贴脸 → 切 attack 还击")
-	_runner.assert_true(ctx.ai.is_counter_attack_window(), "还击窗口开启")
-	# 窗口带闩：敌仍在近战范围，下一拍保持还击不抖回避战
-	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "attack", "窗口带闩：敌未脱离保持还击")
-	# 敌拉开出近战范围：收窗回避战（带打带跑后半拍）
-	ctx.battle.enemies[0].global_position = Vector2(1500, 300)
-	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "敌脱离近战范围 → 收窗回避战")
-	_runner.assert_false(ctx.ai.is_counter_attack_window(), "还击窗口已收")
-	ctx.teardown()
-
-
-func _test_counter_gate_command_path() -> void:
-	# 命令路径撤离豁免：retreat 的 evacuate 档（C3 撤仗/可下令撤退）被压不开
-	# 还击窗——带打带跑只作用于自主避战（fallback），命令撤离一路撤到边缘
-	var ctx := _make_ai_ctx({"suppression_enabled": true})
-	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
-	ctx.ai._make_decision()  # 先入 fallback 避战
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "先入避战")
-	# 白盒翻 evacuate 档（TeamAi ROUT 撤仗同款行为形态）+ 敌仍贴脸
-	ctx.ai.get_state_machine()._current_behavior._evacuate = true
-	ctx.ai._make_decision()
-	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "撤离档被压继续撤离（不回头还击）")
-	_runner.assert_false(ctx.ai.is_counter_attack_window(), "撤离档不开还击窗")
+	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "被压照常撤离（命令意图）")
 	ctx.teardown()
 
 

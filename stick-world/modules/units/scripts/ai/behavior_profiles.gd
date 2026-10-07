@@ -129,14 +129,6 @@ const BASELINE: Dictionary = {
 	#    消费点：ai_controller._try_combat 掷骰 + behavior_retreat fallback 档 +
 	#    _travel_disengage 统一出口（优先 seek_cover；裁决【删溃逃、立避战】后
 	#    C6 不再下发 withdraw——该档保留为命令路径语义：可下令的 RETREAT/TeamAi ROUT））──
-	"retreat_mod_enabled": false,           ## 自主避战概率调制总开关（劣势/被压时概率脱离接火）
-	"retreat_mod_hp_ratio": 0.49,           ## 血量低于此比例 → 撤退候选因子一（CoH retreat_capacity_percentage 0.49）
-	"retreat_mod_ally_break_ratio": 0.51,   ## 附近友军溃逃/阵亡比例 ≥ 此值 → 撤退候选因子二（CoH retreat_suppressed_percentage 0.51 同构）
-	"retreat_mod_ally_radius": 300.0,       ## "附近友军"判定半径（px）
-	"retreat_mod_reevaluate": 2.5,          ## 掷骰评估周期（s，CoH retreat_chance_reevaluate_ticks 20 tick≈2.5s）
-	"retreat_mod_chance": NAN,              ## 掷骰概率（NAN=未覆写 → personality global 行 retreat_chance → 代码默认 0.30；显式写入 = 覆写，测试/扫参出口）
-	"retreat_mod_withdraw_arrive": 80.0,    ## 撤退（回锚点）判定抵达半径（px，behavior_retreat withdraw 档）
-	"retreat_mod_withdraw_max_time": 12.0,  ## 撤退（回锚点）最长持续时间（s；后撤档沿用既有 RETREAT_DURATION 不动）
 	# ── A6 · C9 压制=定时锁死（AI集大成；CoH pinned-reaction-plan isInterruptablePlan=false
 	#    + 等 7.5s 真值见逆向笔记 §4.2；总开关默认关 = 零回归基线。
 	#    消费点：status_effects（触发）/ ai_controller（决策链禁令+

@@ -16,3 +16,5 @@ Nonexistent 'String' constructor
 
 # batch_runner 测试台：用例场景复用时 CaseRoot 重复 add_child（台架行为，不影响断言）
 already has a parent 'CaseRoot'
+[SceneLoader] 未注册的地图: nonexistent_map
+# ^ test_game_root_assembly 负路径用例（load_map 拒绝未注册地图，报错即预期行为）

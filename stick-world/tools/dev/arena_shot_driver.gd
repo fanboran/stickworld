@@ -34,7 +34,7 @@ func run(tag: String, preset: int, secs: int, every: int) -> void:
 		# 一屏战场（创始人口径）：地图 = 游玩缩放一屏，全程 1.0 无视角切换
 		await get_tree().process_frame   # 当帧渲染完成后再采（diag 同口径）
 		var img := get_viewport().get_texture().get_image()
-		var name := "%s_p%d_t%d" % [tag, preset, t]
+		var name := "%s_p%d_第%d秒" % [tag, preset, t]
 		img.save_png("%s/%s.png" % [SHOT_DIR, name])
 		print("[ArenaWorkbench] shot %s/%s.png" % [SHOT_DIR, name])
 	while Time.get_ticks_msec() / 1000.0 < t0 + float(secs):

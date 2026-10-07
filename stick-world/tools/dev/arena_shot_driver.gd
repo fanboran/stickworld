@@ -31,6 +31,9 @@ func run(tag: String, preset: int, secs: int, every: int) -> void:
 		var target := t0 + float(t)
 		while Time.get_ticks_msec() / 1000.0 < target:
 			await get_tree().process_frame
+		# 双视角（批4 验收口径）：前半 0.46 全景（观察场默认）、后半 1.0 游玩缩放
+		# ——观感验收不能只看全景广角，正常游玩视角的构图/比例须对照
+		_set_zoom(0.46 if t < secs / 2 else 1.0)
 		await get_tree().process_frame   # 当帧渲染完成后再采（diag 同口径）
 		var img := get_viewport().get_texture().get_image()
 		var name := "%s_p%d_t%d" % [tag, preset, t]
@@ -40,3 +43,16 @@ func run(tag: String, preset: int, secs: int, every: int) -> void:
 		await get_tree().process_frame
 	print("[ArenaWorkbench] done preset=%d secs=%d" % [preset, secs])
 	get_tree().quit(0)
+
+
+## 切观察场相机缩放（duck：rig 经 game_root 持有；找不到静默跳过）
+func _set_zoom(z: float) -> void:
+	var arena := get_tree().current_scene
+	if arena == null or not is_instance_valid(arena):
+		return
+	var root: Node = arena.get("_game_root")
+	if root == null or not is_instance_valid(root):
+		return
+	var rig: Node = root.get("camera_rig")
+	if rig != null and is_instance_valid(rig) and rig.has_method("set_user_zoom"):
+		rig.set_user_zoom(z)

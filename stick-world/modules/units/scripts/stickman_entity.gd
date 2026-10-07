@@ -140,13 +140,13 @@ var faction_id: int = 0
 ##   0 = 士兵（大头兵，默认）
 ##   1 = 班长（战术轮转层：阵亡免费无缝继任，军衔点跟职务走）
 ##   2 = 排长（指挥链层：阵亡无法现场补员 = 持续指挥链缺口）
-##   3 = 指挥官（战场最高，连长级兼任；阵亡 = 斩首 = 该方立即战败）
-## 消费方：BattleInstance.add_unit 斩首登记 / AIController 号令守卫与避战豁免 /
+##   3 = 指挥官（战场最高，连长级兼任）
+## 消费方：AIController 号令守卫与避战豁免 /
 ## 血条军衔点渲染（set_rank 已做转发挂点，渲染侧未接线时静默跳过）。
 var rank: int = 0
 ## 守位职责（阵地护卫，02 一-A.4：指挥官前方阵地配 0~3 名护卫）：守位行为面
-## 与指挥官同款（留守+LEASH 内迎击+号令拦截），但**不触发斩首**——守位判定口
-## 见 holds_post()，斩首登记仍只认 is_commander()（rank>=3）。
+## 与指挥官同款（留守+LEASH 内迎击+号令拦截），但**不判任何全局胜负**——守位
+## 判定口见 holds_post()。
 var guard_post: bool = false
 ## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
 ## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
@@ -1404,9 +1404,9 @@ func get_rank() -> int:
 	return rank
 
 
-## 是否指挥官（斩首规则的语义判定口：rank 3，战场最高）。
-## 消费方：AIController 号令守卫（不接推进/撤离类号令）与避战豁免（永不脱离接火）、
-## BattleInstance.add_unit 斩首登记。
+## 是否指挥官（rank 3，战场最高——将领语义：留守后方+贴身卫队+不被号令拉走；
+## 阵亡是纪律线打击因子不是败因，01-组织系统 §3.1）。
+## 消费方：AIController 号令守卫（不接推进/撤离类号令）与避战豁免（永不脱离接火）。
 func is_commander() -> bool:
 	return rank >= 3
 
@@ -1414,7 +1414,7 @@ func is_commander() -> bool:
 ## 是否守位者（留守行为面的语义判定口：指挥官与阵地护卫共用）。守位 = 留守
 ## 本方阵地、只做被近身自卫（LEASH 内迎击），任何来路的推进/撤离号令都拉不走。
 ## 消费方：AIController 号令守卫/压制豁免/避战豁免、TargetAcquire 追击带门。
-## 斩首登记**不走此口**（只认 is_commander，护卫阵亡不判败）。
+## 指挥官身份判定**不走此口**（护卫只是守位者，无将领语义）。
 func holds_post() -> bool:
 	return rank >= 3 or guard_post
 

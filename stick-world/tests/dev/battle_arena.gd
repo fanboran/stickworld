@@ -35,21 +35,21 @@ extends Node
 ##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
 ##   兵种行为档案（冲脸/持阵/风筝）接管；排长阵亡该排失去集火但班仍执行规划器号令。
 ##
-## 夺点模式（CAPTURE_ENABLED 默认开）：纵深里程碑布点（批4，02 二-A.3——中线中立
-##   + 双方阵线/后排各一初始归属己方：争中线 → 压敌阵 → 端后排），双方各一台
-##   班级意图规划器（tactics SquadIntentPlanner，0.5s 节拍做结算/事件检测/相位推进；
-##   意图重判走粘性门——最短保持期 4s + 事件触发例外「里程碑易主/要地被贴脸含斩首
-##   威胁」，周期重判退役），选定后翻译成 TacticalOrders 下发；到旗边先停驻观察
-##   约 0.8s 再入场（Ravenfield"先看再进"）。夺点接手后开战推进/跟队锚定与 TeamAi
-##   姿态号令全部让位（规划器独占号令权，防双脑互覆）。控制面板战况板加旗点状态行
-##   （"旗：中线争/蓝阵我/红阵敌/…"）。开关关闭 = 完整回退旧开战逻辑。
-##   规划器打分权重/风格表 = RL 搜索变量集（待实测校准），见 squad_intent_planner.gd。
+## 开战推进（夺点模式已退役，CAPTURE_ENABLED 默认关——夺点/旗/占领圈是 AI 线
+##   自立的开发态模拟非游戏机制，创始人裁决整体下线；战斗输赢 = 全面战争式
+##   全灭/撤离/超时，02 八-A）：先锋班 ADVANCE_ALL 压中线（advance_x 纵深目标），
+##   后队班动态跟队（set_squad_follow_squad 锚前队质心后方 gap 处）保持纵深推进、
+##   接敌即还战斗；前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长
+##   集火 + 兵种行为档案（冲脸/持阵/风筝）接管；排长阵亡该排失去集火但班仍自主。
+##   夺点规划器（SquadIntentPlanner）与其号令粘性（保持期/未完成续期/事件节流）
+##   作为资产保留在 tactics 模块，正式宏观意图源接入时复用。
 ##
 ## 相机（审计 P0-6 + 批2 稳定锚）：camera_rig 保持启用（滚轮缩放/边界钳制/平滑
 ##   全可用），居中模式跟随"稳定锚代理"——锚 = 双方前线（修剪均值）的中点，
 ##   死区 + 限速（02 二-B #11 治理：质心代理死亡/换令即跳变 = 镜头级拉扯感）；
-##   开纵向跟随（rig 侧钳在行走带内）；缩放 0.75（缩放条 100% 档）——3D 侧战场
-##   契约把地面钉半屏高（地平线在屏幕中线），地面恒占 2/3（HD-2D街景系统.md §4.1）。
+##   开纵向跟随（rig 侧钳在行走带内）；缩放 0.46 全景演示档（正常游玩 1.0，
+##   验收快照双视角对照）——3D 侧战场契约把地面钉半屏高（地平线在屏幕中线），
+##   地面恒占 2/3（HD-2D街景系统.md §4.1）。
 ##
 ## 热键：ESC 确认后回主菜单（DevSceneEscape 统一弹窗拦截）· R 重新开局 · 空格 暂停/继续（TimeManager 全局暂停）。
 
@@ -57,10 +57,8 @@ const _GameRootScene: PackedScene = preload("res://modules/world/scenes/game_roo
 const _StickmanScene: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 const _TacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
-## tactics 模块契约出口（夺点/意图规划器；跨模块 preload 走 api.gd 惯例）
+## tactics 模块契约出口（夺点/意图规划器资产；跨模块 preload 走 api.gd 惯例）
 const _TacticsAPI: GDScript = preload("res://modules/tactics/api.gd")
-## 夺点旗视觉件（本目录渲染件；preload 防新 class_name 未进全局缓存期抖动）
-const _CaptureFlagView: GDScript = preload("res://tests/dev/capture_flag_view.gd")
 
 ## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
 const W_SWORD: int = 0
@@ -196,16 +194,16 @@ const TEAM_OFFSET_X: float = 700.0
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
-## ── 夺点模式（开 = 意图规划器接管开战；关 = 完整回退旧 ADVANCE_ALL + 跟队逻辑）──
-const CAPTURE_ENABLED: bool = true
+## ── 夺点模式（已退役，默认关：夺点/旗/占领圈非游戏机制——创始人裁决下线；
+## 开 = 旧夺点规划器接管开战〔RL/benchmark 资产调试用〕，关 = 推进+跟队开战）──
+const CAPTURE_ENABLED: bool = false
 ## 夺点占领半径（px）【提案/待定·待实测校准】（RL v3 一屏口径 120；v2 战场是 180）
 const CAPTURE_RADIUS: float = 120.0
-## ── 纵深里程碑布点（02 二-A.3：占领目标从横向三旗改为纵深推进的里程碑——
-## 中线争夺带 → 敌阵 → 敌后排/斩首线，五点双方共用：中线 1（中立）+ 双方阵线/
-## 后排各 1（初始归属各自方）。横向三旗是拉扯感来源之一（目标横向铺开→横移）──
-## 阵线里程碑距中线（px，敌出生阵列前沿内侧）【提案/待定·待实测校准】
+## ── 旧夺点布点参数（随夺点退役仅存档于常量：RL/benchmark 调试开 CAPTURE_ENABLED
+## 时消费；正式开战 = 推进+跟队，无点无旗）──
+## 阵线点距中线（px）【提案/待定·待实测校准】
 const CAPTURE_X_SPREAD: float = 480.0
-## 后排里程碑距中线（px，指挥官/护卫阵地前 = 斩首线）【提案/待定·待实测校准】
+## 后排点距中线（px，指挥官阵地前）【提案/待定·待实测校准】
 const CAPTURE_REAR_X: float = 860.0
 ## 夺点纵向错开偏移（px，相对行走带中心；阵线上带/后旗下带 = 浅车道近似参差）
 const CAPTURE_Y_OFFSET: float = 200.0
@@ -214,7 +212,7 @@ const CAPTURE_Y_MARGIN: float = 100.0
 ## 旗点状态行用方位标签（与布点顺序一一对应：中线/蓝阵/红阵/蓝后排/红后排）
 const CAPTURE_POINT_LABELS: Array = ["中线", "蓝阵", "红阵", "蓝后排", "红后排"]
 
-## ── 指挥官（斩首规则）：双方后方各 1 名，阵亡 = 该方立即战败 ──
+## ── 战场指挥官（将领+卫队，全战式编制）：双方后方各 1 名留守 ──
 const COMMANDER_ENABLED: bool = true
 ## 指挥官出生在本方阵列最末行再后退的纵深（px；一屏口径收紧——v2 战场 200，
 ## 阵列收拢后 120 即可脱离接战第一排；越界由实体地面约束钳到图缘）
@@ -229,7 +227,7 @@ const COMMANDER_WEAPON: int = W_SWORD
 
 ## ── 阵地护卫（02 一-A.4：指挥前方阵地配 0~3 名，各档人数见 PRESETS guards）──
 ## 护卫守位行为面与指挥官同款（guard_post 职责：留守+LEASH 迎击+号令拦截），
-## 但不触发斩首（rank 0 士兵）——守位判定口 StickmanEntity.holds_post()。
+## 不判任何全局胜负（rank 0 士兵）——守位判定口 StickmanEntity.holds_post()。
 ## 护卫相对指挥官的前向偏移（px，朝中线方向 = 指挥前方"阵地"）
 ##【提案/待定·待实测校准】
 const GUARD_FORWARD_OFFSET: float = 90.0
@@ -273,7 +271,7 @@ var _planners: Dictionary = {}
 var _arena_formation: Node = null
 ## 火力组 id 登记（faction -> ft_id 数组；HUD 火力组计数用）
 var _arena_fireteams: Dictionary = {}
-## 双方指挥官（faction -> 单位；斩首规则 HUD 消费）
+## 双方指挥官（faction -> 单位；HUD 阵亡提示用）
 var _arena_commanders: Dictionary = {}
 ## 相机跟随代理（camera_rig 居中模式目标；缓动到稳定锚——前线中点）
 var _cam_proxy: Marker2D = null
@@ -404,9 +402,10 @@ func _spawn_and_start() -> void:
 		squads_left.append(l_units)
 		squads_right.append(r_units)
 		await get_tree().process_frame
-	# 指挥官（斩首规则）：双方后方各 1 名——留守后方，不编班不下推进令，
-	# 被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）；阵亡 = 斩首 =
-	# 该方立即战败（BattleInstance.add_unit 自动扫描 rank 登记，进战斗前先 set_rank）。
+	# 战场指挥官（将领，全战式编制）：双方后方各 1 名——留守后方，不编班不下
+	# 推进令，被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）。阵亡不判负
+	# （旧"斩首即败"已退役）：他是纪律线打击因子（01-组织系统 §3.1，纪律线
+	# 后续批次实装），战斗仍打到全灭/撤离/超时收束。
 	# 纵深随预设编成推导（多班纵深分排收拢后 96 档阵列深 ~500px，固定 rear 会把
 	# 指挥官埋进队列中部挨打）——取最深一排再后退 COMMANDER_REAR_OFFSET。
 	if COMMANDER_ENABLED:
@@ -434,7 +433,7 @@ func _spawn_and_start() -> void:
 			_defender.append(r_cmd)
 			_arena_commanders[2] = r_cmd
 		# 阵地护卫（02 一-A.4）：指挥官前方（阵地）配 0~3 名——守位行为面同指挥官
-		#（guard_post：留守+LEASH 迎击+号令拦截），不触发斩首（rank 0 士兵）。
+		#（guard_post：留守+LEASH 迎击+号令拦截），不判任何全局胜负（rank 0 士兵）。
 		# 站位 = 指挥官前向 GUARD_FORWARD_OFFSET（阵地），多名时纵向对称错开
 		# GUARD_Y_STAGGER（≥分离纵半径，防出生互推）。
 		var guards_n: int = int(PRESETS[_preset_idx].get("guards", 0))
@@ -710,11 +709,9 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 
 # ─────────────────────────────── 夺点模式 ────────────────────────────────
 
-## 布纵深里程碑 + 装双方意图规划器（夺点模式开战逻辑）：中线（中立）+ 双方
-## 阵线/后排各一（初始归属各自方）——推进叙事 = 争中线 → 压敌阵 → 端后排
-##（02 二-A.3 纵深轴）；y 错开浅车道参差、行走带内夹紧取整十；规划器接管开战
-## 推进——号令经 TacticalOrders 下发（AI 口径 tier=1），单位数据经 provider 回传
-##（tactics L2 零出向，本观察场是注入方）。
+## 旧夺点模式开战逻辑（CAPTURE_ENABLED=true 时走：RL/benchmark 调试资产）：
+## 布五个抽象点 + 装双方意图规划器，号令经 TacticalOrders 下发（AI 口径 tier=1），
+## 单位数据经 provider 回传（tactics L2 零出向，本观察场是注入方）。默认关。
 func _setup_capture_mode(mid_x: float, spawn_y: float, map: Node2D, fs: Node, to: Node,
 		left_squad_ids: Array, right_squad_ids: Array) -> void:
 	_arena_formation = fs
@@ -737,12 +734,6 @@ func _setup_capture_mode(mid_x: float, spawn_y: float, map: Node2D, fs: Node, to
 		point.setup(d["id"], pos, CAPTURE_RADIUS, int(d["owner"]))
 		point.capture_owner_changed.connect(_on_capture_owner_changed)
 		_capture_points.append(point)
-		# 旗视觉（观察场侧渲染件）：CapturePoint 纯逻辑零渲染，旗面/占领圈/进度
-		# 由 CaptureFlagView 只读快照绘制；挂 entity_host 参与单位 y_sort 前后排序
-		var flag: Node2D = _CaptureFlagView.new()
-		flag.position = pos
-		flag.set("point", point)
-		map.entity_host.add_child(flag)
 	# 双方各一台规划器；占领结算权归攻方那台（同局恰好一台，防双份积分——
 	# 结算权纪律见 squad_intent_planner.gd 文件头）。规划器同为 RefCounted。
 	var provider := Callable(self, "_capture_unit_snapshot")
@@ -1012,21 +1003,20 @@ func _update_hud() -> void:
 	if la == 0 or ra == 0:
 		_hint_label.text = "战斗结束：%s 获胜 —— R 重开 / 换预设" % ("蓝方" if ra == 0 else "红方")
 	elif _commander_down_text() != "":
-		# 斩首提示（指挥官阵亡 = 该方立即战败；结算由战斗实例斩首分支收束，
-		# 存活数不清零 → 全灭文案不会出现，斩首文案常驻到重开）
+		# 指挥官阵亡战况提示（不判负——战斗照常收束，纪律线因子）
 		_hint_label.text = _commander_down_text()
 	else:
 		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
 
 
-## 斩首提示文案（任一方指挥官阵亡返回提示；无指挥官/都活着返回空串）。
+## 指挥官阵亡提示文案（不判负——纪律线因子，战斗继续；只做战况提示）。
 func _commander_down_text() -> String:
 	if not COMMANDER_ENABLED or _arena_commanders.is_empty():
 		return ""
 	if _is_unit_down(_arena_commanders.get(1)):
-		return "蓝方指挥官阵亡——斩首！红方获胜 —— R 重开"
+		return "蓝方指挥官阵亡（军心动摇）"
 	if _is_unit_down(_arena_commanders.get(2)):
-		return "红方指挥官阵亡——斩首！蓝方获胜 —— R 重开"
+		return "红方指挥官阵亡（军心动摇）"
 	return ""
 
 

@@ -1,16 +1,14 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：指挥官规则（斩首判负 + 留守守卫 + rank 数据层）。
+## 单元测试：指挥官规则（rank 数据层 + 阵亡不判负 + 留守守卫）。
 ##
-## 钉死四条语义：
-## ① 斩首判负——登记指挥官阵亡 = 该方立即战败（reason="decapitation"），哪怕
-##    还有兵也是败；斩首分支先于全灭判定。
-## ② 零回归——无指挥官登记的战斗（既有全部战斗/测试）胜负路径完全不受影响；
-##    指挥官健在时全灭/超时照常。
-## ③ 登记双道——add_unit 自动扫描 rank>=3 登记；register_commander 供测试桩
-##    /后设 rank 场景手动补登。
-## ④ 留守守卫——rank>=3 的 AIController 拒绝推进/撤离类号令（move/retreat/
+## 钉死三条语义（"斩首即败"已整体退役——那是 AI 线自立开发态规则非创始人
+## 设定；输赢口径 = 全面战争式打到失去作战能力，指挥官阵亡是纪律线打击因子
+## 01-组织系统 §3.1，非败因）：
+## ① 阵亡不判负——指挥官（rank>=3）阵亡战斗照常，全灭/超时才收束；
+## ② rank 数据层——set/get/is_commander/越界钳制；
+## ③ 留守守卫——rank>=3 的 AIController 拒绝推进/撤离类号令（move/retreat/
 ##    seek_cover），idle 放行；普通士兵号令不受影响。
 
 @warning_ignore("shadowed_global_identifier")
@@ -23,11 +21,9 @@ const AIControllerScript := preload("res://modules/units/scripts/ai/ai_controlle
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("rank: 数据层 set/get/is_commander（含越界钳制）", _test_rank_data)
-	_runner.add_test("斩首: 攻方指挥官亡 → 守方胜（decapitation）", _test_decapitation_attacker_down)
-	_runner.add_test("斩首: 守方指挥官亡 → 攻方胜（decapitation）", _test_decapitation_defender_down)
-	_runner.add_test("斩首: 指挥官健在 → 全灭照常（annihilation）", _test_no_decapitation_when_alive)
+	_runner.add_test("阵亡不判负: 指挥官亡且还有兵 → 战斗未收束", _test_commander_down_no_end)
+	_runner.add_test("阵亡不判负: 指挥官亡后打到全灭 → 全灭收束（annihilation）", _test_commander_down_annihilation)
 	_runner.add_test("回归: 无指挥官 → 既有全灭/超时路径不变", _test_no_commander_regression)
-	_runner.add_test("登记: add_unit 自动扫描 rank>=3", _test_add_unit_auto_register)
 	_runner.add_test("留守: 指挥官拒推进/撤离类号令（idle 放行）", _test_commander_order_guard)
 	_runner.add_test("留守: 普通士兵号令不受守卫影响", _test_soldier_order_unguarded)
 	_runner.run()
@@ -90,48 +86,32 @@ func _test_rank_data() -> void:
 	e.free()
 
 
-func _test_decapitation_attacker_down() -> void:
+func _test_commander_down_no_end() -> void:
+	# 指挥官阵亡且本方还有兵 → 战斗不得收束（全战式：阵亡是纪律线因子不是败因）
 	var b := _make_battle(5, 3, 0.0, 0.0)
 	var cmd := FakeUnit.new()
 	cmd.rank_v = 3
 	add_child(cmd)
-	b.add_unit(cmd, 1)  # 自动扫描登记为攻方指挥官
+	b.add_unit(cmd, 1)
+	cmd.dead = true
+	b._check_victory()
+	_runner.assert_equal(int(b._state), BattleScript.State.ENGAGED,
+			"攻方指挥官亡但还有 5 兵 → 战斗继续（不判负）")
+
+
+func _test_commander_down_annihilation() -> void:
+	# 指挥官随军打到全灭 → 全灭收束照常（reason=annihilation，非斩首）
+	var b := _make_battle(0, 3, 0.0, 0.0)
+	var cmd := FakeUnit.new()
+	cmd.rank_v = 3
+	add_child(cmd)
+	b.add_unit(cmd, 1)
 	cmd.dead = true
 	b._check_victory()
 	var summary: Dictionary = b.get_summary()
 	_runner.assert_equal(int(summary.get("result", -1)), BattleScript.State.DEFENDER_WIN,
-			"攻方指挥官亡 → 守方胜（攻方还有兵也是败）")
-	_runner.assert_equal(String(summary.get("reason", "")), "decapitation", "收束原因 = 斩首")
-	_runner.assert_equal(int((summary.get("alive", {}) as Dictionary).get(1, -1)), 5,
-			"存活快照齐备（斩首路径也有 alive）")
-
-
-func _test_decapitation_defender_down() -> void:
-	var b := _make_battle(3, 5, 0.0, 0.0)
-	var cmd := FakeUnit.new()
-	cmd.rank_v = 3
-	add_child(cmd)
-	b.add_unit(cmd, 2)
-	cmd.dead = true
-	b._check_victory()
-	_runner.assert_equal(int(b.get_summary().get("result", -1)), BattleScript.State.ATTACKER_WIN,
-			"守方指挥官亡 → 攻方胜")
-	_runner.assert_equal(String(b.get_summary().get("reason", "")), "decapitation", "收束原因 = 斩首")
-
-
-func _test_no_decapitation_when_alive() -> void:
-	# 攻方指挥官健在 + 守方全灭 → 既有全灭判定照常（斩首不误触、reason 不串）
-	# （指挥官活着本身计存活兵力，"全灭 + 指挥官健在"在语义上不同时成立——
-	#   自洽构造 = 对方全灭）
-	var b := _make_battle(2, 0, 0.0, 0.0)
-	var cmd := FakeUnit.new()
-	cmd.rank_v = 3
-	add_child(cmd)
-	b.add_unit(cmd, 1)  # 攻方指挥官健在
-	b._check_victory()
-	_runner.assert_equal(int(b.get_summary().get("result", -1)), BattleScript.State.ATTACKER_WIN,
-			"指挥官健在 → 全灭判定照常")
-	_runner.assert_equal(String(b.get_summary().get("reason", "")), "annihilation", "原因 = 全灭（非斩首）")
+			"攻方全灭（含阵亡指挥官）→ 守方胜")
+	_runner.assert_equal(String(summary.get("reason", "")), "annihilation", "收束原因 = 全灭")
 
 
 func _test_no_commander_regression() -> void:
@@ -149,25 +129,6 @@ func _test_no_commander_regression() -> void:
 	var b3 := _make_battle(2, 1, 10.0, 20.0)
 	b3._check_victory()
 	_runner.assert_equal(String(b3.get_summary().get("reason", "")), "timeout", "无指挥官: 超时照旧")
-
-
-func _test_add_unit_auto_register() -> void:
-	var b := _make_battle(2, 2, 0.0, 0.0)
-	var cmd := FakeUnit.new()
-	cmd.rank_v = 3
-	add_child(cmd)
-	b.add_unit(cmd, 1)
-	_runner.assert_equal(b._is_commander_down(1), false, "登记后活着 → 未倒下")
-	cmd.dead = true
-	_runner.assert_equal(b._is_commander_down(1), true, "登记单位死亡 → 判倒下")
-	# 手动登记口（后设 rank 场景）：覆盖同阵营旧登记
-	var cmd2 := FakeUnit.new()
-	cmd2.rank_v = 3
-	add_child(cmd2)
-	b.register_commander(cmd2, 1)
-	_runner.assert_equal(b._is_commander_down(1), false, "后到指挥官覆盖登记（战场最高唯一）")
-	# 无登记阵营恒 false（不触发斩首）
-	_runner.assert_equal(b._is_commander_down(2), false, "无登记阵营不触发斩首")
 
 
 func _test_commander_order_guard() -> void:

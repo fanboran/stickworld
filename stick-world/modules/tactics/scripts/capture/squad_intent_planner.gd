@@ -6,7 +6,7 @@ extends RefCounted
 ## 与英雄连AI逆向_2026-09-11.md）：编班 + 班长 + 夺点驱动宏观意图 + 到旗边先观察再进场，
 ## 无经济层。本类每 0.5s 一拍（CoH TimeRule_AddInterval 0.5 真值）做结算/事件检测/相位推进，
 ## 意图重判走粘性门（02 一-A.5 号令粘性）：选定后最短保持期内不重判，仅事件触发例外
-##（里程碑易主 / 己方要地被敌贴脸含斩首威胁）——周期重判已退役（拉扯感主源）。候选打分：
+##（里程碑易主 / 己方要地被敌贴脸）——周期重判已退役（拉扯感主源）。候选打分：
 ##   攻点 CAPTURE   —— 未占/敌占点，分值随距离衰减 × 我敌兵力比（ aggression 风格倍率）；
 ##   驻防 GARRISON  —— 己方已占点留班看家，已有人看的点降权劝退叠班（不禁止增援）；
 ##   接火 INTERCEPT —— 敌班逼近己方要点时优先拦截（urgency 放大压得过驻防惯性）；
@@ -80,7 +80,7 @@ const BEAT_INTERVAL: float = 0.5
 ##【提案/待定·待实测校准】
 const INTENT_MIN_HOLD: float = 4.0
 ## 要地威胁事件半径（px）：敌单位进入己方已占点此范围 = 威胁事件拍
-##（含斩首威胁——后排里程碑被敌贴脸须立即允许重判拦截）。600 实测把接战线
+##（后排要地被敌贴脸须立即允许重判拦截）。600 实测把接战线
 ## 常态距离算成威胁（事件拍过频，粘性门被打穿，号令翻转 34.6/min 超靶），
 ## 收 400 = 真贴脸才触发【提案/待定·待实测校准】
 const EVENT_THREAT_DIST: float = 400.0
@@ -228,7 +228,7 @@ func _run_beat() -> void:
 			p.tick(BEAT_INTERVAL, counts)
 	# 2) 事件检测（02 二-A.3 意图粘性 = 最短保持期 + 事件触发换令）：
 	#    a.易主——里程碑归属与上拍快照 diff；b.要地威胁——敌班质心进入
-	#    己方已占点 EVENT_THREAT_DIST 内（含后排斩首威胁）。事件拍全班可重判
+	#    己方已占点 EVENT_THREAT_DIST 内（含后排要地）。事件拍全班可重判
 	var events: Dictionary = _detect_events(snapshot)
 	var owner_event: bool = bool(events["owner"])
 	var threat_pos: Variant = events["threat"]   # false 或受威胁点位置

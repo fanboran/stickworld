@@ -1332,7 +1332,10 @@ func face_towards(pos: Vector2) -> void:
 	var dx: float = pos.x - global_position.x
 	if absf(dx) < 1.0:
 		return
-	try_set_facing(1 if dx > 0.0 else -1)
+	# 战斗面向强制通道：绕过战斗朝向锁（锁只拦移动翻面，开火瞄准才是朝向
+	# 权威——被锁拦住时，目标丢失窗口里被移动翻成背向的单位会**卡死在背身
+	# 拉弓**：重锁后 _face_target 永远被拒，创始人点正「左下角弓手背对拉弓」）
+	_force_facing(1 if dx > 0.0 else -1)
 
 
 ## 朝向变更节流（SW3 Movement.LimitFacingChangeRate/LastFacingChangeFrame 直译，
@@ -1348,6 +1351,17 @@ func try_set_facing(new_facing: int) -> bool:
 	# 脸永远朝敌人；旧实现移动侧抢闸导致背身拉弓，创始人点正）
 	if _combat_face_lock:
 		return false
+	return _set_facing_rate_limited(new_facing)
+
+
+## 强制翻面（face_towards 战斗面向消费）：绕过战斗朝向锁，仍走翻面节流
+func _force_facing(new_facing: int) -> bool:
+	if new_facing == _facing:
+		return true
+	return _set_facing_rate_limited(new_facing)
+
+
+func _set_facing_rate_limited(new_facing: int) -> bool:
 	var pf := Engine.get_physics_frames()
 	if not is_possessed() and _last_direction_change_frame >= 0 \
 			and pf - _last_direction_change_frame < FACING_RATE_LIMIT_FRAMES:

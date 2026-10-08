@@ -1,5 +1,13 @@
 # 火柴人大战略 Stick World
 
+![Engine](https://img.shields.io/badge/engine-Godot_4.x-478CBF?logo=godotengine&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows11)
+![Language](https://img.shields.io/badge/language-GDScript-355570?logo=gdscript&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-GdUnit4_110%2B-brightgreen)
+![Commits](https://img.shields.io/badge/commits-2000%2B-blue)
+![Release](https://img.shields.io/github/v/release/fanboran/stickworld)
+![Downloads](https://img.shields.io/github/downloads/fanboran/stickworld/total)
+
 > **横版策略战争游戏** —— 定居点建设 · 小队编成 · 大规模实时战斗 · 单兵附身微操
 > **引擎 Godot 4.x · 平台 Windows · 单人独立开发 4 个月、2000+ 提交 · 目前还在高速迭代开发中**
 
@@ -166,7 +174,7 @@ bash stick-world/tests/run_all.sh
 
 ## 开发状态与路线
 
-**v0.5（当前）**：HD-2D 主街实机可玩——定居点建设、资源采集、编队战斗、组织指挥链一体；内置目标引导与胜利结算，通关后开放自由沙盒。v0.5 新增：**音乐音效全量重制**（分层 BGM cue 混音 + SFX 事件表）、**组织系统深化**（编队树/命令链/组织侧 UI）、**游戏循环深化**（兵源招募/兵营训练/持续消耗链）、**96 单位战斗规模化 30fps**。
+**v0.6（当前）**：HD-2D 主街实机可玩——定居点建设、资源采集、编队战斗、组织指挥链一体；内置目标引导与胜利结算，通关后开放自由沙盒。v0.6 新增：**音乐音效全量重制**（分层 BGM cue 混音 + SFX 事件表）、**组织系统深化**（编队树/命令链/组织侧 UI）、**游戏循环深化**（兵源招募/兵营训练/持续消耗链）、**96 单位战斗规模化 30fps**、**战斗观感修复线**（渲染白块/原地抽搐/左右乱跑/堆团沉底等根治）。
 规划中：科技树/物流/扩张系统、战略图聚落下钻、背包与装备、Chunk 流式加载（见[待办事项](docs/项目/待办事项.md)）。
 
 ## 文档目录

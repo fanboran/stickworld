@@ -346,11 +346,10 @@ func update(delta: float) -> void:
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)
 	else:
-		# 批5 远程槽位锚定：班战斗锚已立（火力线定档）时，射程外成员的接敌目标 =
-		# 自身槽位而不是敌阵——整班在锚线收拢方阵，不再各自压到射程环再折返
-		# （收拢舞步）。到槽站定待敌（面向锁定朝敌），敌进射程自然转入锚定射击；
-		# 全班脱战锚清除后恢复常态接敌。
-		if _is_ranged_weapon(weapon) and _approach_via_slot():
+		# 批5 战线/槽位锚定：接敌目标优先自身槽位（SWL 阵线语义：跟着战线走，
+		# 不是各自冲敌阵——冲敌阵=全军吸向敌阵中线的沙丁鱼堆）。远程认战线槽或
+		# 班战斗锚（既有语义）；近战只认战线槽（生产无战线时近战保持原接敌零回归）。
+		if _approach_via_slot():
 			return
 		var to_target: Vector2 = _target.global_position - entity.global_position
 		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈等位，直接压上
@@ -438,16 +437,22 @@ func _hold_formation_slot(dist: float, kite_range: float) -> bool:
 	return true
 
 
-## 锚定期接敌改道（批5 远程部分，approach 分支消费）：班战斗锚存在时射程外
-## 成员走向自身槽位（远处奔跑归位）。到槽死区内站定待敌——不追敌不空走，
-## SWL 远程组接战常态：站在方阵里等敌人进射程。无班/无锚返回 false 走原接敌。
+## 锚定期接敌改道（批5，approach 分支消费）：有槽位时射程外成员走向自身槽位
+## （远处奔跑归位）。到槽死区内站定待敌——不追敌不空走，SWL 接战常态：站在
+## 方阵里等敌人进射程。远程查战线槽或班战斗锚（get_unit_combat_slot 战线优先），
+## 近战只查战线槽（get_unit_line_slot）；无槽位返回 false 走原接敌。
 func _approach_via_slot() -> bool:
 	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_formation_system"):
 		return false
 	var fs: Node = entity.get_formation_system()
-	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_combat_slot"):
+	if fs == null or not is_instance_valid(fs):
 		return false
-	var slot: Vector2 = fs.get_unit_combat_slot(entity)
+	var slot: Vector2 = Vector2.INF
+	if _is_ranged_weapon(entity.get_weapon() if _cap_get_weapon else null) \
+			and fs.has_method("get_unit_combat_slot"):
+		slot = fs.get_unit_combat_slot(entity)
+	elif fs.has_method("get_unit_line_slot"):
+		slot = fs.get_unit_line_slot(entity)
 	if is_inf(slot.x):
 		return false
 	var d_slot: float = entity.global_position.distance_to(slot)

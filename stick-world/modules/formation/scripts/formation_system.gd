@@ -111,6 +111,7 @@ const ScriptSquadFollowDirector := preload("res://modules/formation/scripts/squa
 const ScriptSquadReportHooks := preload("res://modules/formation/scripts/squad_report_hooks.gd")
 const ScriptSquadSnapshot := preload("res://modules/formation/scripts/squad_snapshot.gd")
 const ScriptSquadCohesion := preload("res://modules/formation/scripts/squad_cohesion.gd")
+const ScriptBattleLine := preload("res://modules/formation/scripts/battle_line.gd")
 
 ## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
 ## 搬运（HAUL）是全员基础能力，不受职责范围限制（见 is_work_allowed）；
@@ -178,6 +179,9 @@ var _authority_market = null   ## 权威值择班市场（§权威值自主跳�
 var _follow_director = null    ## 编队动态跟队（锚定跟随）
 var _report_hooks = null       ## 信息上报挂点（§4.4）+ 征用互斥
 var _snapshot_helper = null    ## 跨图携带快照/恢复
+## 战线（SWL Team.MoveInFormation 直译）：faction -> BattleLine——全组一个方阵
+## 沿 x 连续推进的阵线权威；观察场/AI 推进用，玩家号令通道不依赖它
+var _battle_lines: Dictionary = {}
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -307,6 +311,9 @@ func _process(_delta: float) -> void:
 	_decide_squad_targets(_delta)
 	# 战斗驻防锚（批5 远程槽位锚定）：接战班冻结锚点，远程行为按锚收拢方阵
 	_tick_combat_anchors(_delta)
+	# 战线推进（SWL MoveInFormation）：连续平移 + 组方阵随线号令
+	for line in _battle_lines.values():
+		line.tick(_delta)
 	# A5 小队相位计划（C8）：按 L2 节拍驱动活跃计划（缺省关闭时零开销空转）
 	_tick_phase_plans(_delta)
 	# A9+ 权威值自主跳槽（R4）：按 L2 节拍周期性评估成员择班（缺省关闭时零开销空转）
@@ -1332,8 +1339,12 @@ func _squad_block_depth(squad_id: String) -> float:
 
 ## 单位的战斗驻防槽位（BehaviorAttack 远程射程内分支消费）：以班战斗锚为基的
 ## 槽位世界坐标（前列贴锚线，后列沿面向反侧退 ROW_GAP，同列横展 SPREAD_SPACING）。
+## 战线存在时**战线优先**（组级方阵，SWL 阵线语义）；无战线回落班战斗锚。
 ## 无班/无锚/无槽位返回 Vector2.INF（消费方回落原站桩语义）。
 func get_unit_combat_slot(unit: Node) -> Vector2:
+	var line_slot: Vector2 = get_unit_line_slot(unit)
+	if not is_inf(line_slot.x):
+		return line_slot
 	if unit == null or not is_instance_valid(unit):
 		return Vector2.INF
 	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")
@@ -1348,6 +1359,35 @@ func get_unit_combat_slot(unit: Node) -> Vector2:
 	if slot.x < 0:
 		return Vector2.INF
 	return _slot_world(slot, anchor["pos"], anchor["facing"], squad_id)
+
+
+# ──────────────────────── 战线（SWL Team.MoveInFormation 直译）────────────────────────
+# 全组一个方阵沿 x 连续推进的阵线权威（battle_line.gd）；本类托管创建/驱动/查询。
+
+## 创建战线（每方一台；重复创建同阵营覆盖旧线）。line_x0 = 近战组前列线起点，
+## goal_x = 推进终点（通常敌方阵地深处），band = 行动带竖直中心/半宽。
+## 返回 BattleLine（调用方 add_unit 装成员——守位/指挥单位由调用方过滤）。
+func create_battle_line(faction: int, facing: int, goal_x: float, line_x0: float,
+		band_center_y: float, band_half: float) -> RefCounted:
+	var line: RefCounted = ScriptBattleLine.new()
+	line.setup(self, faction, facing, goal_x, line_x0, band_center_y, band_half,
+			SPREAD_SPACING, ROW_GAP)
+	_battle_lines[faction] = line
+	return line
+
+
+func get_battle_line(faction: int) -> RefCounted:
+	return _battle_lines.get(faction)
+
+
+## 单位的战线槽位（世界坐标；无战线/非成员 = INF）。
+func get_unit_line_slot(unit: Node) -> Vector2:
+	if unit == null or not is_instance_valid(unit) or not unit.has_method("get_faction"):
+		return Vector2.INF
+	var line: RefCounted = _battle_lines.get(int(unit.get_faction()))
+	if line == null:
+		return Vector2.INF
+	return line.get_unit_slot(unit)
 
 
 # ──────────────────────── 编队动态跟队（内部）────────────────────────────────

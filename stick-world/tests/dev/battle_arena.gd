@@ -174,8 +174,9 @@ const FormationSpacing := preload("res://modules/formation/scripts/formation_spa
 ## 纵深行距（px）：相邻武器行/班的 x 间距 = 横半径+2——Δx 超横半径，任意纵距
 ## 椭圆判别恒 >1，行间分离力不激活
 const ROW_GAP: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
-## 排内左右间距（px）
-const LINE_GAP: float = 90.0
+## 排内左右间距（px）：≥ 分离纵半径 + 余量——26° 投影把纵距压 ~0.44 倍，
+## 90px 投影后 ~40px 屏距，90px 高立绘叠死（「沙丁鱼罐头」根因之一）
+const LINE_GAP: float = 130.0
 ## 行内最小纵距（px，诊断 A1/B）：= 分离椭圆纵深半径——行内自适应压缩的钳制
 ## 下限。压穿它 = 分离力常驻 + 位置伺服极限环（移动单位水平翻转 4.3~5.1 次/s、
 ## 友邻纵距 43~57px 的根因；半径 60/92 试验期未联动本值，2026-10-05 复发实测
@@ -577,30 +578,26 @@ func _spawn_and_start() -> void:
 		if battle != null:
 			_suppress_team_ai.call_deferred(battle)
 	else:
-		# 回退路径（夺点关闭）：旧行为原样——先锋班单线 ADVANCE_ALL + 锚定班动态跟队
-		if to != null and to.has_method("issue"):
-			for si in squad_defs.size():
-				var def: Dictionary = squad_defs[si]
-				if float(def.get("follow_gap", 0.0)) > 0.0:
-					continue  # 锚定班：剑班/火力班由动态跟队接管
-				var adv_x: float = float(def["advance_x"])
-				var lid: String = left_squad_ids[si]
-				var rid: String = right_squad_ids[si]
-				if not lid.is_empty():
-					to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, lid, Vector2(mid_x + adv_x, spawn_y), 0)
-				if not rid.is_empty():
-					to.issue(_TacticalOrders.OrderType.ADVANCE_ALL, rid, Vector2(mid_x - adv_x, spawn_y), 0)
+		# 战线推进（SWL Team.Attack + MoveInFormation 直译）：双方各一条战线——
+		# 近战组/远程组各一个组级方阵，前列贴线连续推进，接战即停/冻结，打完续推；
+		# 未接战成员收随线号令（engage_in_range 敌进射程即战）。
+		# 旧「先锋班 ADVANCE 压中线 + 跟队链」退役（班各为阵 = 全军挤中间的根因）。
+		if fs != null and fs.has_method("create_battle_line"):
+			var goal_l: float = mid_x + TEAM_OFFSET_X + 150.0
+			var goal_r: float = mid_x - TEAM_OFFSET_X - 150.0
+			var line_l: RefCounted = fs.create_battle_line(1, 1, goal_l,
+					mid_x - TEAM_OFFSET_X + 150.0, spawn_y, ACTION_BAND_HALF_PX)
+			var line_r: RefCounted = fs.create_battle_line(2, -1, goal_r,
+					mid_x + TEAM_OFFSET_X - 150.0, spawn_y, ACTION_BAND_HALF_PX)
+			for u in _attacker:
+				if u != null and is_instance_valid(u) and not _holds_post(u):
+					line_l.add_unit(u)
+			for u in _defender:
+				if u != null and is_instance_valid(u) and not _holds_post(u):
+					line_r.add_unit(u)
+			print("[Arena] 战线就绪: 蓝 goal=%.0f / 红 goal=%.0f" % [goal_l, goal_r])
 		else:
-			push_warning("[Arena] TacticalOrders 未就绪，编队前进跳过")
-		# 编队动态跟队（SWL MoveInFormationBehindAnotherFormation + GapBetweenFormationGroups
-		# 直译）：剑班锚矛班、火力班锚剑班，后队落点 = 前队质心 − 行进方向 × gap
-		if fs != null and fs.has_method("set_squad_follow_squad"):
-			for si in squad_defs.size():
-				var gap: float = float(squad_defs[si].get("follow_gap", 0.0))
-				if gap <= 0.0 or si == 0:
-					continue
-				fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
-				fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
+			push_warning("[Arena] FormationSystem 无战线 API，推进跳过")
 	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
 	# 观察场不看新手引导）
 	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
@@ -640,6 +637,11 @@ func _reveal() -> void:
 
 ## 创建小队并任命班长（班长 = 队列中间成员，rank 1 由 formation 侧写入）。
 ## 返回 squad_id（失败返回 ""）。
+## 守位单位判定（指挥官 rank 3 / 阵地护卫 guard_post）：留守后方不随战线推进
+func _holds_post(u: Node) -> bool:
+	return u.has_method("holds_post") and u.holds_post()
+
+
 func _make_squad(fs: Node, units: Array, squad_name: String) -> String:
 	if fs == null or not is_instance_valid(fs) or units.is_empty():
 		return ""

@@ -56,10 +56,20 @@ func run(_tag: String, _preset: int, secs: int, every: int) -> void:
 		acc = 0.0
 		var t_now: int = int(round(_elapsed(t0)))
 		print("[SlotProbe] ── t=%.0fs ──" % _elapsed(t0))
+		# 战线状态（SWL 阵线推进：线位/停线/远程冻结）
+		for f in [1, 2]:
+			var line: RefCounted = fs.get_battle_line(f) if fs.has_method("get_battle_line") else null
+			if line != null:
+				print("[SlotProbe] 战线%s: line_x=%.0f goal=%.0f 停线=%s 远程线=%.0f%s 近战%d 远程%d" % [
+					"蓝" if f == 1 else "红", line.get_line_x(), line.get("goal_x"),
+					line.is_melee_blocked(), line.ranged_line_x(),
+					"(冻)" if not is_nan(line.get("frozen_ranged_x")) else "",
+					line.melee_count(), line.ranged_count()])
 		for sid in fs.get_all_squads():
 			var units: Array = fs.get_squad_units(sid)
 			var alive: Array = []
 			var ranged_all: bool = not units.is_empty()
+			var melee_all: bool = not units.is_empty()
 			for u in units:
 				if is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
 					alive.append(u)
@@ -67,8 +77,11 @@ func run(_tag: String, _preset: int, secs: int, every: int) -> void:
 					var wt: int = int(w.weapon_type) if w != null and "weapon_type" in w else -1
 					if wt != 2 and wt != 4:  # BOW / STAFF
 						ranged_all = false
-			if not ranged_all or alive.is_empty():
+					else:
+						melee_all = false
+			if alive.is_empty() or (not ranged_all and not melee_all):
 				continue
+			var kind: String = "远程" if ranged_all else "近战"
 			var anchored_n: int = 0
 			var slot_dists: Array = []
 			var can_fire: int = 0
@@ -96,10 +109,13 @@ func run(_tag: String, _preset: int, secs: int, every: int) -> void:
 				slot_err_sum += mean_err
 				slot_err_n += 1
 			worst_cols = maxi(worst_cols, cols)
-			print("[SlotProbe] %s: %d 人 | 锚 %d/%d | 可开火 %d | x列 %d | 纵深 %.0f | 横宽 %.0f | 槽距 均%.0f 最大%.0f" % [
-				fs.get_squad_name(sid), alive.size(), anchored_n, alive.size(), can_fire,
+			print("[SlotProbe] %s[%s]: %d 人 | 锚 %d/%d | 可开火 %d | x列 %d | 纵深 %.0f | 横宽 %.0f | 槽距 均%.0f 最大%.0f" % [
+				fs.get_squad_name(sid), kind, alive.size(), anchored_n, alive.size(), can_fire,
 				cols, depth, y_span, mean_err, max_err])
-			print("[SlotProbe]   坐标(*=锚定): %s" % " ".join(dump))
+			if ranged_all:
+				print("[SlotProbe]   坐标(*=锚定): %s" % " ".join(dump))
+			else:
+				print("[SlotProbe]   近战y分布: %s" % " ".join(dump))
 		# 同场截图（数字与像素绑定）：与 shot driver 同链路
 		await get_tree().process_frame
 		var img := get_viewport().get_texture().get_image()

@@ -25,10 +25,16 @@
 
 | | |
 |---|---|
-| ![战略图·地形模式](docs/images/演示/战略图地形.png) | ![战略图·政治模式](docs/images/演示/战略图政治.png) |
+| ![城块划分终图](docs/images/v2_rebake/city_preview_8192.png) | ![城市剪影全图](docs/images/v2_rebake/blob_v2_preview_2048.png) |
+
+| 宜居度场 | 聚落分布 | 道路网络 |
+|---|---|---|
+| ![宜居度场](docs/images/v2_rebake/fields_preview_suitability_2048.png) | ![聚落分布](docs/images/v2_rebake/settlements_preview_locations_2048.png) | ![道路网络](docs/images/v2_rebake/roads_preview_2048.png) |
 
 ![战略图·地块视图实机](docs/images/gallery/06_l1_switch_neighbors.png)
 *地块视图（L1）实机：城块按政权着色、城市详情卡、L1/L2/L3 三级层级随时切换*
+
+世界生成全链 17 张验收图（宜居/资源/进攻成本三大场、文化域、聚落、城块划分、193 政权、河网、道路、城市剪影）见 [V2 世界重生成·验收图解](docs/images/v2_rebake/README.md)。
 
 **界面与流程**
 
@@ -43,33 +49,6 @@
 | | | |
 |---|---|---|
 | ![主菜单·手绘皮肤](docs/images/演示/备选/主菜单.png) | ![工作区](docs/images/演示/备选/工作区.png) | ![设置页](docs/images/演示/备选/设置页.png) |
-
-## 程序化世界生成（世界地图全链）
-
-战略图上的每一寸疆域都来自这条离线生成链：分形大陆高度场 → 三大底层场（宜居度/资源/进攻成本，决定聚落疏密与政权扩张难度）→ 文化域 → 聚落与城块划分 → 政权涌现 → 河网道路 → 城市剪影。**193 个政权、1042 个城块，一颗种子全程确定生成**。
-
-| 宜居度场：绿黄白=宜居（沿海/平原/河谷），深蓝=不宜（高山/荒漠/冰原） | 资源丰度场：矿/渔盐/沃土成带成片，无椒盐噪点 |
-|---|---|
-| ![宜居度场](docs/images/v2_rebake/fields_preview_suitability_2048.png) | ![资源丰度场](docs/images/v2_rebake/fields_preview_resources_2048.png) |
-
-| 进攻成本场：亮=难攻（山地/荒漠），暗=易攻（平原走廊）——山国难统一、平原国易扩张 | 文化场：22 个文化域的界线与过渡带，决定政权配色与合并倾向 |
-|---|---|
-| ![进攻成本场](docs/images/v2_rebake/fields_preview_attack_cost_2048.png) | ![文化场](docs/images/v2_rebake/culture_preview_2048.png) |
-
-| 聚落分布：1042 个村（绿）/镇（黄）/城（红）撒点，富庶带密簇、贫瘠带无人 | 聚落密度：撒点的平滑热度图，"文明带"沿海沿河走向 |
-|---|---|
-| ![聚落分布撒点](docs/images/v2_rebake/settlements_preview_locations_2048.png) | ![聚落密度](docs/images/v2_rebake/settlements_preview_density_2048.png) |
-
-| 城块划分终图：一地块一色一聚落，「最近聚落抗衡」无缝拼满陆地 | 政治图：涌现制 193 国疆域，白点=都城（国内人口最高城） |
-|---|---|
-| ![城块划分终图](docs/images/v2_rebake/city_preview_8192.png) | ![政治图](docs/images/v2_rebake/states_v2_preview_political_2048.png) |
-
-| 河流矢量：注入 70 个数据包的河流折线，贴地形顺流向 | 道路网络：2185 条城间道路，绕山不走崖、跨包接缝连续 |
-|---|---|
-| ![河流矢量](docs/images/v2_rebake/river_vectors_preview.png) | ![道路网络](docs/images/v2_rebake/roads_preview_2048.png) |
-
-![城市剪影全图](docs/images/v2_rebake/blob_v2_preview_2048.png)
-*城市剪影全图——与游戏内 Tab 城区图同源：场场叠加 → 阈值 → marching squares，村浅灰/镇中灰/城深灰随规模，建成区限自身城块内*
 
 ## 从新游戏到首胜（最快 10 分钟）
 

@@ -2,11 +2,8 @@
 
 ![Engine](https://img.shields.io/badge/engine-Godot_4.x-478CBF?logo=godotengine&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows11)
-![Language](https://img.shields.io/badge/language-GDScript-355570?logo=gdscript&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-GdUnit4_110%2B-brightgreen)
 ![Commits](https://img.shields.io/badge/commits-2000%2B-blue)
 ![Release](https://img.shields.io/github/v/release/fanboran/stickworld)
-![Downloads](https://img.shields.io/github/downloads/fanboran/stickworld/total)
 
 > **横版策略战争游戏** —— 定居点建设 · 小队编成 · 大规模实时战斗 · 单兵附身微操
 > **引擎 Godot 4.x · 平台 Windows · 单人独立开发 4 个月、2000+ 提交 · 目前还在高速迭代开发中**

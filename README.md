@@ -28,9 +28,11 @@
 
 **程序化大陆战略图（Tab/M 随时打开）**
 
-| | |
-|---|---|
-| ![城块划分终图](docs/images/v2_rebake/city_preview_8192.png) | ![城市剪影全图](docs/images/v2_rebake/blob_v2_preview_2048.png) |
+![城块划分终图](docs/images/v2_rebake/city_preview_8192.png)
+*城块划分终图——一地块一色一聚落，「最近聚落抗衡」无缝拼满陆地*
+
+![城市剪影全图](docs/images/v2_rebake/blob_v2_preview_2048.png)
+*城市剪影全图——与游戏内 Tab 城区图同源*
 
 | 宜居度场 | 聚落分布 | 道路网络 |
 |---|---|---|

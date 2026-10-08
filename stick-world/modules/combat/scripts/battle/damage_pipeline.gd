@@ -97,7 +97,9 @@ static func apply(target: Node, p: Params) -> float:
 		final_amount *= float(target.get_armor_factor())
 	# 格挡判定（举盾姿态 + 正面来袭 + 概率）：减伤 85%，播放格挡动画；
 	# 不可格挡类型（法术/反伤/溅射）跳过。成功格挡后进入 blockResetInterval 冷却。
+	var blocked := false
 	if p.is_blockable and _try_block(target, p.direction):
+		blocked = true
 		final_amount *= 0.15
 		if target.has_method("play_block"):
 			target.play_block()
@@ -141,8 +143,9 @@ static func apply(target: Node, p: Params) -> float:
 		_apply_splash(target, p)
 
 	# 伤害飘字（Demo 打磨：白=普通 / 金=暴击·爆头；表现层经 FxLibrary，不回写战斗逻辑）。
-	# 传 target 让数字跟随目标（命中后目标继续移动/被击退，定死出生点=蹦空气）
-	if final_amount > 0.0 and target is Node2D:
+	# 传 target 让数字跟随目标（命中后目标继续移动/被击退，定死出生点=蹦空气）。
+	# 格挡命中不飘字：格挡动画/音效已是反馈，×0.15 的碎数字只会糊屏。
+	if final_amount > 0.0 and not blocked and target is Node2D:
 		var crit_look: bool = p.is_crit or p.is_head_shot
 		FxLibrary.spawn_damage_text(target.get_tree(), (target as Node2D).global_position, final_amount, crit_look, target)
 

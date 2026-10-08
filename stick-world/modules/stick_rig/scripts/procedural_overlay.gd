@@ -2,17 +2,19 @@ extends Node2D
 ## 程序化叠加层（Stick Fight 关节物理/程序化动画风格，纯算法原创）
 ##
 ## 在动画之上叠加程序化动作，让火柴人更有"关节弹性 + 惯性"的活感：
-##   - 待机呼吸：hip 微起伏 + 头微摆（正弦）
-##   - 移动惯性：按实体速度，躯干/头反向倾斜（加速前倾、减速后仰）
+##   - 待机呼吸：hip 微起伏（正弦）
+##   - 移动惯性：按实体速度，躯干反向倾斜（加速前倾、减速后仰）
 ##   - 挥剑回弹：攻击挥出后 IK 手目标 spring 衰减振荡（overshoot）
-##   - 受击抖动：受击时躯干/头弹性抖动 + 手弹开
-##   - 随机微抖：head/torso 低幅噪声（火柴人真动感）
+##   - 受击抖动：受击时躯干弹性抖动 + 手弹开
+##   - 随机微抖：torso 低幅噪声（火柴人真动感）
 ##
 ## 设计：
-##   - 只叠加"不参与 IK 的骨骼"（hip/lower_torso/neck）与"IK 手目标位置"
+##   - 只叠加"不参与 IK 的骨骼"（hip/lower_torso）与"IK 手目标位置"
 ##     （outhand/innerhand），不直接改 IK 骨骼 rotation，避免破坏 IK 解算。
 ##   - 绝对设置（base + overlay）而非累积：这些骨骼/标记不被动画每帧重置，
-##     `+=` 会累积漂移（实测 head 单调漂 70°）。
+##     `+=` 会累积漂移（实测单调漂 70°）。
+##   - 不碰 head 骨：head 由动画轨道驱动（拉弓仰角等）；旧实现每帧以启动基准
+##     覆写 head.rotation，把动画值踩掉（当时 head 旋转视觉死码未暴露）。
 ##   - 挂载：由 StickmanRig._ready 动态创建为骨架子节点，连接 process_frame
 ##     （动画应用后叠加，下一帧动画覆盖后再叠加 → 等效"动画 + 叠加"持续生效）。
 
@@ -23,10 +25,8 @@ static var ENABLED := true
 
 # 幅度常量（度）
 const BREATH_HIP_DEG := 1.2
-const BREATH_HEAD_DEG := 1.0
 const LEAN_MAX_DEG := 5.0
 const LEAN_GAIN := 0.025
-const JITTER_HEAD_DEG := 0.15
 const JITTER_TORSO_DEG := 0.1
 # 手 IK 目标叠加幅度（像素）
 const ARM_SPRING_AMP := 6.0
@@ -42,13 +42,11 @@ var _outhand: Marker2D
 var _innerhand: Marker2D
 var _hip: Bone2D
 var _torso: Bone2D
-var _head: Bone2D
 var _entity: Node2D
 
 # 基准（动画不驱动这些骨骼/标记，叠加以基准 + 偏移绝对设置，防累积漂移）
 var _hip_base: float = 0.0
 var _torso_base: float = 0.0
-var _head_base: float = 0.0
 var _outhand_base := Vector2.ZERO
 var _innerhand_base := Vector2.ZERO
 
@@ -63,7 +61,7 @@ var _last_pos := Vector2.INF
 var _get_anim: Callable = Callable()
 
 # 速度平滑：实体位置只在物理帧更新，渲染帧率(如 144Hz) > 物理帧率(60Hz) 时，
-# 按渲染帧差分会得到 0/全速交替的振荡值（实测 head lean 每帧跳 4~8° → 抖动/重影）。
+# 按渲染帧差分会得到 0/全速交替的振荡值（实测躯干 lean 每帧跳 4~8° → 抖动/重影）。
 # 改为物理帧差分 + 指数平滑，渲染帧直接读平滑值。
 var _phys_vx: float = 0.0
 var _smooth_vx: float = 0.0
@@ -111,19 +109,14 @@ func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 	if _markers != null:
 		_outhand = _markers.get_node_or_null("outhand")
 		_innerhand = _markers.get_node_or_null("innerhand")
-	# 叠加目标骨骼（不参与 IK）；head 骨骼可能不存在（部分骨架只有 neck），回退到 neck
+	# 叠加目标骨骼（不参与 IK）；head 不叠加（动画轨道驱动，见文件头注）
 	_hip = skeleton.get_node_or_null("hip")
 	_torso = skeleton.get_node_or_null("hip/spine_root/lower_torso")
-	_head = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head")
-	if _head == null:
-		_head = skeleton.get_node_or_null("hip/spine_root/lower_torso/chest_mid/upper_torso/neck")
 	# 记录基准
 	if _hip != null:
 		_hip_base = _hip.rotation
 	if _torso != null:
 		_torso_base = _torso.rotation
-	if _head != null:
-		_head_base = _head.rotation
 	if _outhand != null:
 		_outhand_base = _outhand.position
 	if _innerhand != null:
@@ -209,7 +202,6 @@ func _on_frame() -> void:
 	# ---- 叠加角累计 ----
 	var hip_off := 0.0
 	var torso_off := 0.0
-	var head_off := 0.0
 	var outhand_off := Vector2.ZERO
 	var innerhand_off := Vector2.ZERO
 
@@ -218,14 +210,12 @@ func _on_frame() -> void:
 	if is_idle:
 		var breath := sin(_time * TAU * 0.35)
 		hip_off += breath * BREATH_HIP_DEG
-		head_off += -breath * BREATH_HEAD_DEG
 
 	# 2. 移动惯性倾斜（速度用物理帧平滑值，渲染帧差分会振荡导致抖动）
 	var is_moving: bool = anim == "walk" or anim == "run"
 	if is_moving:
 		var lean := clampf(_smooth_vx * LEAN_GAIN, -LEAN_MAX_DEG, LEAN_MAX_DEG)
 		torso_off += lean
-		head_off += lean * 0.8
 
 	# 3. 挥剑回弹（spring 衰减振荡）
 	if _arm_spring > 0.001:
@@ -241,7 +231,6 @@ func _on_frame() -> void:
 		_hit_spring *= exp(-8.0 * delta)
 		var j := _hit_spring * sin(_time * TAU * HIT_SPRING_FREQ)
 		torso_off += j * HIT_SPRING_AMP * 0.5
-		head_off += j * HIT_SPRING_AMP * 0.8
 		hip_off += j * HIT_SPRING_AMP * 0.3
 		outhand_off += Vector2(j * HIT_SPRING_AMP, j * HIT_SPRING_AMP * 0.5)
 		innerhand_off += Vector2(-j * HIT_SPRING_AMP, -j * HIT_SPRING_AMP * 0.5)
@@ -250,12 +239,9 @@ func _on_frame() -> void:
 
 	# 5. 低频微抖（轻微活感；用平滑噪声而非每帧 randf 白噪声——
 	#    白噪声是高频抖动，在骨骼上是肉眼可见的持续颤/拖影）
-	head_off += _noise.get_noise_1d(_time * 2.0) * JITTER_HEAD_DEG
 	torso_off += _noise.get_noise_1d(_time * 2.0 + 100.0) * JITTER_TORSO_DEG
 
 	# ---- 应用（绝对设置 = 基准 + 叠加） ----
-	if _head != null:
-		_head.rotation = _head_base + deg_to_rad(head_off)
 	if _torso != null:
 		_torso.rotation = _torso_base + deg_to_rad(torso_off)
 	if _hip != null:

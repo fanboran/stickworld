@@ -36,7 +36,7 @@ tracks/2/keys = {
 "times": PackedFloat32Array(0, 0.3, 0.5333),
 "transitions": PackedFloat32Array(1, 1, 1),
 "update": 0,
-"values": [-0.3342305517569141, -0.7871434926494424, -0.3342305517569141]
+"values": [0.0, 0.0, 0.0]
 }
 tracks/3/type = "value"
 tracks/3/imported = false

@@ -99,6 +99,18 @@ tracks/7/keys = {
 "update": 0,
 "values": [Vector2(0, 0), Vector2(0, 0)]
 }
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head:rotation")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.0]
+}
 metadata/anim_events = []
 metadata/hit_time = -1.0
 metadata/sound_events = []

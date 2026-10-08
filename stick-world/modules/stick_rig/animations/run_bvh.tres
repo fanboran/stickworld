@@ -87,3 +87,15 @@ tracks/6/keys = {
 "update": 0,
 "values": [Vector2(0, 12), Vector2(0, 9.9149), Vector2(0, 4.3841), Vector2(0, -2.6703), Vector2(0, -8.7966), Vector2(0, -11.866), Vector2(0, -10.8116), Vector2(0, -6), Vector2(0, 0.8968), Vector2(0, 7.4819), Vector2(0, 11.4669), Vector2(0, 11.4669), Vector2(0, 7.4819), Vector2(0, 0.8968), Vector2(0, -6), Vector2(0, -10.8116), Vector2(0, -11.866), Vector2(0, -8.7966), Vector2(0, -2.6703), Vector2(0, 4.3841), Vector2(0, 12)]
 }
+tracks/7/type = "value"
+tracks/7/imported = false
+tracks/7/enabled = true
+tracks/7/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/neck/head:rotation")
+tracks/7/interp = 1
+tracks/7/loop_wrap = true
+tracks/7/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.0]
+}

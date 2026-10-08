@@ -166,6 +166,7 @@ func update(delta: float) -> void:
 	if _arrived:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
+		face_battle_dir()  # 站定面向敌阵（倒退/横移归位的移动残影朝向收口）
 		return
 
 	var pos: Vector2 = entity.global_position

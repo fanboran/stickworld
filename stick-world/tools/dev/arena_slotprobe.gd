@@ -56,15 +56,24 @@ func run(_tag: String, _preset: int, secs: int, every: int) -> void:
 		acc = 0.0
 		var t_now: int = int(round(_elapsed(t0)))
 		print("[SlotProbe] ── t=%.0fs ──" % _elapsed(t0))
-		# 战线状态（SWL 阵线推进：线位/停线/远程冻结）
+		# 战线状态（SWL 阵线推进：线位/停线/远程冻结/逆面向计数）
 		for f in [1, 2]:
 			var line: RefCounted = fs.get_battle_line(f) if fs.has_method("get_battle_line") else null
 			if line != null:
-				print("[SlotProbe] 战线%s: line_x=%.0f goal=%.0f 停线=%s 远程线=%.0f%s 近战%d 远程%d" % [
+				var wrong_face: int = 0
+				var line_facing: int = int(line.get("facing"))
+				for grp in ["_melee", "_ranged"]:
+					for u in line.get(grp):
+						if u == null or not is_instance_valid(u):
+							continue
+						if u.has_method("get_facing") and int(u.get_facing()) != line_facing \
+								and not fs._member_enemy_in_range(u):
+							wrong_face += 1
+				print("[SlotProbe] 战线%s: line_x=%.0f goal=%.0f 停线=%s 远程线=%.0f%s 近战%d 远程%d 逆面向%d" % [
 					"蓝" if f == 1 else "红", line.get_line_x(), line.get("goal_x"),
 					line.is_melee_blocked(), line.ranged_line_x(),
 					"(冻)" if not is_nan(line.get("frozen_ranged_x")) else "",
-					line.melee_count(), line.ranged_count()])
+					line.melee_count(), line.ranged_count(), wrong_face])
 		for sid in fs.get_all_squads():
 			var units: Array = fs.get_squad_units(sid)
 			var alive: Array = []

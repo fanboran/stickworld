@@ -10,6 +10,7 @@ signal test_done(code: int)
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
+const ScriptBehaviorMove := preload("res://modules/units/scripts/ai/behavior_move.gd")
 
 var _runner: TestRunner
 
@@ -21,6 +22,7 @@ func _ready() -> void:
 	_runner.add_test("远程组: 随行近战线后 GAP / 接战冻结（末列贴射程线）", _test_ranged_follow_and_freeze)
 	_runner.add_test("随线号令: 未接战收令（line_order）/ 接战跳过 / 玩家号令不覆盖", _test_march_orders)
 	_runner.add_test("FormationSystem: get_unit_combat_slot 战线优先", _test_combat_slot_priority)
+	_runner.add_test("朝向: 战线面向查询 + 到位驻留朝向收口（背对→面向敌阵）", _test_facing)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -151,6 +153,34 @@ func _test_combat_slot_priority() -> void:
 	_teardown_world(w)
 
 
+func _test_facing() -> void:
+	var w := _make_world(1, 0)
+	var line: RefCounted = w["fs"].create_battle_line(1, 1, 1000.0, 0.0, 500.0, 360.0)
+	line.add_unit(w["units"][0])
+	line.tick(0.0)
+	_runner.assert_equal(w["fs"].get_unit_face_dir(w["units"][0]), 1,
+			"战线成员面向 = 线面向（+1）")
+	var stranger := Node2D.new()
+	_runner.assert_equal(w["fs"].get_unit_face_dir(stranger), 0,
+			"无查询面单位 = 0 不干预")
+	stranger.free()
+	# 到位驻留（hold_on_arrive）：背对敌阵到达 → 驻留分支收口面向敌阵
+	#（倒退/横移归位的移动残影朝向是「有人不面对战线」的根因）
+	var mover := _MoveStub.new()
+	mover.fs = w["fs"]
+	mover.facing = -1
+	mover.global_position = Vector2(5.0, 500.0)
+	var move = ScriptBehaviorMove.new()
+	move.entity = mover
+	move.enter("", {"target": Vector2(5.0, 500.0), "hold_on_arrive": true})
+	move.update(0.016)  # 到达 → _arrived
+	move.update(0.016)  # 驻留分支 → face_battle_dir
+	_runner.assert_equal(mover.facing, 1, "驻留站定背对战线 → 收口面向敌阵")
+	move.free()
+	mover.free()
+	_teardown_world(w)
+
+
 # ─────────────────────── 夹具 ───────────────────────
 
 ## 假组织 API（复刻 test_formation_slots 的 FakeOrgApi）
@@ -239,6 +269,29 @@ class FakeUnit extends Node2D:
 class FakeWeapon extends Node:
 	var weapon_type: int = 0
 	var attack_range: float = 650.0
+
+
+## move 行为桩：faction 1 + 编队系统引用 + 可读写 facing（驻留朝向收口用）
+class _MoveStub extends CharacterBody2D:
+	var fs: Node = null
+	var facing: int = -1
+	var faction: int = 1
+
+	func get_formation_system() -> Node:
+		return fs
+
+	func get_faction() -> int:
+		return faction
+
+	func get_facing() -> int:
+		return facing
+
+	func try_set_facing(dir: int) -> bool:
+		facing = dir
+		return true
+
+	func ai_stop() -> void:
+		pass
 
 
 ## 世界夹具：fs + n 个成员（剑/弓按 ranged）+ 远敌（默认不在任何射程内）

@@ -74,6 +74,24 @@ func face_position(pos: Vector2) -> void:
 		entity.face_towards(pos)
 
 
+## 战线朝向收口（批5 战线，SWL Team.direction 语义）：站定在战线槽位上的
+## 单位面向敌阵。移动朝向是"最后一步"的残影——倒退/横移归位的单位不收口
+## 就会背对战线站桩（创始人点正「有人不面对战线」）。查战线面向（无战线
+## 回落班战斗锚面向；都没有 = 0 不干预）；战斗朝向锁活跃时 try_set_facing
+## 自会拒绝，无需此处判断。
+func face_battle_dir() -> void:
+	if entity == null or not is_instance_valid(entity) \
+			or not entity.has_method("get_formation_system"):
+		return
+	var fs: Node = entity.get_formation_system()
+	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_face_dir"):
+		return
+	var dir: int = fs.get_unit_face_dir(entity)
+	if dir != 0 and entity.has_method("get_facing") and entity.has_method("try_set_facing") \
+			and entity.get_facing() != dir:
+		entity.try_set_facing(dir)
+
+
 # ─────────────────────────── 城墙门洞引导（gate_router 协议）──────────────────────────
 
 ## 直线 steering 遇城墙时的门洞引导（HD-2D 主街等带墙图）：向所在图的

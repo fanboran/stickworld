@@ -1390,6 +1390,26 @@ func get_unit_line_slot(unit: Node) -> Vector2:
 	return line.get_unit_slot(unit)
 
 
+## 单位应面向的战线方向（±1；0 = 无战线无锚，不干预）。SWL Team.direction
+## 语义：编队成员面向敌阵——到槽站定的朝向收口（move 驻留/idle 消费，
+## 见 behavior_base.face_battle_dir）。
+func get_unit_face_dir(unit: Node) -> int:
+	if unit == null or not is_instance_valid(unit) or not unit.has_method("get_faction"):
+		return 0
+	var line: RefCounted = _battle_lines.get(int(unit.get_faction()))
+	if line != null:
+		return int(line.get("facing"))
+	# 回落：班战斗锚面向（±x 符号）
+	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")
+	if squad_id.is_empty() or not _squads.has(squad_id):
+		return 0
+	var anchor: Dictionary = _squads[squad_id].get("combat_anchor", {})
+	if anchor.is_empty():
+		return 0
+	var f: Vector2 = anchor["facing"]
+	return 1 if f.x >= 0.0 else -1
+
+
 # ──────────────────────── 编队动态跟队（内部）────────────────────────────────
 # 函数体在拆分助手 squad_follow_director.gd（W2 壳）；落点/守卫/号令语义详见该文件头，
 # 几何 var 参数由壳每次调用传当前值，签名与行为逐位不变。

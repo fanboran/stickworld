@@ -37,6 +37,10 @@ const ANIM_ATTACK_BOW := "attack_bow"
 ##   trim_after 变换生成；attack_bow（原版 Draw 全条）保留作对照/回退。
 const ANIM_ATTACK_BOW_HOLD := "attack_bow_hold"
 const ANIM_ATTACK_BOW_RELEASE := "attack_bow_release"
+## 装填动画（SWL Archidon-Reload 1.167s 直译，弓手战斗链差距#3 数据侧）：
+## 放箭后装填再进下一轮。数据已入库；消费接线（冷却窗内播放、IsReloading
+## 语义）归战场观感重构 S1b 行为批次。
+const ANIM_ATTACK_BOW_RELOAD := "attack_bow_reload"
 ## 祭司治疗动画池（Meric-Heal1/Heal2，P7 批次 7b：dump healingAnimation 字段直译候选）
 ## 动画资产由任务 3.2 多骨架导入产出；本批先落常量供编译，运行时 _load_anim 缺资源只 push_warning
 const ANIM_HEAL_MERIC_1 := "heal_meric_1"
@@ -180,6 +184,8 @@ static func idle_for_weapon(weapon_type: int) -> String:
 ## 消费方（weapon_mount 实体侧换装 / char_sprite_3d 镜像层换装）经 walk_for_weapon
 ## 取名，走 set_state_anim 换 walk state 资源（盾姿态分层同款机制，不增状态节点）。
 const ANIM_WALK_BOW := "walk_bow"
+## 持弓跑动（Archidon-Run 真数据直译：弓手专属步态，换装消费见 WEAPON_RUN_ANIM）
+const ANIM_RUN_BOW := "run_bow"
 ## 持弓行走·拉弓保持变体（烘焙合并资产，tools/baking/bake_walk_bow_hold.gd 生成）：
 ## walk_bow 腿轨 ∪ attack_bow_hold 上身轨按 Drawn@0.5 拉满帧定格——持瞄窗内移动
 ## 时上身保持拉满姿态（腿走弓不收）。消费接线（walk state 资源换装）由后续批次接。
@@ -192,6 +198,17 @@ const WEAPON_WALK_ANIM: Dictionary = {
 ## 取武器类型对应的行走动画名（未知类型回落通用走姿）
 static func walk_for_weapon(weapon_type: int) -> String:
 	return WEAPON_WALK_ANIM.get(weapon_type, ANIM_WALK)
+
+## 武器类型 -> 持械跑动动画名（键序对齐 WeaponMount.WeaponType；缺省 = 通用 run）。
+## 弓手专属跑姿（Archidon-Run 真数据，此前共用剑士 run）；消费方与
+## WEAPON_WALK_ANIM 同款（换装 run state 资源，walk_for_weapon 镜像）。
+const WEAPON_RUN_ANIM: Dictionary = {
+	2: ANIM_RUN_BOW,         # BOW：持弓跑动（Archidon-Run）
+}
+
+## 取武器类型对应的跑动动画名（未知类型回落通用跑姿）
+static func run_for_weapon(weapon_type: int) -> String:
+	return WEAPON_RUN_ANIM.get(weapon_type, ANIM_RUN)
 
 ## 武器类型 -> 持瞄保持行走变体名（键序对齐 WeaponMount.WeaponType；缺省空串 =
 ## 无保持变体，消费方回落 walk_for_weapon 的基础走姿）。持瞄窗（attack_bow_hold
@@ -235,6 +252,8 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_RUN)
 	# 持弓行走变体（武器走姿分层，walk state 资源换装用）
 	_load_anim(lib, ANIM_WALK_BOW)
+	# 持弓跑动变体（武器跑姿分层，run state 资源换装用）
+	_load_anim(lib, ANIM_RUN_BOW)
 	# 持弓行走·拉弓保持变体（烘焙合并资产，上身定格拉满+腿走步态，机制同上）
 	_load_anim(lib, ANIM_WALK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK)
@@ -247,6 +266,8 @@ static func setup_player(player: AnimationPlayer) -> void:
 	# 弓手射击两段（拉弓保持 / 释放，见 ANIM_ATTACK_BOW_HOLD 注）
 	_load_anim(lib, ANIM_ATTACK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK_BOW_RELEASE)
+	# 装填动画入库（消费接线归 S1b 行为批次，见常量注）
+	_load_anim(lib, ANIM_ATTACK_BOW_RELOAD)
 	# 祭司治疗动画（P7 批次 7b：Meric-Heal1/Heal2，资产由任务 3.2 导入）
 	for a in HEAL_ANIMS:
 		_load_anim(lib, a)

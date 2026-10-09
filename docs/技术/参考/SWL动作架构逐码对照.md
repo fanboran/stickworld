@@ -48,22 +48,22 @@ SWL 有而本作无的骨设施【事实】：`allBodyColliders`/`allBoneFollowe
 
 ## 3. 动画数据层：逐动画对应（Archidon 全集）
 
-> **⚠ 口径修正（2026-10-09 创始人裁决）**：本节及全文各表中的"✅ 对齐"**仅指动画名占位与事件时刻对齐**；动作轨迹本体仍是手 K 暂代实现，未用 SWL 数据——此前表述夸大。S1 直译管线（见[交接档](../../项目/交接/战场观感重构-进度与交接.md) §二）落地后逐项重评，手 K 资产退役。
+> **口径（S1a 落地后）**：动画库 53 资产已全部由 `tools/baking/spine_import.gd` 从**真核心骨架**（100 动画）忠实直译——旋转轨 BEZIER 段曲线精确映射、事件元数据直取、端到端保真验证 0 超差。历史上的"洗稿层"（wash_anims 对数据加扰动）与手 K 修正（KEYFRAME_FIXES）已退役删除；更早的 [skeleton].txt 实为僵尸骨架（93 动画，Hit 族等 26 项缺源的根因），已换回真骨架。
 
-SWL 骨架 93 动画全集见 [翻译档 §4](SWL-单位行为完整翻译.md#④-动画全集清单spine-骨架-json-实测)；弓手 9+1 专属对照：【事实】
+SWL 骨架 100 动画全集（翻译档 §4 为当时僵尸骨架的 93 动画名表，真骨架另含 Hit 族/Stand2/Into-Stand/Attack2/Miner-Attack1/Cheering/Eclipsor/King 等）；弓手 9+1 专属对照：
 
-| SWL 动画 | 时长 | 事件 | 本作对应 | 对齐状态 |
+| SWL 动画 | 时长 | 事件 | 本作对应 | 状态 |
 |---|---|---|---|---|
-| Archidon-Draw | 2.00 | 0.50 `Drawn` + 0.53 `Hit` | `attack_bow`（2.0，metadata 事件 0.5/0.5333） | ✅ 事件时刻逐位同 |
-| Archidon-Hold | 2.00 | — | `attack_bow_hold` | ✅ |
-| Archidon-Reload | 1.17 | — | **缺** | ❌ 差距#3 |
-| Archidon-Walk / Walk2 | — | — | `walk_bow` / `walk_bow_hold`（持瞄走） | ✅ |
-| Archidon-Run | — | — | `run`（通用） | ≈（SWL 弓手有专属跑姿，本作共用） |
-| Archidon-Stand1 | 2.67 | — | `idle_bow` | ✅ |
-| Archidon-Death1/2 | — | — | `dead` 族（变体池） | ≈ |
+| Archidon-Draw | 2.00 | 0.50 `Drawn` + 0.53 `Hit` | `attack_bow`（+ 两段拆分 hold/release） | ✅ 轨迹+事件忠实直译 |
+| Archidon-Hold | 2.00 | — | 未接（**持弓戒备姿**：持弓臂同位、拉弦手放松下垂——非拉满保持，用途待裁决） | ⬜ S1b |
+| Archidon-Reload | 1.17 | — | `attack_bow_reload`（数据入库，冷却窗播放接线归 S1b） | ✅ 数据 / ⬜ 接线（差距#3） |
+| Archidon-Walk / Walk2 | 1.67 | — | `walk_bow`（Walk；两版均无臂通道=持弓 setup 步行） | ✅ 忠实直译 |
+| Archidon-Run | 2.00 | — | `run_bow`（武器分型 run 换装，`WEAPON_RUN_ANIM`） | ✅ S1a 新增 |
+| Archidon-Stand1 | 2.67 | — | `idle_bow` | ✅ 忠实直译 |
+| Archidon-Death1/2 | — | — | `dead` 族变体池（真骨架含 Archidon 专属 Death，现用通用池） | ✅ 通用池忠实直译 |
 | 城弓专属 ×1 | — | — | — | ❌（城弓兵种未规划） |
 
-动画**内容**层面（非机制）注意【事实】：本作 attack_bow 三件套的姿势是手 K 原创（2026-08 批次），非 Spine 轨迹转译——SWL Draw 的臂/胸/头旋转曲线在 `[skeleton].txt` 里逐关键帧可查，可作为后续"姿势复刻"的精确基准（如 bone2 胸倾 −10.3→−15.7、minerhead1 头 −19.1→−6.3 的 Draw 曲线）。
+动画**内容**层面：attack_bow 全族的臂/胸/头旋转曲线现逐关键帧直译自真骨架（bone2 胸倾 −10.3→−15.7、minerhead1 头 −19.1→−6.3 的 Draw 曲线原样生效）；历史版本曾对直译数据做洗稿扰动+手 K 手术，S1a 已全数退役换忠实版。
 
 ## 4. 播放控制层：逐方法对应
 
@@ -94,7 +94,7 @@ SWL:  ShouldAim(站定+目标进射程) → isAiming → 播 Draw ──0.5s─�
 | 散布 | `NextGaussian`（currentShotBodyRandomness） | `next_gaussian` + sustained_fire 热度 | ✅ 直译 |
 | 射角→姿势 | `UpdateAim`：Lerp 追踪 + `FindBone(骨).rotation = aim−4`（LateUpdate）【事实：反汇编；骨名 literal 静态不可解析，实机观感=**仅持弓臂抬**】 | `get_aim_pitch`（同源解算）→ `entity.aim_pitch` → feed → `rig.set_aim_pitch` → overlay（lerp 10/s=GetAimRate 等价）→ 晚优先级 `_process` 采样基值绝对写 `upper_arm_inner` | ✅（三轮收敛：头轨道→髋枢全身→**持弓臂**；修法=实机观感基准） |
 | 拉弓力度 | `DrawBow(power)/DrawBowGradually/UnDrawBow`（AI 渐拉、玩家拖拽定力） | AI 恒满弓；玩家附身 `fire_arrow_manual(power)`（蓄力有、渐拉表现无） | ≈ 附身侧待做（拖拽弹道 UI，见[拉弓操控逆向](../../项目/审计/SWL拉弓操控逆向_2026-09-19.md)差距对照） |
-| 装填 | `Reload` 动画 1.17s + `IsReloading()` | 无（冷却静默） | ❌ 差距#3 |
+| 装填 | `Reload` 动画 1.17s + `IsReloading()` | `attack_bow_reload` 数据已入库（S1a），冷却窗播放接线归 S1b | 🔶 数据 ✅ / 接线 ⬜ |
 | 弹道 | `Arrow`（Rigidbody2D+gravityScale，`launchY`） | `arrow_projectile`（解算式抛物线+落点地面线） | ✅（弹道层已追平，插箭/爆头已有） |
 
 ## 6. 朝向与移动

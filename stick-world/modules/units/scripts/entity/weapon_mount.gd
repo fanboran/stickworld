@@ -462,6 +462,8 @@ func _reload_weapons() -> void:
 		var rig: Node = owner_entity.get("rig")
 		if rig != null and rig.has_method("set_state_anim"):
 			rig.set_state_anim("walk", Anims.walk_for_weapon(weapon_type))
+			# 跑姿同款分层：BOW → run_bow（Archidon-Run，弓手专属步态）
+			rig.set_state_anim("run", Anims.run_for_weapon(weapon_type))
 
 
 ## HP 校准只做一次（出生满血基线）；换武器只迁移伤害/冷却/爆头加值，

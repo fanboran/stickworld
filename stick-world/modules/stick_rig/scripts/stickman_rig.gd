@@ -846,7 +846,11 @@ func sample_bone_track_rotation(anim_name: String, bone_path: NodePath, t: float
 	var anim: Animation = _anim_player.get_animation(anim_name)
 	if anim == null:
 		return NAN
-	var tid: int = anim.find_track(bone_path, Animation.TYPE_VALUE)
+	# 旋转轨自 S1 直译管线起为 BEZIER 轨（Spine 段曲线），旧 VALUE 轨兼容
+	var tid: int = anim.find_track(bone_path, Animation.TYPE_BEZIER)
+	if tid >= 0:
+		return anim.bezier_track_interpolate(tid, t)
+	tid = anim.find_track(bone_path, Animation.TYPE_VALUE)
 	if tid < 0:
 		return NAN
 	return anim.value_track_interpolate(tid, t)

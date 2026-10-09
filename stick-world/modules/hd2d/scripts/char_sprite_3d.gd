@@ -762,6 +762,8 @@ func set_weapon_type(wt: int) -> void:
 	# 实体侧 2D rig 的同款换装在 WeaponMount._reload_weapons（该图型下 rig 为 null）。
 	if rig != null and rig.has_method("set_state_anim"):
 		rig.set_state_anim("walk", ANIMS.walk_for_weapon(wt))
+		# 跑姿同款分层：BOW → run_bow（Archidon-Run，弓手专属步态）
+		rig.set_state_anim("run", ANIMS.run_for_weapon(wt))
 		# 清姿态缓存：上面的换装覆盖了 walk state，下一拍 feed 的
 		# set_stance_anims 需重放举盾变体（缓存命中会跳过）
 		_stance_walk = ""

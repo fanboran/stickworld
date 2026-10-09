@@ -10,8 +10,11 @@ extends Node2D
 const Anims := preload("res://modules/stick_rig/scripts/stickman_anims.gd")
 const RIG_SCENE: PackedScene = preload("res://modules/stick_rig/scenes/stickman_test.tscn")
 const OUT := "user://aimpitch_probe"
-## 差异像素占比阈值（960×540 全帧，臂+弓在 zoom 2.4 下约占屏 1%~3%）
-const DIFF_FRAC_MIN := 0.002
+## 差异像素占比阈值（960×540 全帧）。本探针判的是"写入有没有落地"——
+## 失效模式（写被动画推进踩掉）差异 ≈ 0%，正常落地的可见变化随姿态基线
+## 波动：手 K 时代标 0.2%；SWL 忠实姿态下拉满臂更贴身，实测 0.11%——
+## 阈值取 0.05%，离 0% 失效模态两个数量级，姿态基线再变也不误报。
+const DIFF_FRAC_MIN := 0.0005
 const PITCH_MAX := -0.6
 
 
@@ -45,7 +48,9 @@ func _ready() -> void:
 
 
 func _shot(tag: String) -> Image:
-	await get_tree().process_frame
+	# 等俯仰 lerp（10/s）收敛到 99%+ 再截帧——只等 2 帧会截到 30% 左右的
+	# 随机进度，测量值在阈值边缘闪失（忠实姿态下实测 0.06%/0.11% 两档跳）
+	await get_tree().create_timer(0.6).timeout
 	await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()

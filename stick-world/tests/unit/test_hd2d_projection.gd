@@ -12,6 +12,8 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 ## billboard 几何真相源（随身特效抬升常量的同步对象）
 const CharSprite3D := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
+## 骨架场景真相源（RIG_SCENE 必须取自此，禁跨模块裸路径字面量）
+const StickRigAPI := preload("res://modules/stick_rig/api.gd")
 
 var _runner: TestRunner
 
@@ -32,6 +34,7 @@ func _ready() -> void:
 	_runner.add_test("Hd2dStreetMap: _hd 未就绪回退 2D 恒等", _test_street_fallback_identity)
 	_runner.add_test("随身特效抬升: 协议口径 + billboard 几何同步", _test_fx_anchor_lift)
 	_runner.add_test("实体碰撞箱: origin 空间贴脚线门控", _test_entity_collider_origin_space)
+	_runner.add_test("billboard 骨架场景来源与存在性", _test_rig_scene_source)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -131,6 +134,20 @@ func _test_entity_collider_origin_space() -> void:
 	_runner.assert_approx(col.position.y, foot_offset, 0.001, "翻回 2D 口径：箱回脚位")
 	remove_child(ent)
 	ent.free()
+
+
+## billboard 骨架场景来源闸：RIG_SCENE 必须取自 stick_rig api 出口常量，且该场景
+## 真实存在。回归背景——模块迁移（stick_rig 抽出）后此处曾残留跨模块裸路径字面量，
+## 指向已删除的 modules/units/scenes/stickman_test.tscn：build() 在 load 出 null 后
+## 中途空指针返回，角色 quad 拿到 null material_override，被引擎默认材质画成**灰方块**
+## （街上行走的村民全体变灰块），且不报任何可见错误。改经 api 出口 + 本断言双保险。
+func _test_rig_scene_source() -> void:
+	_runner.assert_true(CharSprite3D.RIG_SCENE == StickRigAPI.RIG_SCENE_PATH,
+			"RIG_SCENE 取 stick_rig api 出口（禁跨模块裸路径字面量）")
+	_runner.assert_true(ResourceLoader.exists(CharSprite3D.RIG_SCENE),
+			"骨架场景存在: " + CharSprite3D.RIG_SCENE)
+	_runner.assert_true(load(CharSprite3D.RIG_SCENE) is PackedScene,
+			"骨架场景可加载为 PackedScene")
 
 
 func _test_fx_anchor_lift() -> void:

@@ -21,7 +21,7 @@ extends Node3D
 ## 一个 SubViewport 可以被 N 个 quad 共用（同姿态）；要每个角色不同动画相位，
 ## 必须一个角色一个 SubViewport（成本见汇报的性能读数）。
 
-const RIG_SCENE := "res://modules/units/scenes/stickman_test.tscn"
+const RIG_SCENE := preload("res://modules/stick_rig/api.gd").RIG_SCENE_PATH
 const CHAR_SHADER := preload("res://modules/hd2d/shaders/char_billboard.gdshader")
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const StickmanOutline := preload("res://modules/stick_rig/api.gd").OUTLINE_SCRIPT
@@ -186,6 +186,11 @@ var _anim := "idle"
 var _depth := 1.0
 ## 纯后台计算豁免（headless）：真视觉链不装配，见 build() 内注释
 var _pure_sim := false
+## 骨架场景加载失败（billboard 不可用）：add_char 不再建 quad——否则 material_override
+## 为 null 的 quad 会被引擎默认材质画成**灰方块**，把"场景路径写错"这种硬错误伪装成
+## 角色贴图缺失（曾实际发生：RIG_SCENE 指向迁移后已不存在的路径，街上村民全变灰块）。
+## 缺场景是硬故障，一律 push_error 喊出来 + 不产灰块。
+var _broken := false
 
 
 ## 建 SubViewport + 火柴人。parent 必须是已在树内的节点。
@@ -201,6 +206,11 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	# 落在解算之前 → 存的是 rest/未 IK 的姿态。本原型只用矢量路径取正确姿态，
 	# 这个批渲染差异如实写进汇报，不当成功。
 	OS.set_environment("STICK_BATCH_RIG", "0")
+	var rig_scene: PackedScene = load(RIG_SCENE)
+	if rig_scene == null:
+		_broken = true
+		push_error("[char_sprite_3d] 骨架场景缺失，billboard 不可用: " + RIG_SCENE)
+		return
 	_sv_size = Vector2i(int(SV_W * px_scale), int(SV_H * px_scale))
 	_foot_row = FOOT_ROW * px_scale
 	var rig_scale := RIG_SCALE * px_scale
@@ -208,7 +218,7 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	# 材质/接地影整条视觉链不装配——sim 开启时 sim 是命中时序权威，rig 只是
 	# 动画位置的兜底读源（实体链回退时仍可能轮询），故裸留一份不进视口。
 	if _pure_sim:
-		var inst0: Node = load(RIG_SCENE).instantiate()
+		var inst0: Node = rig_scene.instantiate()
 		inst0.set_script(null)
 		add_child(inst0)
 		rig = inst0.get_node("OutlineGroup/StickmanRig") as Node2D
@@ -232,7 +242,7 @@ func build(parent: Node, anim: String = "idle", tilt_deg: float = 26.0) -> void:
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	parent.add_child(viewport)
 
-	var inst: Node = load(RIG_SCENE).instantiate()
+	var inst: Node = rig_scene.instantiate()
 	# stickman_test.tscn 的根脚本是"编辑器演示"控制器（把实例挪到 (400,300)、
 	# 加 Label、按主视口尺寸缩放）。摘掉它，由本脚本按 SubViewport 自己的坐标系统一摆位。
 	inst.set_script(null)
@@ -282,6 +292,11 @@ func quad_center_offset_y() -> float:
 ## quad 世界尺寸固定 = 基准 SubViewport 尺寸 × PX（与 px_scale 无关）：
 ## SubViewport 变大只是让 2D 角色被画得更精细，世界占位始终 4.06 格。
 func add_char(x: float, z: float, flip: bool = false) -> MeshInstance3D:
+	# 骨架缺失（_broken）不发 quad：material_override 为 null 的 quad 会被引擎默认
+	# 材质画成灰方块（见 _broken 注）。纯后台计算档（_pure_sim）照旧建 quad——那条
+	# 链路本就不进视口，quad 只是宿主摆位的占位，行为不变。
+	if _broken:
+		return null
 	var q := QuadMesh.new()
 	q.size = Vector2(SV_W * PX, SV_H * PX) * SIZE_K
 	var mi := MeshInstance3D.new()

@@ -1,57 +1,54 @@
 class_name Minimap
 extends Control
-## 小地图 —— 屏幕正上方中央的缩略地图。
+## 小地图 —— 屏幕正上方中央的本地块缩略图。
 ##
-## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.4。
-## P0 策略 3（纯色填充）：地面绿色矩形 + 天空蓝色矩形。
+## 详见 docs/技术/架构/场景与战斗/UI.md §10.4。
 ##
-## 显示内容：
-##   - 地图缩略图（纯色填充：天空蓝 + 地面绿）
-##   - 当前屏幕视野框（红色边框）
-##   - 角色位置点（绿色）
-##   - 建筑物图标（黄/棕色小矩形）
+## 显示内容（绘制核见 minimap_painter.gd，与放大版窗口共用同一投影）：
+##   - 地表：按地图侧供给的材质色带铺实际颜色（主街石板 / 城外草地，不再是全幅纯绿）
+##   - 建筑：按世界实际材质色缩略（不再分类硬编码黄点）
+##   - 实体点：玩家（绿点+呼吸光环）/ 同阵营（蓝）/ 敌方（红）/ 中立 NPC·村民（淡土石）
+##     ——位置按实体实际纵深落点（地面带内映射，不再一律钉在天地分界线上）
+##   - 视野框（红框）
+##
+## 体量：高固定 120，宽按**等比例尺**随地图宽自适应（见 _desired_width），
+## 上限受顶栏两侧按钮群之间的空档（减去 L1 缩略窗占位）钳制，
+## 位置归 zone（top_center 全跨度内居中，见 hud_zone_layout.gd）。
 ##
 ## 交互：
-##   - 左键点击/拖动：相机跳转到点击位置（RTS 式），暂停自动跟随
+##   - 左键点击/拖动：相机跳转到点击位置（RTS 式，暂停自动跟随）
+##   - 双击 / 点右上角展开把手：发 expand_requested 展开成放大版（装配层开窗）
+##     单击保留 RTS 跳转（已验收语义），故展开不复用单击
 ##
-## 由 GameRoot 在 _ready 中创建并 add_child 到 UIRoot，随后调用 setup(game_root)。
+## 由 GameRoot 在装配时创建并 add_child 到 UIRoot，随后调用 setup(game_root)。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 小地图体量（屏幕像素）。定位归 zone（top_center 保留区须容纳此体量，
-## 见 hud_zone_layout.gd）；1.5 倍放大（基准 240x80 → 360x120）
-const MAP_WIDTH: float = 360.0
+## 小地图高度（屏幕像素；地面带比例由地图 ground_ratio 决定）
 const MAP_HEIGHT: float = 120.0
-## 边框宽度
-const BORDER_WIDTH: float = 2.0
-## 建筑图标最小宽度（像素）
-const BUILDING_MIN_W: float = 2.0
-## 视野框更新频率（Hz，节流避免每帧重算）
+## 宽度可读下限（px）：比这更窄就退回固定宽度，宁可比例失真也不越走越小
+const BASE_WIDTH: float = 360.0
+## 实体点/视野框更新频率（Hz，节流避免每帧重算）
 const UPDATE_HZ: float = 15.0
+## 右上角展开把手尺寸与内缩（px）
+const GLYPH_BOX: float = 16.0
+const GLYPH_INSET: float = 3.0
 
-# ─────────────────────────────── 颜色 ────────────────────────────────
-const COLOR_BORDER: Color = Color(0.15, 0.15, 0.15, 0.9)
-const COLOR_SKY: Color = Color(0.25, 0.45, 0.7, 0.7)
-const COLOR_GROUND: Color = Color(0.2, 0.45, 0.2, 0.85)
-const COLOR_VIEWPORT: Color = Color(1.0, 0.3, 0.3, 0.85)
-const COLOR_PLAYER: Color = Color(0.3, 1.0, 0.35, 1.0)
-const COLOR_BUILDING: Color = Color(0.85, 0.7, 0.35, 0.9)
-const COLOR_TERRAIN_BLD: Color = Color(0.6, 0.55, 0.5, 0.85)
+## 请求展开放大版（装配层接线开 MinimapWindow）
+signal expand_requested
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
 var _camera_rig: Node = null
 
-# ─────────────────────────────── 地图信息 ────────────────────────────────
-var _map_left: float = 0.0
-var _map_right: float = 8192.0
-var _map_width: float = 8192.0
-var _ground_y: float = 810.0
-var _ground_ratio: float = 0.25
-var _has_map_info: bool = false
-
 # ─────────────────────────────── 状态 ────────────────────────────────
+## 地图投影参数 [left, right, ground_y, ground_ratio]（set_map_info 注入）
+var _map_info: Array = [0.0, 8192.0, 720.0, 0.334]
+var _has_map_info: bool = false
+## 当前宽度（随地图/画布自适应；高度恒 MAP_HEIGHT）
+var _width: float = BASE_WIDTH
 var _update_accum: float = 0.0
 var _dragging: bool = false
+var _hover: bool = false
 
 
 # ─────────────────────────────── 装配 ────────────────────────────────
@@ -59,8 +56,11 @@ var _dragging: bool = false
 func _ready() -> void:
 	# 体量声明：定位归 zone（SystemSetup 经 UIRoot.place_in_zone 钉进 top_center，
 	# 见 hud_zone_layout.gd），本部件不自算屏幕坐标
-	custom_minimum_size = Vector2(MAP_WIDTH, MAP_HEIGHT)
+	custom_minimum_size = Vector2(_width, MAP_HEIGHT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_refresh_size):
+		vp.size_changed.connect(_refresh_size)
 
 
 ## 由 GameRoot 调用，注入引用。
@@ -73,21 +73,74 @@ func setup(game_root: Node) -> void:
 
 ## 设置地图信息（地图加载时由 GameRoot 调用，详见 §10.4.6）
 func set_map_info(p_map_left: float, p_map_right: float, p_ground_y: float, p_ground_ratio: float) -> void:
-	_map_left = p_map_left
-	_map_right = p_map_right
-	_map_width = p_map_right - p_map_left
-	if _map_width <= 0.0:
-		_map_width = 1.0
-	_ground_y = p_ground_y
-	_ground_ratio = p_ground_ratio
+	_map_info = [p_map_left, p_map_right, p_ground_y, p_ground_ratio]
 	_has_map_info = true
+	_refresh_size()
+	queue_redraw()
+
+
+# ─────────────────────────────── 体量自适应 ────────────────────────────────
+
+## 当前小地图宽度（px）——外部（L1 缩略窗定位 / 测试）读体量的唯一出口
+func get_map_width_px() -> float:
+	return _width
+
+
+## 地图投影参数 [left, right, ground_y, ground_ratio]（放大版窗口据此复用同一投影）
+func get_map_info() -> Array:
+	return _map_info
+
+
+## 小地图高度（px）——烘焙底图尺寸按它算（外部读体量的出口）
+func get_map_height_px() -> float:
+	return MAP_HEIGHT
+
+
+## 期望宽度：**等比例尺**——画面构图决定地面带像素高（`高 × ground_ratio`），
+## 该像素高代表地图的地面世界深度，由此定出"世界 px / 小地图 px"；横向同比例尺
+## 取宽。于是：地图越宽小地图越宽（"保持比例尺"），且**横纵同比例尺、房屋/地块
+## 形状不变形**（否则实际"宽 > 深"的房子会画成"高 > 宽"）。
+func _desired_width() -> float:
+	var map_w: float = maxf(float(_map_info[1]) - float(_map_info[0]), 1.0)
+	var band_px: float = maxf(MAP_HEIGHT * float(_map_info[3]), 1.0)
+	var scale: float = maxf(_ground_depth() / band_px, 0.001)
+	return map_w / scale
+
+
+## 地面带世界深度（ground_y..ground_bottom）。地图未就绪（占位期）按屏高构图反推，
+## 避免装配途中的宽度跳变。
+func _ground_depth() -> float:
+	var map := _get_current_map()
+	if map != null and map.has_method("get_ground_bottom"):
+		return maxf(float(map.get_ground_bottom()) - float(_map_info[2]), 1.0)
+	return 1080.0 * float(_map_info[3])
+
+
+## 可用宽度上限（空档宽 − L1 缩略窗占位；HudZoneLayout 是布局真相源）
+func _max_width() -> float:
+	var vp := get_viewport()
+	var vp_x: float = vp.get_visible_rect().size.x if vp != null else 1920.0
+	return HudZoneLayout.top_center_map_max_width(vp_x)
+
+
+## 重算并应用宽度（地图变化 / 画布尺寸变化时调用）。
+## 下限 360：空档太窄（或画布异形）时退回固定宽度，接受与按钮群接近/重叠，
+## 不把地图缩到看不清（口径见待办"窄跨度/超宽地图时钳回 360"）。
+func _refresh_size() -> void:
+	var cap: float = _max_width()
+	var w: float = clampf(_desired_width(), BASE_WIDTH, cap)
+	w = maxf(w, BASE_WIDTH)
+	if is_equal_approx(w, _width):
+		return
+	_width = w
+	custom_minimum_size = Vector2(_width, MAP_HEIGHT)
 	queue_redraw()
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _process(delta: float) -> void:
-	# 节流重绘（15Hz 足够，角色点/视野框不需要每帧）
+	# 节流重绘（15Hz 足够，实体点/视野框不需要每帧）
 	_update_accum += delta
 	if _update_accum >= 1.0 / UPDATE_HZ:
 		_update_accum = 0.0
@@ -95,103 +148,90 @@ func _process(delta: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		var was_hover: bool = _hover
+		_hover = _expand_glyph_rect().has_point(event.position)
+		if _hover != was_hover:
+			queue_redraw()
+		if _dragging and _has_map_info:
+			_jump_to_mouse(event.position)
+		return
 	if not _has_map_info:
 		return
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				_dragging = true
-				_jump_to_mouse(event.position)
-			else:
-				_dragging = false
-	elif event is InputEventMouseMotion and _dragging:
-		_jump_to_mouse(event.position)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			# 展开把手 / 双击 = 展开（单击保留 RTS 相机跳转语义）
+			if _expand_glyph_rect().has_point(event.position) or event.double_click:
+				expand_requested.emit()
+				accept_event()
+				return
+			_dragging = true
+			_jump_to_mouse(event.position)
+		else:
+			_dragging = false
+
+
+## 鼠标移出收起把手高亮
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_MOUSE_EXIT and _hover:
+		_hover = false
+		queue_redraw()
 
 
 # ─────────────────────────────── 绘制 ────────────────────────────────
 
 func _draw() -> void:
+	var rect := Rect2(Vector2.ZERO, Vector2(_width, MAP_HEIGHT))
 	if not _has_map_info:
-		_draw_placeholder()
+		_draw_placeholder(rect)
 		return
-	var rect := Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT))
-	# 1. 背景：天空 + 地面
-	var ground_y_px: float = MAP_HEIGHT * (1.0 - _ground_ratio)
-	draw_rect(rect, COLOR_SKY, true)
-	draw_rect(Rect2(Vector2(0, ground_y_px), Vector2(MAP_WIDTH, MAP_HEIGHT - ground_y_px)), COLOR_GROUND, true)
-	# 2. 建筑图标
-	_draw_buildings(ground_y_px)
-	# 3. 角色点
-	_draw_player_dot(ground_y_px)
-	# 4. 视野框
-	_draw_viewport_rect()
-	# 5. 边框
-	draw_rect(rect, COLOR_BORDER, false, BORDER_WIDTH)
-
-
-func _draw_placeholder() -> void:
-	var rect := Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT))
-	draw_rect(rect, Color(0.2, 0.2, 0.2, 0.8), true)
-	draw_rect(rect, COLOR_BORDER, false, BORDER_WIDTH)
-
-
-func _draw_buildings(ground_y_px: float) -> void:
 	var map: Node2D = _get_current_map()
-	if map == null:
-		return
-	# 建筑数据由地图类汇总（get_minimap_buildings），UI 不直接遍历地图节点树
-	if not map.has_method("get_minimap_buildings"):
-		return
-	for b in map.get_minimap_buildings():
-		var color: Color = COLOR_TERRAIN_BLD if b.get("terrain", false) else COLOR_BUILDING
-		_draw_building_icon(b.get("x", 0.0), b.get("width", 32.0), ground_y_px, color)
+	var snap: Dictionary = MinimapPainter.build_snapshot(map, _map_info)
+	var points: Array = MinimapPainter.collect_points(map)
+	MinimapPainter.draw(self, rect, snap, points, {"viewport_world": _viewport_world()})
+	_draw_expand_glyph(rect)
 
 
-func _draw_building_icon(world_x: float, world_w: float, ground_y_px: float, color: Color) -> void:
-	var icon_x: float = _world_to_minimap_x(world_x)
-	var icon_w: float = maxf(BUILDING_MIN_W, world_w / _map_width * MAP_WIDTH)
-	# 建筑图标在地面线上方（模拟建筑高度）
-	var icon_h: float = 6.0
-	draw_rect(Rect2(icon_x - icon_w * 0.5, ground_y_px - icon_h, icon_w, icon_h), color, true)
+func _draw_placeholder(rect: Rect2) -> void:
+	draw_rect(rect, StickTokens.WINDOW_BG, true)
+	draw_rect(rect, StickTokens.BORDER_STRONG, false, MinimapPainter.BORDER_W)
+	_draw_expand_glyph(rect)
 
 
-func _draw_player_dot(ground_y_px: float) -> void:
-	var player: Node2D = _get_player_entity()
-	if player == null:
-		return
-	var dot_x: float = _world_to_minimap_x(player.global_position.x)
-	# 角色点在地面线上（Y 固定，详见 §10.4.4）
-	# 呼吸光环（脉动）：1.2s 周期，3px 实心点外圈 3→6px 渐隐
-	var phase: float = fmod(Time.get_ticks_msec() / 1000.0, 1.2) / 1.2
-	var halo_r: float = 3.0 + phase * 3.0
-	var halo := COLOR_PLAYER
-	halo.a = 0.5 * (1.0 - phase)
-	draw_circle(Vector2(dot_x, ground_y_px), halo_r, halo)
-	draw_circle(Vector2(dot_x, ground_y_px), 3.0, COLOR_PLAYER)
+## 右上角展开把手：常态淡显（可发现）、悬停高亮。图标 = 底板 + 右上外指箭头，
+## 点击热区见 _expand_glyph_rect。
+func _draw_expand_glyph(rect: Rect2) -> void:
+	var g := _expand_glyph_rect()
+	var a: float = 0.95 if _hover else 0.5
+	var col := Color(1.0, 1.0, 1.0, a)
+	var box := Rect2(g.position + Vector2(3.0, 3.0), Vector2(GLYPH_BOX - 6.0, GLYPH_BOX - 6.0))
+	draw_rect(box, Color(0.05, 0.04, 0.03, a * 0.55), true)
+	draw_rect(box, col, false, 1.0)
+	var p: Vector2 = box.position + box.size - Vector2(1.0, 1.0)
+	draw_line(p, p - Vector2(4.0, 4.0), col, 1.0)
+	draw_line(p, p - Vector2(4.0, 0.0), col, 1.0)
+	draw_line(p, p - Vector2(0.0, 4.0), col, 1.0)
 
 
-func _draw_viewport_rect() -> void:
+func _expand_glyph_rect() -> Rect2:
+	return Rect2(Vector2(_width - GLYPH_BOX - GLYPH_INSET, GLYPH_INSET),
+			Vector2(GLYPH_BOX, GLYPH_BOX))
+
+
+## 相机可视世界范围（供绘制核画视野框；相机不可用时返回空 Rect2 = 不画）
+func _viewport_world() -> Rect2:
 	if _camera_rig == null or not _camera_rig.has_method("get_viewport_rect_world"):
-		return
-	var vp_world: Rect2 = _camera_rig.get_viewport_rect_world()
-	var vp_x: float = _world_to_minimap_x(vp_world.position.x)
-	var vp_w: float = vp_world.size.x / _map_width * MAP_WIDTH
-	# 视野框覆盖整个小地图高度（水平卷轴，垂直范围恒定）
-	var vp_rect := Rect2(vp_x, 0, vp_w, MAP_HEIGHT)
-	vp_rect = vp_rect.intersection(Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT)))
-	draw_rect(vp_rect, COLOR_VIEWPORT, false, 1.5)
+		return Rect2()
+	return _camera_rig.get_viewport_rect_world()
 
 
 # ─────────────────────────────── 坐标映射 ────────────────────────────────
 
-## 世界坐标 X → 小地图 X
-func _world_to_minimap_x(world_x: float) -> float:
-	return (world_x - _map_left) / _map_width * MAP_WIDTH
-
-
-## 小地图 X → 世界坐标 X
-func _minimap_to_world_x(minimap_x: float) -> float:
-	return minimap_x / MAP_WIDTH * _map_width + _map_left
+## 小地图 X → 世界坐标 X（公开：点击跳转与外部查询共用同一投影）
+func minimap_to_world_x(minimap_x: float) -> float:
+	var rect := Rect2(Vector2.ZERO, Vector2(_width, MAP_HEIGHT))
+	return MinimapPainter.x_to_world(minimap_x, rect,
+			MinimapPainter.build_snapshot(_get_current_map(), _map_info))
 
 
 # ─────────────────────────────── 交互 ────────────────────────────────
@@ -200,8 +240,7 @@ func _minimap_to_world_x(minimap_x: float) -> float:
 func _jump_to_mouse(local_pos: Vector2) -> void:
 	if _camera_rig == null or not _camera_rig.has_method("jump_to_x"):
 		return
-	var world_x: float = _minimap_to_world_x(local_pos.x)
-	_camera_rig.jump_to_x(world_x)
+	_camera_rig.jump_to_x(minimap_to_world_x(local_pos.x))
 
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
@@ -211,21 +250,4 @@ func _get_current_map() -> Node2D:
 		return null
 	if _game_root.has_method("get_current_map"):
 		return _game_root.get_current_map()
-	return null
-
-
-func _get_player_entity() -> Node2D:
-	var map: Node2D = _get_current_map()
-	if map == null:
-		return null
-	# 优先返回附身实体
-	if map.has_method("get_possessed_entity"):
-		var possessed: Node2D = map.get_possessed_entity()
-		if possessed != null:
-			return possessed
-	# 退而求其次：第一个实体
-	if map.has_method("get_entities"):
-		var entities: Array = map.get_entities()
-		if not entities.is_empty():
-			return entities[0]
 	return null

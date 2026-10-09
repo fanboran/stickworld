@@ -18,10 +18,11 @@ func bind(host: Node) -> void:
 
 # ─────────────────────────────── 小地图装配（§15 阶段 0.6）────────────────────────────────
 
-## 创建顶部小地图区（Minimap + L1 缩略窗）并挂到 UIRoot。详见 §10.4。
-## Minimap（本城市俯视）**常驻恒显**——Tab 三态不影响（创始人反馈）；
+## 创建顶部小地图区（Minimap + L1 缩略窗 + 本地地图放大版）并挂到 UIRoot。
+## 详见 §10.4。Minimap（本城市俯视）**常驻恒显**——Tab 三态不影响（创始人反馈）；
 ## L1 缩略窗也常驻（创始人反馈：Tab 地图默认展开），初始隐藏，由步骤表
-## 后段的「地图缩略窗」步骤喂完数据后显示。
+## 后段的「地图缩略窗」步骤喂完数据后显示；放大版浮窗初始隐藏，由小地图
+## 展开把手/双击唤起。
 func _setup_minimap() -> void:
 	if _host._root.ui_root == null:
 		return
@@ -44,6 +45,31 @@ func _setup_minimap() -> void:
 		# 写入，立即调用会读到旧 rect（0,0 起）；call_deferred 排在重排之后必就绪
 		_host._l1_thumbnail.call_deferred("place_right_of_minimap", mm)
 	_host._l1_thumbnail.visible = false
+	# 本地地图放大版（Minimap 展开把手/双击 → 打开；常驻隐藏，挂 ModalOverlay
+	# 与 OrgPanel 同层——它是"看得更细"的辅助视图，不是排他模态）
+	var win: Control = _setup_minimap_window(mm)
+	if win != null:
+		_host._root.ui_root.add_to_slot("ModalOverlay", win)
+
+
+## 本地地图放大版浮窗装配：创建 → 注入引用 → 接线展开请求 → 常驻隐藏。
+func _setup_minimap_window(minimap: Control) -> Control:
+	var win: Control = UIKit.full_rect(_host._MinimapWindowScript, "MinimapWindow")
+	_host._minimap_window = win
+	if win.has_method("setup"):
+		win.setup(_host._root, minimap)
+	if minimap.has_signal("expand_requested"):
+		minimap.expand_requested.connect(_on_minimap_expand_requested)
+	win.visible = false
+	return win
+
+
+## Minimap 请求展开 → 放大版开合（再次双击/点把手 = 收起，符合"再点一次关掉"直觉）
+func _on_minimap_expand_requested() -> void:
+	if _host._minimap_window == null:
+		return
+	if _host._minimap_window.has_method("toggle"):
+		_host._minimap_window.toggle()
 
 
 # ─────────────────────────────── 阶段 F：边界检测出城系统 ────────────────────────────────

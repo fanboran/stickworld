@@ -105,13 +105,16 @@ func _test_minimap_map_info() -> void:
 	var has_info: bool = _minimap.get("_has_map_info") if _minimap.get("_has_map_info") != null else false
 	_runner.assert_true(has_info, "Minimap 地图信息应已设置")
 	# 验证坐标映射：小地图中点应对应地图中点
-	var map_left: float = _minimap.get("_map_left")
-	var map_right: float = _minimap.get("_map_right")
+	# 公开查询口：get_map_info / get_map_width_px / minimap_to_world_x——
+	# 体量随地图自适应，宽度不再是不变常量，故不能再读 MAP_WIDTH 常量。
+	var map_info: Array = _minimap.get_map_info()
+	var map_left: float = float(map_info[0])
+	var map_right: float = float(map_info[1])
 	var map_w: float = map_right - map_left
-	var minimap_w: float = _minimap.get("MAP_WIDTH")
-	# 小地图 X = MAP_WIDTH/2 对应世界 X = map_left + map_w/2
-	# 白盒标注（2026-08 审计）：minimap 私有方法，待 UI 层暴露公共查询后再脱敏
-	var world_x: float = _minimap._minimap_to_world_x(minimap_w * 0.5)
+	var minimap_w: float = _minimap.get_map_width_px()
+	_runner.assert_true(minimap_w >= Minimap.BASE_WIDTH,
+			"小地图宽度不低于可读下限 %.0f（实际 %.1f）" % [Minimap.BASE_WIDTH, minimap_w])
+	var world_x: float = _minimap.minimap_to_world_x(minimap_w * 0.5)
 	var expected_x: float = map_left + map_w * 0.5
 	_runner.assert_true(absf(world_x - expected_x) < 1.0, "小地图中点应映射到地图中点")
 
@@ -154,7 +157,7 @@ func _test_minimap_jump() -> void:
 	# 记录当前相机 X
 	var cam_x_before: float = cam.global_position.x
 	# 通过小地图跳转到地图右侧（小地图 X = 80% 处）
-	var minimap_w: float = _minimap.get("MAP_WIDTH")
+	var minimap_w: float = _minimap.get_map_width_px()
 	_minimap._jump_to_mouse(Vector2(minimap_w * 0.8, 10.0))
 	await get_tree().process_frame
 	# 验证相机 X 已变化

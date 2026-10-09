@@ -17,6 +17,21 @@ extends RefCounted
 ## 约束：堆叠成员须挂在「顶部通栏全宽、原点即屏左上」的父级下（GlobalHUD /
 ## HudOverlay 均满足），同一组 offsets 才在不同父级下产生相同屏幕位置。
 
+# ─────────────────────────────── 顶部中央跨度合同 ────────────────────────────────
+## 顶栏两段按钮群之间的空档（画布 px，自屏幕左缘计）——顶部中央部件（小地图）
+## 允许占用的横向范围，数值取自 global_hud.tscn HBoxContainer 子项实测：
+##   左群右缘（PlaceholderPreviewButton 右缘 695；Spring 起点 703）→ 703（含间隙 8）
+##   右群左缘（OrgButton 左缘 1646）→ 1638（含间隙 8）
+## 顶栏为通栏容器：左群左锚固定像素、右群右锚固定像素，故这两个数在横向恒定的
+## 画布坐标下不随分辨率变（stretch=canvas_items+expand 下横向恒 1920）。
+const TOP_CENTER_FREE_LEFT_PX := 703.0
+const TOP_CENTER_FREE_RIGHT_PX := 1638.0
+## 基准画布宽（UX 基准分辨率，见 project.godot display/window/size/viewport_width）
+const BASE_CANVAS_W := 1920.0
+## L1 世界缩略窗占位（水平间隙 8 + 缩略窗宽 120）：小地图贴其左侧，
+## 故小地图可用宽度 = 空档宽 − 本占位（见 top_center_map_max_width）。
+const TOP_CENTER_THUMBNAIL_SLOT := 128.0
+
 # ─────────────────────────────── zone 注册表 ────────────────────────────────
 ## 每区字段（占位一屏可读，1920×1080 基准）：
 ##   anchors: [L,T,R,B] 锚点比例（相对挂载父级矩形）
@@ -42,11 +57,12 @@ const ZONES: Dictionary = {
 	},
 	&"top_center": {
 		"anchors": [0.5, 0.0, 0.5, 0.0],
-		"region": [-206.0, 8.0, 206.0, 170.0],
+		"region": [TOP_CENTER_FREE_LEFT_PX - BASE_CANVAS_W * 0.5, 8.0,
+				TOP_CENTER_FREE_RIGHT_PX - TOP_CENTER_THUMBNAIL_SLOT - BASE_CANVAS_W * 0.5, 170.0],
 		"mode": "stack",
 		"stack_h": "center",
 		"gap": 6.0,
-		"desc": "顶部中央堆叠：Minimap→ZoomBar（缩放条贴小地图下方；L1Thumbnail 不入区，贴 Minimap 右侧自算；窄窗口下与堆叠区逼近，防撞以 1920 基准为准）",
+		"desc": "顶部中央堆叠：Minimap→ZoomBar（缩放条贴小地图下方；L1Thumbnail 不入区，贴 Minimap 右侧自算）。保留区 = 顶栏两按钮群之间的全跨度**减去 L1 缩略窗占位**——小地图在区内按地图宽自适应并居中，缩略窗随后落在右侧留出的占位里，「小地图 + 缩略窗」这一对因此在空档内居中；窄画布下与按钮群逼近，防撞以 1920 基准为准",
 	},
 	&"top_right": {
 		"anchors": [1.0, 0.0, 1.0, 0.0],
@@ -131,6 +147,19 @@ static func zone_rect(zone_id: StringName, viewport_size: Vector2) -> Rect2:
 	var pos := Vector2(a[0] * viewport_size.x + r[0], a[1] * viewport_size.y + r[1])
 	var end := Vector2(a[2] * viewport_size.x + r[2], a[3] * viewport_size.y + r[3])
 	return Rect2(pos, end - pos)
+
+
+## 顶部中央空档宽度（画布 px）：两侧锚线都是固定像素（左群右缘 / 右群左缘），
+## 故空档宽与画布宽无关——vp_x 参数保留为接口一致（将来若改比例锚定在此改）。
+static func top_center_span_width(_vp_x: float = BASE_CANVAS_W) -> float:
+	return maxf(TOP_CENTER_FREE_RIGHT_PX - TOP_CENTER_FREE_LEFT_PX, 1.0)
+
+
+## 小地图可用最大宽度 = 顶栏空档宽 − L1 缩略窗占位（即 zone 保留区宽度本身：
+## 缩略窗贴小地图右侧并列，占用区右端那一段；小地图在区内居中 → 「小地图 +
+## 缩略窗」这一对正好在空档内居中）。改表即改上限，部件不复制数值。
+static func top_center_map_max_width(vp_x: float = BASE_CANVAS_W) -> float:
+	return maxf(zone_rect(&"top_center", Vector2(vp_x, BASE_CANVAS_W)).size.x, 1.0)
 
 
 # ─────────────────────────────── 内部：落位 ────────────────────────────────

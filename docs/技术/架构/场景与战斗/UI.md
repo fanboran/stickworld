@@ -98,7 +98,7 @@ modules/ui_global/           # 全局 UI 层：容器 + 通用控件
 ├── api.gd
 ├── scripts/
 │   ├── ui_root.gd           # UIRoot 主控
-│   ├── hud/                 # GlobalHUD / ClockWidget / Minimap / ZoomBar（薄壳）/ ZoomSlider（公共缩放条机件）/ ResourceBar
+│   ├── hud/                 # GlobalHUD / ClockWidget / Minimap（+ minimap_painter / minimap_window）/ ZoomBar（薄壳）/ ZoomSlider（公共缩放条机件）/ ResourceBar
 │   ├── panels/              # ModePanel（容器）/ ContextPanel（容器）/ SettingsMenuPanel
 │   └── indicators/          # 游玩指示器（附身圆圈/悬停方框/中键图标）
 └── scenes/
@@ -134,41 +134,65 @@ modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
 
 ### 10.4 Minimap 小地图系统
 
+小地图 = **顶部中央的本地块缩略图**（地表材质分区 + 建筑 + 实体点 + 视野框），
+与它右侧的 L1 世界缩略窗、下方的缩放条同属「顶部小地图区」。
+
 #### 10.4.1 位置与尺寸
 
-- **位置**：屏幕正上方中央（`anchor_top = 0`，水平居中）
-- **尺寸**：默认 `240x80`（可配置），按地图长宽比自适应
-- **层级**：`UIRoot` 子节点，`z_index` 高于游戏画面，低于 `ModalOverlay`
+- **位置**：屏幕正上方中央——`top_center` zone，保留区 = 顶栏左右两段按钮群之间的空档
+  **减去 L1 缩略窗占位**（缩略窗贴小地图右侧并列，故「小地图 + 缩略窗」这一对在空档内居中）
+- **尺寸**：高固定 `120`；**宽按等比例尺随地图宽推出**——地面带像素高（`高 × ground_ratio`，
+  与画面同构图）代表地图的世界地面深，由此得"世界 px / 小地图 px"，横向同比例尺取宽，
+  钳在 `[360, 空档宽 − 缩略窗占位]`（比例尺与防撞合同详见 §10.4.7）
+- **层级**：`UIRoot` 槽 `HudOverlay`（z 高于 `GlobalHUD` 顶栏，故顶栏按钮群不会抢走小地图上的鼠标事件），低于 `ModalOverlay`
 
-#### 10.4.2 节点结构
+#### 10.4.2 实现形态
 
-```
-Minimap (Control)                      ← 屏幕正上方中央
-├── Background (Panel)                 ← 背景框
-├── MapThumbnail (TextureRect)         ← 整图缩略图（程序生成或预渲染）
-├── ViewportRect (ColorRect)           ← 当前屏幕视野框（红色边框）
-├── PlayerDot (ColorRect)              ← 角色位置点（绿色）
-└── BuildingLayer (Node2D)             ← 建筑物图标容器
-    └── BuildingIcon[] (ColorRect)     # 每个建筑一个小图标
-```
+绘制全部走 `_draw`（**无子节点树**——地图是实时数据，重建节点树不如直接落笔），
+且**双路径**：有照片底图走照片路径，无则退回纯数据平面图。
+
+| 文件 | 职责 |
+|------|------|
+| `modules/ui_global/scripts/hud/minimap.gd` | 部件：体量自适应、交互（跳转/展开）、装配入口 |
+| `modules/ui_global/scripts/hud/minimap_painter.gd` | **绘制核**：两条绘制路径（照片底图 / 数据平面图）+ 投影换算 + 图层顺序（与放大版共用，保证两处点位逐像素对得上） |
+| `modules/ui_global/scripts/hud/minimap_window.gd` / `minimap_canvas.gd` | 放大版浮窗（StickWindow·FLOATING）与其绘制区 |
+| `modules/hd2d/scripts/hd2d_world.gd` → `bake_minimap_strip()` | **照片底图烘焙**：只留前排建筑 + 地面的真渲染，降采样成街带贴图（见 §10.4.8） |
+| `modules/hd2d/scripts/hd2d_minimap_style.gd` | 建筑 def → 功能类型 + 近似世界材质色（**平面图路径**用；照片路径不用近似色） |
+
+**数据供给在组件名下、朝地图侧一行**：`map.get_minimap_layout()`
+（`modules/world/scripts/map/map_base.gd` 虚方法，返回
+`{surfaces: [{x0, x1, color}], buildings: [{x, width, terrain, def, type, color}]}`，
+世界 px 口径；`hd2d_map_base.gd` 覆写 = 3D 街景地表条带 + 前排建筑 + 2D 宿主里的
+玩家自建建筑）。UI 侧不遍历地图节点树、不读地图私有字段。
 
 #### 10.4.3 显示内容
 
-| 元素 | 来源 | 更新频率 |
-|------|------|---------|
-| 地图缩略图 | `minimap_renderer` 生成（地图加载时一次） | 地图切换时重生成 |
-| 视野框 | `CameraRig.get_viewport_rect()` 映射到缩略图坐标 | 每帧（或 10Hz 节流） |
-| 角色点 | 玩家实体 `global_position.x` 映射；Y 固定在 `ground_y` 对应位置 | 每帧 |
-| 建筑图标 | `BuildingHost` 子节点，按 `building_type` 着色 | 建筑增减时增量更新 |
+| 元素 | 来源 | 频率 |
+|------|------|------|
+| **底图** | 照片路径：`map.get_minimap_base()` 的烘焙贴图（真渲染街带，含真实建筑美术与地表）；平面图路径：地表色带 + 建筑色块（下两行） | 地图加载时烘一次 |
+| 地表材质色带 | `get_minimap_layout().surfaces`（按铺地顺序叠色，故主街石板压住城外草地） | 15Hz |
+| 建筑 | 同上前排建筑，按**真占地**画俯视块（世界宽 × 占地纵深，取自与 F3 碰撞带同源的烘焙占地口径）：**实际材质色**（默认）/ **功能类型色**（放大版） | 15Hz |
+| 实体点 | `map.get_entities()`：玩家（绿点 + 呼吸光环）/ 同阵营（蓝）/ 敌方（红）/ 中立 NPC·村民（淡土石） | 15Hz |
+| 视野框 | `CameraRig.get_viewport_rect_world()` | 15Hz |
+
+节流常量 `UPDATE_HZ = 15`——实体点与视野框不需要每帧重算。
+
+覆盖层两条路径都要画：单位点、视野框、以及**照片里没有的建筑**（玩家自建/后改，
+`baked == false` 的那些，见 §10.4.8）。平面图路径里建筑按**真占地**画块而非"图标"
+——立面高在俯视图里没有对应维度，画成图标会让房子看着比实际小得多（脚下真占地整片空着）。
 
 #### 10.4.4 坐标映射
 
 ```
-缩略图坐标 = (世界坐标 - map_left) * (缩略图宽 / 地图宽)
+小地图 X = (世界 X - map_left) / 地图宽 × 小地图宽
+小地图 Y = 天地分界 + (世界 Y - ground_y) / (ground_bottom - ground_y) × 地面带高
 ```
 
-- Y 轴：地图垂直范围 `[sky_top, ground_y + depth]` 映射到缩略图高度
-- 角色点 Y 固定在 `ground_y` 对应的缩略图位置（约下方 1/3）
+- 天地分界 = `高 × (1 - ground_ratio)`：地面带高 = `高 × ground_ratio`（与画面同构图，本作城镇约 57%）
+- 地面带内的世界纵深才映射到地面带内，故**站位前后可读**（靠后 = 画得靠上），
+  不是一律钉在分界线上；越出 `[ground_y, ground_bottom]` 的 Y 被钳到地面带边缘
+- 换算唯一出口在 `minimap_painter.gd`（`world_to_x` / `world_to_y` / `x_to_world`），
+  顶部小地图与放大版共用——两处点位必须逐像素一致
 
 #### 10.4.5 交互
 
@@ -176,35 +200,76 @@ Minimap (Control)                      ← 屏幕正上方中央
 |------|------|
 | 左键点击小地图 | 相机跳转到点击位置（RTS 式观察），暂停自动跟随（详见 [场景宿主架构.md](场景宿主架构.md) §2.4.5） |
 | 左键拖动小地图 | 相机持续跟随拖动位置 |
-| 鼠标悬停（可选，P0 不做） | 显示该位置坐标/建筑名提示 |
+| 双击 / 点右上角展开把手 | 发 `expand_requested` → 装配层打开**放大版浮窗**（`MinimapWindow`，非模态，ESC/✕ 关闭）。单击保留相机跳转语义，故展开不复用单击 |
+| 点 L1 世界缩略窗 | 打开 L1 大图（Tab 三态第三步；见 §10.3） |
 
-**点击跳转实现：**
-```gdscript
-func _on_gui_input(event):
-    if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-        var world_x := (event.position.x / size.x) * (map_right - map_left) + map_left
-        camera_rig.jump_to_x(world_x)  # 手动控制，暂停自动跟随
-```
+放大版浮窗内点地图同样跳转相机；L1 缩略窗贴在 Minimap 右侧，订阅其 `resized`
+跟随重定位（小地图变宽时自动让位）。
 
 #### 10.4.6 公共 API
 
 ```gdscript
 # Minimap
 set_map_info(map_left, map_right, ground_y, ground_ratio)  # 地图加载时调用
-update_player_position(x: float)                           # 每帧调用
-update_viewport_rect(rect: Rect2)                          # 每帧调用（来自 CameraRig）
-refresh_buildings(buildings: Array)                        # 建筑变化时调用
+get_map_info() -> Array                                    # 复用同一投影（放大版取用）
+get_map_width_px() -> float                                # 当前体量（外部/测试读取口）
+minimap_to_world_x(x) -> float                             # 点击跳转与外部查询共用
+signal expand_requested                                    # 请求展开放大版
 ```
 
-#### 10.4.7 缩略图生成策略
+#### 10.4.7 宽度自适应与跨度合同
 
-`minimap_renderer.gd` 负责生成缩略图，三种策略（按优先级）：
+顶部中央的可用横向范围 = **顶栏左右两段按钮群之间的空档**（`hud_zone_layout.gd` 的
+`TOP_CENTER_FREE_LEFT_PX` / `TOP_CENTER_FREE_RIGHT_PX`，取自 `global_hud.tscn` 实测；
+布局真相源是 zone 表，部件不自造数值）。空档里还要留出 L1 缩略窗的占位
+（`TOP_CENTER_THUMBNAIL_SLOT` = 间隙 8 + 缩略窗宽 120），故：
 
-1. **预渲染纹理**（首选）：地图配置里指定 `thumbnail.png`，直接使用
-2. **程序生成**（兜底）：读取 `TerrainLayer.GroundPolygon` 顶点 + `DecorationLayer` 装饰物，用 `Viewport` 离屏渲染缩略图
-3. **纯色填充**（最小可用）：地面绿色矩形 + 天空蓝色矩形，无装饰
+- **等比例尺**（横纵一致，房屋/地块不变形）：`世界 px / 小地图 px = 地面世界深 / (小地图高 × ground_ratio)`。
+  横向同比例尺取宽 ⇒ 地图越宽小地图越宽（"保持比例尺"）
+- **上限**：`top_center_map_max_width` = 空档宽 − 缩略窗占位。小地图在区内居中，
+  缩略窗随后落在右端占位里 ⇒「小地图 + 缩略窗」这一对在空档内居中
+- **下限 360**：空档太窄或地图过小时退回固定宽度，接受比例失真，不把地图缩到看不清
+- 本作城镇（7080 世界 px）得 787 px 宽、比例尺 9.0；战场（6144）得 683 px。若地图宽超出
+  空档能给的宽度，宽度被钳住、比例尺随之略失真（单向、渐增）
+- **放大版**：地图区 = 顶部小地图矩形 × `ZOOM(1.5)`（同比）——同一张图放大，两处比例尺
+  一致、底图与点位都不被拉伸；地图区是长条（世界本身 11.5:1），窗口因此是宽扁窗
 
-P0 阶段先用策略 3（纯色填充），后续迭代到策略 1/2。
+改顶部布局的流程：改 `global_hud.tscn` 顶栏按钮后跑 `probe_hud_bands.tscn` 复测，
+把新数值回填 zone 表，再跑 `verify_hud_zones.tscn` 验防撞合同仍成立。
+
+#### 10.4.8 照片底图（"干净管线"）与平面图兜底
+
+**底图用真渲染，不做近似。** `hd2d_world.bake_minimap_strip()` 把整条街烘成一张街带贴图，
+装配期首烘一次（加载覆盖层之下），运行期按脏标记防抖重烘（见下）：
+
+- **取景**：正交相机按"地图全宽"取景（`set_cam_fit_width_px`，绕开玩家缩放档钳制），
+  构图锚与游戏内一致；裁切以**行走带前沿**为底、按小地图矩形的宽高比向上取。
+  地图无论是手工制作还是**运行时程序化生成**（世界生成/战场图），装配流程同一份——
+  首烘对生成内容天然覆盖。
+- **只留建筑与地面**（烘焙相机剔除）：火柴人（`_char_host`）、自然物与道具
+  （`_prop_root`，含野外树木/矿物）、云牌（`_cloud_root`，云贴图异步烘制故按容器归层）、
+  背景楼群（`_card_root` 中前排之后的剪影）的可视件归入第 20 渲染层
+  （`BAKE_EXCLUDE_LAYER`），烘焙相机 `cull_mask` 挖掉该层——**按相机剔除而非全局隐藏，
+  主画面零闪烁，游戏内随时可重烘**。天幕/月盘挂在主相机上、后处理层是
+  CanvasLayer——都**不在烘焙视口里**，天然不进图。
+- **怎么只取 3D**：烘焙走**共享主视口 World3D 的 SubViewport + 专用正交相机**，而不是
+  截主视口——主视口会连 UI/加载屏/后处理一起拍进去（实测拍到过加载屏）。SubViewport
+  同时解决三件事：分辨率与玩家窗口解耦、不吃主相机景深属性、天空天然出局。
+  平时 `render_target_update_mode = DISABLED`，不留常驻渲染通道（空闲零成本）。
+- **去天空**：烘焙期把默认清屏色清成透明 → 贴图的天空处透明，露出小地图自己的背衬平色
+  （天空 token），切换昼夜时背衬色可随主题走。
+- **运行期重烘（低占用实时管线）**：脏信号 `hd2d_world.minimap_base_dirty` →
+  `hd2d_map_base` 防抖 0.5s 合并 → 重烘换图 → 小地图 15Hz 快照下一拍自动拾取（≤67ms）。
+  现役脏源＝昼夜光照档切换（`set_light_mode` 档位实际变化时发）；未来 3D 街景内容
+  运行期变更（换卡/扩建/城墙升档）由变更方调 `mark_minimap_base_dirty()` 接入
+  （顺带失效平面图布局缓存）。烘焙失败保旧图，换图原子。
+  玩家自建建筑是 2D CanvasItem，不进 3D 烘焙——由照片路径的覆盖层按类型色块实时画
+  （`baked == false` 的建筑，见 §10.4.3 显示内容）。
+
+**平面图兜底**（`get_minimap_base()` 为空时，或非 HD-2D 图）：由地图侧数据供给绘制——
+地表材质色带（HD-2D 侧铺地时记账，见 `_ground_strips` / `get_minimap_layout`）、建筑按
+def 归到近似材质色。放大版的"类型着色 + 图例"属这条路径（照片本身就是实际颜色，
+故有底图时该开关隐藏）。
 
 ### 10.5 DebugOverlay 调试覆盖层
 

@@ -35,6 +35,7 @@ const _CommandChainViewScene: PackedScene = preload("res://modules/organization/
 const _SettingsMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/settings_menu_panel.gd")
 const _PauseMenuPanelScript: GDScript = preload("res://modules/ui_global/scripts/panels/pause_menu_panel.gd")
 const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap.gd")
+const _MinimapWindowScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap_window.gd")
 const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thumbnail.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _InventoryServiceScript: GDScript = preload("res://modules/inventory/scripts/inventory_service.gd")
@@ -84,6 +85,9 @@ var _tab_state: int = TabMapState.HIDDEN
 ## L1 世界缩略窗（与 Minimap 并列）
 @warning_ignore("unused_private_class_variable")
 var _l1_thumbnail: Control = null
+## 本地地图放大版浮窗（Minimap 展开把手/双击打开；常驻隐藏，见 MinimapWindow）
+@warning_ignore("unused_private_class_variable")
+var _minimap_window: Control = null
 ## L1 班组卡引用（装配层持有，供 OrgPanel 选中联动调用 show_squad/hide_card——
 ## 不跨模块 get_node；UI-W4b 班组卡触发源补全）
 @warning_ignore("unused_private_class_variable")

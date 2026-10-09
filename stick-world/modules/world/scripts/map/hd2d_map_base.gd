@@ -52,6 +52,16 @@ const HOUR_NIGHT_FALL := 19.0
 
 ## 3D 街景节点引用（相机/光照档驱动用）
 var _hd: Node3D = null
+## 小地图底图（照片式烘焙结果；bake_minimap_base 写入，装配期一次 + 运行期脏重烘）
+var _minimap_base: Dictionary = {}
+## 照片底图运行期重烘（低占用实时管线）：hd2d 发 minimap_base_dirty（光照档
+## 切换/3D 街景内容变更）→ 防抖窗口合并 → 重烘换图，小地图 15Hz 快照自动拾取。
+## 烘焙走渲染层剔除（不动 visible）→ 游戏内重烘零可见副作用；平时烘焙视口
+## UPDATE_DISABLED → 空闲零成本。
+const MINIMAP_REBAKE_DEBOUNCE_S := 0.5
+var _minimap_rebake_pending := false
+var _minimap_rebaking := false
+var _minimap_bake_size := Vector2i.ZERO
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
 ## 上次广播描边补偿的世界 zoom（变化才广播）
@@ -146,6 +156,9 @@ func _ready() -> void:
 	_apply_hd_layout(_hd)
 	_configure_hd(_hd)
 	add_child(_hd)
+	# 照片底图脏信号（光照档切换/3D 街景内容变更）→ 防抖重烘（低占用实时管线）
+	if _hd.has_signal("minimap_base_dirty"):
+		_hd.minimap_base_dirty.connect(_on_minimap_base_dirty)
 	# 布局收界钩子（布局图覆写：按布局街宽收 map_left/right）
 	_apply_hd_bounds()
 	# 深端行走界=前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁：前景整段可行走，
@@ -636,6 +649,106 @@ func get_building_rects() -> Array:
 	if _hd != null and _hd.has_method("get_building_rects"):
 		return _hd.get_building_rects()
 	return []
+
+
+## 小地图底图（照片式烘焙，见 hd2d_world.bake_minimap_strip）。无则空字典。
+func get_minimap_base() -> Dictionary:
+	return _minimap_base
+
+
+## 烘焙小地图底图：装配期首烘（GameRoot 地图编排调）与运行期脏重烘
+## （_on_minimap_base_dirty）同走本口。只留前排建筑 + 地面的真渲染降采样
+## （火柴人/自然物/道具/云/背景排走烘焙相机剔除层，天幕/月盘/后处理天然
+## 不入 SubViewport），尺寸按传入的显示矩形。烘焙相机是独立 SubViewport
+## 里的专用相机——主相机与逐帧镜像不受影响，无需停 _process。
+## 烘焙失败返回空且**保旧图**（有旧图时换图原子性：要么新图要么旧图）。
+## 返回烘焙结果（同 hd2d_world.bake_minimap_strip），缓存在 _minimap_base 供取用。
+func bake_minimap_base(target_w: int, target_h: int) -> Dictionary:
+	if _hd == null or not _hd.has_method("bake_minimap_strip"):
+		return {}
+	_minimap_bake_size = Vector2i(target_w, target_h)
+	var out: Dictionary = await _hd.bake_minimap_strip(
+			map_left, map_right, ground_y, get_ground_bottom(), target_w, target_h)
+	if out.is_empty():
+		return out
+	_minimap_base = out
+	return out
+
+
+## 照片底图脏信号入口（hd2d.minimap_base_dirty：光照档切换 / 3D 街景内容变更）：
+## 防抖窗口内多次脏合并成一次重烘；尚无底图（未走过装配期首烘）则无事可做
+## ——小地图走平面图兜底，下次进图首烘自然会带上最新状态。
+func _on_minimap_base_dirty() -> void:
+	if _minimap_base.is_empty() or _minimap_bake_size.x <= 0:
+		return
+	_minimap_rebake_pending = true
+	if _minimap_rebaking:
+		return   # 在烘：本轮完成后 _drain 会补一轮
+	await get_tree().create_timer(MINIMAP_REBAKE_DEBOUNCE_S).timeout
+	_drain_minimap_rebake()
+
+
+## 执行（并收敛）待决的重烘：防抖已过才走到这；烘焙期间又有脏则再补一轮。
+## 换图即整体替换 _minimap_base —— 小地图 15Hz 快照下一拍（≤67ms）自动换新图。
+func _drain_minimap_rebake() -> void:
+	if not _minimap_rebake_pending or not is_inside_tree() or _hd == null:
+		return
+	_minimap_rebake_pending = false
+	_minimap_rebaking = true
+	await bake_minimap_base(_minimap_bake_size.x, _minimap_bake_size.y)
+	_minimap_rebaking = false
+	if _minimap_rebake_pending:
+		_drain_minimap_rebake()
+
+
+## 小地图数据供给（覆写 MapBase 虚方法）：3D 街景的地表色带与临街建筑
+## （_hd.get_minimap_layout，格→px 换算是宿主口径故由本类传入 CELL_PX），
+## 并并入 2D 宿主里的玩家自建建筑。见 docs/技术/架构/场景与战斗/UI.md §10.4。
+func get_minimap_layout() -> Dictionary:
+	var layout: Dictionary = {"surfaces": [], "buildings": []}
+	if _hd != null and _hd.has_method("get_minimap_layout"):
+		# duplicate：_hd 侧返回的是缓存字典，直接改键会污染其缓存
+		layout = _hd.get_minimap_layout(CELL_PX).duplicate()
+		var merged: Array = layout.get("buildings", [])
+		merged.append_array(_collect_minimap_host_buildings())
+		layout["buildings"] = merged
+	return layout
+
+
+## 2D 建筑宿主里的实体（玩家自建 / 施工产物）→ 小地图建筑点。
+## plan 物化件跳过：它们的 3D 卡已在 _hd.get_minimap_layout 的临街排里，
+## 两边都收会让同一栋楼画成两个点。
+func _collect_minimap_host_buildings() -> Array:
+	var out: Array = []
+	for pair: Array in [[building_host, false], [terrain_buildings, true]]:
+		var host: Node2D = pair[0]
+		if host == null:
+			continue
+		for child in host.get_children():
+			if child == null or not child is Node2D:
+				continue
+			if bool(child.get_meta("plan_generated", false)):
+				continue
+			var cells: float = maxf(float(child.get("width")) if "width" in child else 1.0, 1.0)
+			var cell_x: float = float(child.get("cell_x")) if "cell_x" in child else 0.0
+			var def: String = str(child.get("def_id")) if "def_id" in child else ""
+			var is_terrain: bool = bool(pair[1]) \
+					or (bool(child.get("is_terrain")) if "is_terrain" in child else false)
+			# 占地：2D 图无 3D 烘焙占地数据，按名义口径——后沿 = 节点落位基线
+			# （节点原点贴基线），纵深取 2 格（与管线占地下限同值）
+			var node: Node2D = child as Node2D
+			out.append({
+				"x": (cell_x + cells * 0.5) * CELL_PX,
+				"width": cells * CELL_PX,
+				"y": node.global_position.y,
+				"depth": CELL_PX * 2.0,
+				"terrain": is_terrain,
+				"baked": false,   # 玩家自建/后改建筑不进照片底图 → 照片模式补画
+				"def": def,
+				"type": Hd2dMinimapStyle.type_for(def),
+				"color": Hd2dMinimapStyle.color_for(def),
+			})
+	return out
 
 
 ## F3 黄线数据口（debug_gui duck 读取）：前后景分界线的 2D 等价 y

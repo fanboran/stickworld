@@ -188,6 +188,8 @@ const BG_GLOW_RATIO := 0.45
 ## 漂移云牌（创始人 2026-09-15：2D 地图的手绘云加进新天空）——sketch_cloud
 ## 程序化画风烘成贴图上 Sprite3D billboard；风驱漂移+出带回绕（SkyDecor 云同语义）
 const SKETCH_CLOUD := preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
+## 云牌容器名：小地图烘焙整体隐藏（云贴图**异步**烘制——按容器隐藏才与时序无关）
+const CLOUD_ROOT_NAME := &"Clouds"
 ## 云池规模（2D SkyDecor 同量：视带内 14、屏内约 9）
 const CLOUD_POOL := 14
 
@@ -204,6 +206,22 @@ const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到�
 ## 笔触与配色），深绿染色档会把花草压成暗橄榄——战场全幅草与街景城外草带
 ## 同用一档，野地草色一色（创始人 2026-09-17：AI 草地按原色呈现）
 const GRASS_TINT := Color(0.90, 0.93, 0.80)
+
+## ── 小地图地表色账（消费见 get_minimap_layout）──
+## 地表材质 → 代表色：贴图平均色的手填近似（贴图无从运行期采样），
+## 实际色 = 本表 × 该条带的 albedo_color 染色（见 get_minimap_layout）。
+## 键 = 纹理名去 `_128` 与 `_alb` 后缀（grass_alb_128.png → grass）。
+const SURFACE_COLORS: Dictionary = {
+	"grass": Color(0.46, 0.60, 0.34),
+	"flagstone": Color(0.60, 0.58, 0.55),
+	"band_road_stone": Color(0.55, 0.56, 0.58),
+	"band_shoulder_stone": Color(0.70, 0.69, 0.66),
+	"band_kerb_stone": Color(0.62, 0.61, 0.58),
+}
+const SURFACE_COLOR_FALLBACK := Color(0.46, 0.60, 0.34)
+## 小地图只收"大尺度"地表条带（格）：路肩 8.7 格、门前径 3.6 格这类细条带上图
+## 只会把主街糊成杂色——小地图要表达的是"城中石板 / 城外草地"这种一眼可辨的分区。
+const MINIMAP_MIN_BAND_CELLS := 20.0
 
 ## 城墙（创始人 2026-09-14：地图两侧到城墙，城镇由城墙收口；2026-09-15
 ## 城镇扩到 ±95——"没走多久就城门"；墙高升 10 格 town 档——"城墙这么矮"）。
@@ -267,11 +285,32 @@ var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / �
 var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
 var _prop_solids: Array = []    # 道具实心区间 [x0,x1]（碰撞用）
 var _clutter_occ: Array = []    # 建筑间杂物占格带（F3 建筑辅助线用，同建筑 rect 口径）
+## 地面条带账本（小地图地表色数据源）：_add_ground_plane_at 每次铺地追加
+## [cx 格, width 格, 纹理名, 染色]。按铺设顺序记录 = 叠色顺序（后铺者压前），
+## 小地图照原顺序重放即得"主街石板、城外草地"的实际地表分布。
+var _ground_strips: Array = []
+## 小地图布局快照缓存（首次查询构建；运行期内容变更走 mark_minimap_base_dirty 失效）
+var _minimap_layout_cache: Dictionary = {}
+## 照片底图脏信号：光照档切换或 3D 街景内容变更时发（Hd2dMapBase 收到后
+## 防抖重烘，小地图 15Hz 快照自动换图）——运行时重烘管线的脏标记入口
+signal minimap_base_dirty
+## 烘焙排除层（第 20 层渲染层）：临烘排除内容（火柴人 billboard / 自然物与
+## 道具 / 云牌 / 背景排剪影）的可视件归入此层，烘焙相机 cull_mask 挖掉它。
+## 按相机剔除而非全局隐藏——主画面零闪烁，重烘可在游戏内随时发。
+const BAKE_EXCLUDE_LAYER := 1 << 19
+## 小地图烘焙 rig（懒建；共享主视口 World3D 的 SubViewport + 专用正交相机）
+var _bake_vp: SubViewport = null
+var _bake_cam: Camera3D = null
+## 云牌容器（烘焙整体归排除层；云贴图异步烘制，容器是时序无关的排除单位）
+var _cloud_root: Node3D = null
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
 var _cam_attrs: CameraAttributesPractical
 var _char_host: Node3D = null
+## 实体 billboard 宿主容器（spawn_character 的挂点；烘焙整体归排除层）——
+## 与演示宿主 _char_host 分开：游戏图的火柴人全在这，不在演示宿主下
+var _char_entities_root: Node3D = null
 var _post_layer: CanvasLayer
 var _post_rect: ColorRect
 var _post_mat: ShaderMaterial
@@ -654,6 +693,224 @@ func get_building_rects() -> Array:
 	return out
 
 
+## ── 小地图数据供给（宿主 Hd2dMapBase 转发，签名含格→px 换算口径）──
+## 为什么在这里换算：1 格 = 多少 px 是"宿主地图"的口径（Hd2dMapBase.CELL_PX），
+## 本类只认格；由调用方传入既避免 hd2d 反向依赖 world 层的常量，也不复制一份。
+##
+## 返回（世界 px，原点 = 世界 x=0）：
+##   surfaces  = [{x0, x1, color}]  地面材质色带，**按铺设顺序**排列（后铺者压前，
+##               小地图照序重放即得正确叠色）
+##   buildings = [{x, width, y, depth, terrain, def, type, color}]  x = 中心；
+##               y = 占地后沿（基线）、depth = 占地纵深 —— 小地图据此画**真占地**
+##               而非图标（建筑是 3D 立体，缩略图上是俯视占地块）；
+##               type/color 语义见 Hd2dMinimapStyle
+##
+## 只报前排临街排：后排（bg1~bg3）是远景布景，缩略图上会叠成一团糊块。
+func get_minimap_layout(cell_px: float = 24.0) -> Dictionary:
+	if is_equal_approx(float(_minimap_layout_cache.get("cell_px", -1.0)), cell_px) \
+			and not _minimap_layout_cache.is_empty():
+		return _minimap_layout_cache
+	var surfaces: Array = []
+	for s in _ground_strips:
+		var w: float = float(s[1])
+		if w < MINIMAP_MIN_BAND_CELLS:
+			continue
+		var cx: float = float(s[0])
+		var tint: Color = s[3]
+		var base: Color = minimap_surface_color(str(s[2]))
+		surfaces.append({
+			"x0": (cx - w * 0.5) * cell_px,
+			"x1": (cx + w * 0.5) * cell_px,
+			"color": Color(base.r * tint.r, base.g * tint.g, base.b * tint.b),
+		})
+	var buildings: Array = []
+	for occ in _front_occ:
+		var meta: Dictionary = _cards.get(str(occ[2]), {})
+		var def: String = str(meta.get("def", ""))
+		var x0: float = float(occ[0]) * cell_px
+		var x1: float = float(occ[1]) * cell_px
+		# 占地纵深沿用 F3 碰撞带的同一口径（_building_solid_rect：烘焙实测 footprint
+		# 全深，下限 2 格防扁片，后沿不越行走带深端）——小地图与碰撞盒同源不出双份
+		var band: Array = _building_solid_rect(occ)
+		buildings.append({
+			"x": (x0 + x1) * 0.5,
+			"width": x1 - x0,
+			"y": float(band[3]),
+			"depth": maxf(float(band[3]) - float(band[2]), cell_px * 2.0),
+			"terrain": false,
+			"baked": true,   # 前排会烘进照片底图 → 照片模式下不重复画（见 minimap_painter）
+			"def": def,
+			"type": Hd2dMinimapStyle.type_for(def),
+			"color": Hd2dMinimapStyle.color_for(def),
+		})
+	_minimap_layout_cache = {
+		"cell_px": cell_px,
+		"surfaces": surfaces,
+		"buildings": buildings,
+	}
+	return _minimap_layout_cache
+
+
+## 地表纹理名 → 代表色（去 `_128`/`_alb` 后缀查 SURFACE_COLORS，未收录走兜底草色）
+static func minimap_surface_color(tex_name: String) -> Color:
+	var key: String = tex_name.get_basename().replace("_128", "").trim_suffix("_alb")
+	return SURFACE_COLORS.get(key, SURFACE_COLOR_FALLBACK)
+
+
+# ─────────────────────────── 小地图底图烘焙（照片式）───────────────────────────
+
+## 小地图底图烘焙 —— "干净管线"：只留**前排建筑 + 地面**的真渲染，降采样成贴图。
+##
+## 与 get_minimap_layout（数据平面图）的区别：这里不做任何近似——颜色与形状是
+## 烘卡的真实美术，直接由渲染管线产出。
+##
+## 临烘排除（创始人 2026-10：火柴人与野外树木都烘掉）：火柴人（_char_entities_root
+## 实体 billboard 容器 + _char_host 演示宿主）、自然物与道具（_prop_root 含野外
+## 树木/矿物/摊位）、云牌、背景楼群（_card_root 里前排之后的 68 张剪影）的可视件
+## **独占**归入 BAKE_EXCLUDE_LAYER 渲染层（赋值 = ：留在第 1 层会漏进烘焙相机，
+## 云与实体火柴人两次泄漏的教训），烘焙相机 cull_mask 挖掉该层——**按相机剔除
+## 而非全局隐藏，主画面零闪烁**，游戏内随时可重烘（昼夜换档防抖重烘即走本口）。
+## 天幕与月盘是主相机子节点、后处理层是 CanvasLayer——都不在 SubViewport 的
+## 渲染里，天然不进烘焙图。
+## 背景清成透明（transparent_bg + 默认清屏色 alpha 0）＝"去天空"。
+## 后处理（DOF/辉光/雾）全关——景深远焦起点锚在世界线上，一开整幅糊掉。
+##
+## 参数：world_x0/x1 = 地图世界 x 范围（px）；canvas_ground_y/bottom = 2D 画布的
+## 地面带上下沿（点位换算与裁切基准）；（target_w, target_h）= 目标贴图尺寸，
+## 宽高比即裁切比（街带按该比从行走带前沿往上取）。
+##
+## 返回（相机/viewport 不可用或烘焙失败返回空字典）：
+##   texture      ImageTexture（已裁已降采样）
+##   x_ref        [world_x0, world_x1]
+##   y_ref        [canvas_y_back, t_back, canvas_y_front, t_front]（t 为 0..1 归一纵坐标）
+##   lift_ratio   台面抬升的竖直占比（城内点按台面标高画；墙外点不加）
+##   wall_x       台面抬升的 x 边界（px；|x| ≤ 它为城内）
+## 调用约定：相机接管只发生在烘焙 SubViewport 内部（专用烘焙相机，主相机与
+## 逐帧镜像不受影响）；清屏色在捕获后即还原。加载期与游戏内重烘同走本口。
+func bake_minimap_strip(world_x0: float, world_x1: float,
+		canvas_ground_y: float, canvas_ground_bottom: float,
+		tex_w: int, tex_h: int) -> Dictionary:
+	if _cam == null or tex_w <= 0 or tex_h <= 0 or world_x1 <= world_x0:
+		return {}
+	var rig: Array = _ensure_bake_rig(tex_w, tex_h)
+	var bake_cam: Camera3D = rig[1]
+	var bake_vp: SubViewport = rig[0]
+	if bake_cam == null or bake_vp == null:
+		return {}
+	# 平时 DISABLED（不留常驻渲染通道）；烘焙期开渲染
+	bake_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var map_w: float = world_x1 - world_x0
+
+	# ── 临烘排除：可视件独占归烘焙排除层（相机剔除，不动 visible）──
+	var saved_clear: Color = RenderingServer.get_default_clear_color()
+	# 背景清成透明（"去天空"）：烘焙视口透明的处露出小地图自己的背衬色
+	RenderingServer.set_default_clear_color(Color(0.0, 0.0, 0.0, 0.0))
+	_bake_exclude_layer(_char_entities_root)   # 实体 billboard（游戏图的火柴人全在这）
+	_bake_exclude_layer(_char_host)            # 演示宿主（游戏图常空，防御性排除）
+	_bake_exclude_layer(_prop_root)
+	# 云牌：整个容器归排除层（云贴图异步烘制——逐节点排除会漏掉烘焙后才入树的那些）
+	_bake_exclude_layer(_cloud_root)
+	var front_n: int = _front_occ.size()
+	if _card_root != null:
+		for i in _card_root.get_child_count():
+			if i >= front_n:
+				_bake_exclude_layer(_card_root.get_child(i))
+	# ── 全宽取景（含少量边距，防边缘卡裁）──
+	_apply_cam_framing(map_w * 1.02 / 24.0, bake_cam)
+	bake_cam.position.x = (world_x0 + world_x1) * 0.5 / 24.0
+	for i in 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+	var img: Image = (rig[0] as SubViewport).get_texture().get_image()
+	var result: Dictionary = {}
+	if img != null and img.get_width() > 0:
+		# 画布 y ↔ 世界 z 口径：canvas_y = 516 + z*24（全图统一，见 _building_solid_rect）
+		var y_front: float = _bake_screen_y(bake_cam, canvas_ground_bottom)
+		var y_back: float = _bake_screen_y(bake_cam, canvas_ground_y)
+		var h_px: float = float(maxi(img.get_height(), 1))
+		result = {
+			"texture": ImageTexture.create_from_image(img),
+			"x_ref": [world_x0, world_x1],
+			"y_ref": [canvas_ground_y, y_back / h_px, canvas_ground_bottom, y_front / h_px],
+			"lift_ratio": _bake_lift_ratio(bake_cam, h_px, canvas_ground_bottom),
+			"wall_x": _wall_x() * 24.0,
+		}
+	# ── 还原清屏色/烘焙视口渲染（层标记幂等无需还原；相机留在烘焙取景，
+	#    下次烘焙自行重设；可见性全程未动）──
+	RenderingServer.set_default_clear_color(saved_clear)
+	bake_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	return result
+
+
+## 画布 y 在烘焙相机下的屏幕 y（含台面抬升；以 x=0 处标高作统一基准，
+## 墙外低地面点位由 lift_ratio 在消费侧修正）
+func _bake_screen_y(bake_cam: Camera3D, canvas_y: float) -> float:
+	var z: float = (canvas_y - 516.0) / 24.0
+	var lift: float = get_ground_lift_world(0.0, z)
+	return bake_cam.unproject_position(Vector3(0.0, lift, z)).y
+
+
+## 台面抬升在街带里的竖直占比（消费侧：|x| > wall_x 的点加上它——墙外地面
+## 比城内台面低这一档）。取"抬升后 / 未抬升"同一 canvas z 的屏幕 y 之差，
+## 是正交俯角下该抬升的精确屏上落差。
+func _bake_lift_ratio(bake_cam: Camera3D, h_px: float, canvas_ground_bottom: float) -> float:
+	var z: float = (canvas_ground_bottom - 516.0) / 24.0
+	var lifted: float = bake_cam.unproject_position(
+			Vector3(0.0, get_ground_lift_world(0.0, z), z)).y
+	var flat: float = bake_cam.unproject_position(Vector3(0.0, 0.0, z)).y
+	return absf(flat - lifted) / maxf(h_px, 1.0)
+
+
+## 烘焙 rig（懒建）：SubViewport 共享主视口的 World3D → 只渲染 3D 世界，
+## 不含任何 CanvasLayer（UI/加载屏/后处理），尺寸即目标贴图尺寸（与玩家窗口解耦），
+## 专用相机不带相机属性 → 无景深；天幕/月盘挂在主相机上，天然不入图；
+## cull_mask 挖掉烘焙排除层（排除内容只对玩家相机可见）。
+## 返回 [SubViewport, Camera3D]。
+func _ensure_bake_rig(tex_w: int, tex_h: int) -> Array:
+	if _bake_vp == null or not is_instance_valid(_bake_vp):
+		_bake_vp = SubViewport.new()
+		_bake_vp.name = "MinimapBakeViewport"
+		_bake_vp.disable_3d = false
+		_bake_vp.transparent_bg = true
+		_bake_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		_bake_vp.msaa_3d = Viewport.MSAA_DISABLED
+		add_child(_bake_vp)
+		_bake_cam = Camera3D.new()
+		_bake_cam.name = "MinimapBakeCamera"
+		_bake_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+		_bake_cam.keep_aspect = Camera3D.KEEP_WIDTH
+		_bake_cam.near = 0.05
+		_bake_cam.far = 600.0
+		_bake_cam.cull_mask = 0xFFFFF & ~BAKE_EXCLUDE_LAYER
+		if _cam != null:
+			_bake_cam.rotation = _cam.rotation
+			_bake_cam.position.y = _cam.position.y
+		_bake_vp.add_child(_bake_cam)
+	# 共享主视口的世界（World3D 同一份 → 渲染同一批 3D 节点与灯光/环境）
+	var main_vp: Viewport = get_viewport()
+	if main_vp != null:
+		_bake_vp.world_3d = main_vp.world_3d
+	_bake_vp.size = Vector2i(maxi(tex_w, 1), maxi(tex_h, 1))
+	_bake_cam.current = true
+	return [_bake_vp, _bake_cam]
+
+
+## 把节点子树里的可视件（GeometryInstance3D）**独占**归入烘焙排除层：
+## 赋值（=）而非叠加（|=）——节点若仍留在第 1 层，烘焙相机（掩码 1..19）
+## 照样渲染它，云就是这么漏进去的（实测教训）。独占后：主相机全层照见、
+## 烘焙相机挖掉。幂等（重复赋同值），运行期新入树的排除件下次烘焙自然归层。
+## 火柴人 billboard 的外壳 quad、卡片、云全是 MeshInstance3D/Sprite3D 系；
+## billboard 内部的 SubViewport/逻辑节点按类型自然跳过。
+func _bake_exclude_layer(n: Node) -> void:
+	if n == null or not is_instance_valid(n):
+		return
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).layers = BAKE_EXCLUDE_LAYER
+	for c in n.get_children():
+		_bake_exclude_layer(c)
+
+
 ## 前后景分界线的 2D 等价 y（px）——可行走地面（前景）与后景的构图分界：
 ## zoom=1 压屏幕下 1/3 线（SKYLINE_Z 的推导即来自该契约）。注意术语：
 ## 旧文档多把这条线叫"地平线/天际线基线"，实为**前后景分界线**；真实地平线
@@ -1002,9 +1259,31 @@ func set_cam_zoom(user_zoom: float) -> void:
 		return
 	var uz: float = clampf(user_zoom, 0.25, 8.0)
 	var vp := _cam.get_viewport().get_visible_rect().size
-	_cam.size = DESIGN_HEIGHT * vp.x / (24.0 * vp.y * uz)
+	_apply_cam_framing(DESIGN_HEIGHT * vp.x / (24.0 * vp.y * uz), _cam)
+
+
+## 按**世界可视宽**取景（px；正交 KEEP_WIDTH 下 size 即可视宽）。专供小地图烘焙：
+## 玩家缩放档钳在 [0.25, 8]，全图取景常需更远（本作城镇 7080px → 需 uz≈0.27、
+## 更宽的地图还要更小），故走本口绕开缩放钳制。构图锚（地面压屏下 1/3 线）与
+## set_cam_zoom 同一份代码，两路口径不会分叉。
+func set_cam_fit_width_px(world_px: float) -> void:
+	if _cam == null or world_px <= 1.0:
+		return
+	_apply_cam_framing(world_px / 24.0, _cam)
+
+
+## 应用正交取景（size = 可视宽，格）到给定相机：算纵向构图锚 + 近平面退避 + 景深换算。
+## 单一出口——玩家缩放（set_cam_zoom）、烘焙全图取景（set_cam_fit_width_px）与
+## 烘焙相机（_ensure_bake_rig）共用同一份构图锚数学，三处口径不会分叉。
+## cam 的视口尺寸决定纵向可视范围（烘焙相机挂在 SubViewport 上，与主窗口解耦）；
+## 景深只对主相机（带相机属性的那台）换算，烘焙相机无属性、本就不吃景深。
+func _apply_cam_framing(size_units: float, cam: Camera3D) -> void:
+	if cam == null:
+		return
+	var vp := cam.get_viewport().get_visible_rect().size
+	cam.size = maxf(size_units, 1.0)
 	var t := deg_to_rad(TILT_DEG)
-	var h_v: float = _cam.size * vp.y / maxf(vp.x, 1.0)   # = DESIGN_HEIGHT/(24·uz)
+	var h_v: float = cam.size * vp.y / maxf(vp.x, 1.0)
 	# 构图锚（格口径，换轨不变）：1080/32 = 33.75 格——天际线基线压 1/3 线的世界锚线
 	var h_anchor: float = DESIGN_HEIGHT / 32.0
 	var z_bottom: float                                  # 屏幕底沿锚线的世界地面 z
@@ -1014,25 +1293,25 @@ func set_cam_zoom(user_zoom: float) -> void:
 		# 缩放档成立。推导同下行：屏幕底沿地面 z = 地平线 + (2/3)·h_v/sinθ
 		# ⇒ P.z = 地平线 + h_v/(6·sinθ) + P.y/tanθ
 		z_bottom = BF_HORIZON_Z + h_v * (2.0 / 3.0) / sin(t)
-		_cam.position.z = BF_HORIZON_Z + h_v / (6.0 * sin(t)) + _cam.position.y / tan(t)
+		cam.position.z = BF_HORIZON_Z + h_v / (6.0 * sin(t)) + cam.position.y / tan(t)
 	else:
 		z_bottom = SKYLINE_Z + h_anchor / (3.0 * sin(t))
-		_cam.position.z = z_bottom - h_v * 0.5 / sin(t) + _cam.position.y / tan(t)
+		cam.position.z = z_bottom - h_v * 0.5 / sin(t) + cam.position.y / tan(t)
 	# 近平面退避：缩放拉远后 P.z 后退，底沿锚线的地面视深（P.y·sinθ −
 	# cosθ·(z_bottom − P.z)）随之变浅，uz≲0.55 起穿进近平面(0.05)被整段
 	# 裁掉——裁掉的下缘露出天幕蓝＝"缩到最小屏幕下方出蓝条"（uz=0.5 实测
 	# 31px，越小越长，uz=0.25 时近 2/3 屏被裁）。正交相机沿视轴平移不改变
 	# 取景：沿视轴反向退 back 使视深回到 CAM_NEAR_SAFE，锚线分毫不动。
-	var depth_bottom: float = _cam.position.y * sin(t) - cos(t) * (z_bottom - _cam.position.z)
+	var depth_bottom: float = cam.position.y * sin(t) - cos(t) * (z_bottom - cam.position.z)
 	var back: float = maxf(0.0, CAM_NEAR_SAFE - depth_bottom)
-	_cam.position += Vector3(0.0, sin(t), cos(t)) * back
+	cam.position += Vector3(0.0, sin(t), cos(t)) * back
 	# 景深与缩放解耦：far blur 起点钉在**世界线**上——天际线基线向镜头前移
 	# DOF_FAR_START_AHEAD 格（第二排从这条线起吃半档模糊；创始人：第二排景深要明显）。
 	# dof_blur_far_distance 是相机本地距离，缩放移动相机后若不同步换算，
 	# 模糊带会跟着缩放漂移（创始人：景深不应受镜头缩放影响）；上面的退避
 	# 抬高 P.z，下式同量吸收（世界线的本地深度随之 +back，锚定关系不变）
-	if _cam_attrs != null:
-		_cam_attrs.dof_blur_far_distance = (_cam.position.z - SKYLINE_Z - DOF_FAR_START_AHEAD) / cos(t)
+	if cam == _cam and _cam_attrs != null:
+		_cam_attrs.dof_blur_far_distance = (cam.position.z - SKYLINE_Z - DOF_FAR_START_AHEAD) / cos(t)
 
 
 ## 3D 视图对地面纵深的屏幕压缩率（俯角前缩）：3D 与 2D 逐像素 1:1 后，
@@ -1059,9 +1338,22 @@ func get_ground_lift_px(x_px: float, y_px: float) -> float:
 	return get_ground_lift_world(x_px / 24.0, z) * 24.0 * cos(deg_to_rad(TILT_DEG))
 
 
-## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）
+## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）。
+## 档位实际切换时发底图脏信号——照片底图的光照冻结在烘焙时刻，昼夜换档
+## 须重烘一版（Hd2dMapBase 防抖后自动执行）。
 func set_light_mode(mode: String) -> void:
+	var changed: bool = mode != _last_light_mode
 	_apply_light(mode)
+	if changed:
+		minimap_base_dirty.emit()
+
+
+## 底图脏标记公开口：3D 街景内容在运行期变更时由变更方调用（换卡/扩建/
+## 城墙升档等未来接入方）——照片底图防抖重烘 + 平面图缓存失效重建。
+## 光照档切换走 set_light_mode（同发信号）。
+func mark_minimap_base_dirty() -> void:
+	_minimap_layout_cache = {}
+	minimap_base_dirty.emit()
 
 
 ## 门前径（创始人 2026-09-14：宏伟建筑门前有特别短的小路接进街道）。
@@ -1189,6 +1481,9 @@ func _build_world() -> void:
 	_shadow_root = Node3D.new()
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
+	_char_entities_root = Node3D.new()
+	_char_entities_root.name = "CharEntities"
+	add_child(_char_entities_root)
 	if not battlefield:
 		_place_rows()   # 前排吸附整格 + 两排背景留缝、后层插前层缝
 	_prop_root = Node3D.new()
@@ -1390,7 +1685,12 @@ func spawn_character() -> Node:
 	var h: Node = CHAR_HOST.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
-	add_child(h)
+	# 挂实体容器（非 hd2d_world 根）：小地图烘焙按容器整体归排除层——
+	# 散挂根上会漏进照片底图（实测：Char0..N 漏进街带贴图）
+	if _char_entities_root != null:
+		_char_entities_root.add_child(h)
+	else:
+		add_child(h)
 	h.set_px_scale(2.0)   # 2x 超采样：描边锐利无彩边
 	h.build(self, "idle", TILT_DEG)
 	h.add_char(0.0, 0.0, false)
@@ -1879,6 +2179,11 @@ func _set_sky_look(c: Color) -> void:
 ## 烘法：透明底 SubViewport 渲一帧取 ImageTexture（每朵独立 seed，多局一致）；
 ## 世界锚定 + 风驱 x 漂移 + 出带回绕（_drift_clouds），纵深视差由 3D 深度天然给出。
 func _place_clouds() -> void:
+	# 云牌统一挂专用容器：小地图烘焙整体隐藏它（异步烘制下按容器才不漏）
+	if _cloud_root == null or not is_instance_valid(_cloud_root):
+		_cloud_root = Node3D.new()
+		_cloud_root.name = CLOUD_ROOT_NAME
+		add_child(_cloud_root)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260915
 	var far: float = float(_bg_base_z.get(BG_LAYERS - 1,
@@ -1895,7 +2200,7 @@ func _place_clouds() -> void:
 		sp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		sp.shaded = false
 		sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-		add_child(sp)
+		_cloud_root.add_child(sp)
 		# 小云（远档）更高——2D SkyDecor 同构；z 钉在 bg2 身后**至少 14 格**：
 		# 卡与相机同基 → 整张卡恒深（bg1≈42 / bg2≈45），云挂得高（y 20~28，
 		# 接近相机高度 28.5）会把沿视轴的深度拉近——原 far−2~8（−12~−18）算出
@@ -2218,6 +2523,9 @@ func _add_ground_plane_at(tex_name: String, cx: float, width: float,
 	mi.material_override = gm
 	mi.name = "Seg_" + tex_name.get_basename()
 	_ground_root.add_child(mi)
+	# 小地图地表账本（格口径；消费见 get_minimap_layout）
+	_ground_strips.append([cx, width, tex_name, tint])
+	_minimap_layout_cache = {}
 
 
 func _add_ground_plane(tex_name: String, z0: float, z1: float, y: float,

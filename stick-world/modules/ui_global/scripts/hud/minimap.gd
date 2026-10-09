@@ -91,6 +91,11 @@ func get_map_info() -> Array:
 	return _map_info
 
 
+## 小地图高度（px）——烘焙底图尺寸按它算（外部读体量的出口）
+func get_map_height_px() -> float:
+	return MAP_HEIGHT
+
+
 ## 期望宽度：**等比例尺**——画面构图决定地面带像素高（`高 × ground_ratio`），
 ## 该像素高代表地图的地面世界深度，由此定出"世界 px / 小地图 px"；横向同比例尺
 ## 取宽。于是：地图越宽小地图越宽（"保持比例尺"），且**横纵同比例尺、房屋/地块

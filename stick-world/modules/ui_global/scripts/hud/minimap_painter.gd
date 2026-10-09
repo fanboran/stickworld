@@ -67,7 +67,25 @@ static func build_snapshot(map: Node2D, map_info: Array) -> Dictionary:
 		"ground_ratio": clampf(ground_ratio, 0.05, 0.95),
 		"surfaces": layout.get("surfaces", []),
 		"buildings": layout.get("buildings", []),
+		# 照片式底图（真渲染街带；有则绘制走照片路径，数据只作覆盖层）
+		"base": map.get_minimap_base() if map != null and map.has_method("get_minimap_base") else {},
 	}
+
+
+## 世界坐标 → 小地图坐标（照片底图口径：x 线性；y 用烘焙回传的两点仿射）。
+## 台面抬升修正：烘焙基准取的是城内台面标高，墙外低地面要补回抬升量。
+static func photo_pos(world_pos: Vector2, rect: Rect2, snap: Dictionary) -> Vector2:
+	var base: Dictionary = snap.get("base", {})
+	var x_ref: Array = base.get("x_ref", [float(snap["map_left"]), float(snap["map_right"])])
+	var y_ref: Array = base.get("y_ref", [float(snap["ground_y"]), 0.0, float(snap["ground_bottom"]), 1.0])
+	var tx: float = (world_pos.x - float(x_ref[0])) \
+			/ maxf(float(x_ref[1]) - float(x_ref[0]), 1.0)
+	var span: float = maxf(float(y_ref[2]) - float(y_ref[0]), 1.0)
+	var t: float = (world_pos.y - float(y_ref[0])) / span
+	var ty: float = lerpf(float(y_ref[1]), float(y_ref[3]), t)
+	if absf(world_pos.x) > float(base.get("wall_x", 0.0)):
+		ty += float(base.get("lift_ratio", 0.0))   # 墙外地面低一档台面
+	return rect.position + Vector2(tx * rect.size.x, ty * rect.size.y)
 
 
 ## 实体点集（每个绘制帧现取，位置随时变）：[{x, y, faction, player}]
@@ -150,6 +168,13 @@ static func x_to_world(minimap_x: float, rect: Rect2, snap: Dictionary) -> float
 static func draw(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: Array,
 		opts: Dictionary = {}) -> void:
 	var mode: String = String(opts.get("color_mode", MODE_ACTUAL))
+	# 照片底图优先：真渲染街带（建筑美术/颜色/比例直接来自渲染管线）+ 数据覆盖层
+	var base: Dictionary = snap.get("base", {})
+	if not base.is_empty() and base.get("texture") != null:
+		_draw_photo(ci, rect, snap, base, points, opts)
+		_draw_viewport(ci, rect, snap, opts)
+		ci.draw_rect(rect, StickTokens.BORDER_STRONG, false, BORDER_W)
+		return
 	var split: float = ground_split_y(rect, snap)
 	# 1. 天空 + 地面底
 	ci.draw_rect(rect, Color(SKY_FALLBACK.r, SKY_FALLBACK.g, SKY_FALLBACK.b, SKY_FALLBACK.a), true)
@@ -160,11 +185,39 @@ static func draw(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: Array,
 	# 3. 建筑（真占地块，画在地面带上其实际纵深处）
 	_draw_buildings(ci, rect, snap, mode)
 	# 4. 实体点（玩家 / 同阵营 / 敌方 / 中立）
-	_draw_points(ci, rect, snap, points, opts)
+	_draw_points(ci, rect, snap, points, opts, false)
 	# 5. 视野框
 	_draw_viewport(ci, rect, snap, opts)
 	# 6. 边框
 	ci.draw_rect(rect, StickTokens.BORDER_STRONG, false, BORDER_W)
+
+
+## 照片式底图路径：平色背衬（透明处＝无天空）→ 街带贴图 → 覆盖层。
+## 照片里已有前排建筑与地面，故只补**照片里没有的**：玩家自建/后改的建筑、
+## 单位点、视野框。类型着色模式在此退化为实际颜色（照片就是实际颜色）。
+static func _draw_photo(ci: CanvasItem, rect: Rect2, snap: Dictionary, base: Dictionary,
+		points: Array, opts: Dictionary) -> void:
+	# 背衬 = 天空 token（烘焙图天空已抠透明，露出的是这里的平色，不是渲染的天幕）
+	ci.draw_rect(rect, Color(SKY_FALLBACK.r, SKY_FALLBACK.g, SKY_FALLBACK.b, 1.0), true)
+	ci.draw_texture_rect(base["texture"], rect, false)
+	_draw_photo_buildings(ci, rect, snap, base)
+	_draw_points(ci, rect, snap, points, opts, true)
+
+
+## 照片模式补画建筑：只画 `baked == false` 的（前排已烘进照片，重复画会重影）
+static func _draw_photo_buildings(ci: CanvasItem, rect: Rect2, snap: Dictionary,
+		base: Dictionary) -> void:
+	var k: float = _size_scale(rect)
+	for b: Dictionary in snap["buildings"]:
+		if bool(b.get("baked", false)):
+			continue
+		var p := photo_pos(Vector2(float(b["x"]), float(b.get("y", 0.0))), rect, snap)
+		var w: float = maxf(BUILDING_MIN_W * k,
+				float(b["width"]) / float(snap["map_width"]) * rect.size.x)
+		var q := photo_pos(Vector2(float(b["x"]), float(b.get("y", 0.0)) - float(b.get("depth", 0.0))),
+				rect, snap)
+		var h: float = maxf(p.y - q.y, BUILDING_MIN_DEPTH * k)
+		ci.draw_rect(Rect2(p.x - w * 0.5, p.y - h, w, h), Color(b.get("color", GROUND_FALLBACK)), true)
 
 
 ## 地表色带：两种配色模式都按实际地表色铺——"类型着色"的作用对象是**建筑**
@@ -205,15 +258,18 @@ static func _draw_buildings(ci: CanvasItem, rect: Rect2, snap: Dictionary,
 
 
 static func _draw_points(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: Array,
-		opts: Dictionary) -> void:
+		opts: Dictionary, photo: bool) -> void:
 	var my_faction: Variant = player_faction_of(points)
 	var k: float = _size_scale(rect)
 	var phase: float = float(opts.get("halo_phase", -1.0))
 	if phase < 0.0:
 		phase = fmod(Time.get_ticks_msec() / 1000.0, HALO_PERIOD) / HALO_PERIOD
 	for p: Dictionary in points:
-		var px: float = world_to_x(float(p["x"]), rect, snap)
-		var py: float = world_to_y(float(p["y"]), rect, snap)
+		var pos: Vector2 = photo_pos(Vector2(float(p["x"]), float(p["y"])), rect, snap) \
+				if photo else Vector2(world_to_x(float(p["x"]), rect, snap),
+				world_to_y(float(p["y"]), rect, snap))
+		var px: float = pos.x
+		var py: float = pos.y
 		if px < rect.position.x - 4.0 or px > rect.end.x + 4.0:
 			continue
 		if bool(p["player"]):

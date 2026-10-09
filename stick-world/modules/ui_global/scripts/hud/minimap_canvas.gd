@@ -24,8 +24,8 @@ func _draw() -> void:
 		"color_mode": window.color_mode(),
 		"viewport_world": window.viewport_world(),
 	})
-	# 图例只在类型着色模式画：实际颜色模式的色块与图例色不对应，摆着会误导
-	if window.is_type_mode():
+	# 图例只在"类型着色的平面图"下画：照片底图是实际颜色、色块与图例对不上
+	if window.is_type_mode() and not window.has_photo_base():
 		MinimapPainter.draw_legend(self,
 				Vector2(map_rect.end.x + 12.0, map_rect.position.y + 4.0),
 				get_theme_default_font(), 12)

@@ -52,6 +52,8 @@ const HOUR_NIGHT_FALL := 19.0
 
 ## 3D 街景节点引用（相机/光照档驱动用）
 var _hd: Node3D = null
+## 小地图底图（照片式烘焙结果；bake_minimap_base 写入，装配期一次）
+var _minimap_base: Dictionary = {}
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
 ## 上次广播描边补偿的世界 zoom（变化才广播）
@@ -638,6 +640,28 @@ func get_building_rects() -> Array:
 	return []
 
 
+## 小地图底图（照片式烘焙，见 hd2d_world.bake_minimap_strip）。无则空字典。
+func get_minimap_base() -> Dictionary:
+	return _minimap_base
+
+
+## 烘焙小地图底图（地图装配期调用一次，须在加载覆盖层之下）：
+## 只留前排建筑 + 地面的真渲染降采样（火柴人/自然物/道具/云/天幕/背景排/后处理
+## 全部临烘隐藏），尺寸按传入的显示矩形。期间**停掉逐帧相机镜像**——3D 相机每帧
+## 被 2D CameraRig 覆盖，不停则全宽取景下一帧即被改回。
+## 返回烘焙结果（同 hd2d_world.bake_minimap_strip），缓存在 _minimap_base 供取用。
+func bake_minimap_base(target_w: int, target_h: int) -> Dictionary:
+	if _hd == null or not _hd.has_method("bake_minimap_strip"):
+		return {}
+	var saved_mode: int = process_mode
+	process_mode = Node.PROCESS_MODE_DISABLED
+	var out: Dictionary = await _hd.bake_minimap_strip(
+			map_left, map_right, ground_y, get_ground_bottom(), target_w, target_h)
+	process_mode = saved_mode
+	_minimap_base = out
+	return out
+
+
 ## 小地图数据供给（覆写 MapBase 虚方法）：3D 街景的地表色带与临街建筑
 ## （_hd.get_minimap_layout，格→px 换算是宿主口径故由本类传入 CELL_PX），
 ## 并并入 2D 宿主里的玩家自建建筑。见 docs/技术/架构/场景与战斗/UI.md §10.4。
@@ -680,6 +704,7 @@ func _collect_minimap_host_buildings() -> Array:
 				"y": node.global_position.y,
 				"depth": CELL_PX * 2.0,
 				"terrain": is_terrain,
+				"baked": false,   # 玩家自建/后改建筑不进照片底图 → 照片模式补画
 				"def": def,
 				"type": Hd2dMinimapStyle.type_for(def),
 				"color": Hd2dMinimapStyle.color_for(def),

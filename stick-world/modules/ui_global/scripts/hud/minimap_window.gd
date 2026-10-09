@@ -70,19 +70,12 @@ func _build_content() -> void:
 	_body.add_child(_canvas)
 
 
-## 按当前地图与顶部小地图体量重算地图区几何。
-## **等比例尺**：地图区宽 = 小地图宽 × ZOOM，高由世界地面深与地图宽之比推出
-## （地面带像素高 = 画布高 × ground_ratio，故画布总高 = 地图区高 / ground_ratio），
-## 于是放大版与顶部小地图横纵比例尺一致、房屋形状不变形，只是整体放大 ZOOM 倍。
+## 按顶部小地图体量重算地图区几何：**同一张图放大 ZOOM 倍**——
+## 地图区 = 小地图矩形 × ZOOM（同比），故两处比例尺一致、底图与点位都不会被拉伸
+## （照片底图、俯视平面图两条路径都靠这条成立）。
 func refresh_geometry() -> void:
-	var snap: Dictionary = MinimapPainter.build_snapshot(current_map(), map_info())
-	var map_w: float = maxf(float(snap["map_width"]), 1.0)
-	var depth: float = maxf(float(snap["ground_bottom"]) - float(snap["ground_y"]), 1.0)
-	var mm_w: float = _minimap_map_px()
-	_map_px_w = clampf(mm_w * ZOOM, MAP_MIN_W, MAP_MAX_W)
-	var map_px_h: float = _map_px_w * depth / map_w
-	var ratio: float = clampf(float(snap["ground_ratio"]), 0.2, 0.9)
-	_total_h = map_px_h / ratio
+	_map_px_w = clampf(_minimap_map_px() * ZOOM, MAP_MIN_W, MAP_MAX_W)
+	_total_h = _map_px_w * Minimap.MAP_HEIGHT / maxf(_minimap_map_px(), 1.0)
 	window_size = Vector2(_map_px_w + LEGEND_W + CHROME_W, _total_h + CHROME_H)
 	if _canvas != null:
 		_canvas.custom_minimum_size = Vector2(_map_px_w + LEGEND_W, _total_h)
@@ -122,6 +115,8 @@ func open() -> void:
 	refresh_geometry()
 	# 体量变了要重新居中（基类只在构建时定位一次；FLOATING 即屏中居中 + 夹安全区）
 	_position_panel()
+	if _mode_btn != null:
+		_mode_btn.visible = not has_photo_base()
 	_accum = 0.0
 	if _canvas != null:
 		_canvas.queue_redraw()
@@ -132,6 +127,14 @@ func open() -> void:
 ## 绘制区节点（验收断言/外部查询用）
 func canvas() -> Control:
 	return _canvas
+
+
+## 是否已有照片底图。有则类型着色无处可用（照片本身就是实际颜色、前排不再画色块）
+## ——开关与图例据此隐藏，避免"按了没反应"的假按钮。
+func has_photo_base() -> bool:
+	var snap: Dictionary = MinimapPainter.build_snapshot(current_map(), map_info())
+	var base: Dictionary = snap.get("base", {})
+	return not base.is_empty() and base.get("texture") != null
 
 
 func is_type_mode() -> bool:

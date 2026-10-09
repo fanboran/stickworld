@@ -222,6 +222,12 @@ func get_minimap_layout() -> Dictionary:
 	return {"surfaces": [], "buildings": []}
 
 
+## 小地图底图（照片式烘焙；虚方法）。非空时小地图以它为底、数据量只作覆盖层。
+## HD-2D 图覆写；基类无底图（小地图退回纯数据平面图绘制）。
+func get_minimap_base() -> Dictionary:
+	return {}
+
+
 # ── 视觉域坐标协议（HD-2D 投影唯一出口；2D 图全部恒等）──────────────────
 ## 2D 图视觉域=画布域，各方法均恒等；HD-2D 图在 Hd2dMapBase 覆写。
 ## 铁律：只有**地面锚点**参与映射；**身体纵向尺寸/偏移不映射**（billboard

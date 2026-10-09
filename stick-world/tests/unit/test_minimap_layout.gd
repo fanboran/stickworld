@@ -38,6 +38,7 @@ func _ready() -> void:
 	_runner.add_test("跨度: top_center 保留区落在顶栏空档内", _test_zone_span)
 	_runner.add_test("跨度: 最大宽度随画布收紧且不超空档", _test_max_width)
 	_runner.add_test("比例尺: 横纵一致（地块形状不变形）", _test_isotropic_scale)
+	_runner.add_test("照片底图: 点位换算（x 线性 / y 仿射 / 台面抬升）", _test_photo_pos)
 	_runner.add_test("供给: 基类默认布局为空（HD-2D 覆写）", _test_base_layout_empty)
 	_runner.run()
 	print(_runner.summary())
@@ -220,6 +221,33 @@ func _test_isotropic_scale() -> void:
 	var w_px: float = 192.0 / v_scale
 	var d_px: float = 161.0 / v_scale
 	_runner.assert_true(w_px > d_px, "宽 192 / 深 161 的地块画成宽 %.1f > 深 %.1f（不变形）" % [w_px, d_px])
+
+
+## 照片底图口径的点位换算：x 与世界线性；y 用烘焙回传的两点仿射；
+## 墙外点补台面抬升（烘焙基准取城内台面标高）
+func _test_photo_pos() -> void:
+	var s := _snap()
+	s["base"] = {
+		"x_ref": [-1000.0, 1000.0],
+		"y_ref": [0.0, 0.0, 1000.0, 1.0],   # 地面带顶 → t=0；带底 → t=1
+		"lift_ratio": 0.05,
+		"wall_x": 200.0,
+	}
+	var r := _rect()
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(-1000.0, 0.0), r, s).x, 0.0, 0.001,
+			"照片口径：世界左界 → 贴图左缘")
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(1000.0, 0.0), r, s).x, 200.0, 0.001,
+			"照片口径：世界右界 → 贴图右缘")
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(0.0, 0.0), r, s).y, 0.0, 0.001,
+			"照片口径：地面带顶 → 贴图顶（两点仿射）")
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(0.0, 1000.0), r, s).y, 100.0, 0.001,
+			"照片口径：地面带底 → 贴图底")
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(0.0, 500.0), r, s).y, 50.0, 0.001,
+			"照片口径：带中腰线性")
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(100.0, 500.0), r, s).y, 50.0, 0.001,
+			"城内点不加台面抬升")
+	_runner.assert_approx(PainterScript.photo_pos(Vector2(500.0, 500.0), r, s).y, 55.0, 0.001,
+			"墙外点加台面抬升（5%）")
 
 
 func _test_base_layout_empty() -> void:

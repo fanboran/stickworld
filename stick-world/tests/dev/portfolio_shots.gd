@@ -88,6 +88,17 @@ func run() -> void:
 		await _frames(3)
 	# ── 小地图区裁剪（顶部中央堆叠 Minimap + L1Thumbnail + ZoomBar）──
 	await _shot_minimap_crop(gr, "portfolio_minimap")
+	# ── 本地地图放大版（小地图展开把手/双击）──
+	var mm: Control = gr.ui_root.get_node_or_null("HudOverlay/Minimap") \
+			if gr.get("ui_root") != null else null
+	if mm != null and mm.has_signal("expand_requested"):
+		mm.expand_requested.emit()
+		await _frames(10)
+		await _shot("portfolio_minimap_window")
+		var win: Control = gr.ui_root.get_node_or_null("ModalOverlay/MinimapWindow")
+		if win != null and win.has_method("close"):
+			win.close()
+			await _frames(3)
 	print("=== PORTFOLIO SHOTS DONE ===")
 	get_tree().quit()
 

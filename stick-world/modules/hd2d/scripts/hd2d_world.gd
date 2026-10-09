@@ -205,6 +205,22 @@ const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到�
 ## 同用一档，野地草色一色（创始人 2026-09-17：AI 草地按原色呈现）
 const GRASS_TINT := Color(0.90, 0.93, 0.80)
 
+## ── 小地图地表色账（消费见 get_minimap_layout）──
+## 地表材质 → 代表色：贴图平均色的手填近似（贴图无从运行期采样），
+## 实际色 = 本表 × 该条带的 albedo_color 染色（见 get_minimap_layout）。
+## 键 = 纹理名去 `_128` 与 `_alb` 后缀（grass_alb_128.png → grass）。
+const SURFACE_COLORS: Dictionary = {
+	"grass": Color(0.46, 0.60, 0.34),
+	"flagstone": Color(0.60, 0.58, 0.55),
+	"band_road_stone": Color(0.55, 0.56, 0.58),
+	"band_shoulder_stone": Color(0.70, 0.69, 0.66),
+	"band_kerb_stone": Color(0.62, 0.61, 0.58),
+}
+const SURFACE_COLOR_FALLBACK := Color(0.46, 0.60, 0.34)
+## 小地图只收"大尺度"地表条带（格）：路肩 8.7 格、门前径 3.6 格这类细条带上图
+## 只会把主街糊成杂色——小地图要表达的是"城中石板 / 城外草地"这种一眼可辨的分区。
+const MINIMAP_MIN_BAND_CELLS := 20.0
+
 ## 城墙（创始人 2026-09-14：地图两侧到城墙，城镇由城墙收口；2026-09-15
 ## 城镇扩到 ±95——"没走多久就城门"；墙高升 10 格 town 档——"城墙这么矮"）。
 ## 墙板沿纵深方向立在 ±WALL_X，正交视角下呈"窄竖条 + 墙顶垛口"的转角收边
@@ -267,6 +283,12 @@ var _door_path_xs: Array = []   # 需要门前短径的建筑 x（guildhall / �
 var _prop_slots: Array = []     # 前排楼间空当 [x0,x1]（道具槽位）
 var _prop_solids: Array = []    # 道具实心区间 [x0,x1]（碰撞用）
 var _clutter_occ: Array = []    # 建筑间杂物占格带（F3 建筑辅助线用，同建筑 rect 口径）
+## 地面条带账本（小地图地表色数据源）：_add_ground_plane_at 每次铺地追加
+## [cx 格, width 格, 纹理名, 染色]。按铺设顺序记录 = 叠色顺序（后铺者压前），
+## 小地图照原顺序重放即得"主街石板、城外草地"的实际地表分布。
+var _ground_strips: Array = []
+## 小地图布局快照缓存（首次查询构建；场景摆完即不变，无需失效）
+var _minimap_layout_cache: Dictionary = {}
 var _shadow_root: Node3D
 var _lamp_root: Node3D
 var _cam: Camera3D
@@ -652,6 +674,62 @@ func get_building_rects() -> Array:
 	for occ in _clutter_occ:
 		out.append(occ)
 	return out
+
+
+## ── 小地图数据供给（宿主 Hd2dMapBase 转发，签名含格→px 换算口径）──
+## 为什么在这里换算：1 格 = 多少 px 是"宿主地图"的口径（Hd2dMapBase.CELL_PX），
+## 本类只认格；由调用方传入既避免 hd2d 反向依赖 world 层的常量，也不复制一份。
+##
+## 返回（世界 px，原点 = 世界 x=0）：
+##   surfaces  = [{x0, x1, color}]  地面材质色带，**按铺设顺序**排列（后铺者压前，
+##               小地图照序重放即得正确叠色）
+##   buildings = [{x, width, terrain, def, type, color}]  x = 中心；
+##               type/color 语义见 Hd2dMinimapStyle
+##
+## 只报前排临街排：后排（bg1~bg3）是远景布景，缩略图上会叠成一团糊块。
+func get_minimap_layout(cell_px: float = 24.0) -> Dictionary:
+	if is_equal_approx(float(_minimap_layout_cache.get("cell_px", -1.0)), cell_px) \
+			and not _minimap_layout_cache.is_empty():
+		return _minimap_layout_cache
+	var surfaces: Array = []
+	for s in _ground_strips:
+		var w: float = float(s[1])
+		if w < MINIMAP_MIN_BAND_CELLS:
+			continue
+		var cx: float = float(s[0])
+		var tint: Color = s[3]
+		var base: Color = minimap_surface_color(str(s[2]))
+		surfaces.append({
+			"x0": (cx - w * 0.5) * cell_px,
+			"x1": (cx + w * 0.5) * cell_px,
+			"color": Color(base.r * tint.r, base.g * tint.g, base.b * tint.b),
+		})
+	var buildings: Array = []
+	for occ in _front_occ:
+		var meta: Dictionary = _cards.get(str(occ[2]), {})
+		var def: String = str(meta.get("def", ""))
+		var x0: float = float(occ[0]) * cell_px
+		var x1: float = float(occ[1]) * cell_px
+		buildings.append({
+			"x": (x0 + x1) * 0.5,
+			"width": x1 - x0,
+			"terrain": false,
+			"def": def,
+			"type": Hd2dMinimapStyle.type_for(def),
+			"color": Hd2dMinimapStyle.color_for(def),
+		})
+	_minimap_layout_cache = {
+		"cell_px": cell_px,
+		"surfaces": surfaces,
+		"buildings": buildings,
+	}
+	return _minimap_layout_cache
+
+
+## 地表纹理名 → 代表色（去 `_128`/`_alb` 后缀查 SURFACE_COLORS，未收录走兜底草色）
+static func minimap_surface_color(tex_name: String) -> Color:
+	var key: String = tex_name.get_basename().replace("_128", "").trim_suffix("_alb")
+	return SURFACE_COLORS.get(key, SURFACE_COLOR_FALLBACK)
 
 
 ## 前后景分界线的 2D 等价 y（px）——可行走地面（前景）与后景的构图分界：
@@ -2218,6 +2296,9 @@ func _add_ground_plane_at(tex_name: String, cx: float, width: float,
 	mi.material_override = gm
 	mi.name = "Seg_" + tex_name.get_basename()
 	_ground_root.add_child(mi)
+	# 小地图地表账本（格口径；消费见 get_minimap_layout）
+	_ground_strips.append([cx, width, tex_name, tint])
+	_minimap_layout_cache = {}
 
 
 func _add_ground_plane(tex_name: String, z0: float, z1: float, y: float,

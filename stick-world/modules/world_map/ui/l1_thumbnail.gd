@@ -10,8 +10,9 @@ class_name L1Thumbnail
 ## 标记（白点 + 蓝色脉冲扩散环）——数据来自 L1WorldData（装配层喂数）。
 ## 交互：左键点击 → 发 open_l1_requested（装配层接线切到"原 Tab 大图"态）。
 ##
-## 布局：自定位（Minimap 右侧贴边、同高并列），与 Minimap 一致的一次性定位策略
-## （不随窗口 resize 重排）。由 SystemSetup 装配时调用 place_right_of_minimap。
+## 布局：自定位（Minimap 右侧贴边、同高并列）——不入 zone，但**跟随 Minimap
+## 的 resized 重定位**（小地图宽度随地图自适应，本窗必须让位跟随）。
+## 由 SystemSetup 装配时调用 place_right_of_minimap 完成接线。
 
 ## 点击请求打开 L1 大图（Tab 三态第二步等效入口）
 signal open_l1_requested
@@ -41,6 +42,10 @@ const PULSE_MAX_RADIUS := 8.0
 const PULSE_COLOR := Color(0.35, 0.70, 1.0)
 
 var _texture: Texture2D = null
+## 贴靠对象（顶部小地图；其宽度随地图自适应，本窗跟随重定位）
+var _minimap: Control = null
+## 越界告警一次性闸门
+var _warned_overflow: bool = false
 ## L1 世界数据（装配层喂；为空时无当前位置标记，仅静态底图）
 var _map_data: L1WorldData = null
 ## 出生 L1 轮廓分段缓存（窗口像素坐标，SIZE 固定可直接烘焙）
@@ -114,8 +119,28 @@ func _draw() -> void:
 	draw_rect(rect, BORDER_COLOR, false, BORDER_WIDTH)
 
 
-## 定位到 Minimap 右侧（顶部小地图区双窗并列；装配层在两者 setup 完成后调用）
+## 定位到 Minimap 右侧（顶部小地图区双窗并列；装配层在两者 setup 完成后调用）。
+##
+## 联动让位：Minimap 宽度随地图自适应（见 minimap.gd），故本窗订阅其 resized 跟随
+## 重定位。越界则由**小地图侧的宽度上限**保证不发生——上限 = 顶栏两按钮群之间的
+## 空档（HudZoneLayout.top_center_max_width），小地图右缘最多到空档右界，再往右
+## 贴 120 宽的缩略窗仍落在空档内（1920 基准：514+8+120=642 ≤ 935 空档宽）。
+## 万一换分辨率后仍越界，只告警一次（按钮群是硬约束，不静默重叠）。
 func place_right_of_minimap(minimap: Control) -> void:
+	_minimap = minimap
+	if _minimap != null and not _minimap.resized.is_connected(_reposition):
+		_minimap.resized.connect(_reposition)
+	_reposition()
+
+
+func _reposition() -> void:
+	if _minimap == null or not is_instance_valid(_minimap):
+		return
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
-	position = minimap.position + Vector2(minimap.size.x + GAP, 0.0)
+	position = _minimap.position + Vector2(_minimap.size.x + GAP, 0.0)
 	size = SIZE
+	var right_bound: float = HudZoneLayout.TOP_CENTER_FREE_RIGHT_PX
+	if position.x + SIZE.x > right_bound and not _warned_overflow:
+		_warned_overflow = true
+		push_warning("[L1Thumbnail] 越出顶部空档右界（right=%.1f > %.1f）——小地图宽度上限失效，查 hud_zone_layout.gd"
+				% [position.x + SIZE.x, right_bound])

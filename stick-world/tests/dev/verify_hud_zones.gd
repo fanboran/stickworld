@@ -65,6 +65,9 @@ func _run() -> void:
 	await _shot("hud_zones_1920.png")
 	_check_layout_1920()
 
+	# ── 本地地图放大版（小地图展开把手/双击）──
+	await _check_minimap_window()
+
 	# ── 1280×720 截图（stretch canvas_items+expand：16:9 窗口下画布坐标仍为
 	# 1920×1080，HUD 整体缩放渲染——PNG 真实像素 1280×720）──
 	get_window().size = Vector2i(1280, 720)
@@ -108,8 +111,13 @@ func _check_layout_1920() -> void:
 	else:
 		var r := mm.get_global_rect()
 		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "Minimap 水平居中（center=%.1f）" % r.get_center().x)
-		_check(r.size == Vector2(360, 120), "Minimap 体量 360x120（实际 %s）" % r.size)
+		_check(r.size.y == 120.0, "Minimap 体量高度 120（实际 %s）" % r.size)
+		_check(r.size.x >= 360.0, "Minimap 宽度不低于可读下限 360（实际 %.1f）" % r.size.x)
+		_check(r.size.x <= HudZoneLayout.top_center_max_width(vp.x) + 1.0,
+				"Minimap 宽度不超顶部空档上限 %.1f（实际 %.1f）"
+				% [HudZoneLayout.top_center_max_width(vp.x), r.size.x])
 		_check(r.position.y >= 7.0 and r.end.y <= 133.0, "Minimap 占 top_center 堆叠首位 y 8..128（%s）" % r)
+		_check_top_center_span(r)
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb == null:
 		_fail("ZoomBar 未装配")
@@ -130,6 +138,59 @@ func _check_layout_1920() -> void:
 		_check(not (debug_layer as Control).visible, "F3 关 → zone 画框隐藏")
 		DebugApi.set_overlay_visible(true)
 		_check((debug_layer as Control).visible, "F3 再开 → zone 画框复现")
+
+
+## 顶部中央跨度合同（防撞真值）：小地图与顶栏左右按钮群、右上时钟区互不重叠。
+## 量的是**真实控件 rect**而非 zone 表数值——表可以改，防撞是最终目的。
+func _check_top_center_span(mm_rect: Rect2) -> void:
+	var hud: Control = _game_root.ui_root.get_slot("GlobalHUD")
+	if hud == null:
+		_fail("GlobalHUD 未装配")
+		return
+	var hbox := hud.get_node_or_null("MarginContainer/HBoxContainer")
+	if hbox != null:
+		var names := ["SettingsButton", "FormationButton", "OverviewButton", "TechButton",
+				"LogisticsButton", "CollectionButton", "CenteredButton",
+				"PlaceholderPreviewButton", "OrgButton"]
+		for cname in names:
+			var b: Control = hbox.get_node_or_null(cname)
+			if b == null:
+				continue
+			var br := b.get_global_rect()
+			print("[INFO] 顶栏 %-24s rect=%s" % [cname, br])
+			_check(not br.intersects(mm_rect),
+					"顶栏按钮 %s 与小地图不重叠（按钮 %s / 小地图 %s）" % [cname, br, mm_rect])
+	var clock: Control = hud.get_node_or_null("ClockWidget")
+	if clock != null:
+		var cr := clock.get_global_rect()
+		print("[INFO] 右上 ClockWidget rect=%s" % cr)
+		_check(not cr.intersects(mm_rect),
+				"右上时钟与小地图不重叠（时钟左缘 %.1f / 小地图右缘 %.1f）" % [cr.position.x, mm_rect.end.x])
+
+
+## 本地地图放大版：装配 + 展开入口 + 类型着色开关 + 图例
+func _check_minimap_window() -> void:
+	var mm: Control = _game_root.ui_root.get_node_or_null("HudOverlay/Minimap")
+	var win: Control = _game_root.ui_root.get_node_or_null("ModalOverlay/MinimapWindow")
+	_check(win != null, "MinimapWindow 已装配（ModalOverlay 槽，与 OrgPanel 同层）")
+	if win == null or mm == null:
+		return
+	_check(not win.visible, "MinimapWindow 初始隐藏")
+	# 展开入口 = 小地图信号（把手/双击都发它），装配层负责开窗
+	mm.expand_requested.emit()
+	_check(win.visible, "小地图 expand_requested → 放大版打开")
+	var canvas: Control = win.canvas()
+	_check(canvas != null, "放大版绘制区已构建")
+	if canvas != null:
+		var cr := canvas.get_global_rect()
+		_check(cr.size.x >= 900.0 and cr.size.y >= 300.0,
+				"放大版绘制区体量 ≥900×300（实际 %s）" % cr.size)
+		_check(win.is_type_mode(), "放大版默认类型着色（关则回到实际颜色）")
+	for i in 10:
+		await get_tree().process_frame
+	await _shot("hud_minimap_window.png")
+	win.close()
+	_check(not win.visible, "放大版可关闭（ESC / ✕ 同路径）")
 
 
 func _check_layout_720() -> void:

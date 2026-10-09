@@ -638,6 +638,50 @@ func get_building_rects() -> Array:
 	return []
 
 
+## 小地图数据供给（覆写 MapBase 虚方法）：3D 街景的地表色带与临街建筑
+## （_hd.get_minimap_layout，格→px 换算是宿主口径故由本类传入 CELL_PX），
+## 并并入 2D 宿主里的玩家自建建筑。见 docs/技术/架构/场景与战斗/UI.md §10.4。
+func get_minimap_layout() -> Dictionary:
+	var layout: Dictionary = {"surfaces": [], "buildings": []}
+	if _hd != null and _hd.has_method("get_minimap_layout"):
+		# duplicate：_hd 侧返回的是缓存字典，直接改键会污染其缓存
+		layout = _hd.get_minimap_layout(CELL_PX).duplicate()
+		var merged: Array = layout.get("buildings", [])
+		merged.append_array(_collect_minimap_host_buildings())
+		layout["buildings"] = merged
+	return layout
+
+
+## 2D 建筑宿主里的实体（玩家自建 / 施工产物）→ 小地图建筑点。
+## plan 物化件跳过：它们的 3D 卡已在 _hd.get_minimap_layout 的临街排里，
+## 两边都收会让同一栋楼画成两个点。
+func _collect_minimap_host_buildings() -> Array:
+	var out: Array = []
+	for pair: Array in [[building_host, false], [terrain_buildings, true]]:
+		var host: Node2D = pair[0]
+		if host == null:
+			continue
+		for child in host.get_children():
+			if child == null or not child is Node2D:
+				continue
+			if bool(child.get_meta("plan_generated", false)):
+				continue
+			var cells: float = maxf(float(child.get("width")) if "width" in child else 1.0, 1.0)
+			var cell_x: float = float(child.get("cell_x")) if "cell_x" in child else 0.0
+			var def: String = str(child.get("def_id")) if "def_id" in child else ""
+			var is_terrain: bool = bool(pair[1]) \
+					or (bool(child.get("is_terrain")) if "is_terrain" in child else false)
+			out.append({
+				"x": (cell_x + cells * 0.5) * CELL_PX,
+				"width": cells * CELL_PX,
+				"terrain": is_terrain,
+				"def": def,
+				"type": Hd2dMinimapStyle.type_for(def),
+				"color": Hd2dMinimapStyle.color_for(def),
+			})
+	return out
+
+
 ## F3 黄线数据口（debug_gui duck 读取）：前后景分界线的 2D 等价 y
 ## （zoom=1 压屏幕下 1/3 线；旧文档叫"地平线"，实为前后景分界，勿混淆）
 func get_fg_bg_boundary_y() -> float:

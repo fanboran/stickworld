@@ -17,6 +17,21 @@ extends RefCounted
 ## 约束：堆叠成员须挂在「顶部通栏全宽、原点即屏左上」的父级下（GlobalHUD /
 ## HudOverlay 均满足），同一组 offsets 才在不同父级下产生相同屏幕位置。
 
+# ─────────────────────────────── 顶部中央跨度合同 ────────────────────────────────
+## 顶栏两段按钮群之间的空档（画布 px，自屏幕左缘计）——顶部中央部件（小地图）
+## 允许占用的横向范围，数值取自 global_hud.tscn HBoxContainer 子项实测：
+##   左群右缘（PlaceholderPreviewButton 右缘 695；Spring 起点 703）→ 703（含间隙 8）
+##   右群左缘（OrgButton 左缘 1646）→ 1638（含间隙 8）
+## 顶栏为通栏容器：左群左锚固定像素、右群右锚固定像素，故这两个数在横向恒定的
+## 画布坐标下不随分辨率变（stretch=canvas_items+expand 下横向恒 1920）。
+const TOP_CENTER_FREE_LEFT_PX := 703.0
+const TOP_CENTER_FREE_RIGHT_PX := 1638.0
+## 基准画布宽（UX 基准分辨率，见 project.godot display/window/size/viewport_width）
+const BASE_CANVAS_W := 1920.0
+## 顶部中央横向保留半宽：部件以**屏幕中心**锚定（"顶部中央"身份，ZoomBar 随其居中），
+## 故可用半宽取两侧空档的较小者——左按钮群是紧的一侧（右上空档另有余额）。
+const TOP_CENTER_HALF_SPAN := BASE_CANVAS_W * 0.5 - TOP_CENTER_FREE_LEFT_PX
+
 # ─────────────────────────────── zone 注册表 ────────────────────────────────
 ## 每区字段（占位一屏可读，1920×1080 基准）：
 ##   anchors: [L,T,R,B] 锚点比例（相对挂载父级矩形）
@@ -42,11 +57,11 @@ const ZONES: Dictionary = {
 	},
 	&"top_center": {
 		"anchors": [0.5, 0.0, 0.5, 0.0],
-		"region": [-206.0, 8.0, 206.0, 170.0],
+		"region": [-TOP_CENTER_HALF_SPAN, 8.0, TOP_CENTER_HALF_SPAN, 170.0],
 		"mode": "stack",
 		"stack_h": "center",
 		"gap": 6.0,
-		"desc": "顶部中央堆叠：Minimap→ZoomBar（缩放条贴小地图下方；L1Thumbnail 不入区，贴 Minimap 右侧自算；窄窗口下与堆叠区逼近，防撞以 1920 基准为准）",
+		"desc": "顶部中央堆叠：Minimap→ZoomBar（缩放条贴小地图下方；L1Thumbnail 不入区，贴 Minimap 右侧自算）。横向保留区 = 顶栏两按钮群之间的空档（见 TOP_CENTER_FREE_*），小地图在其内按地图宽自适应并居中",
 	},
 	&"top_right": {
 		"anchors": [1.0, 0.0, 1.0, 0.0],
@@ -131,6 +146,14 @@ static func zone_rect(zone_id: StringName, viewport_size: Vector2) -> Rect2:
 	var pos := Vector2(a[0] * viewport_size.x + r[0], a[1] * viewport_size.y + r[1])
 	var end := Vector2(a[2] * viewport_size.x + r[2], a[3] * viewport_size.y + r[3])
 	return Rect2(pos, end - pos)
+
+
+## 顶部中央部件在画布宽 vp_x 下的最大宽度（居中且不压两侧按钮群）。
+## 供小地图自算宽度上限——改顶部布局 = 改本表上面的常量，部件不复制数值。
+static func top_center_max_width(vp_x: float) -> float:
+	var cx := vp_x * 0.5
+	var half := minf(cx - TOP_CENTER_FREE_LEFT_PX, TOP_CENTER_FREE_RIGHT_PX - cx)
+	return maxf(half * 2.0, 1.0)
 
 
 # ─────────────────────────────── 内部：落位 ────────────────────────────────

@@ -58,3 +58,7 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn
 | 场景 | 用途 | 运行 |
 |---|---|---|
 | `test_ui_overlap.tscn` | HUD 部件两两不重叠检查（自 tests/integration/ 下沉：非 TestRunner 规范套件、不进任何 CI 清单；断言口径停留在 zone 制之前的老布局，结果仅供参考） | `godot --path stick-world res://tests/dev/test_ui_overlap.tscn --resolution 1920x1080` |
+| `verify_hud_zones.tscn` | HUD zone 落位与顶部跨度合同验收（多分辨率截图 + 断言：小地图/缩放条居中、不压顶栏按钮群与右上时钟、放大版展开）；出图 `temp/shots_b/` | `godot --path stick-world res://tests/dev/verify_hud_zones.tscn` |
+| `verify_minimap_battle.tscn` | 战场图小地图验收（宽度随地图自适应、双方阵营点红蓝可分、点位反映实际纵深）；出图 `temp/shots_b/minimap_battle.png` | `godot --path stick-world res://tests/dev/verify_minimap_battle.tscn` |
+| `probe_hud_bands.tscn` | 顶栏按钮群 / 右上时钟区实测矩形打印——`hud_zone_layout.gd` 顶部跨度常数的来源，**顶栏增删按钮后用它复测回填** | `godot --path stick-world res://tests/dev/probe_hud_bands.tscn` |
+| `portfolio_shots.tscn` | 验收图集（主菜单/载入/街景/设置/建造/编制 + 顶部小地图区裁剪与放大版）；出图 `user://shots/` | `godot --path stick-world --resolution 1920x1080 res://tests/dev/portfolio_shots.tscn` |

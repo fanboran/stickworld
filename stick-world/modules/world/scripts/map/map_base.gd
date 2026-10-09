@@ -209,6 +209,18 @@ func get_passage_barriers() -> Array:
 	return barriers
 
 
+# ── 小地图数据供给（虚方法；世界 px 口径，原点 = 世界 x=0）──────────────────
+## 返回：
+##   surfaces  = [{x0, x1, color}]                        地面材质色带（按叠色顺序）
+##   buildings = [{x, width, terrain, def, type, color}]   x = 建筑中心
+## 字段语义：terrain = 地形建筑（不可拆）；type = 功能类型键、color = 近似世界
+## 材质色，取值与口径见 modules/hd2d/scripts/hd2d_minimap_style.gd。
+## 基类返回空（无地表带 + 无建筑）——HD-2D 图覆写（街景建筑与地表在 3D 侧）。
+## 消费方 modules/ui_global/scripts/hud/minimap.gd（has_method 防御）。
+func get_minimap_layout() -> Dictionary:
+	return {"surfaces": [], "buildings": []}
+
+
 # ── 视觉域坐标协议（HD-2D 投影唯一出口；2D 图全部恒等）──────────────────
 ## 2D 图视觉域=画布域，各方法均恒等；HD-2D 图在 Hd2dMapBase 覆写。
 ## 铁律：只有**地面锚点**参与映射；**身体纵向尺寸/偏移不映射**（billboard

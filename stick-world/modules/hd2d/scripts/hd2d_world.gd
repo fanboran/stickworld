@@ -308,6 +308,9 @@ var _lamp_root: Node3D
 var _cam: Camera3D
 var _cam_attrs: CameraAttributesPractical
 var _char_host: Node3D = null
+## 实体 billboard 宿主容器（spawn_character 的挂点；烘焙整体归排除层）——
+## 与演示宿主 _char_host 分开：游戏图的火柴人全在这，不在演示宿主下
+var _char_entities_root: Node3D = null
 var _post_layer: CanvasLayer
 var _post_rect: ColorRect
 var _post_mat: ShaderMaterial
@@ -761,12 +764,14 @@ static func minimap_surface_color(tex_name: String) -> Color:
 ## 与 get_minimap_layout（数据平面图）的区别：这里不做任何近似——颜色与形状是
 ## 烘卡的真实美术，直接由渲染管线产出。
 ##
-## 临烘排除（创始人 2026-10：火柴人与野外树木都烘掉）：火柴人（_char_host）、
-## 自然物与道具（_prop_root 含野外树木/矿物/摊位）、云牌、背景楼群（_card_root
-## 里前排之后的 68 张剪影）的可视件归入 BAKE_EXCLUDE_LAYER 渲染层，烘焙相机
-## cull_mask 挖掉该层——**按相机剔除而非全局隐藏，主画面零闪烁**，游戏内
-## 随时可重烘（昼夜换档防抖重烘即走本口）。天幕与月盘是主相机子节点、
-## 后处理层是 CanvasLayer——都不在 SubViewport 的渲染里，天然不进烘焙图。
+## 临烘排除（创始人 2026-10：火柴人与野外树木都烘掉）：火柴人（_char_entities_root
+## 实体 billboard 容器 + _char_host 演示宿主）、自然物与道具（_prop_root 含野外
+## 树木/矿物/摊位）、云牌、背景楼群（_card_root 里前排之后的 68 张剪影）的可视件
+## **独占**归入 BAKE_EXCLUDE_LAYER 渲染层（赋值 = ：留在第 1 层会漏进烘焙相机，
+## 云与实体火柴人两次泄漏的教训），烘焙相机 cull_mask 挖掉该层——**按相机剔除
+## 而非全局隐藏，主画面零闪烁**，游戏内随时可重烘（昼夜换档防抖重烘即走本口）。
+## 天幕与月盘是主相机子节点、后处理层是 CanvasLayer——都不在 SubViewport 的
+## 渲染里，天然不进烘焙图。
 ## 背景清成透明（transparent_bg + 默认清屏色 alpha 0）＝"去天空"。
 ## 后处理（DOF/辉光/雾）全关——景深远焦起点锚在世界线上，一开整幅糊掉。
 ##
@@ -796,11 +801,12 @@ func bake_minimap_strip(world_x0: float, world_x1: float,
 	bake_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var map_w: float = world_x1 - world_x0
 
-	# ── 临烘排除：可视件归烘焙排除层（相机剔除，不动 visible）──
+	# ── 临烘排除：可视件独占归烘焙排除层（相机剔除，不动 visible）──
 	var saved_clear: Color = RenderingServer.get_default_clear_color()
 	# 背景清成透明（"去天空"）：烘焙视口透明的处露出小地图自己的背衬色
 	RenderingServer.set_default_clear_color(Color(0.0, 0.0, 0.0, 0.0))
-	_bake_exclude_layer(_char_host)
+	_bake_exclude_layer(_char_entities_root)   # 实体 billboard（游戏图的火柴人全在这）
+	_bake_exclude_layer(_char_host)            # 演示宿主（游戏图常空，防御性排除）
 	_bake_exclude_layer(_prop_root)
 	# 云牌：整个容器归排除层（云贴图异步烘制——逐节点排除会漏掉烘焙后才入树的那些）
 	_bake_exclude_layer(_cloud_root)
@@ -890,16 +896,17 @@ func _ensure_bake_rig(tex_w: int, tex_h: int) -> Array:
 	return [_bake_vp, _bake_cam]
 
 
-## 把节点子树里的可视件（GeometryInstance3D）归入烘焙排除层：火柴人 billboard
-## 的外壳 quad、卡片、云全是 MeshInstance3D 系；billboard 内部的 SubViewport/
-## 逻辑节点按类型自然跳过。层标记幂等（|=），运行期新入树的排除件下次烘焙
-## 自然归层——不像 visible 隐藏那样需要还原，也没有"烘焙瞬间主画面闪一下"
-## 的副作用。
+## 把节点子树里的可视件（GeometryInstance3D）**独占**归入烘焙排除层：
+## 赋值（=）而非叠加（|=）——节点若仍留在第 1 层，烘焙相机（掩码 1..19）
+## 照样渲染它，云就是这么漏进去的（实测教训）。独占后：主相机全层照见、
+## 烘焙相机挖掉。幂等（重复赋同值），运行期新入树的排除件下次烘焙自然归层。
+## 火柴人 billboard 的外壳 quad、卡片、云全是 MeshInstance3D/Sprite3D 系；
+## billboard 内部的 SubViewport/逻辑节点按类型自然跳过。
 func _bake_exclude_layer(n: Node) -> void:
 	if n == null or not is_instance_valid(n):
 		return
 	if n is GeometryInstance3D:
-		(n as GeometryInstance3D).layers |= BAKE_EXCLUDE_LAYER
+		(n as GeometryInstance3D).layers = BAKE_EXCLUDE_LAYER
 	for c in n.get_children():
 		_bake_exclude_layer(c)
 
@@ -1474,6 +1481,9 @@ func _build_world() -> void:
 	_shadow_root = Node3D.new()
 	_shadow_root.name = "BuildingShadows"
 	add_child(_shadow_root)
+	_char_entities_root = Node3D.new()
+	_char_entities_root.name = "CharEntities"
+	add_child(_char_entities_root)
 	if not battlefield:
 		_place_rows()   # 前排吸附整格 + 两排背景留缝、后层插前层缝
 	_prop_root = Node3D.new()
@@ -1675,7 +1685,12 @@ func spawn_character() -> Node:
 	var h: Node = CHAR_HOST.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
-	add_child(h)
+	# 挂实体容器（非 hd2d_world 根）：小地图烘焙按容器整体归排除层——
+	# 散挂根上会漏进照片底图（实测：Char0..N 漏进街带贴图）
+	if _char_entities_root != null:
+		_char_entities_root.add_child(h)
+	else:
+		add_child(h)
 	h.set_px_scale(2.0)   # 2x 超采样：描边锐利无彩边
 	h.build(self, "idle", TILT_DEG)
 	h.add_char(0.0, 0.0, false)

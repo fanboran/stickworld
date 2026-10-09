@@ -107,8 +107,8 @@ func _run() -> void:
 	if not bake_a.is_empty() and not bake_b.is_empty():
 		var diff := _image_diff((bake_a["texture"] as ImageTexture).get_image(),
 				(bake_b["texture"] as ImageTexture).get_image())
-		_check(diff.ratio_bad <= 0.005,
-				"火柴人横移 240px 底图逐像素几乎不变（差异像素 %.3f%% ≤ 0.5%%）"
+		_check(diff.ratio_bad <= 0.001,
+				"火柴人横移 240px 底图逐像素不变（差异像素 %.4f%% ≤ 0.1%%，剔除层须真排除——曾 |= 叠层保留第 1 层而漏烘）"
 				% [diff.ratio_bad * 100.0])
 		_check(diff.mean <= 1.0,
 				"底图确定性（平均像素差 %.3f/255 ≤ 1.0）" % diff.mean)

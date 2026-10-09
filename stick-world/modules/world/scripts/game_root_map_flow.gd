@@ -271,9 +271,10 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
 	if _host.input_dispatcher and _host.input_dispatcher.has_method("set_mode"):
 		_host.input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
-	# 小地图底图烘焙（"干净管线"）：只留**前排建筑 + 地面**的真渲染降采样
-	# （火柴人/自然物/道具/云/天幕/背景排/后处理临烘隐藏）。
-	# 位置：加载覆盖层之下——烘焙会改写相机取景与可见性若干帧，玩家看不见过程；
+	# 小地图底图首烘（"干净管线"）：只留**前排建筑 + 地面**的真渲染降采样
+	# （火柴人/自然物/道具/云/背景排走烘焙相机剔除层）。烘焙在专用 SubViewport
+	# 里零可见副作用，但放在覆盖层之下仍最稳；运行期变更（昼夜档/街景内容）
+	# 由 hd2d 脏信号 → Hd2dMapBase 防抖重烘（低占用实时管线），此处只管首烘。
 	# awaited 保证覆盖层淡出前底图就绪（否则会先闪一版平面图再跳照片）。
 	if map != null and map.has_method("bake_minimap_base") 			and _host._minimap != null and _host._minimap.has_method("get_map_width_px") 			and _host._minimap.has_method("get_map_height_px"):
 		var tw: int = int(round(float(_host._minimap.get_map_width_px()) * MINIMAP_BAKE_SCALE))

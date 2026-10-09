@@ -289,12 +289,19 @@ var _clutter_occ: Array = []    # 建筑间杂物占格带（F3 建筑辅助线�
 ## [cx 格, width 格, 纹理名, 染色]。按铺设顺序记录 = 叠色顺序（后铺者压前），
 ## 小地图照原顺序重放即得"主街石板、城外草地"的实际地表分布。
 var _ground_strips: Array = []
-## 小地图布局快照缓存（首次查询构建；场景摆完即不变，无需失效）
+## 小地图布局快照缓存（首次查询构建；运行期内容变更走 mark_minimap_base_dirty 失效）
 var _minimap_layout_cache: Dictionary = {}
+## 照片底图脏信号：光照档切换或 3D 街景内容变更时发（Hd2dMapBase 收到后
+## 防抖重烘，小地图 15Hz 快照自动换图）——运行时重烘管线的脏标记入口
+signal minimap_base_dirty
+## 烘焙排除层（第 20 层渲染层）：临烘排除内容（火柴人 billboard / 自然物与
+## 道具 / 云牌 / 背景排剪影）的可视件归入此层，烘焙相机 cull_mask 挖掉它。
+## 按相机剔除而非全局隐藏——主画面零闪烁，重烘可在游戏内随时发。
+const BAKE_EXCLUDE_LAYER := 1 << 19
 ## 小地图烘焙 rig（懒建；共享主视口 World3D 的 SubViewport + 专用正交相机）
 var _bake_vp: SubViewport = null
 var _bake_cam: Camera3D = null
-## 云牌容器（烘焙整体隐藏用；云贴图异步烘制，容器是时序无关的隐藏单位）
+## 云牌容器（烘焙整体归排除层；云贴图异步烘制，容器是时序无关的排除单位）
 var _cloud_root: Node3D = null
 var _shadow_root: Node3D
 var _lamp_root: Node3D
@@ -752,12 +759,15 @@ static func minimap_surface_color(tex_name: String) -> Color:
 ## 小地图底图烘焙 —— "干净管线"：只留**前排建筑 + 地面**的真渲染，降采样成贴图。
 ##
 ## 与 get_minimap_layout（数据平面图）的区别：这里不做任何近似——颜色与形状是
-## 烘卡的真实美术，直接由渲染管线产出；代价是要临时接管相机与可见性（见下）。
+## 烘卡的真实美术，直接由渲染管线产出。
 ##
-## 临烘隐藏（创始人 2026-10：火柴人与野外树木都烘掉）：火柴人（_char_host）、
-## 自然物与道具（_prop_root 含野外树木/矿物/摊位）、云牌、天幕与月盘、
-## 背景楼群（_card_root 里前排之后的 68 张剪影）、后处理层（_post_layer）。
-## 背景清成透明（view.yuan transparent_bg + 环境底色 alpha 0）＝"去天空"。
+## 临烘排除（创始人 2026-10：火柴人与野外树木都烘掉）：火柴人（_char_host）、
+## 自然物与道具（_prop_root 含野外树木/矿物/摊位）、云牌、背景楼群（_card_root
+## 里前排之后的 68 张剪影）的可视件归入 BAKE_EXCLUDE_LAYER 渲染层，烘焙相机
+## cull_mask 挖掉该层——**按相机剔除而非全局隐藏，主画面零闪烁**，游戏内
+## 随时可重烘（昼夜换档防抖重烘即走本口）。天幕与月盘是主相机子节点、
+## 后处理层是 CanvasLayer——都不在 SubViewport 的渲染里，天然不进烘焙图。
+## 背景清成透明（transparent_bg + 默认清屏色 alpha 0）＝"去天空"。
 ## 后处理（DOF/辉光/雾）全关——景深远焦起点锚在世界线上，一开整幅糊掉。
 ##
 ## 参数：world_x0/x1 = 地图世界 x 范围（px）；canvas_ground_y/bottom = 2D 画布的
@@ -770,8 +780,8 @@ static func minimap_surface_color(tex_name: String) -> Color:
 ##   y_ref        [canvas_y_back, t_back, canvas_y_front, t_front]（t 为 0..1 归一纵坐标）
 ##   lift_ratio   台面抬升的竖直占比（城内点按台面标高画；墙外点不加）
 ##   wall_x       台面抬升的 x 边界（px；|x| ≤ 它为城内）
-## 调用约定：调用方须已停掉逐帧相机镜像（Hd2dMapBase 负责），且期间玩家看不到
-## 画面（加载覆盖层之下）——本函数会连续改写相机与可见性若干帧。
+## 调用约定：相机接管只发生在烘焙 SubViewport 内部（专用烘焙相机，主相机与
+## 逐帧镜像不受影响）；清屏色在捕获后即还原。加载期与游戏内重烘同走本口。
 func bake_minimap_strip(world_x0: float, world_x1: float,
 		canvas_ground_y: float, canvas_ground_bottom: float,
 		tex_w: int, tex_h: int) -> Dictionary:
@@ -786,22 +796,19 @@ func bake_minimap_strip(world_x0: float, world_x1: float,
 	bake_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var map_w: float = world_x1 - world_x0
 
-	# ── 临烘隐藏：火柴人 / 自然物与道具（野外树木）/ 云牌 / 背景楼群 ──
-	# 天幕与月盘是主相机的子节点、后处理层是 CanvasLayer——都不在 SubViewport
-	# 的渲染里，天然不进烘焙图（这正是走 SubViewport 的好处）。
-	var hidden: Array = []
+	# ── 临烘排除：可视件归烘焙排除层（相机剔除，不动 visible）──
 	var saved_clear: Color = RenderingServer.get_default_clear_color()
 	# 背景清成透明（"去天空"）：烘焙视口透明的处露出小地图自己的背衬色
 	RenderingServer.set_default_clear_color(Color(0.0, 0.0, 0.0, 0.0))
-	_bake_hide(_char_host, hidden)
-	_bake_hide(_prop_root, hidden)
-	# 云牌：整个容器隐藏（云贴图异步烘制——逐节点隐藏会漏掉烘焙后才入树的那些）
-	_bake_hide(_cloud_root, hidden)
+	_bake_exclude_layer(_char_host)
+	_bake_exclude_layer(_prop_root)
+	# 云牌：整个容器归排除层（云贴图异步烘制——逐节点排除会漏掉烘焙后才入树的那些）
+	_bake_exclude_layer(_cloud_root)
 	var front_n: int = _front_occ.size()
 	if _card_root != null:
 		for i in _card_root.get_child_count():
 			if i >= front_n:
-				_bake_hide(_card_root.get_child(i), hidden)
+				_bake_exclude_layer(_card_root.get_child(i))
 	# ── 全宽取景（含少量边距，防边缘卡裁）──
 	_apply_cam_framing(map_w * 1.02 / 24.0, bake_cam)
 	bake_cam.position.x = (world_x0 + world_x1) * 0.5 / 24.0
@@ -823,8 +830,8 @@ func bake_minimap_strip(world_x0: float, world_x1: float,
 			"lift_ratio": _bake_lift_ratio(bake_cam, h_px, canvas_ground_bottom),
 			"wall_x": _wall_x() * 24.0,
 		}
-	# ── 还原可见性/清屏色/烘焙视口渲染（相机留在烘焙取景，下次烘焙自行重设）──
-	_bake_restore(hidden)
+	# ── 还原清屏色/烘焙视口渲染（层标记幂等无需还原；相机留在烘焙取景，
+	#    下次烘焙自行重设；可见性全程未动）──
 	RenderingServer.set_default_clear_color(saved_clear)
 	bake_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	return result
@@ -851,7 +858,8 @@ func _bake_lift_ratio(bake_cam: Camera3D, h_px: float, canvas_ground_bottom: flo
 
 ## 烘焙 rig（懒建）：SubViewport 共享主视口的 World3D → 只渲染 3D 世界，
 ## 不含任何 CanvasLayer（UI/加载屏/后处理），尺寸即目标贴图尺寸（与玩家窗口解耦），
-## 专用相机不带相机属性 → 无景深；天幕/月盘挂在主相机上，天然不入图。
+## 专用相机不带相机属性 → 无景深；天幕/月盘挂在主相机上，天然不入图；
+## cull_mask 挖掉烘焙排除层（排除内容只对玩家相机可见）。
 ## 返回 [SubViewport, Camera3D]。
 func _ensure_bake_rig(tex_w: int, tex_h: int) -> Array:
 	if _bake_vp == null or not is_instance_valid(_bake_vp):
@@ -868,6 +876,7 @@ func _ensure_bake_rig(tex_w: int, tex_h: int) -> Array:
 		_bake_cam.keep_aspect = Camera3D.KEEP_WIDTH
 		_bake_cam.near = 0.05
 		_bake_cam.far = 600.0
+		_bake_cam.cull_mask = 0xFFFFF & ~BAKE_EXCLUDE_LAYER
 		if _cam != null:
 			_bake_cam.rotation = _cam.rotation
 			_bake_cam.position.y = _cam.position.y
@@ -881,43 +890,18 @@ func _ensure_bake_rig(tex_w: int, tex_h: int) -> Array:
 	return [_bake_vp, _bake_cam]
 
 
-## 临烘隐藏（CanvasItem / Node3D / CanvasLayer 三类都支持——后处理层是
-## CanvasLayer，只认前两类会漏掉它，实测会整幅盖住烘焙结果）
-func _bake_hide(n: Node, store: Array) -> void:
-	var vis: Variant = _bake_visible_of(n)
-	if vis == null:
-		return
-	store.append([n, vis])
-	_bake_set_visible(n, false)
-
-
-func _bake_restore(store: Array) -> void:
-	for e: Array in store:
-		var n: Node = e[0]
-		if n == null or not is_instance_valid(n):
-			continue
-		_bake_set_visible(n, bool(e[1]))
-
-
-func _bake_visible_of(n: Node) -> Variant:
+## 把节点子树里的可视件（GeometryInstance3D）归入烘焙排除层：火柴人 billboard
+## 的外壳 quad、卡片、云全是 MeshInstance3D 系；billboard 内部的 SubViewport/
+## 逻辑节点按类型自然跳过。层标记幂等（|=），运行期新入树的排除件下次烘焙
+## 自然归层——不像 visible 隐藏那样需要还原，也没有"烘焙瞬间主画面闪一下"
+## 的副作用。
+func _bake_exclude_layer(n: Node) -> void:
 	if n == null or not is_instance_valid(n):
-		return null
-	if n is CanvasItem:
-		return (n as CanvasItem).visible
-	if n is Node3D:
-		return (n as Node3D).visible
-	if n is CanvasLayer:
-		return (n as CanvasLayer).visible
-	return null
-
-
-func _bake_set_visible(n: Node, v: bool) -> void:
-	if n is CanvasItem:
-		(n as CanvasItem).visible = v
-	elif n is Node3D:
-		(n as Node3D).visible = v
-	elif n is CanvasLayer:
-		(n as CanvasLayer).visible = v
+		return
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).layers |= BAKE_EXCLUDE_LAYER
+	for c in n.get_children():
+		_bake_exclude_layer(c)
 
 
 ## 前后景分界线的 2D 等价 y（px）——可行走地面（前景）与后景的构图分界：
@@ -1347,9 +1331,22 @@ func get_ground_lift_px(x_px: float, y_px: float) -> float:
 	return get_ground_lift_world(x_px / 24.0, z) * 24.0 * cos(deg_to_rad(TILT_DEG))
 
 
-## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）
+## 光照档公开封装（宿主昼夜挂钩调；_apply_light 幂等可反复调）。
+## 档位实际切换时发底图脏信号——照片底图的光照冻结在烘焙时刻，昼夜换档
+## 须重烘一版（Hd2dMapBase 防抖后自动执行）。
 func set_light_mode(mode: String) -> void:
+	var changed: bool = mode != _last_light_mode
 	_apply_light(mode)
+	if changed:
+		minimap_base_dirty.emit()
+
+
+## 底图脏标记公开口：3D 街景内容在运行期变更时由变更方调用（换卡/扩建/
+## 城墙升档等未来接入方）——照片底图防抖重烘 + 平面图缓存失效重建。
+## 光照档切换走 set_light_mode（同发信号）。
+func mark_minimap_base_dirty() -> void:
+	_minimap_layout_cache = {}
+	minimap_base_dirty.emit()
 
 
 ## 门前径（创始人 2026-09-14：宏伟建筑门前有特别短的小路接进街道）。

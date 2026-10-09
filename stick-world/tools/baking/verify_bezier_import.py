@@ -9,7 +9,9 @@ TSV = "temp/bezier_samples.tsv"
 AM = {'attack': 'Swordwrath-Attack1', 'walk': 'Swordwrath-Walk',
       'attack_bow': 'Archidon-Draw', 'run': 'Swordwrath-Run', 'dead': 'Death1',
       'hit_front': 'Hit-Mid-Front-Small-1', 'idle_spear': 'Spearton-Stand1',
-      'attack_spear': 'Spearton-Attack1', 'block_attack_3': 'Spearton-Block-Attack3'}
+      'attack_spear': 'Spearton-Attack1', 'block_attack_3': 'Spearton-Block-Attack3',
+      'attack_2': 'Swordwrath-Attack2', 'attack_spear_throw': 'Spearton-Throw',
+      'run_spear': 'Spearton-Run', 'attack_bow_reload': 'Archidon-Reload'}
 M = {'bone3': 7, 'minerhead1': 10, 'minerarm1': 18, 'minerarm2': 1, 'minerarm3': 19,
      'minerarm4': 14, 'minerleg2': 16, 'minerleg1': 3, 'minerfoot1': 4, 'minerleg4': 17,
      'minerleg3': 11, 'minerfoot2': 12, 'bone': 21, 'minertorso1': 6, 'bone2': 22,

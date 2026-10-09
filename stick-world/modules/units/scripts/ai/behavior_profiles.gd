@@ -172,6 +172,8 @@ const CLASS_PROFILES: Dictionary = {
 		"move_mult": 1.3,
 		# Demo P5 灵动化：剑兵侧翼包抄（兵种级覆盖；基线默认关是零回归闸门）
 		"flank_enabled": true,
+		# S1b：剑士攻击池（Swordwrath-Attack1/2 双式随机，SWL 剑士两段挥剑）
+		"attack_pool": ["attack", "attack_2"],
 	},
 	SPEAR: {
 		"aggressive_push_prob": 0.0,

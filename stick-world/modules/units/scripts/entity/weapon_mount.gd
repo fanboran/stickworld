@@ -231,6 +231,13 @@ var _aim_visual_player: bool = false
 const BOW_AIM_VISUAL_TIMEOUT: float = 5.0
 ## 移动判定阈值（速度平方）：与 hd2d 镜像的 moving 口径一致（25 = 5px/s）
 const BOW_MOVE_SQ_THRESHOLD: float = 25.0
+## 装填动画已播标记（SWL IsReloading 的表现侧，S1b）：本冷却窗内已播过
+## attack_bow_reload——oneshot 同名 play 会从头重播，逐帧仲裁不得重入。
+## 冷却尽（回拉满持瞄）或表现窗关闭时复位，一窗一次
+var _reload_visual_done: bool = false
+## 装填播放判定的冷却残量下限（s）：低于此值视为冷却已尽（防帧尾毛刺在
+## 冷却归零边缘反复横跳）
+const RELOAD_COOLDOWN_EPS: float = 0.05
 
 # ── 治疗能力族（P7 批次 7b：Meric 实体层 CastHeal/CanCastHeal/IsCastingHeal 直译）──
 ## 当前治疗动画名（dump healingAnimation 字段直译，运行时经 StickmanAnims.pick_heal_anim 随机注入）
@@ -568,10 +575,23 @@ func _process(_delta: float) -> void:
 		if current == Anims.ANIM_ATTACK_BOW_HOLD:
 			_play_via_visual(Anims.ANIM_WALK)
 	else:
-		# 站定即拉弓绷住：motion 减速到 0 时会把状态写回 idle（表现窗拦不住
-		# 那一次写入），这里检测到待机/走姿残留就重新拉起拉弓保持段
-		if current == "idle" or current == Anims.ANIM_WALK or current == "run":
-			_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
+		# 站定：冷却未尽先装填（SWL IsReloading/Reload 语义，对照档 §5）——
+		# 释放段播完回基础态后，冷却窗内播 attack_bow_reload（收弓取箭上弦），
+		# 冷却尽才拉满持瞄。不做这层则弓手两轮之间全程满弓，
+		# "拉弓-放箭-装填-再拉"的循环节奏不可见。motion 减速到 0 时会把状态
+		# 写回 idle（表现窗拦不住那一次写入），这里检测到基础态残留重新拉起。
+		# 装填尾段被冷却尽的拉满直接打断（SWL 下一轮 Draw 起拍——射速权威在
+		# 冷却计时，不为装填动画拖拍）；冷却未尽且装填已播完则维持现状站定
+		if current == "idle" or current == Anims.ANIM_WALK or current == "run" \
+				or current == Anims.ANIM_ATTACK_BOW_RELOAD:
+			if _cooldown_left() > RELOAD_COOLDOWN_EPS:
+				if not _reload_visual_done and current != Anims.ANIM_ATTACK_BOW_RELOAD:
+					_reload_visual_done = true
+					_play_via_visual(Anims.ANIM_ATTACK_BOW_RELOAD)
+			else:
+				_reload_visual_done = false
+				if current != Anims.ANIM_ATTACK_BOW_HOLD:
+					_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
 
 
 ## 持瞄开始 → 起拉弓表现窗（拉弓保持段由 _process 仲裁落位）
@@ -587,9 +607,11 @@ func _mark_bow_aim_started() -> void:
 
 ## 收瞄准表现窗。return_to_idle=true 且当前停在拉弓保持段时回站姿
 ## （出手路径传 false——release 动画随后接管，不必插一脚 idle）。
+## 装填闩锁随窗复位：新窗（下一轮持瞄）重新计一次装填
 func _end_bow_aim_visual(return_to_idle: bool) -> void:
 	_aim_visual_active = false
 	_aim_visual_player = false
+	_reload_visual_done = false
 	# 窗关即撤持瞄保持换装：walk state 回武器基础走姿（弓 = walk_bow）
 	_set_bow_aim_walk_override(false)
 	if not return_to_idle:
@@ -683,8 +705,18 @@ func _can_cancel_attack_anim() -> bool:
 	return false
 
 
-## 当前冷却剩余时间
+## 当前冷却剩余时间（本地计时口径；sim 模式下不推进，见 _cooldown_left）
 func get_cooldown_remaining() -> float:
+	return _cooldown_timer
+
+
+## 冷却剩余（双模真相源）：sim 模式计时权威在 BattleSim（本节点
+## _physics_process 早退，_cooldown_timer 冻结在出手值）；非 sim 走本地
+## 逐帧递减计时。can_attack 同款取数口径，供装填仲裁等表现侧消费
+func _cooldown_left() -> float:
+	var s := _sim()
+	if s != null:
+		return s.get_cooldown(_sim_sid())
 	return _cooldown_timer
 
 
@@ -837,10 +869,15 @@ func release_player_shot(aim_dir: Vector2, power: float) -> Node2D:
 
 ## 玩家蓄力投矛（SWL Spearton.ThrowSpear 的 PC 翻译）：投掷走双倍冷却
 ## （技能语义，原版掷后接拔剑近战，拔剑未实装前用冷却差模拟节奏差）。
+## 掷出播 Spearton-Throw 真数据动画（站定才播，移动投掷保持脚步——同弓
+## 释放段口径）；纯表现无结算挂钩，伤害走矛投射物。
 func throw_spear_manual(aim_dir: Vector2, power: float) -> bool:
 	if not can_attack():
 		return false
 	_ranged.throw_spear_manual(aim_dir, power)
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity != null and owner_entity.velocity.length_squared() <= BOW_MOVE_SQ_THRESHOLD:
+		_play_via_visual(Anims.ANIM_THROW_SPEAR)
 	var factor: float = 2.0
 	var s := _sim()
 	if s != null:
@@ -1271,6 +1308,10 @@ func _now() -> float:
 ## 驱动手臂挥砍，剑自动跟随，无需程序化 Tween 旋转。
 ## 由发起攻击这一步直接触发——命中帧按动画时间结算，动画必须先起播。
 func _play_swing() -> void:
+	# 攻击池变体每次随机抽取且先于命中帧登记换装（visual_controller.play_attack）：
+	# 命中帧时刻随变体逐击重解析——"换武器才重解析"的缓存语义只对无池武器成立
+	_hit_time_resolved = false
+	_hit_event_time = -1.0
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity != null and owner_entity.has_method("play_attack"):
 		owner_entity.play_attack()

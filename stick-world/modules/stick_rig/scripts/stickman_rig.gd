@@ -285,10 +285,13 @@ func _check_animation_finished() -> void:
 	var cur: String = _state_machine.get_current_node()
 	if cur.is_empty() or cur == "Start" or cur == _finished_sent_state:
 		return
-	# 只对 LOOP_NONE 动画发结束信号（循环动画永不结束）
+	# 只对 LOOP_NONE 动画发结束信号（循环动画永不结束）；
+	# 循环属性按变体真源判（池变体与基础动画资源不同，见 _resolve_state_anim）
 	var anim: Animation = null
-	if _anim_player != null and _anim_player.has_animation(cur):
-		anim = _anim_player.get_animation(cur)
+	if _anim_player != null:
+		var res_name := _resolve_state_anim(cur)
+		if _anim_player.has_animation(res_name):
+			anim = _anim_player.get_animation(res_name)
 	if anim == null or anim.loop_mode != Animation.LOOP_NONE:
 		return
 	var len: float = _state_machine.get_current_length()
@@ -308,17 +311,22 @@ func _check_animation_events() -> void:
 	if _state_machine == null or _anim_player == null:
 		return
 	var cur: String = _state_machine.get_current_node()
-	if cur.is_empty() or cur == "Start" or not _anim_player.has_animation(cur):
+	if cur.is_empty() or cur == "Start":
+		return
+	# 事件表取状态节点当前引用的变体资源（池变体 Hit 时刻与基础动画不同，
+	# 见 _resolve_state_anim）；发射名保持状态名（消费方按状态过滤）
+	var res_name := _resolve_state_anim(cur)
+	if not _anim_player.has_animation(res_name):
 		return
 	var events: Array
-	if _events_cache.has(cur):
-		events = _events_cache[cur]
+	if _events_cache.has(res_name):
+		events = _events_cache[res_name]
 	else:
-		var anim: Animation = _anim_player.get_animation(cur)
+		var anim: Animation = _anim_player.get_animation(res_name)
 		events = []
 		if anim != null and anim.has_meta("anim_events"):
 			events = anim.get_meta("anim_events")
-		_events_cache[cur] = events
+		_events_cache[res_name] = events
 	if events.is_empty():
 		return
 	var pos: float = _state_machine.get_current_play_position()
@@ -812,13 +820,36 @@ func get_anim_time(anim_name: String) -> float:
 	return _state_machine.get_current_play_position()
 
 
+## 状态名 → 状态节点当前引用的动画资源名（变体换装感知）：攻击池/姿态
+## 变体经 set_state_anim 换进状态后，事件表/时长应取变体真源——按状态名
+## 直查动画库会拿到基础动画（Hit 时刻/长度偏差，池变体命中帧错拍）。
+## 播放位置本身取自状态机（get_current_play_position），天然是变体的。
+## 非换装节点（blend/oneShot 等）按原名返回。
+func _resolve_state_anim(anim_name: String) -> String:
+	if _anim_tree == null or not is_instance_valid(_anim_tree):
+		return anim_name
+	var root: AnimationNode = _anim_tree.tree_root
+	if root == null or not (root is AnimationNodeStateMachine):
+		return anim_name
+	var sm := root as AnimationNodeStateMachine
+	if not sm.has_node(anim_name):
+		return anim_name
+	var node: AnimationNode = sm.get_node(anim_name)
+	if node is AnimationNodeAnimation and not (node as AnimationNodeAnimation).animation.is_empty():
+		return (node as AnimationNodeAnimation).animation
+	return anim_name
+
+
 ## 查询动画内嵌事件时间（秒）。返回首个匹配事件的绝对时间；无该事件/无元数据返回 -1。
 ## 供需要"提前知道命中时刻"的逻辑（如没有动画事件时的兜底、调试断言）使用；
 ## 常规命中帧结算应订阅 animation_event 信号而非轮询。
 func get_anim_event_time(anim_name: String, event_name: String) -> float:
-	if _anim_player == null or not _anim_player.has_animation(anim_name):
+	if _anim_player == null:
 		return -1.0
-	var anim: Animation = _anim_player.get_animation(anim_name)
+	var res_name := _resolve_state_anim(anim_name)
+	if not _anim_player.has_animation(res_name):
+		return -1.0
+	var anim: Animation = _anim_player.get_animation(res_name)
 	if anim == null or not anim.has_meta("anim_events"):
 		return -1.0
 	for e in anim.get_meta("anim_events"):
@@ -830,9 +861,12 @@ func get_anim_event_time(anim_name: String, event_name: String) -> float:
 ## 查询动画时长（秒）；找不到返回 -1。与 get_anim_time 配合计算
 ## "命中后动画可打断点"（AnimationCancelFractionOfAnimationAfterAttackHit）。
 func get_anim_length(anim_name: String) -> float:
-	if _anim_player == null or not _anim_player.has_animation(anim_name):
+	if _anim_player == null:
 		return -1.0
-	var anim: Animation = _anim_player.get_animation(anim_name)
+	var res_name := _resolve_state_anim(anim_name)
+	if not _anim_player.has_animation(res_name):
+		return -1.0
+	var anim: Animation = _anim_player.get_animation(res_name)
 	return anim.length if anim != null else -1.0
 
 

@@ -20,11 +20,18 @@ const ANIM_IDLE_STAFF := "idle_staff"
 const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
+## 剑士攻击池第二式（Swordwrath-Attack2 真数据，Hit@0.9 与 Attack1@1.0 略异；
+## 池随机抽取，消费见兵种档案 attack_pool——机制同矛士 9f 攻击池）
+const ANIM_ATTACK_2 := "attack_2"
 ## 各武器专属攻击动画（转译自解包 Spine 数据，见 tools/baking/spine_import.gd）
 const ANIM_ATTACK_SPEAR := "attack_spear"
 ## 9f 矛士攻击池候选（Spearton-Attack2/3 戳刺变体，经档案 attack_pool 随机抽取）
 const ANIM_ATTACK_SPEAR_2 := "attack_spear_2"
 const ANIM_ATTACK_SPEAR_3 := "attack_spear_3"
+## 玩家蓄力投矛表现（Spearton-Throw 1.733s 真数据，S1b）：矛已出手纯表现无结算
+## 挂钩（Hit 事件被 weapon_mount 动画名过滤拦下，伤害走矛投射物）；attack_ 前缀
+## 享受 entity_motion 攻击守卫（播完前移动不切走）与播完回切通用语义
+const ANIM_THROW_SPEAR := "attack_spear_throw"
 const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
@@ -37,9 +44,10 @@ const ANIM_ATTACK_BOW := "attack_bow"
 ##   trim_after 变换生成；attack_bow（原版 Draw 全条）保留作对照/回退。
 const ANIM_ATTACK_BOW_HOLD := "attack_bow_hold"
 const ANIM_ATTACK_BOW_RELEASE := "attack_bow_release"
-## 装填动画（SWL Archidon-Reload 1.167s 直译，弓手战斗链差距#3 数据侧）：
-## 放箭后装填再进下一轮。数据已入库；消费接线（冷却窗内播放、IsReloading
-## 语义）归战场观感重构 S1b 行为批次。
+## 装填动画（SWL Archidon-Reload 1.167s 直译）：放箭后冷却窗内播放
+## （收弓取箭上弦），冷却尽被下一轮拉满持瞄打断——SWL IsReloading/Reload
+## 语义，消费方 = weapon_mount._process 持瞄窗装填仲裁（玩家蓄力路径不经
+## 仲裁，无装填段）。
 const ANIM_ATTACK_BOW_RELOAD := "attack_bow_reload"
 ## 祭司治疗动画池（Meric-Heal1/Heal2，P7 批次 7b：dump healingAnimation 字段直译候选）
 ## 动画资产由任务 3.2 多骨架导入产出；本批先落常量供编译，运行时 _load_anim 缺资源只 push_warning
@@ -134,11 +142,14 @@ static func pick_heal_anim() -> String:
 
 const ANIM_DIR := "res://modules/stick_rig/animations/"
 
-## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓）
+## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓；装填是弓攻
+## 循环的冷却段——进本集只取状态机通用过渡，不进 WEAPON_ATTACK_ANIM，
+## 命中帧结算仍按放箭段 attack_bow_release）
 const ATTACK_ANIMS: Array[String] = [
 	ANIM_ATTACK, ANIM_ATTACK_SPEAR, ANIM_ATTACK_PICKAXE,
 	ANIM_ATTACK_STAFF, ANIM_ATTACK_BOW,
 	ANIM_ATTACK_BOW_HOLD, ANIM_ATTACK_BOW_RELEASE,
+	ANIM_ATTACK_BOW_RELOAD,
 ]
 
 ## 祭司治疗动画池（类型化数组直初始化，不经三元退化为 untyped，§七.4）
@@ -186,6 +197,8 @@ static func idle_for_weapon(weapon_type: int) -> String:
 const ANIM_WALK_BOW := "walk_bow"
 ## 持弓跑动（Archidon-Run 真数据直译：弓手专属步态，换装消费见 WEAPON_RUN_ANIM）
 const ANIM_RUN_BOW := "run_bow"
+## 持矛跑动（Spearton-Run 真数据直译：矛士专属步态，换装消费同 run_bow）
+const ANIM_RUN_SPEAR := "run_spear"
 ## 持弓行走·拉弓保持变体（烘焙合并资产，tools/baking/bake_walk_bow_hold.gd 生成）：
 ## walk_bow 腿轨 ∪ attack_bow_hold 上身轨按 Drawn@0.5 拉满帧定格——持瞄窗内移动
 ## 时上身保持拉满姿态（腿走弓不收）。消费接线（walk state 资源换装）由后续批次接。
@@ -200,9 +213,10 @@ static func walk_for_weapon(weapon_type: int) -> String:
 	return WEAPON_WALK_ANIM.get(weapon_type, ANIM_WALK)
 
 ## 武器类型 -> 持械跑动动画名（键序对齐 WeaponMount.WeaponType；缺省 = 通用 run）。
-## 弓手专属跑姿（Archidon-Run 真数据，此前共用剑士 run）；消费方与
+## 弓/矛专属跑姿（真数据直译，此前共用剑士 run）；消费方与
 ## WEAPON_WALK_ANIM 同款（换装 run state 资源，walk_for_weapon 镜像）。
 const WEAPON_RUN_ANIM: Dictionary = {
+	1: ANIM_RUN_SPEAR,       # SPEAR：持矛跑动（Spearton-Run）
 	2: ANIM_RUN_BOW,         # BOW：持弓跑动（Archidon-Run）
 }
 
@@ -254,12 +268,18 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_WALK_BOW)
 	# 持弓跑动变体（武器跑姿分层，run state 资源换装用）
 	_load_anim(lib, ANIM_RUN_BOW)
+	# 持矛跑动变体（同上）
+	_load_anim(lib, ANIM_RUN_SPEAR)
 	# 持弓行走·拉弓保持变体（烘焙合并资产，上身定格拉满+腿走步态，机制同上）
 	_load_anim(lib, ANIM_WALK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK)
+	# 剑士攻击池第二式（池变体资源，换进 attack state——同矛士池机制）
+	_load_anim(lib, ANIM_ATTACK_2)
 	_load_anim(lib, ANIM_ATTACK_SPEAR)
 	_load_anim(lib, ANIM_ATTACK_SPEAR_2)
 	_load_anim(lib, ANIM_ATTACK_SPEAR_3)
+	# 玩家蓄力投矛表现（Spearton-Throw 直译，S1b）
+	_load_anim(lib, ANIM_THROW_SPEAR)
 	_load_anim(lib, ANIM_ATTACK_PICKAXE)
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)
@@ -344,6 +364,14 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	# 不加直达则 travel 绕经 idle，拉满姿态会朝站姿闪跳一下再放箭
 	sm.add_transition(ANIM_ATTACK_BOW_HOLD, ANIM_ATTACK_BOW_RELEASE, _smt(0.1, false))
 	sm.add_transition(ANIM_ATTACK_BOW_RELEASE, ANIM_ATTACK_BOW_HOLD, _smt(0.1, false))
+	# 装填段专属过渡（S1b 冷却窗消费，weapon_mount._process 装填仲裁驱动）：
+	# - 装填播完仍在移动 → walk（通用集只补了 →idle，移动回切走这条）
+	# - 冷却尽时拉满持瞄直接打断装填尾段（SWL 下一轮 Draw 起拍语义——
+	#   持瞄窗仲裁从 reload 直接 travel 到 hold，不经 idle 中转）
+	# - 装填中被取消窗放行的提前重射直接切 release（不经 hold 绕行）
+	sm.add_transition(ANIM_ATTACK_BOW_RELOAD, ANIM_WALK, _smt(0.08, false))
+	sm.add_transition(ANIM_ATTACK_BOW_RELOAD, ANIM_ATTACK_BOW_HOLD, _smt(0.08, false))
+	sm.add_transition(ANIM_ATTACK_BOW_RELOAD, ANIM_ATTACK_BOW_RELEASE, _smt(0.08, false))
 	# 祭司治疗施法（P7 补接线）：与攻击同款模式——LOOP_NONE 一次性动画，
 	# AT_START 切入防吃进度，播完回 idle（WeaponMount.cast_heal 驱动 travel）
 	for a in HEAL_ANIMS:
@@ -401,6 +429,17 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 		sm.add_transition(s, ANIM_ARRIVE, _smt(0.1, false))
 	sm.add_transition(ANIM_ARRIVE, ANIM_IDLE, _smt(0.08))
 	sm.add_transition(ANIM_ARRIVE, ANIM_DEAD, _smt(0.1, false))
+	# 玩家蓄力投矛（S1b，weapon_mount.throw_spear_manual 驱动）：从基础态切入，
+	# 播完回 walk/idle（攻击前缀统一走 _on_rig_anim_finished），死亡/受击可打断
+	_add_state(sm, ANIM_THROW_SPEAR)
+	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
+		sm.add_transition(s, ANIM_THROW_SPEAR, _smt(0.1, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_IDLE, _smt(0.12))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_WALK, _smt(0.08, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_DEAD, _smt(0.15, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_DEAD_HEADSHOT, _smt(0.15, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_HIT_FRONT, _smt(0.05, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_HIT_BACK, _smt(0.05, false))
 	# 先关联 player，再设 tree_root，最后激活
 	tree.anim_player = player.get_path()
 	tree.tree_root = sm

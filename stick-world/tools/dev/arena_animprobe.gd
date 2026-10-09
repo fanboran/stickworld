@@ -9,6 +9,13 @@ const COVER_WAIT_FRAMES := 4200
 const REPORT_EVERY := 5.0
 ## 重点盯的动画（进入沿计数+单位名单）；空 = 只出分布
 const WATCH: Array = ["arrive", "block", "block_attack_1", "block_attack_2", "block_attack_3"]
+## 命令行 watch 覆盖（arena_shot_boot --watch a,b,c 解析后写入；非空时
+## 替代 WATCH——按需盯任意动画子集，不改代码重跑）
+static var WATCH_OVERRIDE: Array = []
+
+
+func _watch() -> Array:
+	return WATCH_OVERRIDE if not WATCH_OVERRIDE.is_empty() else WATCH
 
 var _t0 := 0.0
 var _frames: int = 0
@@ -16,6 +23,8 @@ var _counts: Dictionary = {}          # anim -> 帧×单位样本数
 var _enter_counts: Dictionary = {}    # anim(仅 WATCH) -> 进入沿次数
 var _enter_units: Dictionary = {}     # anim(仅 WATCH) -> 播过的单位 instance_id 集合
 var _prev: Dictionary = {}            # unit instance_id -> 上一拍动画名
+var _rig_samples: int = 0             # rig!=null（2D 链）样本数
+var _mirror_samples: int = 0          # rig==null（billboard 镜像链）样本数
 
 
 func run(_tag: String, _preset: int, secs: int, _every: int) -> void:
@@ -51,9 +60,34 @@ func _sample_frame() -> void:
 		if not is_instance_valid(e) or e.is_dead():
 			continue
 		var anim: String = e.get_current_anim()
+		var rig: Node = e.get("rig") if "rig" in e else null
+		if rig != null:
+			_rig_samples += 1
+			# 变体解析（2D 链）：池变体（attack_2/run_spear…）换进状态节点播放，
+			# 实体层 _current_anim 只记状态名——读状态机节点当前引用的资源名才可见
+			var tree: Node = rig.get("_anim_tree")
+			var pb = rig.get("_state_machine")
+			if tree != null and pb != null:
+				var sm: AnimationNode = tree.get("tree_root")
+				if sm is AnimationNodeStateMachine:
+					var node: AnimationNode = (sm as AnimationNodeStateMachine).get_node_or_null(
+						str(pb.get_current_node()))
+					if node is AnimationNodeAnimation:
+						anim = (node as AnimationNodeAnimation).animation
+		else:
+			_mirror_samples += 1
+			# 变体解析（billboard 镜像链）：单次动画变体经 mirror swap 通道下发
+			# （visual_controller._play_attack_variant 置位），观测口读取
+			var visual: Node = e.get("_visual") if "_visual" in e else null
+			if visual != null and visual.has_method("get_mirror_anim_state"):
+				var ms: Dictionary = visual.get_mirror_anim_state()
+				if not str(ms.get("swap", "")).is_empty():
+					anim = str(ms["swap"])
+				elif not str(ms.get("anim", "")).is_empty():
+					anim = str(ms["anim"])
 		_counts[anim] = int(_counts.get(anim, 0)) + 1
 		var id := e.get_instance_id()
-		if WATCH.has(anim):
+		if _watch().has(anim):
 			if str(_prev.get(id, "")) != anim:
 				_enter_counts[anim] = int(_enter_counts.get(anim, 0)) + 1
 				if not _enter_units.has(anim):
@@ -80,7 +114,8 @@ func _report(head: String) -> void:
 
 func _finish() -> void:
 	_report("最终")
-	for anim in WATCH:
+	print("[AnimProbe] 采样链分布：2D rig %d / billboard 镜像 %d" % [_rig_samples, _mirror_samples])
+	for anim in _watch():
 		var enters: int = int(_enter_counts.get(anim, 0))
 		var units: int = (_enter_units.get(anim, {}) as Dictionary).size()
 		print("[AnimProbe] 进入沿 %s：≈%d 次 / %d 个单位播过" % [anim, enters, units])

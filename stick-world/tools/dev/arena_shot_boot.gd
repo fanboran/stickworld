@@ -52,6 +52,10 @@ func _ready() -> void:
 				_twitch = true; i += 1
 			"--animprobe":
 				_animprobe = true; i += 1
+			"--watch":
+				# animprobe 盯单覆盖（逗号分隔动画名）：--watch attack_bow_reload,attack_bow_hold
+				ANIMPROBE_DRIVER.WATCH_OVERRIDE = args[i + 1].split(",")
+				_animprobe = true; i += 2
 			"--p2probe":
 				_p2probe = true; i += 1
 			"--p4probe":

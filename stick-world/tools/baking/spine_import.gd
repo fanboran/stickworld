@@ -80,6 +80,8 @@ const ANIM_MAP: Dictionary = {
 	# 与 idle_bow（Archidon-Stand1，同样无臂通道）同源——"举弓行走"真数据变体
 	"walk_bow":   {"spine": "Archidon-Walk",           "loop": true},
 	"attack":     {"spine": "Swordwrath-Attack1",      "loop": false},
+	# 剑士攻击池第二式（S1b：Hit@0.9 与 Attack1@1.0 略异，池消费见档案 attack_pool）
+	"attack_2":   {"spine": "Swordwrath-Attack2",      "loop": false},
 	"block":      {"spine": "Swordwrath-Block",       "loop": false},
 	# 盾姿态分层（计划 5，SWL Spearton 持盾形态组）：端盾行军/待命/三连刺
 	"block_walk":      {"spine": "Spearton-Block-Walk",     "loop": true},
@@ -92,6 +94,10 @@ const ANIM_MAP: Dictionary = {
 	# 三者均带 Hit 事件：Attack1@0.8667 / Attack2@0.9333 / Attack3@0.9333）
 	"attack_spear_2":{"spine": "Spearton-Attack2",     "loop": false},
 	"attack_spear_3":{"spine": "Spearton-Attack3",     "loop": false},
+	# 玩家蓄力投矛表现（S1b：Spearton-Throw 1.733s，投掷真数据——此前投矛无动画）
+	"attack_spear_throw": {"spine": "Spearton-Throw",  "loop": false},
+	# 矛士专属跑姿（S1b：Spearton-Run 真数据，此前共用剑士 run）
+	"run_spear":   {"spine": "Spearton-Run",           "loop": true},
 	"attack_pickaxe":{"spine": "Miner-Attack1",        "loop": false},
 	"attack_staff":  {"spine": "Magikill-Spell1",      "loop": false},
 	"attack_bow":    {"spine": "Archidon-Draw",        "loop": false},

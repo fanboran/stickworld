@@ -762,6 +762,14 @@ func _forward_stagger() -> void:
 		_overlay.set_stagger(_stagger_seed, _stagger_k)
 
 
+## 拉弓瞄准俯仰（SWL Archer._currentAim 表亲）：转发 overlay（平滑追踪 +
+## 仅弓族动画生效——腰枢俯仰见 procedural_overlay 的 aim_pitch 段）。
+## overlay 未建（编辑器/极早期）时静默丢弃
+func set_aim_pitch(rad: float) -> void:
+	if _overlay != null and is_instance_valid(_overlay) and _overlay.has_method("set_aim_pitch_target"):
+		_overlay.set_aim_pitch_target(rad)
+
+
 ## 设置动画播放速率（用于 walk 速度匹配，p_speed=1.0 为原始速率）。
 ## 只对**循环动画**（walk/run 等移动动画）生效：一次性动画（攻击/受击/死亡/列阵/
 ## 格挡）一律按原始速率播放。否则单位站着不动时速率被压到 MIN_ANIM_SCALE(0.6)，

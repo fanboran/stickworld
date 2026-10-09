@@ -83,12 +83,30 @@ var _hz_accum: float = 0.0
 var _stagger_phase: int = 0
 var _stagger_k: int = 1
 
+# ── 拉弓瞄准俯仰（SWL Archer.Aim/_currentAim/UpdateAim 语义）──
+## 目标俯仰角（rig 域弧度，负=仰头）：实体侧 behavior_attack 按弹道解算逐拍
+## 推送，经 rig.set_aim_pitch 转发进来；应用层做两件事——
+##   1) 渐进追踪（SWL UpdateAim：_currentAim 向 _targetAim 平滑逼近，不瞬跳）；
+##   2) 弓族动画门控：仅 attack_bow* / walk_bow_hold 期间生效（其他动画归零）——
+##      换箭/受击/死亡不做残留仰角。
+## 应用点 = lower_torso（腰枢）：躯干+双臂+弓+颈头整体俯仰（腿不动）——
+## 这是本叠加层对 lower_torso 的唯一新增写项，与其 hip/torso 基准写共存。
+var _aim_pitch_target: float = 0.0
+var _aim_pitch_applied: float = 0.0
+## 追踪速率（1/s）：越大跟得越紧（0.5s 内约到 99%）
+const AIM_PITCH_TRACK_RATE := 10.0
+
 
 ## 设置叠加更新频率（LOD 分档；见 StickmanRig.set_anim_update_hz）。
 ## 叠加所用 delta 用真实累计值，保证呼吸相位/spring 衰减幅度与真实时间一致。
 func set_update_hz(hz: float) -> void:
 	_update_hz = hz
 	_hz_accum = 0.0
+
+
+## 拉弓瞄准俯仰目标角（rig.set_aim_pitch 转发入口；应用见 _on_frame）
+func set_aim_pitch_target(rad: float) -> void:
+	_aim_pitch_target = rad
 
 
 ## rig 低帧率分桶参数同步（桶相位/桶数；见 StickmanRig 低帧率分桶注）。
@@ -241,9 +259,17 @@ func _on_frame() -> void:
 	#    白噪声是高频抖动，在骨骼上是肉眼可见的持续颤/拖影）
 	torso_off += _noise.get_noise_1d(_time * 2.0 + 100.0) * JITTER_TORSO_DEG
 
+	# 6. 拉弓瞄准俯仰（SWL UpdateAim 渐进追踪）：弓族动画期间向目标角逼近，
+	#    其他动画归零（受击/死亡/换弹无残留仰角）
+	var pitch_goal: float = 0.0
+	if anim.begins_with("attack_bow") or anim == "walk_bow_hold":
+		pitch_goal = _aim_pitch_target
+	_aim_pitch_applied = lerpf(_aim_pitch_applied, pitch_goal,
+			clampf(delta * AIM_PITCH_TRACK_RATE, 0.0, 1.0))
+
 	# ---- 应用（绝对设置 = 基准 + 叠加） ----
 	if _torso != null:
-		_torso.rotation = _torso_base + deg_to_rad(torso_off)
+		_torso.rotation = _torso_base + deg_to_rad(torso_off) + _aim_pitch_applied
 	if _hip != null:
 		_hip.rotation = _hip_base + deg_to_rad(hip_off)
 	if _outhand != null:

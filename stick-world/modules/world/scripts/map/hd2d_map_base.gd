@@ -313,6 +313,9 @@ func _sync_character_render() -> void:
 				swap = str(ms.get("swap", ""))
 				if ch.has_method("set_anim_speed"):
 					ch.set_anim_speed(float(ms.get("speed", 1.0)))
+				# 拉弓瞄准俯仰（SWL Archer._currentAim 镜像；rig 侧平滑追踪）
+				if ch.has_method("set_aim_pitch"):
+					ch.set_aim_pitch(float(ms.get("aim_pitch", 0.0)))
 			if anim.is_empty():
 				anim = "walk" if moving else "idle"
 			ch.set_anim(anim, seq, swap)

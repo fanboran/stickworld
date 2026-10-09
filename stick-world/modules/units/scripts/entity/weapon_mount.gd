@@ -696,6 +696,14 @@ func get_sustained_fire_heat() -> float:
 	return _sustained_fire_heat
 
 
+## 拉弓瞄准俯仰角（SWL Archer.Aim 射角源）：behavior_attack 每拍轮询推送到
+## 实体 aim_pitch（纯表现态）。非弓武器恒 0（杖瞬发无弹道）。
+func get_aim_pitch(target: Node) -> float:
+	if weapon_type != WeaponType.BOW:
+		return 0.0
+	return _ranged.get_aim_pitch(target)
+
+
 ## 是否有未结算的挥砍（已发起、命中帧未到；can_attack 命中帧门禁的查询面）
 func has_pending_strike() -> bool:
 	return _pending_strike_target != null and not _strike_fired

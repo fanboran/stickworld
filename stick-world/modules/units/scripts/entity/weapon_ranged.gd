@@ -238,6 +238,26 @@ func get_muzzle_pos(entity: Node) -> Vector2:
 	return _body_pos(entity) + Vector2(0, -70)
 
 
+## 拉弓瞄准俯仰角（SWL Archer.Aim/_currentAim 的射角源）：按与 fire_arrow 同源
+## 的弹道解算取发射仰角，转 rig 域弧度（负=仰头后仰）。钳到 [−0.6, 0.15]——
+## 极端弧线不过倾、俯射不明显低头。纯表现量（射击真值仍由箭矢弹道自走）。
+func get_aim_pitch(target: Node) -> float:
+	if target == null or not is_instance_valid(target):
+		return 0.0
+	var owner_entity: CharacterBody2D = _mount.get_owner_entity()
+	if owner_entity == null:
+		return 0.0
+	var from: Vector2 = get_muzzle_pos(owner_entity)
+	var aim_point: Vector2 = _body_pos(target)
+	var target_vel: Vector2 = (target as CharacterBody2D).velocity if target is CharacterBody2D else Vector2.ZERO
+	var solution: Dictionary = ArrowBallistics.solve(from, aim_point, target_vel,
+			_mount.ARROW_VX, _mount.ARROW_LEAD_FACTOR, _mount.ARROW_GRAVITY)
+	var vel: Vector2 = solution["vel"]
+	# y-down 世界：vel.y 负 = 上仰；elevation 正=仰，rig 旋转负=仰 → 取负号
+	var elevation: float = -atan2(vel.y, absf(vel.x))
+	return clampf(-elevation, -0.6, 0.15)
+
+
 ## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
 func _body_pos(entity: Node) -> Vector2:
 	var collider: Node = entity.get_node_or_null("Collider")

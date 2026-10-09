@@ -58,10 +58,13 @@ var _mirror_base_anim: String = ""
 var _mirror_swap: String = ""
 var _oneshot_left: float = -1.0
 var _anim_speed_cached: float = 1.0
+## aim_pitch 直推缓存（压重复设置；rig 侧另有平滑，此处只防每帧无谓转发）
+var _aim_pitch_sent: float = NAN
 
 
 ## 镜像状态观测口（feed 每帧调用）：anim=当前应显示动画（单次变体优先），
-## seq=动画事件序号（同名重播识别），speed=循环动画速率
+## seq=动画事件序号（同名重播识别），speed=循环动画速率，
+## aim_pitch=拉弓瞄准俯仰（rig 域弧度，负=仰头；SWL Archer._currentAim 镜像）
 func get_mirror_anim_state() -> Dictionary:
 	var anim: String = _entity._current_anim if _entity != null else ""
 	var swap := ""
@@ -69,13 +72,20 @@ func get_mirror_anim_state() -> Dictionary:
 		anim = _mirror_override
 		swap = _mirror_swap
 	return {"anim": anim, "seq": _mirror_seq, "speed": _anim_speed_cached,
-			"swap": swap}
+			"swap": swap,
+			"aim_pitch": _entity.get_aim_pitch() if _entity != null and _entity.has_method("get_aim_pitch") else 0.0}
 
 
 ## billboard 软件回切计时（等价 rig.animation_finished 的无 rig 触发源）。
 ## oneshot 恒 1.0 速率（rig.set_anim_speed 同规：单次动画保命中帧不变速）；
 ## 暂停由引擎总闸负责（树暂停时物理帧停跑本计时自然冻结）
 func _physics_process(_delta: float) -> void:
+	# 拉弓瞄准俯仰直推（2D rig 路径；billboard 镜像走 get_mirror_anim_state feed）
+	if _entity != null and _entity.rig != null:
+		var pitch: float = _entity.get_aim_pitch() if _entity.has_method("get_aim_pitch") else 0.0
+		if not is_equal_approx(pitch, _aim_pitch_sent):
+			_aim_pitch_sent = pitch
+			_entity.rig.set_aim_pitch(pitch)
 	if _oneshot_left < 0.0:
 		return
 	_oneshot_left -= _delta

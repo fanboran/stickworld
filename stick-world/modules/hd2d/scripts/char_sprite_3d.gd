@@ -77,6 +77,7 @@ var _anim_seq: int = -2              # feed 侧动画事件序号（同名重播
 var _swap_state := ""                # 已换装状态名缓存（压重复 set_state_anim）
 var _swap_anim := ""                 # 已换装变体名缓存
 var _anim_speed_sent: float = -1.0   # set_anim_speed 缓存（压重复设置）
+var _aim_pitch_sent: float = NAN     # set_aim_pitch 缓存（同上）
 var _master_alpha := -1.0            # 整卡透明度缓存（尸体渐隐；-1=未设置）
 var _baked_once := false             # 首烘成功标记（影子随首烘现身，防孤儿影）
 var last_fed_xz := Vector2.ZERO      # 最近一次 feed 喂入的格坐标（探针对账用）
@@ -682,6 +683,17 @@ func set_anim_speed(scale: float) -> void:
 		return
 	_anim_speed_sent = scale
 	rig.set_anim_speed(scale)
+
+
+## 拉弓瞄准俯仰镜像（SWL Archer._currentAim 表亲）：转发 rig.set_aim_pitch
+## （overlay 平滑追踪 + 仅弓族动画生效，见 procedural_overlay.aim_pitch 段）。
+## 俯仰变化 = 姿态变化 → 唤醒烘焙到最近可用帧（同 set_anim_speed 口径）
+func set_aim_pitch(rad: float) -> void:
+	if rig == null or is_equal_approx(rad, _aim_pitch_sent):
+		return
+	_aim_pitch_sent = rad
+	rig.set_aim_pitch(rad)
+	_blit_next_frame = mini(_blit_next_frame, Engine.get_process_frames() + 1)
 
 
 ## 整卡透明度（尸体渐隐 #8）：乘进 quad 与接地影的最末 alpha。feed 在实体

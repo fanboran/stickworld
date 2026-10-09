@@ -1381,6 +1381,21 @@ func set_combat_face_lock(locked: bool) -> void:
 	_combat_face_lock = locked
 
 
+## 拉弓瞄准俯仰角（SWL Archer._currentAim 表亲；rig 域弧度，负=仰头）：
+## behavior_attack 弓手每拍按弹道解算推送（weapon_mount.get_aim_pitch），
+## 视觉链消费（visual_controller → rig / billboard 镜像 feed）——纯表现态，
+## 不回写战斗逻辑（射击真值由箭矢弹道自走）
+var _aim_pitch: float = 0.0
+
+
+func set_aim_pitch(rad: float) -> void:
+	_aim_pitch = rad
+
+
+func get_aim_pitch() -> float:
+	return _aim_pitch
+
+
 ## 立即换持械站姿（换武器时 WeaponMount 调用）：
 ## 仅待机态立即生效；移动/攻击等状态不打断，回 idle 时按新武器自动选姿。
 func refresh_stance() -> void:

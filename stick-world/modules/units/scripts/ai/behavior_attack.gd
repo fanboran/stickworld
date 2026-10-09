@@ -256,6 +256,11 @@ func update(delta: float) -> void:
 	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
 	var dist: float = entity.global_position.distance_to(_target.global_position)
+	# 拉弓瞄准俯仰（SWL Archer.UpdateAim：弓手逐拍把弹道仰角推给表现层；
+	# 非弓/无武器自然归零——风筝/锚定/接近各分支同享这一次推送）
+	if entity.has_method("set_aim_pitch"):
+		entity.set_aim_pitch(
+				weapon.get_aim_pitch(_target) if weapon != null and weapon.has_method("get_aim_pitch") else 0.0)
 	# 召唤护卫（SWL MagikillAi.ShouldCastSummon 直译）：敌人逼近施法距离且冷却
 	# 就绪时召唤脆皮护卫（minidon）挡脸——原版法师的生存方案，替代自创风筝
 	_update_summon(dist, delta)
@@ -386,6 +391,9 @@ func exit(next: String) -> void:
 	# 清战斗朝向锁（否则单位永久朝向锁死——锁只在本行为活跃期有效）
 	if entity != null and is_instance_valid(entity) and entity.has_method("set_combat_face_lock"):
 		entity.set_combat_face_lock(false)
+	# 清拉弓瞄准俯仰（表现态归零，防切行为后残留仰角）
+	if entity != null and is_instance_valid(entity) and entity.has_method("set_aim_pitch"):
+		entity.set_aim_pitch(0.0)
 	super.exit(next)
 
 

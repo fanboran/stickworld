@@ -836,6 +836,22 @@ func get_anim_length(anim_name: String) -> float:
 	return anim.length if anim != null else -1.0
 
 
+## 采样动画轨道基值（秒时刻 t 对 bone_path 旋转 VALUE 轨道的插值）。
+## 供叠加层做"轨道基值 + 程序偏移"的绝对写（SWL LateUpdate 式）——直接读骨
+## 当前旋转再叠加会被后续动画应用覆盖/在暂停期累积，独立采样则次序无关。
+## 无该动画/无该轨道返回 NAN（调用方跳过）。
+func sample_bone_track_rotation(anim_name: String, bone_path: NodePath, t: float) -> float:
+	if _anim_player == null or not _anim_player.has_animation(anim_name):
+		return NAN
+	var anim: Animation = _anim_player.get_animation(anim_name)
+	if anim == null:
+		return NAN
+	var tid: int = anim.find_track(bone_path, Animation.TYPE_VALUE)
+	if tid < 0:
+		return NAN
+	return anim.value_track_interpolate(tid, t)
+
+
 ## 受击插播（反编译参考实装 B）：打断任意动作插入受击动画，播完（计时器）
 ## 自动回切到受击前状态。变体池直译（SWL SelectHitAnimation：部位×方向×强度）——
 ## hit_front/hit_back 状态节点动画**动态替换**为池中变体（不增状态节点）。

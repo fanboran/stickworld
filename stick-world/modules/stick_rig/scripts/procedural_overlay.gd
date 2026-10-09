@@ -125,6 +125,9 @@ func set_stagger(seed: int, k: int) -> void:
 func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 	_skeleton = skeleton
 	_rig = rig
+	# 持弓臂俯仰绝对写须晚于 rig 的动画推进（_process 内 advance AnimationTree）：
+	# 晚优先级 = SWL LateUpdate 的 Godot 等价（同帧内动画先应用、我后覆写）
+	process_priority = 1000
 	# 读当前动画的入口缓存成 Callable（方法存在性 setup 后不变，免每帧反射）
 	if rig != null and rig.has_method("get_current_anim"):
 		_get_anim = Callable(rig, "get_current_anim")
@@ -189,6 +192,31 @@ func _find_entity() -> Node2D:
 				break
 			node = node.get_parent()
 	return _entity
+
+
+## 持弓臂瞄准俯仰的绝对写（SWL LateUpdate 式，晚于 rig 的动画推进）：
+## 基值 = 当前动画旋转轨道在播放时刻的插值（sample_bone_track_rotation，
+## 次序无关、暂停/LOD 节流下幂等），再叠加平滑后的俯仰。写后标脏批渲染。
+## process_priority 在 setup 里置晚（默认 0 = rig 的 AnimationTree advance 先跑）
+func _process(_delta: float) -> void:
+	if _bow_arm == null or is_zero_approx(_aim_pitch_applied):
+		return
+	if _rig == null or not is_instance_valid(_rig):
+		return
+	var anim: String = str(_get_anim.call()) if _get_anim.is_valid() else ""
+	if not (anim.begins_with("attack_bow") or anim == "walk_bow_hold"):
+		return
+	var t: float = float(_rig.get_anim_time(anim)) if _rig.has_method("get_anim_time") else -1.0
+	if t < 0.0:
+		return
+	var base: float = float(_rig.sample_bone_track_rotation(
+			anim, NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner:rotation"), t)) \
+			if _rig.has_method("sample_bone_track_rotation") else NAN
+	if is_nan(base):
+		return
+	_bow_arm.rotation = base + _aim_pitch_applied
+	if _rig.has_method("notify_pose_dirty"):
+		_rig.notify_pose_dirty()
 
 
 func _on_frame() -> void:
@@ -271,23 +299,20 @@ func _on_frame() -> void:
 	# 6. 拉弓瞄准俯仰（SWL UpdateAim 渐进追踪）：弓族动画期间向目标角逼近，
 	#    其他动画归零（受击/死亡/换弹无残留仰角）
 	var pitch_goal: float = 0.0
-	var bow_aiming: bool = anim.begins_with("attack_bow") or anim == "walk_bow_hold"
-	if bow_aiming:
+	if anim.begins_with("attack_bow") or anim == "walk_bow_hold":
 		pitch_goal = _aim_pitch_target
 	_aim_pitch_applied = lerpf(_aim_pitch_applied, pitch_goal,
 			clampf(delta * AIM_PITCH_TRACK_RATE, 0.0, 1.0))
 
 	# ---- 应用（绝对设置 = 基准 + 叠加） ----
+	# 瞄准俯仰**不在此处**写臂：process_frame 信号先于一切 _process（含 rig 的
+	# AnimationTree advance），先写后必被轨道值覆盖（实锤：臂枢首版全帧被踩、
+	# 战场读数平射）。臂的绝对写移到本叠加层 _process（process_priority 晚于
+	# rig，SWL LateUpdate 等价），基值独立采样（见 _process）。
 	if _torso != null:
 		_torso.rotation = _torso_base + deg_to_rad(torso_off)
 	if _hip != null:
 		_hip.rotation = _hip_base + deg_to_rad(hip_off)
-	# 瞄准俯仰 = 持弓臂抬起（臂+弓整组，躯干/腿不动——SWL 实机观感）：弓族动画
-	# 每帧重写 upper_arm_inner 轨道值，此处在其上叠加不累积；暂停期动画停写，
-	# 叠加同步跳过（防 += 自旋）。衰减尾（applied→0）期间同样叠加，自然回落
-	if _bow_arm != null and not is_zero_approx(_aim_pitch_applied) \
-			and not get_tree().paused:
-		_bow_arm.rotation += _aim_pitch_applied
 	if _outhand != null:
 		_outhand.position = _outhand_base + outhand_off
 	if _innerhand != null:

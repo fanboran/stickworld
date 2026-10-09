@@ -84,18 +84,23 @@ func _run() -> void:
 		return _finish()
 	var vp_x: float = get_viewport().get_visible_rect().size.x
 	var width: float = mm.get_map_width_px()
-	var cap: float = HudZoneLayout.top_center_max_width(vp_x)
+	var cap: float = HudZoneLayout.top_center_map_max_width(vp_x)
 	var map_w: float = map.map_right - map.map_left
-	# 比例尺合同：宽 = 地图宽 × 空档上限 / 参考地图宽（战场 6144 < 参考 8192
-	# → 比城镇窄、且未顶到上限；超过参考宽的地图才会被空档钳住）
-	var expect: float = clampf(map_w * cap / Minimap.REF_WORLD_WIDTH, Minimap.BASE_WIDTH, cap)
+	# 等比例尺合同：地面带像素高（120×ground_ratio）代表世界地面深 → 世界/小地图比例尺，
+	# 横向同比例尺取宽（战场 6144 与城镇 7080 因此各得各的宽度，且都不变形）
+	var map_info: Array = mm.get_map_info()
+	var scale: float = (map.get_ground_bottom() - float(map_info[2])) / (120.0 * float(map_info[3]))
+	var expect: float = clampf(map_w / scale, Minimap.BASE_WIDTH, cap)
 	_check(absf(width - expect) < 1.0,
-			"小地图宽度 = 地图宽×比例尺（%.1f，期望 %.1f）" % [width, expect])
+			"小地图宽度 = 地图宽 ÷ 等比例尺 %.2f（%.1f，期望 %.1f）" % [scale, width, expect])
 	_check(width > Minimap.BASE_WIDTH,
-			"宽地图下小地图变宽（%.1f > 基准 %.0f）" % [width, Minimap.BASE_WIDTH])
-	_check(width <= cap + 1.0, "小地图宽度不超顶栏空档上限 %.1f（实际 %.1f）" % [cap, width])
+			"战场图下小地图宽于可读下限（%.1f > %.0f）" % [width, Minimap.BASE_WIDTH])
+	_check(width <= cap + 1.0, "小地图宽度不超可用上限 %.1f（实际 %.1f）" % [cap, width])
 	var r := mm.get_global_rect()
-	_check(absf(r.get_center().x - vp_x * 0.5) < 2.0, "变宽后仍水平居中（center=%.1f）" % r.get_center().x)
+	var zone_cx: float = HudZoneLayout.zone_rect(&"top_center",
+			get_viewport().get_visible_rect().size).get_center().x
+	_check(absf(r.get_center().x - zone_cx) < 2.0,
+			"变宽后在 top_center 区内居中（center=%.1f / 区中 %.1f）" % [r.get_center().x, zone_cx])
 	_check(r.position.x >= HudZoneLayout.TOP_CENTER_FREE_LEFT_PX - 0.5
 			and r.end.x <= HudZoneLayout.TOP_CENTER_FREE_RIGHT_PX + 0.5,
 			"变宽后不压顶栏按钮群（%.1f..%.1f 在 %.0f..%.0f 内）"

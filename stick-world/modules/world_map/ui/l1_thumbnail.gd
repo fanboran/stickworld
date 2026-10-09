@@ -66,6 +66,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
+	# 跟随 Minimap 重定位（体量随地图自适应；位置没变则零开销，见 place_right_of_minimap）
+	_reposition()
 	# 无动画元素（无流动轮廓、无出生标记）时内容纯静态，跳过每帧重绘
 	if _glow_outline.size() < 3 and _spawn_pos.x < 0.0:
 		return
@@ -121,23 +123,23 @@ func _draw() -> void:
 
 ## 定位到 Minimap 右侧（顶部小地图区双窗并列；装配层在两者 setup 完成后调用）。
 ##
-## 联动让位：Minimap 宽度随地图自适应（见 minimap.gd），故本窗订阅其 resized 跟随
-## 重定位。越界则由**小地图侧的宽度上限**保证不发生——上限 = 顶栏两按钮群之间的
-## 空档（HudZoneLayout.top_center_max_width），小地图右缘最多到空档右界，再往右
-## 贴 120 宽的缩略窗仍落在空档内（1920 基准：514+8+120=642 ≤ 935 空档宽）。
-## 万一换分辨率后仍越界，只告警一次（按钮群是硬约束，不静默重叠）。
+## 联动让位：Minimap 宽度随地图自适应（见 minimap.gd）。跟随方式用**每帧比目标位置**
+## 而非订阅 resized——小地图改体量后它的 rect 由 zone 的 deferred 重排写入，
+## 信号时序不受本窗控制（实测会读到中间态 rect，把缩略窗推到按钮群外）；
+## 每帧比一次、位置没变即零开销。越界只告警一次（按钮群是硬约束，不静默重叠）。
 func place_right_of_minimap(minimap: Control) -> void:
 	_minimap = minimap
-	if _minimap != null and not _minimap.resized.is_connected(_reposition):
-		_minimap.resized.connect(_reposition)
 	_reposition()
 
 
 func _reposition() -> void:
 	if _minimap == null or not is_instance_valid(_minimap):
 		return
+	var target: Vector2 = _minimap.position + Vector2(_minimap.size.x + GAP, 0.0)
+	if position == target and size == SIZE:
+		return
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
-	position = _minimap.position + Vector2(_minimap.size.x + GAP, 0.0)
+	position = target
 	size = SIZE
 	var right_bound: float = HudZoneLayout.TOP_CENTER_FREE_RIGHT_PX
 	if position.x + SIZE.x > right_bound and not _warned_overflow:

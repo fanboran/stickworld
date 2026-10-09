@@ -97,7 +97,7 @@ zone 注册表（单文件 const 表，改布局=改表，占位一屏可读）�
 |------|------|--------------------------|--------|
 | `top_bar` | 顶部通栏 | y 0..60 | GlobalHUD 顶栏 |
 | `top_left_stack` | 左上角，**顺序堆叠** | x 8..，y 64 起逐件下移 | ResourceBarHost → QuestPanel（→ 未来任务列表） |
-| `top_center` | 顶部中央，**顺序堆叠** | 屏中 ±(屏宽/2 − 顶栏左按钮群右缘)，y 8..170（即顶栏两段按钮群之间的空档，1920 下 703..1217） | Minimap → ZoomBar（缩放条贴小地图正下方）；L1 缩略窗不入区，贴 Minimap 右侧自算 |
+| `top_center` | 顶部中央，**顺序堆叠** | 屏中横向：顶栏两段按钮群之间的空档**减去 L1 缩略窗占位**（1920 下 703..1510），y 8..170 | Minimap → ZoomBar（缩放条贴小地图正下方）；L1 缩略窗不入区，贴 Minimap 右侧自算，落在那段占位里 |
 | `top_right` | 右上角 | x -184..-8，y 8..150 | ClockWidget + DayTimeLabel（成组） |
 | `bottom_left` | 左下 | 贴底 | NotificationFeed |
 

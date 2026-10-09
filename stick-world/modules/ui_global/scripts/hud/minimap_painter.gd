@@ -17,10 +17,9 @@ extends RefCounted
 # ─────────────────────────────── 落笔常量 ────────────────────────────────
 ## 边框宽度（白描边最强档，与 ZoomBar 同质感）
 const BORDER_W := 2.0
-## 建筑点最小宽（px）；点高 = 小地图高度的此比例（模拟建筑立于地面之上；
-## 随放大版等比放大——固定 px 会让放大版里的建筑点相对更小、反而更难辨）
+## 建筑块最小宽/最小纵深（px，基准尺寸下；放大版按 _size_scale 等比）
 const BUILDING_MIN_W := 2.0
-const BUILDING_H_RATIO := 0.055
+const BUILDING_MIN_DEPTH := 1.5
 ## 地表色带最小绘制宽（px）：窄于此不画（防亚像素杂边）
 const SURFACE_MIN_W := 1.5
 ## 实体点半径（此为"基准尺寸"小地图下的值，放大版按 _size_scale 等比放大）
@@ -110,22 +109,30 @@ static func world_to_x(world_x: float, rect: Rect2, snap: Dictionary) -> float:
 ## 世界 Y → 小地图 Y：只在地面带内映射（地面带顶 = 天空/地面分界）。
 ## 站位纵深因此可读（靠后 = 靠上），而非一律钉在分界线上。
 static func world_to_y(world_y: float, rect: Rect2, snap: Dictionary) -> float:
-	var split: float = rect.position.y + rect.size.y * (1.0 - float(snap["ground_ratio"]))
+	var split: float = ground_split_y(rect, snap)
 	var gy: float = float(snap["ground_y"])
 	var gb: float = float(snap["ground_bottom"])
 	var t: float = clampf((world_y - gy) / maxf(gb - gy, 1.0), 0.0, 1.0)
 	return split + t * (rect.end.y - split)
 
 
-## 尺寸倍数（相对基准小地图高 120）：放大版里点/线/最小建筑宽按此等比放大，
-## 否则同样的 2px 点在大图上显得更小、反而看不清（放大版的意义是"看得更清"）。
-static func _size_scale(rect: Rect2) -> float:
-	return clampf(rect.size.y / REF_HEIGHT, 1.0, 4.0)
+## 地面带像素高 = 画布高 × ground_ratio：与游戏画面同构图（地面占屏比例一致，
+## 本作城镇约 57%）。与 Minimap._desired_width 共用同一条：**该像素高代表地图的
+## 地面世界深度**，由此定出"世界 px / 小地图 px"，横向同比例尺取宽
+## → 横纵比例尺一致，房屋/地块形状不变形（见 tests/unit/test_minimap_layout 的比例尺用例）。
+static func ground_band_px(rect: Rect2, snap: Dictionary) -> float:
+	return rect.size.y * float(snap["ground_ratio"])
 
 
 ## 天空/地面分界线的 y（小地图坐标）
 static func ground_split_y(rect: Rect2, snap: Dictionary) -> float:
-	return rect.position.y + rect.size.y * (1.0 - float(snap["ground_ratio"]))
+	return rect.end.y - ground_band_px(rect, snap)
+
+
+## 尺寸倍数（相对基准小地图高 120）：放大版里点/线/最小建筑宽按此等比放大，
+## 否则同样的 2px 点在大图上显得更小、反而看不清（放大版的意义是"看得更清"）。
+static func _size_scale(rect: Rect2) -> float:
+	return clampf(rect.size.y / REF_HEIGHT, 1.0, 4.0)
 
 
 ## 小地图 X → 世界 X（点击跳转用）
@@ -150,8 +157,8 @@ static func draw(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: Array,
 			Color(GROUND_FALLBACK.r, GROUND_FALLBACK.g, GROUND_FALLBACK.b, GROUND_FALLBACK.a), true)
 	# 2. 地表材质色带（按地图侧铺设顺序叠色 = 后铺者压前）
 	_draw_surfaces(ci, rect, snap, split)
-	# 3. 建筑（地面带上方小矩形，模拟"立在地面上"）
-	_draw_buildings(ci, rect, snap, split, mode)
+	# 3. 建筑（真占地块，画在地面带上其实际纵深处）
+	_draw_buildings(ci, rect, snap, mode)
 	# 4. 实体点（玩家 / 同阵营 / 敌方 / 中立）
 	_draw_points(ci, rect, snap, points, opts)
 	# 5. 视野框
@@ -176,18 +183,25 @@ static func _draw_surfaces(ci: CanvasItem, rect: Rect2, snap: Dictionary, split:
 		ci.draw_rect(Rect2(bx0, band.position.y, bx1 - bx0, band.size.y), c, true)
 
 
-static func _draw_buildings(ci: CanvasItem, rect: Rect2, snap: Dictionary, split: float,
+## 建筑：按**真占地**画俯视块（世界宽 × 占地纵深），不画"图标"。
+## 立面高在俯视图里没有对应维度，画成图标会让房子看着比实际小得多（曾是小细条
+## 贴在天地分界线上、脚下真占地整片空着），也读不出"沿街一排在哪个纵深"。
+static func _draw_buildings(ci: CanvasItem, rect: Rect2, snap: Dictionary,
 		mode: String) -> void:
-	var bh: float = rect.size.y * BUILDING_H_RATIO
+	var k: float = _size_scale(rect)
 	for b: Dictionary in snap["buildings"]:
 		var cx: float = world_to_x(float(b["x"]), rect, snap)
-		var w: float = maxf(BUILDING_MIN_W,
+		var w: float = maxf(BUILDING_MIN_W * k,
 				float(b["width"]) / float(snap["map_width"]) * rect.size.x)
 		if cx + w * 0.5 < rect.position.x or cx - w * 0.5 > rect.end.x:
 			continue
+		var y_front: float = world_to_y(float(b.get("y", snap["ground_y"])), rect, snap)
+		var y_back: float = world_to_y(
+				float(b.get("y", snap["ground_y"])) - float(b.get("depth", 0.0)), rect, snap)
+		var h: float = maxf(y_front - y_back, BUILDING_MIN_DEPTH * k)
 		var c: Color = type_color(String(b.get("type", ""))) if mode == MODE_TYPE \
 				else Color(b.get("color", GROUND_FALLBACK))
-		ci.draw_rect(Rect2(cx - w * 0.5, split - bh, w, bh), c, true)
+		ci.draw_rect(Rect2(cx - w * 0.5, y_front - h, w, h), c, true)
 
 
 static func _draw_points(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: Array,

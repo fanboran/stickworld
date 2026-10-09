@@ -11,8 +11,9 @@ extends Control
 ##     ——位置按实体实际纵深落点（地面带内映射，不再一律钉在天地分界线上）
 ##   - 视野框（红框）
 ##
-## 体量：宽随地图宽度自适应（基准比例尺，见 _desired_width），上限受顶栏两侧
-## 按钮群之间的空档钳制（HudZoneLayout.top_center_max_width）。定位仍归 zone。
+## 体量：高固定 120，宽按**等比例尺**随地图宽自适应（见 _desired_width），
+## 上限受顶栏两侧按钮群之间的空档（减去 L1 缩略窗占位）钳制，
+## 位置归 zone（top_center 全跨度内居中，见 hud_zone_layout.gd）。
 ##
 ## 交互：
 ##   - 左键点击/拖动：相机跳转到点击位置（RTS 式，暂停自动跟随）
@@ -26,10 +27,6 @@ extends Control
 const MAP_HEIGHT: float = 120.0
 ## 宽度可读下限（px）：比这更窄就退回固定宽度，宁可比例失真也不越走越小
 const BASE_WIDTH: float = 360.0
-## 比例尺参考地图宽（px）：**参考地图恰好填满顶栏空档**——比例尺（世界 px /
-## 小地图 px）= 参考地图宽 / 当前空档上限，故窄地图画得窄、宽地图画得宽，
-## 且任一地图下都不越顶栏两侧按钮群。参考值取 8192（地图元数据默认宽度口径）。
-const REF_WORLD_WIDTH: float = 8192.0
 ## 实体点/视野框更新频率（Hz，节流避免每帧重算）
 const UPDATE_HZ: float = 15.0
 ## 右上角展开把手尺寸与内缩（px）
@@ -94,20 +91,31 @@ func get_map_info() -> Array:
 	return _map_info
 
 
-## 期望宽度：按比例尺随地图宽度伸缩（比例尺见 REF_WORLD_WIDTH）。
-## 取"空档上限"而非固定 360 参与换算，使参考地图宽的地图恰好填满空档——
-## 于是窄地图（战场 6144）画得比城镇（7080）窄，宽地图到顶后钳住。
+## 期望宽度：**等比例尺**——画面构图决定地面带像素高（`高 × ground_ratio`），
+## 该像素高代表地图的地面世界深度，由此定出"世界 px / 小地图 px"；横向同比例尺
+## 取宽。于是：地图越宽小地图越宽（"保持比例尺"），且**横纵同比例尺、房屋/地块
+## 形状不变形**（否则实际"宽 > 深"的房子会画成"高 > 宽"）。
 func _desired_width() -> float:
 	var map_w: float = maxf(float(_map_info[1]) - float(_map_info[0]), 1.0)
-	var cap: float = _max_width()
-	return map_w * cap / REF_WORLD_WIDTH
+	var band_px: float = maxf(MAP_HEIGHT * float(_map_info[3]), 1.0)
+	var scale: float = maxf(_ground_depth() / band_px, 0.001)
+	return map_w / scale
 
 
-## 可用宽度上限（顶栏两侧按钮群之间的空档；HudZoneLayout 是布局真相源）
+## 地面带世界深度（ground_y..ground_bottom）。地图未就绪（占位期）按屏高构图反推，
+## 避免装配途中的宽度跳变。
+func _ground_depth() -> float:
+	var map := _get_current_map()
+	if map != null and map.has_method("get_ground_bottom"):
+		return maxf(float(map.get_ground_bottom()) - float(_map_info[2]), 1.0)
+	return 1080.0 * float(_map_info[3])
+
+
+## 可用宽度上限（空档宽 − L1 缩略窗占位；HudZoneLayout 是布局真相源）
 func _max_width() -> float:
 	var vp := get_viewport()
 	var vp_x: float = vp.get_visible_rect().size.x if vp != null else 1920.0
-	return HudZoneLayout.top_center_max_width(vp_x)
+	return HudZoneLayout.top_center_map_max_width(vp_x)
 
 
 ## 重算并应用宽度（地图变化 / 画布尺寸变化时调用）。

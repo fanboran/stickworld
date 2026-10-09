@@ -683,7 +683,9 @@ func get_building_rects() -> Array:
 ## 返回（世界 px，原点 = 世界 x=0）：
 ##   surfaces  = [{x0, x1, color}]  地面材质色带，**按铺设顺序**排列（后铺者压前，
 ##               小地图照序重放即得正确叠色）
-##   buildings = [{x, width, terrain, def, type, color}]  x = 中心；
+##   buildings = [{x, width, y, depth, terrain, def, type, color}]  x = 中心；
+##               y = 占地后沿（基线）、depth = 占地纵深 —— 小地图据此画**真占地**
+##               而非图标（建筑是 3D 立体，缩略图上是俯视占地块）；
 ##               type/color 语义见 Hd2dMinimapStyle
 ##
 ## 只报前排临街排：后排（bg1~bg3）是远景布景，缩略图上会叠成一团糊块。
@@ -710,9 +712,14 @@ func get_minimap_layout(cell_px: float = 24.0) -> Dictionary:
 		var def: String = str(meta.get("def", ""))
 		var x0: float = float(occ[0]) * cell_px
 		var x1: float = float(occ[1]) * cell_px
+		# 占地纵深沿用 F3 碰撞带的同一口径（_building_solid_rect：烘焙实测 footprint
+		# 全深，下限 2 格防扁片，后沿不越行走带深端）——小地图与碰撞盒同源不出双份
+		var band: Array = _building_solid_rect(occ)
 		buildings.append({
 			"x": (x0 + x1) * 0.5,
 			"width": x1 - x0,
+			"y": float(band[3]),
+			"depth": maxf(float(band[3]) - float(band[2]), cell_px * 2.0),
 			"terrain": false,
 			"def": def,
 			"type": Hd2dMinimapStyle.type_for(def),

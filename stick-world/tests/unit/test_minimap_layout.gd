@@ -37,6 +37,7 @@ func _ready() -> void:
 	_runner.add_test("样式: 每种功能类型都有图例项或为兜底", _test_legend_covers_types)
 	_runner.add_test("跨度: top_center 保留区落在顶栏空档内", _test_zone_span)
 	_runner.add_test("跨度: 最大宽度随画布收紧且不超空档", _test_max_width)
+	_runner.add_test("比例尺: 横纵一致（地块形状不变形）", _test_isotropic_scale)
 	_runner.add_test("供给: 基类默认布局为空（HD-2D 覆写）", _test_base_layout_empty)
 	_runner.run()
 	print(_runner.summary())
@@ -169,21 +170,56 @@ func _test_zone_span() -> void:
 	var vp := Vector2(1920.0, 1080.0)
 	var r: Rect2 = ZoneScript.zone_rect(&"top_center", vp)
 	_runner.assert_approx(r.position.x, ZoneScript.TOP_CENTER_FREE_LEFT_PX, 0.01,
-			"1920 下保留区左缘 = 顶栏空档左界 703（实测 %.1f）" % r.position.x)
-	_runner.assert_true(r.end.x <= ZoneScript.TOP_CENTER_FREE_RIGHT_PX,
-			"1920 下保留区右缘不越空档右界 %.0f（实测 %.1f）"
-			% [ZoneScript.TOP_CENTER_FREE_RIGHT_PX, r.end.x])
-	_runner.assert_true(r.position.x >= ZoneScript.TOP_CENTER_FREE_LEFT_PX,
-			"1920 下保留区不压左按钮群")
+			"1920 下保留区左缘 = 顶栏空档左界 %.0f（实测 %.1f）"
+			% [ZoneScript.TOP_CENTER_FREE_LEFT_PX, r.position.x])
+	# 保留区右缘 + 缩略窗占位 = 空档右界（占位是给贴在小地图右侧的 L1 缩略窗留的）
+	_runner.assert_approx(r.end.x + ZoneScript.TOP_CENTER_THUMBNAIL_SLOT,
+			ZoneScript.TOP_CENTER_FREE_RIGHT_PX, 0.01,
+			"保留区右缘 + 缩略窗占位 = 空档右界 %.0f（实测 %.1f）"
+			% [ZoneScript.TOP_CENTER_FREE_RIGHT_PX,
+			r.end.x + ZoneScript.TOP_CENTER_THUMBNAIL_SLOT])
+	_runner.assert_approx(r.size.x, ZoneScript.top_center_map_max_width(vp.x), 0.01,
+			"保留区宽 = 小地图可用最大宽度（%.1f）" % r.size.x)
+	# 空档由"左群右缘（左锚固定 px）+ 右群左缘（右锚固定 px）"界定，
+	# 故换纵横比（画布 1920×1200）时左缘/右缘不变
+	var r2: Rect2 = ZoneScript.zone_rect(&"top_center", Vector2(1920.0, 1200.0))
+	_runner.assert_approx(r2.position.x, r.position.x, 0.01, "换画布高 → 空档左缘不变（左锚固定 px）")
+	_runner.assert_approx(r2.end.x, r.end.x, 0.01, "换画布高 → 空档右缘不变（右锚固定 px）")
 
 
 func _test_max_width() -> void:
-	var vp_x: float = 1920.0
-	var w: float = ZoneScript.top_center_max_width(vp_x)
-	# 左按钮群是紧的一侧：(960-703)*2 = 514
-	_runner.assert_approx(w, 514.0, 0.01, "1920 画布最大宽度 514（实测 %.1f）" % w)
-	_runner.assert_true(ZoneScript.top_center_max_width(1280.0) < w, "画布变窄 → 最大宽度收紧")
-	_runner.assert_true(ZoneScript.top_center_max_width(2560.0) > w, "画布变宽 → 最大宽度放宽")
+	var span: float = ZoneScript.top_center_span_width(1920.0)
+	_runner.assert_approx(span, ZoneScript.TOP_CENTER_FREE_RIGHT_PX - ZoneScript.TOP_CENTER_FREE_LEFT_PX,
+			0.01, "空档宽 = 右界 − 左界（%.1f）" % span)
+	var w: float = ZoneScript.top_center_map_max_width(1920.0)
+	_runner.assert_approx(w, span - ZoneScript.TOP_CENTER_THUMBNAIL_SLOT, 0.01,
+			"小地图可用宽 = 空档宽 − 缩略窗占位 %.0f（实测 %.1f）"
+			% [ZoneScript.TOP_CENTER_THUMBNAIL_SLOT, w])
+	# 小地图 + 缩略窗占位必须容得下整个空档（占位是并列双窗的排他合同）
+	_runner.assert_true(w + ZoneScript.TOP_CENTER_THUMBNAIL_SLOT <= span + 0.01,
+			"小地图 + 缩略窗占位不越空档")
+	# 顶栏两端锚定均为固定像素 → 空档宽不随画布宽变（横向恒定与否由画布缩放承担）
+	_runner.assert_approx(ZoneScript.top_center_span_width(2560.0), span, 0.01,
+			"空档宽不随画布宽变（两侧锚线都是固定像素）")
+
+
+## 等比例尺合同（纯数值自洽）：地面带像素高 = 画布高 × ground_ratio（与画面同构图）；
+## 以"该像素高代表世界地面深"定出的比例尺取宽，则横向比例尺 == 纵向比例尺
+## （这就是 Minimap._desired_width 的合同——房屋/地块形状因此不变形）。
+func _test_isotropic_scale() -> void:
+	var s := _snap()
+	var r := _rect()
+	var band: float = PainterScript.ground_band_px(r, s)
+	_runner.assert_approx(band, r.size.y * float(s["ground_ratio"]), 0.001,
+			"地面带高 = 画布高 × ground_ratio（与画面同构图，实测 %.1f）" % band)
+	var v_scale: float = (float(s["ground_bottom"]) - float(s["ground_y"])) / band
+	var width_for_iso: float = float(s["map_width"]) / v_scale
+	_runner.assert_approx(float(s["map_width"]) / width_for_iso, v_scale, 0.001,
+			"按该宽度取宽 → 横纵比例尺一致（均为 %.2f 世界px/小地图px）" % v_scale)
+	# 形状不变形：真实"宽 > 深"的地块，画出来也是"宽 > 深"
+	var w_px: float = 192.0 / v_scale
+	var d_px: float = 161.0 / v_scale
+	_runner.assert_true(w_px > d_px, "宽 192 / 深 161 的地块画成宽 %.1f > 深 %.1f（不变形）" % [w_px, d_px])
 
 
 func _test_base_layout_empty() -> void:

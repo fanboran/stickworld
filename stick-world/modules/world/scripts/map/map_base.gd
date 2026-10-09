@@ -211,8 +211,9 @@ func get_passage_barriers() -> Array:
 
 # ── 小地图数据供给（虚方法；世界 px 口径，原点 = 世界 x=0）──────────────────
 ## 返回：
-##   surfaces  = [{x0, x1, color}]                        地面材质色带（按叠色顺序）
-##   buildings = [{x, width, terrain, def, type, color}]   x = 建筑中心
+##   surfaces  = [{x0, x1, color}]                                    地面材质色带（按叠色顺序）
+##   buildings = [{x, width, y, depth, terrain, def, type, color}]   x = 建筑中心，
+##               y = 占地后沿、depth = 占地纵深（小地图按**真占地**画俯视块）
 ## 字段语义：terrain = 地形建筑（不可拆）；type = 功能类型键、color = 近似世界
 ## 材质色，取值与口径见 modules/hd2d/scripts/hd2d_minimap_style.gd。
 ## 基类返回空（无地表带 + 无建筑）——HD-2D 图覆写（街景建筑与地表在 3D 侧）。

@@ -671,9 +671,14 @@ func _collect_minimap_host_buildings() -> Array:
 			var def: String = str(child.get("def_id")) if "def_id" in child else ""
 			var is_terrain: bool = bool(pair[1]) \
 					or (bool(child.get("is_terrain")) if "is_terrain" in child else false)
+			# 占地：2D 图无 3D 烘焙占地数据，按名义口径——后沿 = 节点落位基线
+			# （节点原点贴基线），纵深取 2 格（与管线占地下限同值）
+			var node: Node2D = child as Node2D
 			out.append({
 				"x": (cell_x + cells * 0.5) * CELL_PX,
 				"width": cells * CELL_PX,
+				"y": node.global_position.y,
+				"depth": CELL_PX * 2.0,
 				"terrain": is_terrain,
 				"def": def,
 				"type": Hd2dMinimapStyle.type_for(def),

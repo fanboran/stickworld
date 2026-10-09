@@ -105,25 +105,37 @@ func _run() -> void:
 
 func _check_layout_1920() -> void:
 	var vp := get_viewport().get_visible_rect().size
+	var zone_cx: float = HudZoneLayout.zone_rect(&"top_center", vp).get_center().x
 	var mm: Control = _game_root.ui_root.get_node_or_null("HudOverlay/Minimap")
 	if mm == null:
 		_fail("Minimap 未装配")
 	else:
 		var r := mm.get_global_rect()
-		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "Minimap 水平居中（center=%.1f）" % r.get_center().x)
+		_check(absf(r.get_center().x - zone_cx) < 2.0,
+				"Minimap 在 top_center 保留区内居中（center=%.1f / 区中 %.1f）" % [r.get_center().x, zone_cx])
 		_check(r.size.y == 120.0, "Minimap 体量高度 120（实际 %s）" % r.size)
 		_check(r.size.x >= 360.0, "Minimap 宽度不低于可读下限 360（实际 %.1f）" % r.size.x)
-		_check(r.size.x <= HudZoneLayout.top_center_max_width(vp.x) + 1.0,
+		_check(r.size.x <= HudZoneLayout.top_center_map_max_width(vp.x) + 1.0,
 				"Minimap 宽度不超顶部空档上限 %.1f（实际 %.1f）"
-				% [HudZoneLayout.top_center_max_width(vp.x), r.size.x])
+				% [HudZoneLayout.top_center_map_max_width(vp.x), r.size.x])
 		_check(r.position.y >= 7.0 and r.end.y <= 133.0, "Minimap 占 top_center 堆叠首位 y 8..128（%s）" % r)
+		# 等比例尺（横纵一致）：地图宽/小地图宽 == 世界地面深/(高 × ground_ratio)
+		# ——"房子不显高"全靠这条，两端任一改动都要在此暴露
+		var mi: Array = mm.get_map_info()
+		var depth: float = _game_root.get_current_map().get_ground_bottom() - float(mi[2])
+		var h_scale: float = (float(mi[1]) - float(mi[0])) / maxf(r.size.x, 1.0)
+		var v_scale: float = depth / maxf(r.size.y * float(mi[3]), 1.0)
+		_check(absf(h_scale - v_scale) / maxf(v_scale, 0.001) < 0.02,
+				"Minimap 横纵比例尺一致（横 %.2f / 纵 %.2f 世界px每px）" % [h_scale, v_scale])
 		_check_top_center_span(r)
+		_check_minimap_pair_centered(r)
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb == null:
 		_fail("ZoomBar 未装配")
 	else:
 		var r := zb.get_global_rect()
-		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "ZoomBar 随 Minimap 水平居中（center=%.1f）" % r.get_center().x)
+		_check(absf(r.get_center().x - zone_cx) < 2.0,
+				"ZoomBar 随 Minimap 在区内居中（center=%.1f）" % r.get_center().x)
 		if mm != null:
 			var mr := mm.get_global_rect()
 			_check(absf(r.position.y - mr.end.y - 6.0) < 2.0, "ZoomBar 贴 Minimap 正下方 gap=6（top=%.1f，小地图底=%.1f）" % [r.position.y, mr.end.y])
@@ -138,6 +150,20 @@ func _check_layout_1920() -> void:
 		_check(not (debug_layer as Control).visible, "F3 关 → zone 画框隐藏")
 		DebugApi.set_overlay_visible(true)
 		_check((debug_layer as Control).visible, "F3 再开 → zone 画框复现")
+
+
+## 「小地图 + L1 缩略窗」这一对在顶栏空档内居中（保留区右端是给缩略窗留的占位）
+func _check_minimap_pair_centered(mm_rect: Rect2) -> void:
+	var thumb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/L1Thumbnail")
+	if thumb == null or not thumb.visible:
+		return
+	var tr := thumb.get_global_rect()
+	var span := HudZoneLayout.top_center_span_width(get_viewport().get_visible_rect().size.x)
+	var want_center: float = HudZoneLayout.TOP_CENTER_FREE_LEFT_PX + span * 0.5
+	var pair_center: float = (mm_rect.position.x + tr.end.x) * 0.5
+	_check(absf(pair_center - want_center) < 2.0,
+			"小地图+缩略窗在空档内居中（对中心 %.1f / 空档中心 %.1f）" % [pair_center, want_center])
+	_check(not tr.intersects(mm_rect), "缩略窗与小地图不重叠")
 
 
 ## 顶部中央跨度合同（防撞真值）：小地图与顶栏左右按钮群、右上时钟区互不重叠。
@@ -183,8 +209,21 @@ func _check_minimap_window() -> void:
 	_check(canvas != null, "放大版绘制区已构建")
 	if canvas != null:
 		var cr := canvas.get_global_rect()
-		_check(cr.size.x >= 900.0 and cr.size.y >= 300.0,
-				"放大版绘制区体量 ≥900×300（实际 %s）" % cr.size)
+		var mm_w: float = mm.get_map_width_px()
+		var win_map_w: float = cr.size.x - MinimapWindow.LEGEND_W
+		# 等比例尺合同：放大版地图区宽 = 顶部小地图宽 × ZOOM（同一比例尺，只是整幅放大）
+		_check(absf(win_map_w / maxf(mm_w, 1.0) - MinimapWindow.ZOOM) < 0.05,
+				"放大版地图区宽 = 小地图宽 × %.1f（%.1f vs %.1f）"
+				% [MinimapWindow.ZOOM, win_map_w, mm_w])
+		_check(cr.size.y < cr.size.x, "放大版为条状（地图远宽于深）：%s" % cr.size)
+		# 横纵比例尺一致（地面带 = 画布高 × ground_ratio，代表世界地面深）
+		var mi: Array = mm.get_map_info()
+		var depth: float = _game_root.get_current_map().get_ground_bottom() - float(mi[2])
+		var band: float = cr.size.y * float(mi[3])
+		var v_scale: float = depth / maxf(band, 1.0)
+		var h_scale: float = (float(mi[1]) - float(mi[0])) / maxf(win_map_w, 1.0)
+		_check(absf(h_scale - v_scale) / maxf(v_scale, 0.001) < 0.05,
+				"放大版横纵比例尺一致（横 %.2f / 纵 %.2f 世界px每px）" % [h_scale, v_scale])
 		_check(win.is_type_mode(), "放大版默认类型着色（关则回到实际颜色）")
 	for i in 10:
 		await get_tree().process_frame
@@ -195,14 +234,16 @@ func _check_minimap_window() -> void:
 
 func _check_layout_720() -> void:
 	_check(get_window().size == Vector2i(1280, 720), "窗口已切 720p（%s，PNG 像素 1280×720）" % get_window().size)
+	var zone_cx: float = HudZoneLayout.zone_rect(&"top_center",
+			get_viewport().get_visible_rect().size).get_center().x
 	var mm: Control = _game_root.ui_root.get_node_or_null("HudOverlay/Minimap")
 	if mm != null:
 		var r := mm.get_global_rect()
-		_check(absf(r.get_center().x - get_viewport().get_visible_rect().size.x * 0.5) < 2.0, "720p Minimap 仍水平居中（center=%.1f）" % r.get_center().x)
+		_check(absf(r.get_center().x - zone_cx) < 2.0, "720p Minimap 仍在区内居中（center=%.1f）" % r.get_center().x)
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb != null:
 		var r := zb.get_global_rect()
-		_check(absf(r.get_center().x - get_viewport().get_visible_rect().size.x * 0.5) < 2.0, "720p ZoomBar 仍随小地图居中（center=%.1f）" % r.get_center().x)
+		_check(absf(r.get_center().x - zone_cx) < 2.0, "720p ZoomBar 仍随小地图居中（center=%.1f）" % r.get_center().x)
 	_check_stack_base()
 	_check_feed(get_viewport().get_visible_rect().size)
 
@@ -215,11 +256,13 @@ func _check_layout_1610() -> void:
 	var mm: Control = _game_root.ui_root.get_node_or_null("HudOverlay/Minimap")
 	if mm != null:
 		var r := mm.get_global_rect()
-		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "16:10 Minimap 随画布重排仍居中（center=%.1f / 画布宽 %.1f）" % [r.get_center().x, vp.x])
+		_check(absf(r.get_center().x - HudZoneLayout.zone_rect(&"top_center", vp).get_center().x) < 2.0,
+				"16:10 Minimap 随画布重排仍在区内居中（center=%.1f）" % r.get_center().x)
 	var zb: Control = _game_root.ui_root.get_node_or_null("HudOverlay/ZoomBar")
 	if zb != null:
 		var r := zb.get_global_rect()
-		_check(absf(r.get_center().x - vp.x * 0.5) < 2.0, "16:10 ZoomBar 随画布重排仍居中（center=%.1f / 画布宽 %.1f）" % [r.get_center().x, vp.x])
+		_check(absf(r.get_center().x - HudZoneLayout.zone_rect(&"top_center", vp).get_center().x) < 2.0,
+				"16:10 ZoomBar 随画布重排仍居中（center=%.1f）" % r.get_center().x)
 	_check_feed(vp)
 
 

@@ -31,9 +31,11 @@ func _draw() -> void:
 				get_theme_default_font(), 12)
 
 
-## 地图绘制区（左对齐，宽高见 MinimapWindow.MAP_W/MAP_H）
+## 地图绘制区（左对齐；宽 × 画布总高由 MinimapWindow 按等比例尺算出）
 func map_rect() -> Rect2:
-	return Rect2(Vector2.ZERO, Vector2(MinimapWindow.MAP_W, MinimapWindow.MAP_H))
+	if window == null:
+		return Rect2(Vector2.ZERO, Vector2(900.0, 300.0))
+	return Rect2(Vector2.ZERO, Vector2(window.map_px_w(), window.total_h()))
 
 
 func _gui_input(event: InputEvent) -> void:

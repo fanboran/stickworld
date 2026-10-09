@@ -17,13 +17,18 @@ extends StickWindow
 ## 创建后常驻隐藏，开合走 open()/close()。
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-## 地图绘制区（宽高比与小地图一致 3:1，取 2.5 倍放大）
-const MAP_W: float = 900.0
-const MAP_H: float = 300.0
+## 放大倍数（相对顶部小地图的地图区宽度；等比例尺下即"看得大这么多倍"）
+const ZOOM := 1.5
+## 地图区宽度钳制范围（px）：太窄看不清、太宽出安全区
+const MAP_MIN_W := 640.0
+const MAP_MAX_W := 1600.0
 ## 右侧图例列宽（色块 + 文案竖排）
 const LEGEND_W: float = 84.0
 ## 重绘频率（Hz，与 Minimap 同节拍——实体点/光环需要动）
 const UPDATE_HZ: float = 15.0
+## 窗口非地图区的固定高度（标题栏 30 + 工具行+间距 44）
+const CHROME_H := 74.0
+const CHROME_W := 24.0
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 var _game_root: Node = null
@@ -34,6 +39,9 @@ var _type_mode: bool = true
 var _canvas: MinimapCanvas = null
 var _mode_btn: Button = null
 var _accum: float = 0.0
+## 地图区宽 / 画布总高（等比例尺推出，见 refresh_geometry）
+var _map_px_w: float = 900.0
+var _total_h: float = 300.0
 
 
 # ─────────────────────────────── 装配 ────────────────────────────────
@@ -44,8 +52,9 @@ func setup(game_root: Node, minimap: Control) -> void:
 	_minimap = minimap
 	window_title = "本地地图"
 	behavior = StickWindow.Behavior.FLOATING
-	window_size = Vector2(MAP_W + LEGEND_W + 24.0, MAP_H + 30.0 + 44.0)
+	window_size = Vector2(_map_px_w + LEGEND_W + CHROME_W, _total_h + CHROME_H)
 	_build_window()
+	refresh_geometry()
 
 
 func _build_content() -> void:
@@ -55,10 +64,44 @@ func _build_content() -> void:
 	_canvas = MinimapCanvas.new()
 	_canvas.name = "MapCanvas"
 	_canvas.window = self
-	_canvas.custom_minimum_size = Vector2(MAP_W + LEGEND_W, MAP_H)
+	_canvas.custom_minimum_size = Vector2(_map_px_w + LEGEND_W, _total_h)
 	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_child(_canvas)
+
+
+## 按当前地图与顶部小地图体量重算地图区几何。
+## **等比例尺**：地图区宽 = 小地图宽 × ZOOM，高由世界地面深与地图宽之比推出
+## （地面带像素高 = 画布高 × ground_ratio，故画布总高 = 地图区高 / ground_ratio），
+## 于是放大版与顶部小地图横纵比例尺一致、房屋形状不变形，只是整体放大 ZOOM 倍。
+func refresh_geometry() -> void:
+	var snap: Dictionary = MinimapPainter.build_snapshot(current_map(), map_info())
+	var map_w: float = maxf(float(snap["map_width"]), 1.0)
+	var depth: float = maxf(float(snap["ground_bottom"]) - float(snap["ground_y"]), 1.0)
+	var mm_w: float = _minimap_map_px()
+	_map_px_w = clampf(mm_w * ZOOM, MAP_MIN_W, MAP_MAX_W)
+	var map_px_h: float = _map_px_w * depth / map_w
+	var ratio: float = clampf(float(snap["ground_ratio"]), 0.2, 0.9)
+	_total_h = map_px_h / ratio
+	window_size = Vector2(_map_px_w + LEGEND_W + CHROME_W, _total_h + CHROME_H)
+	if _canvas != null:
+		_canvas.custom_minimum_size = Vector2(_map_px_w + LEGEND_W, _total_h)
+
+
+## 顶部小地图的地图区宽度（px；放大倍数以它为基准）
+func _minimap_map_px() -> float:
+	if _minimap != null and _minimap.has_method("get_map_width_px"):
+		return float(_minimap.get_map_width_px())
+	return 420.0
+
+
+## 地图区尺寸（MinimapCanvas 取用：宽 × 画布总高，地面带 = 总高 × ground_ratio）
+func map_px_w() -> float:
+	return _map_px_w
+
+
+func total_h() -> float:
+	return _total_h
 
 
 func _process(delta: float) -> void:
@@ -72,10 +115,13 @@ func _process(delta: float) -> void:
 
 func open() -> void:
 	super()
-	# 每次打开复位到默认类型着色（放大版的意义），并立刻按当前地图态刷新
+	# 每次打开复位到默认类型着色（放大版的意义），并按当前地图态重算几何
 	_type_mode = true
 	if _mode_btn != null:
 		_mode_btn.text = _mode_text()
+	refresh_geometry()
+	# 体量变了要重新居中（基类只在构建时定位一次；FLOATING 即屏中居中 + 夹安全区）
+	_position_panel()
 	_accum = 0.0
 	if _canvas != null:
 		_canvas.queue_redraw()

@@ -43,6 +43,8 @@ const S := 1.0 / 32.0                    # 卡 meta 烘焙 px -> 格：json 恒 
 const TILT_DEG := 26.0                   # 俯角：创始人要求"稍微增加"（原 20°），本次 +6°
 const CARD_SHADER := preload("res://modules/hd2d/shaders/card.gdshader")
 const CHAR_HOST := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
+const CharRig3D := preload("res://modules/hd2d/scripts/char_rig_3d.gd")
+const CHAR_DIRECT_BUCKETS := preload("res://modules/hd2d/scripts/char_direct_buckets.gd")
 const POST_SHADER := preload("res://modules/hd2d/shaders/post_hd2d.gdshader")
 const BUILDING_SHADOW_SHADER := preload("res://modules/hd2d/shaders/building_shadow.gdshader")
 
@@ -1428,6 +1430,10 @@ func _build_world() -> void:
 ## 宿主把玩家/NPC 逐个 add_char 并逐帧 set_world_pos——角色写深度站进场景，
 ## 能被前景遮挡、与建筑正确排序（HD-2D 最佳实践，替代 2D canvas 浮层）。
 func enable_play_characters() -> void:
+	# 直渲路线：通道由 _spawn_direct_character 按需装配，此处无事可做；
+	# 烘焙回退路线才需要预建演示宿主节点
+	if CharRig3D.route_enabled():
+		return
 	if _char_host == null:
 		_spawn_char_host(1.0, false)
 
@@ -1435,6 +1441,8 @@ func enable_play_characters() -> void:
 ## 游戏接入：生成一个**独立**角色实例（各自 SubViewport/骨架/动画）。
 ## 玩家与村民各自独立动画（共享 viewport 会全员同姿态），由宿主逐帧驱动。
 func spawn_character() -> Node:
+	if CharRig3D.route_enabled():
+		return _spawn_direct_character()
 	var h: Node = CHAR_HOST.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
@@ -1442,6 +1450,33 @@ func spawn_character() -> Node:
 	h.set_px_scale(2.0)   # 2x 超采样：描边锐利无彩边
 	h.build(self, "idle", TILT_DEG)
 	h.add_char(0.0, 0.0, false)
+	return h
+
+
+## S2 直渲路线：每实体一个 char_rig_3d 宿主（真 rig 只解算不进视口，部件直写
+## 全局 3D MultiMesh 桶——零视口零回读）。桶/隐藏 rig 画布按需装配一次。
+var _direct_buckets: Node = null
+var _direct_rig_parent: Node2D = null
+
+func _spawn_direct_character() -> Node:
+	if _direct_buckets == null:
+		var b: Node = CHAR_DIRECT_BUCKETS.new()
+		b.name = "CharDirect3D"
+		add_child(b)
+		_direct_buckets = b
+		var layer := CanvasLayer.new()
+		layer.name = "DirectRigHosts"
+		layer.visible = false   # 只解算不绘制（CanvasItem 隐藏停绘制不停 _process）
+		add_child(layer)
+		var rigs := Node2D.new()
+		rigs.name = "Rigs"
+		layer.add_child(rigs)
+		_direct_rig_parent = rigs
+	var h: Node = CharRig3D.new()
+	h.name = "Char%d" % _char_seq
+	_char_seq += 1
+	add_child(h)
+	h.build(self, _direct_buckets, _direct_rig_parent, "idle", TILT_DEG)
 	return h
 
 var _char_seq: int = 0

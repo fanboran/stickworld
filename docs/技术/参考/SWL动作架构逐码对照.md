@@ -133,7 +133,7 @@ SWL:  ShouldAim(站定+目标进射程) → isAiming → 播 Draw ──0.5s─�
 
 | SWL | 本作 | 注记 |
 |---|---|---|
-| SkeletonRenderer 逐单位网格 | SubViewport 烘焙成卡（idle 5Hz/近距 10Hz/远距 LOD 桶） | 本作为 96 单位上限 + HD-2D 26° 取景特化；SWL 移动端百单位网格 |
+| SkeletonRenderer 逐单位网格 | 部件级 3D 直渲（char_rig_3d + 全局 MultiMesh 桶，S2；烘焙回退闸保留） | 语义同构=逐单位真骨架渲染；直渲后 draw calls 13~23× 降、48v48 帧时 2.4× |
 | `IsInSimpleColliderMode` 大群降耗 | sim 模式批推进 + 报表节流 | 架构不同 |
 | 帧同步 | battle_sim 确定性（墙钟/RNG 治理过的双体制） | 本作强项 |
 

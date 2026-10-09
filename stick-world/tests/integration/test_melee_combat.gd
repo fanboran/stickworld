@@ -110,18 +110,26 @@ func _test_sword_mounted() -> void:
 	_runner.assert_true(ch != null and is_instance_valid(ch), "单位应有 billboard 角色镜像")
 	if ch == null or not is_instance_valid(ch):
 		return
-	_runner.assert_true(ch.has_method("get_weapon_instance"), "billboard 角色应提供 get_weapon_instance")
-	# 纯后台计算豁免（headless）：billboard 视觉链按设计不装配（char_sprite_3d
-	# _pure_sim），武器镜像缺席为预期——镜像层断言仅带显示环境执行，
-	# 数据层（weapon_type/attack_range）不受影响已在上方验毕
+	# 武器镜像双路线（S2 直渲默认）：烘焙=武器节点实例挂 viewport 骨架
+	#（get_weapon_instance）；直渲=武器数据记录（_weapon：贴图/手骨/挂点补偿，
+	# 渲染走全局桶）。两条都以 set_weapon_type 为 feed 口。
+	_runner.assert_true(ch.has_method("set_weapon_type"), "角色宿主应提供 set_weapon_type feed 口")
+	# 纯后台计算豁免（headless）：视觉链按设计不装配，武器镜像缺席为预期
+	# ——镜像层断言仅带显示环境执行，数据层已在上方验毕
 	if DisplayServer.get_name() == "headless":
 		return
-	var sword: Node2D = ch.get_weapon_instance() if ch.has_method("get_weapon_instance") else null
-	_runner.assert_true(sword != null and is_instance_valid(sword), "billboard 骨架应挂载武器镜像")
-	if sword != null and is_instance_valid(sword):
-		_runner.assert_true(sword.get_parent() != null, "武器应挂载在 billboard 场景内")
-		# 剑应有握把锚点（GripPoint，握点对齐手骨口径与 2D 挂骨一致）
-		_runner.assert_true(sword.get_node_or_null("GripPoint") != null, "剑应有 GripPoint")
+	if ch.has_method("get_weapon_instance"):
+		var sword: Node2D = ch.get_weapon_instance()
+		_runner.assert_true(sword != null and is_instance_valid(sword), "billboard 骨架应挂载武器镜像")
+		if sword != null and is_instance_valid(sword):
+			_runner.assert_true(sword.get_parent() != null, "武器应挂载在 billboard 场景内")
+			# 剑应有握把锚点（GripPoint，握点对齐手骨口径与 2D 挂骨一致）
+			_runner.assert_true(sword.get_node_or_null("GripPoint") != null, "剑应有 GripPoint")
+	else:
+		# 白盒标注：直渲宿主 _weapon 为私有字段，武器镜像节点不存在（渲染走桶）
+		var wrec: Variant = ch.get("_weapon")
+		_runner.assert_true(wrec is Dictionary and not (wrec as Dictionary).is_empty(),
+				"直渲宿主应挂载武器数据记录（贴图/手骨/挂点补偿）")
 
 
 ## 近战：站近命中 → 扣血 + 受击击退冲量

@@ -25,6 +25,12 @@ const HEALTH_BAR_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/hea
 const OUTLINE_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/stickman_outline.gd")
 ## crowd 批量渲染器脚本（远景单位合批；combat BattleInstance 与 units 装配消费）
 const CROWD_RENDERER_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/crowd_renderer.gd")
+## 骨架定义脚本（StickmanSkeleton：骨骼拓扑/部件参数/颜色与描边常量）
+const SKELETON_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
+## crowd 预烘库（部件 4 桶表/骨骼拓扑——hd2d 直渲桶与 crowd 共用的部件数学）
+const CROWD_BAKE_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/crowd_renderer_bake.gd")
+## 批渲染骨架脚本（StickmanBatchRig：wobble 网格/静态网格与常量，直渲血条桶消费）
+const CROWD_BATCH_RIG_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/stickman_batch_rig.gd")
 ## 骨架场景路径（StickmanRig 根；实体场景与 HD-2D billboard 共用的唯一骨架实例源）
 const RIG_SCENE_PATH: String = "res://modules/stick_rig/scenes/stickman_test.tscn"
 

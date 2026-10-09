@@ -12,6 +12,8 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 ## billboard 几何真相源（随身特效抬升常量的同步对象）
 const CharSprite3D := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
+## 直渲路线宿主（S2）：脚锚/缩放常量须与烘焙路线同值（视觉脚线两路一致）
+const CharRig3D := preload("res://modules/hd2d/scripts/char_rig_3d.gd")
 
 var _runner: TestRunner
 
@@ -147,7 +149,11 @@ func _test_fx_anchor_lift() -> void:
 	_runner.assert_approx(fresh.fx_anchor_lift(), 0.0, 0.0001, "_hd 未就绪回退 0")
 	fresh.free()
 	# 同步断言：常量必须等于 billboard 脚线以上到髋的几何（FOOT_ANCHOR 量到脚墨迹，
-	# billboard 按脚墨迹落 FOOT_ROW）——改 char_sprite_3d 几何时本值必须同步
+	# billboard 按脚墨迹落 FOOT_ROW）——改角色宿主（烘焙 char_sprite_3d / 直渲
+	# char_rig_3d）几何时本值必须同步，两条渲染路线同值
 	_runner.assert_approx(Hd2dStreetMap.BILLBOARD_HIP_H_PX,
 			CharSprite3D.FOOT_ANCHOR.y * CharSprite3D.RIG_SCALE, 0.01,
 			"BILLBOARD_HIP_H_PX = FOOT_ANCHOR.y × RIG_SCALE（billboard 髋高）")
+	_runner.assert_approx(CharRig3D.FOOT_ANCHOR.y * CharRig3D.RIG_SCALE,
+			CharSprite3D.FOOT_ANCHOR.y * CharSprite3D.RIG_SCALE, 0.001,
+			"直渲/烘焙两路线脚锚×缩放同值（视觉脚线一致）")

@@ -34,6 +34,16 @@ const RUN_DIST: float = 240.0
 const GROUP_GAP: float = 260.0
 ## 接战/脱战滞回拍数（防目标切换瞬时空窗导致停线/解冻抖动）
 const ENGAGE_HYSTERESIS: int = 2
+# ── 个性 y 漂移（SWL Ai.personalityControlledY / personalityNextYControlShift 直译）──
+# 单位在槽位横排（y）上按个体个性缓慢漂移——大军 y 分布不机械（02 二-A.5）。
+# 每成员到点换漂移目标（间隔 3~8s），指数趋近；幅度夹 ±spread×DRIFT_MAX_RATIO
+#（同列相邻最坏间距 = spread − 2×幅度，保持在分离半径外——分离椭圆是硬冲突区，
+# 不是密度旋钮）。确定性：种子注入（宿主可按 battle_id 派生），同种子同漂移。
+const DRIFT_MAX_RATIO: float = 0.25
+const DRIFT_SHIFT_MIN: float = 3.0
+const DRIFT_SHIFT_MAX: float = 8.0
+const DRIFT_RATE: float = 0.6
+const DRIFT_SEED_FALLBACK: int = 20261009
 
 enum Stance { ATTACK, DEFEND, GARRISON }
 
@@ -62,6 +72,11 @@ var _ranged_clear_ticks: int = 0  ## 远程连续无接战拍数（冻结/解冻
 var frozen_ranged_x: float = NAN  ## 远程组冻结线（世界 x；冻结期间不随推进移动）
 var _contact_timer: float = 0.0
 
+var _rng := RandomNumberGenerator.new()
+var _y_drift: Dictionary = {}        # iid -> 当前漂移（px，叠加在槽位横排 y 上）
+var _y_drift_target: Dictionary = {} # iid -> 目标漂移
+var _y_next_shift: Dictionary = {}   # iid -> 距下次换目标（s）
+
 
 ## 装配（宿主注入当前间距真值——平衡表可覆盖，不缓存快照的宿主纪律同源）
 func setup(host: Node, p_faction: int, p_facing: int, p_goal_x: float, p_line_x: float,
@@ -76,19 +91,31 @@ func setup(host: Node, p_faction: int, p_facing: int, p_goal_x: float, p_line_x:
 	_spread = maxf(spread, 40.0)
 	_row_gap = maxf(row_gap, 40.0)
 	_upc = clampi(floori((band_half * 2.0) / _spread), 4, 8)
+	_rng.seed = DRIFT_SEED_FALLBACK + p_faction
+
+
+## 漂移种子注入（宿主可选：按 battle_id 派生传入——同战斗可复现、跨战斗不同相；
+## 未调用用 setup 的 faction 混合回落种子，仍是确定序列）。须在 add_unit 前调。
+func seed_drift(seed_value: int) -> void:
+	_rng.seed = seed_value
 
 
 ## 成员入线（按主手武器分组：BOW=2/STAFF=4 远程，其余近战；守位/指挥单位由
-## 调用方过滤，不入线）
+## 调用方过滤，不入线）。入线即建个性漂移账本（首漂零——短局几何断言稳定，
+## 首次换目标最早 DRIFT_SHIFT_MIN 后）。
 func add_unit(u: Node) -> void:
 	if u == null or not is_instance_valid(u):
 		return
 	var w: Node = u.get_weapon() if u.has_method("get_weapon") else null
 	var wt: int = int(w.weapon_type) if w != null and "weapon_type" in w else -1
+	var iid: int = u.get_instance_id()
 	if wt == 2 or wt == 4:
 		_ranged.append(u)
 	else:
 		_melee.append(u)
+	_y_drift[iid] = 0.0
+	_y_drift_target[iid] = 0.0
+	_y_next_shift[iid] = _rng.randf_range(DRIFT_SHIFT_MIN, DRIFT_SHIFT_MAX)
 
 
 # ─────────────────────── 推进 ───────────────────────
@@ -105,6 +132,7 @@ func tick(delta: float) -> void:
 		_recompute_slots()
 		_update_contact()
 		_issue_march_orders()
+	_tick_y_drift(delta)
 	if stance == Stance.ATTACK and not _melee_blocked:
 		line_x += float(facing) * speed * delta
 		if facing > 0:
@@ -136,7 +164,7 @@ func get_unit_slot(u: Node) -> Vector2:
 		base_x = ranged_line_x()
 	else:
 		return Vector2.INF
-	return _slot_world(slot, base_x)
+	return _slot_world(slot, base_x, iid)
 
 
 func get_line_x() -> float:
@@ -157,19 +185,45 @@ func ranged_count() -> int:
 
 # ─────────────────────── 内部 ───────────────────────
 
-func _slot_world(slot: Vector2i, base_x: float) -> Vector2:
+## 个性 y 漂移推进（每帧：到点换目标 + 指数趋近；接战成员不受影响——漂移只
+## 改槽位 y，接战者归战斗行为管，未接战者经随线号令自然小步挪过去 = SWL 缓慢
+## 漂移的观感）。字典按入线序迭代，掷骰序确定 → 同种子序列可复现。
+func _tick_y_drift(delta: float) -> void:
+	if delta <= 0.0 or _y_drift.is_empty():
+		return
+	var limit: float = _spread * DRIFT_MAX_RATIO
+	for iid in _y_drift.keys():
+		var wait: float = float(_y_next_shift[iid]) - delta
+		if wait <= 0.0:
+			_y_drift_target[iid] = _rng.randf_range(-limit, limit)
+			wait = _rng.randf_range(DRIFT_SHIFT_MIN, DRIFT_SHIFT_MAX)
+		_y_next_shift[iid] = wait
+		var cur: float = float(_y_drift[iid])
+		_y_drift[iid] = cur + (float(_y_drift_target[iid]) - cur) * minf(1.0, DRIFT_RATE * delta)
+
+
+func _slot_world(slot: Vector2i, base_x: float, iid: int = 0) -> Vector2:
 	var col: float = float(slot.x)
 	var lateral: float = (float(slot.y) - float(_upc - 1) * 0.5) * _spread
 	return Vector2(base_x - float(facing) * col * _row_gap,
-			band_center_y + lateral)
+			band_center_y + lateral + float(_y_drift.get(iid, 0.0)))
 
 
-## 清理死亡/释放成员（槽位随重算回收）
+## 清理死亡/释放成员（槽位随重算回收；漂移账本同步清——防跨战斗泄漏）
 func _cleanup() -> void:
 	_melee = _melee.filter(func(u) -> bool:
 		return is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()))
 	_ranged = _ranged.filter(func(u) -> bool:
 		return is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()))
+	if not _y_drift.is_empty():
+		var alive: Dictionary = {}
+		for u in _melee + _ranged:
+			alive[u.get_instance_id()] = true
+		for iid in _y_drift.keys():
+			if not alive.has(iid):
+				_y_drift.erase(iid)
+				_y_drift_target.erase(iid)
+				_y_next_shift.erase(iid)
 
 
 ## 槽位重算（入队序 = 行列；组方阵整组一格一格排——SWL Formation 全组一个格）
@@ -262,7 +316,7 @@ func _march_group(units: Array, slots: Dictionary, base_x: float) -> void:
 		var slot: Vector2i = slots.get(u.get_instance_id(), Vector2i(-1, -1))
 		if slot.x < 0:
 			continue
-		var dest: Vector2 = _slot_world(slot, base_x)
+		var dest: Vector2 = _slot_world(slot, base_x, u.get_instance_id())
 		if (u as Node2D).global_position.distance_to(dest) <= LINE_DEADZONE:
 			continue  # 阵位稳定（FormationPositionIsStable 同源防抖）
 		# 已有他人号令（无 line_order/follow_order 标记 = 玩家/上级号令）→ 不覆盖

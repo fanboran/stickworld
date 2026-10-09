@@ -589,6 +589,11 @@ func _spawn_and_start() -> void:
 					mid_x - TEAM_OFFSET_X + 150.0, spawn_y, ACTION_BAND_HALF_PX)
 			var line_r: RefCounted = fs.create_battle_line(2, -1, goal_r,
 					mid_x + TEAM_OFFSET_X - 150.0, spawn_y, ACTION_BAND_HALF_PX)
+			# 个性 y 漂移种子：按战斗 id 派生（同战斗可复现、跨战斗不同相）
+			if line_l != null and line_l.has_method("seed_drift"):
+				line_l.seed_drift(hash("arena%d_1" % (battle.get_battle_id().hash() if battle != null and battle.has_method("get_battle_id") else 0)))
+			if line_r != null and line_r.has_method("seed_drift"):
+				line_r.seed_drift(hash("arena%d_2" % (battle.get_battle_id().hash() if battle != null and battle.has_method("get_battle_id") else 0)))
 			for u in _attacker:
 				if u != null and is_instance_valid(u) and not _holds_post(u):
 					line_l.add_unit(u)

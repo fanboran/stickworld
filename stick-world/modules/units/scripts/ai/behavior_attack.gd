@@ -183,11 +183,9 @@ func update(delta: float) -> void:
 	# 决策链已在 ai_controller 拦截新行为，此处兜底"压制发生在两拍之间的在途
 	# 攻击行为"（禁令立即生效，不等下一决策拍）。受击反馈/被推挤在物理层不受
 	# 禁令影响——惩罚来自模拟因果。duck 查询：组件缺失（测试桩）跳过 = 零回归。
-	var se: Node = entity.get_status_effects() if entity.has_method("get_status_effects") else null
-	if se != null and is_instance_valid(se) and se.has_method("has_suppressed") and se.has_suppressed():
-		# 压制 = 纯行为禁令（自动避战已根除）：停滞不追不打，站桩吃伤害
-		if entity.has_method("ai_stop"):
-			entity.ai_stop()
+	# 压制锁步（02 二-A.5）：停滞 + 蜷缩举盾站桩吃伤害（根除避战裁决），
+	# 姿态反馈在共享口内（behavior_base.pinned_by_suppression）。
+	if pinned_by_suppression():
 		return
 	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
 	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）

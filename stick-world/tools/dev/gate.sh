@@ -12,6 +12,7 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GODOT="${GODOT:-F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe}"
+GATE_START="$(date +%s)"
 REF="HEAD"; FULL=0; DO_IMPORT=1
 for a in "$@"; do
 	case "$a" in
@@ -67,8 +68,10 @@ else
 fi
 echo "   ok (${SECONDS}s)"
 
-step "报错扫描（user:// 日志）"
-bash tools/check_godot_errors.sh > /dev/null 2>&1 || fail "运行时报错非零"
+step "报错扫描（user:// 日志，仅本 gate 窗口）"
+# -Since：多会话并行共用 user://logs（按项目名跨 worktree 共享），只扫本 gate
+# 启动后新建/更新的日志，防并行会话（旧分支/旧 worktree）的报错打红本仓门禁。
+bash tools/check_godot_errors.sh -Since "$GATE_START" > /dev/null 2>&1 || fail "运行时报错非零"
 echo "   ok (${SECONDS}s)"
 
 echo "[gate] ✓ 全绿（import + 编译 + tests + errors）"

@@ -40,6 +40,9 @@ func update(delta: float) -> void:
 	if entity.has_method("is_dead") and entity.is_dead():
 		finish()
 		return
+	# 压制锁步（02 二-A.5）：被压停滞 + 蜷缩举盾（跟队中弹按兵不动）
+	if pinned_by_suppression():
+		return
 	# 刷新目标（玩家实体）
 	_target_timer -= delta
 	if _target == null or not is_instance_valid(_target) or _target_timer <= 0.0:

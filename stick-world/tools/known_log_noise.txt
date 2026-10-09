@@ -18,3 +18,8 @@ Nonexistent 'String' constructor
 already has a parent 'CaseRoot'
 [SceneLoader] 未注册的地图: nonexistent_map
 # ^ test_game_root_assembly 负路径用例（load_map 拒绝未注册地图，报错即预期行为）
+
+# 并行会话旧 worktree（如 .temp/小地图优化）跑 hd2d 时的陈旧 rig 路径报错——
+# 本仓现行代码 RIG_SCENE 已指 res://modules/stick_rig/scenes/（批0 修复），
+# 此旧路径非本仓可产生；gate 报错扫描另有 -Since 窗口过滤兜底。随该 worktree 收线可删。
+res://modules/units/scenes/stickman_test.tscn

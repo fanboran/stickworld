@@ -16,6 +16,8 @@ var entity: CharacterBody2D = null
 var _finished: bool = false
 ## 是否已激活（enter 后 true，exit 后 false）
 var _active: bool = false
+## 压制锁步态标记（上一拍是否被压——解除沿用它做一次性收盾）
+var _suppression_pinned: bool = false
 
 
 # ─────────────────────────────── 生命周期回调 ────────────────────────────────
@@ -51,6 +53,39 @@ func is_finished() -> bool:
 ## 此行为是否处于激活状态。
 func is_active() -> bool:
 	return _active
+
+
+# ─────────────────────── 压制锁步（02 二-A.5，CoH pinned 直译）───────────────────────
+
+## 压制锁步消费段：被压 → 停滞 + 蜷缩举盾姿态（block_crouch 待命变体）——
+## 不追不打不挪窝不后撤，站桩吃伤害（根除避战裁决：无任何逃离通道），姿态是
+## 唯一反馈。盾单位举盾照常参与格挡判定（既有战斗真值），无盾单位纯姿态零数值。
+## 各行为 update 首段调用（attack 压制段同源）；压制结束在下一次调用时**一次性
+## 收盾**（防姿态粘死：如压制中目标死亡，attack 无目标路径不会再跑
+## _update_arrow_threat_block；attack 侧威胁/攻后举盾窗口下拍重算会自然再举）。
+## ai_stop/set_blocking 幂等重申无副作用。duck：组件缺失（测试桩）= 未被压，
+## 零回归。
+func pinned_by_suppression() -> bool:
+	if entity == null or not is_instance_valid(entity) \
+			or not entity.has_method("get_status_effects"):
+		return false
+	var se: Node = entity.get_status_effects()
+	var pinned: bool = se != null and is_instance_valid(se) \
+			and se.has_method("has_suppressed") and bool(se.has_suppressed())
+	if not pinned:
+		if _suppression_pinned:
+			_suppression_pinned = false
+			var w0: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+			if w0 != null and is_instance_valid(w0) and w0.has_method("set_blocking"):
+				w0.set_blocking(false)
+		return false
+	_suppression_pinned = true
+	if entity.has_method("ai_stop"):
+		entity.ai_stop()
+	var w: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+	if w != null and is_instance_valid(w) and w.has_method("set_blocking"):
+		w.set_blocking(true)
+	return true
 
 
 # ─────────────────────────────── 统一面向（SWL Ai.Face 直译）────────────────────────────────

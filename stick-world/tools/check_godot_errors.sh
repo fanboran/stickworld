@@ -9,6 +9,9 @@
 #   tools/check_godot_errors.sh           # 全量（日志扫描 + 启动模拟）
 #   tools/check_godot_errors.sh -Quick    # 仅日志扫描
 #   tools/check_godot_errors.sh -Warnings # 含 WARNING
+#   tools/check_godot_errors.sh -Since <epoch秒>  # 只扫 mtime 晚于该时刻的日志
+#     （gate 隔离窗口：多会话并行共用 user://logs，防止别的 worktree 同时跑
+#      Godot 写入的日志把本仓门禁打红——日志目录按项目名跨 worktree 共享）
 # 退出码：1 有错误，0 干净。
 
 set -u
@@ -35,11 +38,13 @@ LOG_DIR="$LOG_ROOT/Godot/app_userdata/$PROJ_NAME/logs"
 MAX_FILES=10
 WARNINGS=0
 QUICK=0
+SINCE=0
 
 while [ $# -gt 0 ]; do
 	case "$1" in
 		-Warnings) WARNINGS=1; shift ;;
 		-Quick) QUICK=1; shift ;;
+		-Since) SINCE="${2:-0}"; shift 2 ;;
 		*) echo "未知参数: $1"; exit 2 ;;
 	esac
 done
@@ -92,8 +97,12 @@ count_as_error() {
 # ───────────────────────────── 1. 日志扫描 ─────────────────────────────
 if [ -d "$LOG_DIR" ]; then
 	oldest=""
-	# 按修改时间取最近 MAX_FILES 个日志
+	# 按修改时间取最近 MAX_FILES 个日志；-Since 窗口外（mtime 更早）的不扫
 	while IFS= read -r f; do
+		if [ "$SINCE" -gt 0 ]; then
+			mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+			[ "$mtime" -lt "$SINCE" ] && continue
+		fi
 		hits=""
 		while IFS= read -r line; do
 			if match_pattern "$line"; then hits="$hits$line

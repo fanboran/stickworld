@@ -4,8 +4,9 @@ signal test_done(code: int)
 ## 单元测试：战线（SWL Team.Attack + MoveInFormation 直译，批5 战线重构）。
 ## 覆盖：组级方阵槽位（全组一个格子，upc 由带宽推）/ 连续推进与接战停线
 ##（滞回复推）/ 远程组随行与接战冻结（末列贴射程线）/ 随线号令（接战跳过、
-## 玩家号令不覆盖、line_order 标记）/ FormationSystem 战线优先级。
-## 确定性：无掷骰；不进场景树（tick 直调，节拍 0.5s 对齐）。
+## 玩家号令不覆盖、line_order 标记）/ FormationSystem 战线优先级 / 个性 y 漂移
+##（首漂前恒格点、有界、同种子确定）。
+## 确定性：漂移走注入种子（同种子同序列）；不进场景树（tick 直调，节拍 0.5s 对齐）。
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -23,6 +24,7 @@ func _ready() -> void:
 	_runner.add_test("随线号令: 未接战收令（line_order）/ 接战跳过 / 玩家号令不覆盖", _test_march_orders)
 	_runner.add_test("FormationSystem: get_unit_combat_slot 战线优先", _test_combat_slot_priority)
 	_runner.add_test("朝向: 战线面向查询 + 到位驻留朝向收口（背对→面向敌阵）", _test_facing)
+	_runner.add_test("个性 y 漂移: 首漂前恒格点 + 有界 + 同种子确定", _test_y_drift)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -179,6 +181,46 @@ func _test_facing() -> void:
 	move.free()
 	mover.free()
 	_teardown_world(w)
+
+
+func _test_y_drift() -> void:
+	# 个性 y 漂移（SWL Ai.personalityControlledY / personalityNextYControlShift 直译，
+	# 02 二-A.5）：短局（< 首漂间隔 3s）槽位 y 恒格点（既有几何断言稳定）；
+	# 长局漂移有界（±spread×0.25，同列最坏间距不触分离半径）；同种子两条线
+	# 漂移序列逐成员一致（确定性：字典按入线序迭代，掷骰序确定）。
+	var w1 := _make_world(8, 0)
+	var line_a: RefCounted = w1["fs"].create_battle_line(1, 1, 100000.0, 0.0, 500.0, 360.0)
+	line_a.seed_drift(424242)
+	for u in w1["units"]:
+		line_a.add_unit(u)
+	var w2 := _make_world(8, 0)
+	var line_b: RefCounted = w2["fs"].create_battle_line(1, 1, 100000.0, 0.0, 500.0, 360.0)
+	line_b.seed_drift(424242)
+	for u in w2["units"]:
+		line_b.add_unit(u)
+	# 短局：3s 内（首漂最早 DRIFT_SHIFT_MIN=3s 后）漂移恒零（两线同拍推进，
+	# 保持 RNG 消费序列一致——确定性断言的前提）
+	for i in 5:
+		line_a.tick(0.5)
+		line_b.tick(0.5)
+	var upc: int = clampi(floori(720.0 / w1["fs"].SPREAD_SPACING), 4, 8)
+	var s0: Vector2 = line_a.get_unit_slot(w1["units"][0])
+	_runner.assert_approx(s0.y, 500.0 - 2.5 * w1["fs"].SPREAD_SPACING, 0.5,
+			"首漂前槽位 y = 格点（漂移零）")
+	# 长局：20s 漂移激活——有界 + 同种子孪生线逐成员一致
+	for i in 35:
+		line_a.tick(0.5)
+		line_b.tick(0.5)
+	var limit: float = w1["fs"].SPREAD_SPACING * 0.25 + 0.01
+	for i in w1["units"].size():
+		var ya: float = line_a.get_unit_slot(w1["units"][i]).y
+		var yb: float = line_b.get_unit_slot(w2["units"][i]).y
+		var base: float = 500.0 + (float(i % upc) - float(upc - 1) * 0.5) * w1["fs"].SPREAD_SPACING
+		_runner.assert_true(absf(ya - base) <= limit,
+				"漂移有界：成员 %d 偏差 %.1f ≤ %.1f" % [i, ya - base, limit])
+		_runner.assert_approx(ya, yb, 0.01, "同种子漂移确定：成员 %d 两条线一致" % i)
+	_teardown_world(w1)
+	_teardown_world(w2)
 
 
 # ─────────────────────── 夹具 ───────────────────────

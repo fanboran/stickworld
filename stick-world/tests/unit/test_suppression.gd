@@ -38,6 +38,7 @@ func _ready() -> void:
 	_runner.add_test("命令撤离不受压制打断（玩家/指挥链意图）", _test_command_retreat_under_suppression)
 	_runner.add_test("零回归：无状态效果组件实体决策原样", _test_no_component_regression)
 	_runner.add_test("behavior_attack 兜底：压制期在途行为立即停", _test_attack_segment)
+	_runner.add_test("压制锁步：move/idle 停滞+蜷缩举盾 + 解除一次性收盾", _test_pinned_stance)
 	_runner.add_test("squad_phase_plan 替换点：压制成员跳过/未压制走代理", _test_phase_plan)
 	_runner.add_test("A6 近失压制：档案默认关 + 半径键约束", _test_near_miss_defaults)
 	_runner.add_test("A6 近失压制：总门关/近失门关不压制（零回归）", _test_near_miss_gate_off)
@@ -317,6 +318,16 @@ func _test_command_retreat_under_suppression() -> void:
 	ctx.ai._make_decision()
 	_runner.assert_equal(ctx.ai.get_current_behavior(), "retreat", "被压照常撤离（命令意图）")
 	ctx.teardown()
+	# 续行侧：撤离令被战斗行为抢占后压制到 → 决策放行命令覆盖段续行撤离
+	#（压制拦自主决策，不拦命令路径——箭雨下撤仗不能停）
+	var ctx2 := _make_ai_ctx({"suppression_enabled": true})
+	ctx2.ai.set_order("retreat", {})
+	ctx2.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	ctx2.ai._state_machine.travel("attack", {})
+	_runner.assert_equal(ctx2.ai.get_current_behavior(), "attack", "夹具：战斗行为已抢占撤离令")
+	ctx2.ai._make_decision()
+	_runner.assert_equal(ctx2.ai.get_current_behavior(), "retreat", "被压续行撤离令（启动/续行都不拦）")
+	ctx2.teardown()
 
 
 func _test_no_component_regression() -> void:
@@ -350,6 +361,46 @@ func _test_attack_segment() -> void:
 	_runner.assert_true(attack2.is_finished(), "未压制无战斗走既有 finish 路径")
 	attack2.free()
 	ctx2.teardown()
+
+
+func _test_pinned_stance() -> void:
+	# 压制锁步（02 二-A.5，CoH pinned 直译 + 根除避战裁决）：被压 = 停滞 +
+	# 蜷缩举盾（block 姿态），不挪窝不后撤、号令挂起不清；压制解除下一拍
+	# 一次性收盾（防姿态粘死——如压制中目标死亡后 attack 无目标路径不再跑
+	# _update_arrow_threat_block）。move/idle 双行为面（attack 段同口见上用例）。
+	var ctx := _make_ai_ctx({})
+	var pinned_w := _PinnedWeapon.new()
+	ctx.entity.add_child(pinned_w)
+	ctx.entity.weapon = pinned_w
+	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	var pos0: Vector2 = ctx.entity.global_position
+	var mv: BehaviorMove = BehaviorMove.new()
+	mv.entity = ctx.entity
+	mv.enter("", {"target": pos0 + Vector2(500.0, 0.0)})
+	mv.update(0.016)
+	_runner.assert_false(mv.is_finished(), "被压 move 不完成（号令挂起）")
+	_runner.assert_true(ctx.entity.stopped, "被压 move 停滞（ai_stop）")
+	_runner.assert_true(pinned_w.blocking, "被压 move 蜷缩举盾（set_blocking true）")
+	_runner.assert_equal(ctx.entity.global_position, pos0, "被压 move 不挪窝（无任何逃离通道）")
+	# idle 同面：停滞 + 举盾保持 + 待命计时冻结（停滞的是单位不是时间——锁步例外）
+	var idle: BehaviorIdle = BehaviorIdle.new()
+	idle.entity = ctx.entity
+	idle.enter("", {"duration": 0.05})
+	idle.update(0.10)
+	_runner.assert_false(idle.is_finished(), "被压 idle 计时冻结不完成")
+	_runner.assert_true(pinned_w.blocking, "被压 idle 举盾保持")
+	# 解除（白盒拨过期，_test_suppressed_state 同款手法）→ 下一拍一次性收盾
+	ctx.se._effects[ScriptStatusEffects.Type.SUPPRESSED]["until"] = ctx.se._now() - 1.0
+	idle.update(0.016)
+	_runner.assert_false(pinned_w.blocking, "解除后下一拍一次性收盾（防姿态粘死）")
+	# 再压→再举（幂等重申不依赖上一态）
+	ctx.se.apply(ScriptStatusEffects.Type.SUPPRESSED, 1000.0, 2.0, null)
+	idle.update(0.016)
+	_runner.assert_true(pinned_w.blocking, "再压再举（重申幂等）")
+	idle.free()
+	mv.free()
+	pinned_w.free()
+	ctx.teardown()
 
 
 func _test_phase_plan() -> void:
@@ -630,6 +681,14 @@ class _SupEntity extends CharacterBody2D:
 
 class _SupWeapon extends Node:
 	var weapon_type: int = ScriptBehaviorProfiles.SWORD
+
+
+## 举盾可观测桩（压制锁步断言面：set_blocking duck 面 + blocking 态读出）
+class _PinnedWeapon extends _SupWeapon:
+	var blocking: bool = false
+
+	func set_blocking(v: bool) -> void:
+		blocking = v
 
 
 ## 假生命组件：damaged 信号（触发源）+ 决策链查询面

@@ -37,8 +37,8 @@ modules/stick_rig/
   陈旧旋转）。
 - **拉弓瞄准俯仰**（SWL Archer.Aim/_currentAim 直译）：弓手姿势跟射角走——实体侧按
   ArrowBallistics 弹道解算逐拍推 `aim_pitch`，镜像链进 rig 后由 procedural_overlay
-  平滑追踪并应用于 **hip 髋枢**（SWL UpdateAim 反汇编实证：髋骨 rotation=瞄准角、
-  腿为髋子级——全身含腿整体倾斜；仅弓族动画生效）。
+  平滑追踪并应用于**持弓臂 upper_arm_inner**（臂+前臂+手+弓整组抬起；躯干直立腿站定
+  ——SWL 实机观感基准；仅弓族动画生效）。
 - **crowd 合批**：远景单位由 crowd_renderer 收进 MultiMesh 桶（血条摆动/武器图集走 GPU shader）；
   烘制参数常量在 health_bar_indicator，crowd_renderer_buckets 直接取用（同模块内部依赖）。
 - **鸭子协议边界**：crowd_renderer / health_bar_indicator 对实体的访问全部走

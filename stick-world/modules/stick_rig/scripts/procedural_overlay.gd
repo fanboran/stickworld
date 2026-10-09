@@ -89,16 +89,19 @@ var _stagger_k: int = 1
 ##   1) 渐进追踪（SWL UpdateAim：_currentAim 向 _targetAim 平滑逼近，不瞬跳）；
 ##   2) 弓族动画门控：仅 attack_bow* / walk_bow_hold 期间生效（其他动画归零）——
 ##      换箭/受击/死亡不做残留仰角。
-## 应用点 = hip 骨（髋枢）：SWL 反汇编实证 UpdateAim 尾部 FindBone(髋)写
-## rotation = _currentAim − 4 + UpdateWorldTransform，且腿是髋骨子级——
-## **全身（躯干+双臂+弓+头+腿）绕髋整体倾斜**（杠杆式后倾，腿随动），
-## 不是"腰以上后仰腿钉死"的折腰（创始人点正后解包对齐）。
-## 角域参照：SWL AimAngle 抛物线解（v=15）实用射程内 ~10°..45°，
-## 本链钳 [−0.65, 0.15] rad（≈−37°..+9°）。
+## 应用点 = **持弓臂 upper_arm_inner**（臂+前臂+手+弓整组抬起）——SWL 实机
+## 对照（创始人点正＋实机截图证）：拉弓时**躯干直立、腿站定，只有持弓臂
+## 随射角抬起**，拉弓手保持在脸颊；反汇编 UpdateAim 的 FindBone 目标骨名
+## 在 literal pool 静态不可解析，观感基准取实机画面。弓族动画全部带
+## upper_arm_inner 连续轨道（每帧重写）→ 读-加-写不累积；暂停期动画停写，
+## 叠加同步跳过（防暂停累积自旋）。角域钳 [−0.65, 0.15] rad（SWL AimAngle
+## 抛物线解 v=15 实用射程 ~10°..45°）。
 var _aim_pitch_target: float = 0.0
 var _aim_pitch_applied: float = 0.0
 ## 追踪速率（1/s）：越大跟得越紧（0.5s 内约到 99%）
 const AIM_PITCH_TRACK_RATE := 10.0
+## 持弓臂骨（upper_arm_inner：weapon_hand=弓 的祖先臂）
+var _bow_arm: Bone2D = null
 
 
 ## 设置叠加更新频率（LOD 分档；见 StickmanRig.set_anim_update_hz）。
@@ -134,6 +137,8 @@ func setup(skeleton: Skeleton2D, rig: Node2D) -> void:
 	# 叠加目标骨骼（不参与 IK）；head 不叠加（动画轨道驱动，见文件头注）
 	_hip = skeleton.get_node_or_null("hip")
 	_torso = skeleton.get_node_or_null("hip/spine_root/lower_torso")
+	_bow_arm = skeleton.get_node_or_null(
+			"hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner") as Bone2D
 	# 记录基准
 	if _hip != null:
 		_hip_base = _hip.rotation
@@ -266,7 +271,8 @@ func _on_frame() -> void:
 	# 6. 拉弓瞄准俯仰（SWL UpdateAim 渐进追踪）：弓族动画期间向目标角逼近，
 	#    其他动画归零（受击/死亡/换弹无残留仰角）
 	var pitch_goal: float = 0.0
-	if anim.begins_with("attack_bow") or anim == "walk_bow_hold":
+	var bow_aiming: bool = anim.begins_with("attack_bow") or anim == "walk_bow_hold"
+	if bow_aiming:
 		pitch_goal = _aim_pitch_target
 	_aim_pitch_applied = lerpf(_aim_pitch_applied, pitch_goal,
 			clampf(delta * AIM_PITCH_TRACK_RATE, 0.0, 1.0))
@@ -275,8 +281,13 @@ func _on_frame() -> void:
 	if _torso != null:
 		_torso.rotation = _torso_base + deg_to_rad(torso_off)
 	if _hip != null:
-		# 瞄准俯仰在髋枢（全身含腿整体倾斜；SWL UpdateAim 同构，见 aim_pitch 段注释）
-		_hip.rotation = _hip_base + deg_to_rad(hip_off) + _aim_pitch_applied
+		_hip.rotation = _hip_base + deg_to_rad(hip_off)
+	# 瞄准俯仰 = 持弓臂抬起（臂+弓整组，躯干/腿不动——SWL 实机观感）：弓族动画
+	# 每帧重写 upper_arm_inner 轨道值，此处在其上叠加不累积；暂停期动画停写，
+	# 叠加同步跳过（防 += 自旋）。衰减尾（applied→0）期间同样叠加，自然回落
+	if _bow_arm != null and not is_zero_approx(_aim_pitch_applied) \
+			and not get_tree().paused:
+		_bow_arm.rotation += _aim_pitch_applied
 	if _outhand != null:
 		_outhand.position = _outhand_base + outhand_off
 	if _innerhand != null:

@@ -239,8 +239,9 @@ func get_muzzle_pos(entity: Node) -> Vector2:
 
 
 ## 拉弓瞄准俯仰角（SWL Archer.Aim/_currentAim 的射角源）：按与 fire_arrow 同源
-## 的弹道解算取发射仰角，转 rig 域弧度（负=仰头后仰）。钳到 [−0.6, 0.15]——
-## 极端弧线不过倾、俯射不明显低头。纯表现量（射击真值仍由箭矢弹道自走）。
+## 的弹道解算取发射仰角，转 rig 域弧度（负=仰头后仰）。钳到 [−0.65, 0.15]——
+## SWL AimAngle 抛物线解（v=15）实用射程角域 ~10°..45°，极端弧线不过倾、
+## 俯射不明显低头。纯表现量（射击真值仍由箭矢弹道自走）。
 func get_aim_pitch(target: Node) -> float:
 	if target == null or not is_instance_valid(target):
 		return 0.0
@@ -255,7 +256,7 @@ func get_aim_pitch(target: Node) -> float:
 	var vel: Vector2 = solution["vel"]
 	# y-down 世界：vel.y 负 = 上仰；elevation 正=仰，rig 旋转负=仰 → 取负号
 	var elevation: float = -atan2(vel.y, absf(vel.x))
-	return clampf(-elevation, -0.6, 0.15)
+	return clampf(-elevation, -0.65, 0.15)
 
 
 ## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）

@@ -89,8 +89,12 @@ var _stagger_k: int = 1
 ##   1) 渐进追踪（SWL UpdateAim：_currentAim 向 _targetAim 平滑逼近，不瞬跳）；
 ##   2) 弓族动画门控：仅 attack_bow* / walk_bow_hold 期间生效（其他动画归零）——
 ##      换箭/受击/死亡不做残留仰角。
-## 应用点 = lower_torso（腰枢）：躯干+双臂+弓+颈头整体俯仰（腿不动）——
-## 这是本叠加层对 lower_torso 的唯一新增写项，与其 hip/torso 基准写共存。
+## 应用点 = hip 骨（髋枢）：SWL 反汇编实证 UpdateAim 尾部 FindBone(髋)写
+## rotation = _currentAim − 4 + UpdateWorldTransform，且腿是髋骨子级——
+## **全身（躯干+双臂+弓+头+腿）绕髋整体倾斜**（杠杆式后倾，腿随动），
+## 不是"腰以上后仰腿钉死"的折腰（创始人点正后解包对齐）。
+## 角域参照：SWL AimAngle 抛物线解（v=15）实用射程内 ~10°..45°，
+## 本链钳 [−0.65, 0.15] rad（≈−37°..+9°）。
 var _aim_pitch_target: float = 0.0
 var _aim_pitch_applied: float = 0.0
 ## 追踪速率（1/s）：越大跟得越紧（0.5s 内约到 99%）
@@ -269,9 +273,10 @@ func _on_frame() -> void:
 
 	# ---- 应用（绝对设置 = 基准 + 叠加） ----
 	if _torso != null:
-		_torso.rotation = _torso_base + deg_to_rad(torso_off) + _aim_pitch_applied
+		_torso.rotation = _torso_base + deg_to_rad(torso_off)
 	if _hip != null:
-		_hip.rotation = _hip_base + deg_to_rad(hip_off)
+		# 瞄准俯仰在髋枢（全身含腿整体倾斜；SWL UpdateAim 同构，见 aim_pitch 段注释）
+		_hip.rotation = _hip_base + deg_to_rad(hip_off) + _aim_pitch_applied
 	if _outhand != null:
 		_outhand.position = _outhand_base + outhand_off
 	if _innerhand != null:

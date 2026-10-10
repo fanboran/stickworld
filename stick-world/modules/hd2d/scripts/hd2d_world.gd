@@ -1430,7 +1430,7 @@ func _build_world() -> void:
 ## 宿主把玩家/NPC 逐个 add_char 并逐帧 set_world_pos——角色写深度站进场景，
 ## 能被前景遮挡、与建筑正确排序（HD-2D 最佳实践，替代 2D canvas 浮层）。
 func enable_play_characters() -> void:
-	# 直渲路线：通道由 _spawn_direct_character 按需装配，此处无事可做；
+	# 关节烘焙路线：通道由 _spawn_joint_character 按需装配，此处无事可做；
 	# 烘焙回退路线才需要预建演示宿主节点
 	if CharRig3D.route_enabled():
 		return
@@ -1442,7 +1442,7 @@ func enable_play_characters() -> void:
 ## 玩家与村民各自独立动画（共享 viewport 会全员同姿态），由宿主逐帧驱动。
 func spawn_character() -> Node:
 	if CharRig3D.route_enabled():
-		return _spawn_direct_character()
+		return _spawn_joint_character()
 	var h: Node = CHAR_HOST.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
@@ -1453,30 +1453,31 @@ func spawn_character() -> Node:
 	return h
 
 
-## S2 直渲路线：每实体一个 char_rig_3d 宿主（真 rig 只解算不进视口，部件直写
-## 全局 3D MultiMesh 桶——零视口零回读）。桶/隐藏 rig 画布按需装配一次。
-var _direct_buckets: Node = null
-var _direct_rig_parent: Node2D = null
+## 关节烘焙路线（裁决#15）：每实体一个 char_rig_3d 宿主（真 rig 只解算不进
+## 视口，部件直写全局 3D MultiMesh 桶——形状由 char_joint_atlas 预烘关节贴图
+## 承运，零逐帧视口零逐帧回读）。桶/隐藏 rig 画布按需装配一次。
+var _joint_buckets: Node = null
+var _joint_rig_parent: Node2D = null
 
-func _spawn_direct_character() -> Node:
-	if _direct_buckets == null:
+func _spawn_joint_character() -> Node:
+	if _joint_buckets == null:
 		var b: Node = CHAR_DIRECT_BUCKETS.new()
-		b.name = "CharDirect3D"
+		b.name = "CharJoint3D"
 		add_child(b)
-		_direct_buckets = b
+		_joint_buckets = b
 		var layer := CanvasLayer.new()
-		layer.name = "DirectRigHosts"
+		layer.name = "JointRigHosts"
 		layer.visible = false   # 只解算不绘制（CanvasItem 隐藏停绘制不停 _process）
 		add_child(layer)
 		var rigs := Node2D.new()
 		rigs.name = "Rigs"
 		layer.add_child(rigs)
-		_direct_rig_parent = rigs
+		_joint_rig_parent = rigs
 	var h: Node = CharRig3D.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
 	add_child(h)
-	h.build(self, _direct_buckets, _direct_rig_parent, "idle", TILT_DEG)
+	h.build(self, _joint_buckets, _joint_rig_parent, "idle", TILT_DEG)
 	return h
 
 var _char_seq: int = 0

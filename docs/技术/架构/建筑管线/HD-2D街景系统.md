@@ -82,6 +82,8 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 
 **已知代价（战场规模的元凶，机制级待换血）**：每角色一个常开视口（96 单位=96 视口每帧重渲）+ 回读 sync 点必须节流（FIFO 公平队列 + 每帧预算 BLIT_BUDGET + 分档节拍/坏帧闸/最小间隔）——远档姿态 10~15Hz 低频采样即"动作跳变"，满编帧时被视口成本拖进幻灯片。**此为"整卡"烘焙独有；关节烘焙（小贴图挂骨、满帧率跟随骨骼）无此类成本**——机制替换的候选方向与处置状态见交接档（战场观感重构），不在本档展开。
 
+**实验并行路线（关节烘焙，`STICK_CHAR_RENDER=joint3d` 显式开启；默认仍为整卡烘焙，观感过创始人验收后才切换）**：`char_rig_3d` 宿主持真 rig 只解算不进视口，晚优先级 _process 读 rig 实建矢量部件节点，每部件一对 quad 写进 `char_direct_buckets` 的全局 MultiMesh（官方 setter 紧凑行制）——描边贴图垫底（实深度分离）/填充贴图置顶，两遍层序照抄矢量「全局两遍」语义；贴图由 `char_joint_atlas` 用引擎画布光栅化器预烘（rig 同款 Line2D 圆头线段/40 边圆→一次性视口回读图集，观感与烘焙卡同源）；血条走 `char_bar_atlas` 原版驱动镜像图集；武器/接地影/劳作条/插值与整卡路线同款。feed API 同名同义，`hd2d_map_base` 零改动切换。
+
 - feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state…）由 `hd2d_map_base._sync_character_render` 逐帧驱动。
 - 尸体：死亡动画播完停尾帧 + 插箭，实体淡出期 `set_master_alpha` 压整卡透明度。
 - 接地影/劳作条/附身四角框为独立 3D quad，随宿主走。

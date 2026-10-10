@@ -1,14 +1,27 @@
 extends Node3D
-## char_rig_3d.gd —— S2 直渲路线的角色宿主（char_sprite_3d 的 duck 兼容替身）。
+## char_rig_3d.gd —— 关节烘焙路线的角色宿主（char_sprite_3d 的 duck 兼容替身）。
 ##
 ## 是什么：每实体一个本实例。与烘焙路线同构地持有一份真 StickmanRig
 ##（Skeleton2D + AnimationTree + 程序化叠加全照旧，藏在隐藏 CanvasLayer 里只
 ## 解算不绘制——CanvasItem 隐藏只停绘制，_process/动画推进不受影响），但
 ## **不再装配 SubViewport/回读烘焙**：晚优先级 _process（1100 = rig 推进(0)
-## 与俯仰叠加(1000) 之后，写序铁律）读骨骼链，把每部件的 2D 变换折进 26°
-## 取景平面，整段写入 char_direct_buckets 的全局 3D MultiMesh 桶。
-## 零视口、零回读、零纹理上传；渲染侧成本 = 部件变换数学 + 桶缓冲段写入
-##（crowd_renderer 同量级，已验证可承 96 单位）。
+## 与俯仰叠加(1000) 之后，写序铁律）把部件折进 26° 取景平面，整段写入
+## char_direct_buckets 的全局 3D MultiMesh 桶。零逐帧视口、零逐帧回读。
+##
+## 部件来源（忠实搬运立项时的矢量渲染架构，stickman_skeleton.build_limbs）：
+## rig 因 STICK_BATCH_RIG=0 真建了矢量部件节点（sprite_* 容器 + stroke/fill
+## 两层 Line2D/Polygon2D）——本宿主逐件读它们的变换/宽度/半径/颜色，一对一
+## 搬成 3D quad（形状 = char_joint_atlas 预烘的关节贴图，rig px 几何由
+## 引擎画布光栅化器烘出——观感与烘焙卡同源贴图直出）：
+##   - 挂靠：容器挂在哪根骨上就跟哪根骨（头圆挂 head 骨 −HEAD_ORBIT，
+##     build_limbs 的修复自动生效，不经 crowd 战场表的旧死码约定）；
+##   - 层序照抄「全局两遍」：所有描边层（z=-1）垫底（实深度 ZB_STROKE
+##     分离——等深平局在 Forward+ 深度预-pass 下裁决不可靠）、所有填充层
+##     （z=0）置顶——重叠处填充无缝融合，描边只在剪影外轮廓出线；
+##     填充遍内按画布树序（DFS 序）编号实例序（外臂盖内臂、武器盾盖头）；
+##   - 描边宽：rig 的 zoom 补偿（set_outline_canvas_scale→apply_outline_zoom）
+##     直接改节点宽度/半径，本侧逐帧读节点；宽度变化按指纹懒触发图集重烘
+##     （格位量化恒定，重烘只换贴图像素，零闪变）。
 ##
 ## 尺寸契约（与烘焙路线逐位同源，见 char_sprite_3d 尺寸契约段）：
 ##   rig px → 世界单位 S = RIG_SCALE(0.35625) × PX(1/24) = 0.01484375；
@@ -18,34 +31,59 @@ extends Node3D
 ## feed API（set_world_pos/set_anim/set_weapon_type/…）与 char_sprite_3d 同名
 ## 同义——hd2d_map_base._sync_character_render 零改动切换路线。
 ##
-## 尸体（S2）：死亡动画由 rig 播完停尾帧（状态机 dead 态），实体淡出期
+## 血条：原版 health_bar_indicator 的驱动镜像画进共享图集视口
+##（char_bar_atlas，与烘焙路线同一 apply_bar_state 协议），3D 面片贴头顶锚点。
+##
+## 尸体：死亡动画由 rig 播完停尾帧（状态机 dead 态），实体淡出期
 ## set_master_alpha<1 把部件段迁入渐隐桶逐帧压 alpha——rig 姿态 + 插箭，
 ## 图片卡渐隐不再存在。
 
 const StickRigAPI := preload("res://modules/stick_rig/api.gd")
 const ANIMS := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
-const Skel := preload("res://modules/stick_rig/api.gd").SKELETON_SCRIPT
-const HealthBarIndicator := preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const RIG_SCENE_PATH: String = StickRigAPI.RIG_SCENE_PATH
 
-## 路线开关：默认 bake（直渲观感已否决——见交接档裁决#10/#13）；
-## STICK_CHAR_RENDER=direct 显式开直渲实验路线（新渲染路线未裁决前不动默认）。
+## 路线开关：默认 bake（烘焙卡路线为创始人定稿观感）；STICK_CHAR_RENDER=joint3d
+## 显式开 3D 化关节烘焙实验路线（观感未过验收前不动默认）。
 static func route_enabled() -> bool:
-	return OS.get_environment("STICK_CHAR_RENDER") == "direct"
+	return OS.get_environment("STICK_CHAR_RENDER") == "joint3d"
 
 const RIG_SCALE := 0.35625   # 与烘焙路线同值（rig px → SV px；SV px → 世界 = PX）
 const PX := 1.0 / 24.0
 const S := RIG_SCALE * PX    # rig px → 世界单位
 const FOOT_ANCHOR := Vector2(3.0, 141.0)
 const SIZE_K := 1.0
-## 血条世界比例：烘焙路线镜像条在视口内 scale=px_scale/1.2=1.6667（SV px/原生 px），
-## 折世界 = ×PX → 0.069444 世界单位/条原生 px
-const BAR_UNIT := (2.0 / 1.2) * PX
-## 血条中心高度（世界单位，随 depth 缩放）：卡顶(6.0) − 视口顶留白(8SV px=1/3)
-const BAR_H := 6.0 - 8.0 / 24.0
-## 武器/盾的深度微移：恒在全部身体部件（描边 −0.004…填充 0…+0.0007）之上
+## 血条锚点高度（沿 26° 上仰轴，随 depth 缩放）：卡顶留白 8 原生行 = 条中心
+const BAR_H := (144.0 - 8.0) * PX
+## 描边遍的真实深度垫后（世界单位）：等深平局在完整场景（Forward+ 深度
+## 预-pass）下裁决不可靠，改用实深度分离；取值 = 实测最小可靠量级，
+## 远小于相邻角色纵深差（≥0.3），不产生穿层
+const ZB_STROKE := -0.06
+## 武器/盾的深度微移：恒在全部身体部件之上（原版树序「武器/盾盖头」）
 const ZB_WEAPON := 0.008
+
+# ─────────────────────────── 部件记录（rig 实建矢量节点 → 3D 实例） ───────────────────────────
+
+## 一个 sprite_* 容器的搬运表：容器引用 + 父骨走查下标 + 几何/颜色。
+## 线段肢体宽度与圆半径逐帧读节点（zoom 补偿后真值）；颜色构建期定格
+##（运行期无 apply_colors 触发源）并转线性域（spatial ALBEDO）。
+class Part:
+	var cont: Node2D = null
+	var stroke_l: Line2D = null      # 线段肢体两层（圆肢体为 null）
+	var fill_l: Line2D = null
+	var stroke_p: Polygon2D = null   # 圆肢体两层（线段肢体为 null）
+	var fill_p: Polygon2D = null
+	var pidx := 0                    # 容器父骨的走查下标
+	var length := 0.0                # 线段长（fill points 跨度，恒定）
+	var r_stroke := 0.0              # 圆半径缓存（zoom 补偿变更时重读）
+	var r_fill := 0.0
+	var col_stroke := Color.WHITE
+	var col_fill := Color.WHITE
+
+var _parts: Array = []              # Array[Part]
+var _circ_stale := true             # 圆半径待重读（zoom 补偿变更置位）
+var _joint_atlas: Node = null       # char_joint_atlas（build 时取引）
+var _spec_fp := 0.0                 # 已申报规格的宽度指纹（逐帧比对懒重烘）
 
 # ─────────────────────────── 装配 ───────────────────────────
 
@@ -55,14 +93,10 @@ var _rig: Node2D = null            # StickmanRig（骨架解算真源）
 var _pure_sim := false
 var _tilt_deg := 26.0
 
-## 骨骼先序（Bone2D 树走查）+ 父下标 + 部件写表（拓扑下标 → 本树走查下标）
+## 骨骼先序（Bone2D 树走查）+ 父下标
 var _bones: Array = []             # Bone2D 先序
 var _pidx: PackedInt32Array = PackedInt32Array()
 var _acc: Array[Transform2D] = []
-var _pt_walk: Array = []           # PackedInt32Array ×4（桶→本树骨骼下标）
-var _bases: Dictionary = {}        # 不透明段基址（桶→实例基）
-var _bases_fade: Dictionary = {}   # 渐隐段基址
-var _using_fade := false
 
 ## 武器/盾挂载记录（无节点实例：贴图 + 手骨 + 挂点补偿，逐帧算 2D 变换）
 var _weapon: Dictionary = {}
@@ -100,24 +134,33 @@ var _pos_pf := -1
 var _pos_valid := false
 var _moved_this_tick := false
 
+# 折算参数（_write_body 帧首定格，_fold3d 共用——避免十参长传）
+var _f_ct := 1.0
+var _f_st := 0.0
+var _f_s := 0.0
+var _f_sfx := 0.0
+var _f_p := Vector3.ZERO
+
 
 func build(world: Node, buckets: Node, rig_parent: Node2D, anim: String, tilt_deg: float) -> void:
 	_buckets = buckets
 	_rig_parent = rig_parent
 	_tilt_deg = tilt_deg
 	_pure_sim = DisplayServer.get_name() == "headless"
-	OS.set_environment("STICK_BATCH_RIG", "0")  # 2D 批渲染件不参与（不绘制，免装配）
+	OS.set_environment("STICK_BATCH_RIG", "0")  # 矢量部件真建（读节点搬运的唯一来源）
 	var inst: Node2D = load(RIG_SCENE_PATH).instantiate()
 	inst.set_script(null)  # 摘掉演示控制器（同烘焙路线）
 	_rig_parent.add_child(inst)
 	_rig = inst.get_node("OutlineGroup/StickmanRig") as Node2D
 	_rig.play(anim)
 	_walk_bones()
-	_map_part_tables()
+	_collect_parts()
 	if _pure_sim:
 		return
-	_bases = buckets.register_body()
-	_bases_fade = buckets.register_body()
+	_joint_atlas = buckets.get("joint_atlas")
+	_spec_fp = _width_fingerprint()
+	if _joint_atlas != null:
+		_joint_atlas.ensure(_build_specs())
 	_build_shadow()
 
 
@@ -138,22 +181,78 @@ func _walk_bones_rec(node: Node, parent_idx: int) -> void:
 			_walk_bones_rec(child, idx)
 
 
-## 桶部件表（crowd 拓扑下标）→ 本树走查下标映射（骨名→id→拓扑→walk）
-func _map_part_tables() -> void:
-	var topo_to_walk := {}
-	for i in _bones.size():
-		var id: int = Skel.BONE_NAME_TO_ID.get(_bones[i].name, -1)
-		var topo: int = _buckets._id_to_topo.get(id, -1)
-		if topo >= 0:
-			topo_to_walk[topo] = i
-	_pt_walk = []
-	for j in 4:
-		var src: PackedInt32Array = _buckets._part_bidx[j]
-		var out := PackedInt32Array()
-		out.resize(src.size())
-		for i in src.size():
-			out[i] = topo_to_walk.get(src[i], 0)
-		_pt_walk.append(out)
+## 收集 rig 实建矢量部件（sprite_* 容器）。DFS 按画布树序遍历——
+## 骨先容器后（build_limbs 在建骨之后追加容器），子骨 subtree 先于本骨容器
+## 的兄弟序天然保持。层序（描边底/填充顶）不在此编序——由写段的遍序 +
+## 实深度分离承担（见 _write_body）。
+func _collect_parts() -> void:
+	_parts.clear()
+	_walk_parts(_rig, -1)
+
+
+func _walk_parts(node: Node, widx: int) -> void:
+	for child in node.get_children():
+		if child is Bone2D:
+			_walk_parts(child, _bones.find(child))
+		elif child is Node2D and String(child.name).begins_with("sprite_"):
+			_parse_part(child, widx)
+
+
+func _parse_part(cont: Node2D, widx: int) -> void:
+	var stroke_n: Node = cont.get_node_or_null("stroke")
+	var fill_n: Node = cont.get_node_or_null("fill")
+	if stroke_n == null or fill_n == null:
+		return
+	var p := Part.new()
+	p.cont = cont
+	p.pidx = widx
+	if fill_n is Line2D:
+		p.fill_l = fill_n
+		p.stroke_l = stroke_n
+		var pts := p.fill_l.points
+		if pts.size() < 2:
+			return
+		p.length = absf(pts[pts.size() - 1].x - pts[0].x)
+		p.col_fill = p.fill_l.default_color.srgb_to_linear()
+		p.col_stroke = p.stroke_l.default_color.srgb_to_linear()
+	elif fill_n is Polygon2D:
+		p.fill_p = fill_n
+		p.stroke_p = stroke_n
+		p.col_fill = p.fill_p.color.srgb_to_linear()
+		p.col_stroke = p.stroke_p.color.srgb_to_linear()
+		_refresh_circle_radii(p)
+	else:
+		return
+	_parts.append(p)
+
+
+## 圆半径重读（构建期 + zoom 补偿变更后：apply_outline_zoom 重建 stroke 多边形）
+func _refresh_circle_radii(p: Part) -> void:
+	var pts_f := p.fill_p.polygon
+	p.r_fill = pts_f[0].length() if pts_f.size() > 0 else 0.0
+	var pts_s := p.stroke_p.polygon
+	p.r_stroke = pts_s[0].length() if pts_s.size() > 0 else 0.0
+
+
+## 宽度指纹（描边宽集求和）：zoom 补偿改宽度 → 指纹变 → 图集重烘
+func _width_fingerprint() -> float:
+	var fp := 0.0
+	for p in _parts:
+		fp += p.stroke_l.width if p.fill_p == null else p.r_stroke
+	return fp
+
+
+## 从实建部件拼图集规格（char_joint_atlas.ensure 的输入契约见其类头）
+func _build_specs() -> Array:
+	var specs := []
+	for p in _parts:
+		if p.fill_p != null:
+			specs.append({"name": p.cont.name, "circle": true,
+					"r_stroke": p.r_stroke, "r_fill": p.r_fill})
+		else:
+			specs.append({"name": p.cont.name, "circle": false, "length": p.length,
+					"w_stroke": p.stroke_l.width, "w_fill": p.fill_l.width})
+	return specs
 
 
 func _build_shadow() -> void:
@@ -172,12 +271,11 @@ func _build_shadow() -> void:
 
 
 func _exit_tree() -> void:
-	if _buckets != null and is_instance_valid(_buckets) and not _pure_sim:
-		if not _bases.is_empty():
-			_buckets.unregister_body(_bases)
-		if not _bases_fade.is_empty():
-			_buckets.unregister_body(_bases_fade)
-
+	if _pure_sim:
+		return
+	if _buckets != null and is_instance_valid(_buckets):
+		if _buckets.get("bar_atlas") != null:
+			(_buckets.get("bar_atlas") as Node).release(get_instance_id())
 
 # ─────────────────────────── feed API（duck 兼容 char_sprite_3d） ───────────────────────────
 
@@ -231,11 +329,23 @@ func set_aim_pitch(rad: float) -> void:
 	_rig.set_aim_pitch(rad)
 
 
-## 整卡透明度（尸体渐隐）：<1 时部件段迁入渐隐桶（透明混合材质）
+## 整卡透明度（尸体渐隐）：实例色 alpha 逐帧压低（桶材质透明混合，不换桶）
 func set_master_alpha(a: float) -> void:
 	if is_equal_approx(a, _master_alpha):
 		return
 	_master_alpha = a
+
+
+## 描边 zoom 补偿（与烘焙路线同式转发）：世界 zoom 作为等效画布缩放推给
+## rig（outline_zoom_external 停自动补偿，apply_outline_zoom 直接改矢量节点
+## 宽度/半径），本侧线宽逐帧读节点即恒为补偿后真值，圆半径置脏重读。
+func set_outline_zoom(z: float) -> void:
+	if _rig == null:
+		return
+	_rig.outline_zoom_external = true
+	if _rig.has_method("set_outline_canvas_scale"):
+		_rig.set_outline_canvas_scale(z)
+	_circ_stale = true
 
 
 ## 武器镜像（挂点补偿口径与 char_sprite_3d.set_weapon_type 同式）：读武器场景
@@ -326,15 +436,7 @@ func set_light(tint: Color, _add: Color) -> void:
 				Color(0.06, 0.05, 0.05, 0.50 * clampf(tint.get_luminance() + 0.25, 0.0, 1.0)))
 
 
-## 描边 zoom 补偿：暂不启用——烘焙路线实测在观战缩放(0.46)下描边为亚像素
-## 级（每单位 ~2.6 白像素），直渲若按 OUTLINE_SCREEN_PX 恒定补偿会显著加粗
-##（视觉验收实锤描边膨胀吞没身体）。A/B 按烘焙现状对齐（eff=OUTLINE_WIDTH
-## 恒定），路线定夺后如需"屏幕像素恒定描边"再统一两路线口径。
-func set_outline_zoom(_z: float) -> void:
-	pass
-
-
-## 显示/隐藏全部角色部件（A/B 对照出图用）：隐藏 = 清段停写
+## 显示/隐藏全部角色部件（A/B 对照出图用）：隐藏 = 清段停写 + 释放血条槽
 func set_chars_visible(v: bool) -> void:
 	_hidden = not v
 
@@ -494,14 +596,20 @@ func _process(_delta: float) -> void:
 	if _pure_sim or _buckets == null or not is_instance_valid(_buckets) or _rig == null:
 		return
 	if _hidden:
-		if not _bases.is_empty() or not _bases_fade.is_empty():
-			_clear_segments()
+		_release_bar_slot()
 		return
-	# 渐隐段迁移（尸体）：alpha<1 走渐隐桶，回 1 走主桶
-	var want_fade := _master_alpha < 0.999
-	if want_fade != _using_fade:
-		_clear_segments()
-		_using_fade = want_fade
+	# 圆半径重读（zoom 补偿变更后）
+	if _circ_stale:
+		for p in _parts:
+			if p.fill_p != null:
+				_refresh_circle_radii(p)
+		_circ_stale = false
+	# 宽度指纹比对（zoom 补偿改描边宽）：变了→图集懒重烘
+	var fp := _width_fingerprint()
+	if absf(fp - _spec_fp) > 0.05:
+		_spec_fp = fp
+		if _joint_atlas != null:
+			_joint_atlas.ensure(_build_specs())
 	# 先序累乘（batch_rig._write_transforms 同式：骨骼局部 → rig 局部）
 	for i in _bones.size():
 		var bone := _bones[i] as Bone2D
@@ -510,86 +618,83 @@ func _process(_delta: float) -> void:
 		var local := bone.transform
 		var pi := _pidx[i]
 		_acc[i] = local if pi < 0 else _acc[pi] * local
+	var t := deg_to_rad(_tilt_deg)
+	_f_ct = cos(t)
+	_f_st = sin(t)
+	_f_s = S * _depth
+	_f_sfx = _f_s * (-1.0 if _flip else 1.0)
+	_f_p = _pos
 	_write_body()
 	_write_weapons()
-	_write_bar()
+	_feed_bar()
 
 
-## 清空两套段（隐藏/迁移时一次写入零 + 重新登记）
-func _clear_segments() -> void:
-	_buckets.unregister_body(_bases)
-	_buckets.unregister_body(_bases_fade)
-	_bases = _buckets.register_body()
-	_bases_fade = _buckets.register_body()
+func _release_bar_slot() -> void:
+	var atlas: Node = _buckets.get("bar_atlas")
+	if atlas != null:
+		atlas.release(get_instance_id())
 
 
+## 身体写入：逐部件读 rig 实建节点的变换/宽度/半径，折 26° 平面写行。
+## 层序 = 画布「全局两遍」的 3D 直译：描边遍先写且实深度垫后 ZB_STROKE
+##（画布描边层全底的直译），填充遍后写置顶——描边只留剪影外轮廓环带；
+## 填充遍内按画布树序（DFS 序：腿→躯干→颈/头→臂）。跨角色走真深度。
+## 每部件一对 quad（裁决#15）：描边贴图格 + 填充贴图格；quad 尺寸 = 图集
+## 格位尺寸（量化恒定），实际宽度承运在贴图像素里（见 char_joint_atlas）。
 func _write_body() -> void:
-	var buckets: Node = _buckets
-	var t := deg_to_rad(_tilt_deg)
-	var ct := cos(t)
-	var stn := sin(t)
-	var fx := -1.0 if _flip else 1.0
-	var s := S * _depth
-	var sfx := s * fx
-	var alpha := _master_alpha
+	if _joint_atlas == null or _buckets.body == null:
+		return
 	var tr := _tint
-	var p := _pos
-	var j0 := 4 if _using_fade else 0
-	for j in 4:
-		var walk: PackedInt32Array = _pt_walk[j]
-		if walk.is_empty():
-			continue
-		var xfs: Array = buckets._part_xform[j]
-		var zbs: PackedFloat32Array = buckets._part_zbias[j]
-		var cols: PackedColorArray = buckets._part_color[j]
-		var buf: PackedFloat32Array = buckets.body_buf(j0 + j)
-		var bases: Dictionary = _bases_fade if _using_fade else _bases
-		var base: int = bases.get(j0 + j, 0) * walk.size() * 16
-		for i in walk.size():
-			var xf: Transform2D = _acc[walk[i]] * xfs[i]
-			# 列连续布局（temp/mm3d_render_probe 实证）：
-			# f0-2=cx, f3=ox, f4-6=cy, f7=oy, f8-10=cz, f11=oz
-			# cx = X·a + Y·b：a/b 为 2D 列向量折 3D 的系数（y 取负）
-			var a := sfx * xf.x.x
-			var b := -s * xf.x.y
-			var c := sfx * xf.y.x
-			var d := -s * xf.y.y
-			var dx := sfx * (xf.origin.x - FOOT_ANCHOR.x)
-			var dy := -s * (xf.origin.y - FOOT_ANCHOR.y)
-			var zb := zbs[i]
-			var o := base + i * 16
-			buf[o] = a
-			buf[o + 1] = b * ct
-			buf[o + 2] = -b * stn
-			buf[o + 3] = p.x + dx
-			buf[o + 4] = c
-			buf[o + 5] = d * ct
-			buf[o + 6] = -d * stn
-			buf[o + 7] = p.y + dy * ct - zb * stn
-			buf[o + 8] = 0.0
-			buf[o + 9] = stn
-			buf[o + 10] = ct
-			buf[o + 11] = p.z - dy * stn + zb * ct
-			var col: Color = cols[i].srgb_to_linear()
-			buf[o + 12] = col.r * tr.r
-			buf[o + 13] = col.g * tr.g
-			buf[o + 14] = col.b * tr.b
-			buf[o + 15] = col.a * alpha
-		# PackedArray 按值语义：跨对象下标写不回写，整段交还桶（crowd 三步式）
-		buckets.set_body_buf(j0 + j, buf)
-		buckets.mark_body_dirty(j0 + j)
+	var alpha := _master_alpha
+	var buckets: Node = _buckets
+	# 描边遍（实深度垫后 ZB_STROKE——画布描边层全底的直译）
+	for p in _parts:
+		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
+		var name: String = p.cont.name
+		var cs: Vector2 = _joint_atlas.cell_size(name, true)
+		buckets.body_row(_fold3d(xf * _sc2(cs.x, cs.y), ZB_STROKE),
+				Color(p.col_stroke.r * tr.r, p.col_stroke.g * tr.g,
+						p.col_stroke.b * tr.b, p.col_stroke.a * alpha),
+				_joint_atlas.uv_rect(name, true))
+	# 填充遍后写（描边环带之外全覆盖：重叠处填充无缝融合，同色无层序痕）
+	for p in _parts:
+		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
+		var name: String = p.cont.name
+		var cs: Vector2 = _joint_atlas.cell_size(name, false)
+		buckets.body_row(_fold3d(xf * _sc2(cs.x, cs.y), 0.0),
+				Color(p.col_fill.r * tr.r, p.col_fill.g * tr.g,
+						p.col_fill.b * tr.b, p.col_fill.a * alpha),
+				_joint_atlas.uv_rect(name, false))
+
+
+## 2D 部件变换折 3D（官方 Transform3D 构造，零手打包）：
+## rig y-down 折 3D 取负；基列 = rig 列 (a,b)/(c,d) 折上仰平面，
+## 法列 = (0,sin t,cos t) 朝相机；zb 沿法线（描边垫后/武器置前）。
+## FOOT_ANCHOR 钉角色世界脚点，depth 纵深缩放乘进 _f_s/_f_sfx。
+func _fold3d(inst: Transform2D, zb: float) -> Transform3D:
+	var a := _f_sfx * inst.x.x
+	var b := -_f_s * inst.x.y
+	var c := _f_sfx * inst.y.x
+	var d := -_f_s * inst.y.y
+	var dx := _f_sfx * (inst.origin.x - FOOT_ANCHOR.x)
+	var dy := -_f_s * (inst.origin.y - FOOT_ANCHOR.y)
+	return Transform3D(
+			Basis(
+					Vector3(a, b * _f_ct, -b * _f_st),
+					Vector3(c, d * _f_ct, -d * _f_st),
+					Vector3(0.0, _f_st, _f_ct)),
+			Vector3(_f_p.x + dx, _f_p.y + dy * _f_ct + zb * _f_st,
+					_f_p.z - dy * _f_st + zb * _f_ct))
+
+
+static func _sc2(sx: float, sy: float) -> Transform2D:
+	return Transform2D(Vector2(sx, 0.0), Vector2(0.0, sy), Vector2.ZERO)
 
 
 ## 武器/盾：手骨 acc × 挂点补偿 × Sprite 局部 → 3D quad（贴图分桶）
 func _write_weapons() -> void:
 	if _weapon.is_empty() and _shield.is_empty():
 		return
-	var t := deg_to_rad(_tilt_deg)
-	var ct := cos(t)
-	var stn := sin(t)
-	var fx := -1.0 if _flip else 1.0
-	var s := S * _depth
-	var sfx := s * fx
 	var col := _tint.srgb_to_linear()
 	col.a = _master_alpha
 	for w in [_weapon, _shield]:
@@ -597,97 +702,21 @@ func _write_weapons() -> void:
 			continue
 		var xf: Transform2D = _acc[w["hand"]] * w["attach"] * w["sprite_xf"]
 		var tsz: Vector2 = w["tex_size"]
-		var a := sfx * xf.x.x * tsz.x
-		var b := -s * xf.x.y * tsz.x
-		var c := sfx * xf.y.x * tsz.y
-		var d := -s * xf.y.y * tsz.y
-		var dx := sfx * (xf.origin.x - FOOT_ANCHOR.x)
-		var dy := -s * (xf.origin.y - FOOT_ANCHOR.y)
-		var cx := Vector3(a, b * ct, -b * stn)
-		var cy := Vector3(c, d * ct, -d * stn)
-		var o := Vector3(_pos.x + dx, _pos.y + dy * ct + ZB_WEAPON * stn,
-				_pos.z - dy * stn + ZB_WEAPON * ct)
-		_buckets.weapon_row(w["tex_path"], w["tex"], cx, cy, Vector3(0.0, stn, ct), o, col)
+		_buckets.weapon_row(w["tex_path"], w["tex"],
+				_fold3d(xf * _sc2(tsz.x, tsz.y), ZB_WEAPON), col)
 
 
-## 血条（crowd write_bars 单位版移植，世界折算：BAR_UNIT×bs×depth）
-func _write_bar() -> void:
-	var st: Dictionary = _bar_state
-	if st.is_empty() or not bool(st.get("active", false)):
+## 血条喂图集：锚点 = 脚点 + 上仰轴 ×(FOOT_ROW−8)×PX×depth（卡顶留白行中心）
+func _feed_bar() -> void:
+	var atlas: Node = _buckets.get("bar_atlas")
+	if atlas == null:
+		return
+	if _bar_state.is_empty():
 		return
 	var t := deg_to_rad(_tilt_deg)
 	var ct := cos(t)
 	var stn := sin(t)
-	var bx := Vector3(1.0, 0.0, 0.0)
-	var by := Vector3(0.0, ct, -stn)
-	var bz := Vector3(0.0, stn, ct)
-	var bs: float = float(st.get("scale", 1.0)) * BAR_UNIT * _depth
-	var center := _pos + by * (BAR_H * _depth)
-	var shown: float = float(st.get("shown", 0.0))
-	var alpha := _master_alpha
-	var buckets: Node = _buckets
-	var k_wobble: int = int(st.get("wobble", 0)) % 8
-	var k_plain: int = buckets.bar_plain_k()
-	# 圆点（满血/未展开：expand<0.999 才画，本体/描边 alpha 同乘 1-expand）
-	if float(st.get("expand", 1.0)) < 0.999:
-		var dot_a: float = shown * (1.0 - float(st.get("expand", 1.0))) * alpha
-		var rr: float = HealthBarIndicator.DOT_RADIUS * bs
-		var dc: Color = st.get("color", Color.WHITE)
-		var olc: Color = HealthBarIndicator.COLOR_OUTLINE
-		buckets._dot_fill.row(k_wobble, bx * rr, by * rr, bz, center,
-				Color(dc.r, dc.g, dc.b, dc.a * dot_a), 0.0, 0.0, 0.0)
-		buckets._dot_ring.row(k_wobble, bx * rr, by * rr, bz, center,
-				Color(olc.r, olc.g, olc.b, olc.a * dot_a), 0.0, 0.0, 0.0)
-	# 横条层序：底→描边①→残影→填充→描边②
-	var half: float = float(st.get("width", 20.0)) * 0.5 * float(st.get("expand", 1.0)) * bs
-	if half >= bs:
-		var at: float = float(st.get("anim_time", 0.0))
-		var se: float = float(st.get("shake", 0.0))
-		var shk: float = sin(at * HealthBarIndicator.SHAKE_FREQ) * se \
-				* HealthBarIndicator.SHAKE_MAX_OFFSET \
-				+ sin(at * HealthBarIndicator.SHAKE_FREQ * 2.3) * se \
-				* HealthBarIndicator.SHAKE_MAX_OFFSET * 0.3
-		var c2 := center + bx * shk
-		var bw: float = half * 2.0
-		var hh: float = HealthBarIndicator.BAR_HEIGHT * bs
-		var k: int = k_plain if bw / bs < 6.0 else k_wobble
-		_bar_row(buckets._bar_bg, k, c2, bx, by, bz, bw, hh,
-				HealthBarIndicator.COLOR_BG, shown * alpha, bw / bs < 6.0)
-		_bar_row(buckets._bar_ring1, k, c2, bx, by, bz, bw, hh,
-				HealthBarIndicator.COLOR_OUTLINE, shown * alpha, bw / bs < 6.0)
-		var trail: float = float(st.get("trail", 0.0))
-		if trail > float(st.get("ratio", 0.0)) + 0.005:
-			var tw := bw * trail
-			_bar_row(buckets._bar_trail_fill,
-					k_plain if tw / bs < 6.0 else k_wobble,
-					c2 - bx * (half - tw * 0.5), bx, by, bz,
-					tw, hh, HealthBarIndicator.COLOR_TRAIL, shown * alpha, tw / bs < 6.0)
-		var fw := bw * float(st.get("ratio", 0.0))
-		if fw > 0.5 * bs:
-			_bar_row(buckets._bar_trail_fill,
-					k_plain if fw / bs < 6.0 else k_wobble,
-					c2 - bx * (half - fw * 0.5), bx, by, bz,
-					fw, hh, st.get("color", Color.WHITE), shown * alpha, fw / bs < 6.0)
-		_bar_row(buckets._bar_ring2, k, c2, bx, by, bz, bw, hh,
-				HealthBarIndicator.COLOR_OUTLINE, shown * alpha, bw / bs < 6.0)
-	# 军衔方点（血条上侧横排居中；rank0 无标记）
-	var rank: int = clampi(int(st.get("rank", 0)), 0, 3)
-	if rank > 0:
-		var ds: float = HealthBarIndicator.RANK_DOT_SIZE * bs
-		var dg: float = HealthBarIndicator.RANK_DOT_GAP * bs
-		var total := rank * ds + (rank - 1) * dg
-		var dpos := center + by * (-HealthBarIndicator.RANK_DOT_Y * bs)
-		for i in rank:
-			var p := dpos + bx * (-total * 0.5 + i * (ds + dg) + ds * 0.5)
-			_bar_row(buckets._bar_trail_fill, k_plain, p, bx, by, bz,
-					ds + 2.0 * bs, ds + 2.0 * bs, HealthBarIndicator.COLOR_BG,
-					shown * alpha, true)
-			_bar_row(buckets._bar_trail_fill, k_plain, p, bx, by, bz,
-					ds, ds, HealthBarIndicator.COLOR_RANK, shown * alpha, true)
-
-
-func _bar_row(bucket, k: int, center: Vector3, bx: Vector3, by: Vector3, bz: Vector3,
-		w: float, h: float, col: Color, a: float, plain: bool) -> void:
-	var lin := col.srgb_to_linear()   # 画布色值 → spatial 线性域
-	bucket.row(k, bx * w, by * h, bz, center,
-			Color(lin.r, lin.g, lin.b, lin.a * a), w, 1.0 if plain else 0.0, h)
+	var h := BAR_H * _depth
+	atlas.feed(get_instance_id(), _bar_state,
+			Vector3(_pos.x, _pos.y + h * ct, _pos.z - h * stn),
+			_tilt_deg, _depth, _master_alpha, _tint, _flip)

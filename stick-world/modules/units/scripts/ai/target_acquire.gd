@@ -96,7 +96,7 @@ func get_dwell() -> float:
 func advance(delta: float) -> Node:
 	_acquire_timer -= delta
 	_dwell += delta
-	if _acquire_timer > 0.0 and _tier_of(_target) <= TargetTier.OUT_OF_FIRE_RANGE:
+	if _acquire_timer > 0.0 and _tier_safe(_target) <= TargetTier.OUT_OF_FIRE_RANGE:
 		return _target
 	_elect()
 	return _target
@@ -104,7 +104,7 @@ func advance(delta: float) -> Node:
 
 ## 当前目标是否超追击带（behavior_attack._is_beyond_leash 转发；测试观测面）
 func is_beyond_leash() -> bool:
-	return _tier_of(_target) >= TargetTier.UNREACHABLE
+	return _tier_safe(_target) >= TargetTier.UNREACHABLE
 
 
 # ─────────────────────────────── 选举（感知拍）────────────────────────────────
@@ -148,10 +148,10 @@ func _elect() -> void:
 func _should_switch_to(candidate: Node) -> bool:
 	if candidate == null or not is_instance_valid(candidate):
 		return false
-	var cur_tier: int = _tier_of(_target)
+	var cur_tier: int = _tier_safe(_target)
 	if cur_tier >= TargetTier.UNREACHABLE:
 		return true
-	var cand_tier: int = _tier_of(candidate)
+	var cand_tier: int = _tier_safe(candidate)
 	if cand_tier < cur_tier:
 		return true
 	if cand_tier > cur_tier:
@@ -179,7 +179,7 @@ func _valid_forced() -> Node:
 		return null
 	var ok: bool = is_instance_valid(_forced_target) \
 			and not (_forced_target.has_method("is_dead") and _forced_target.is_dead())
-	if ok and _tier_of(_forced_target) >= TargetTier.UNREACHABLE:
+	if ok and _tier_safe(_forced_target) >= TargetTier.UNREACHABLE:
 		ok = false
 	if not ok:
 		_forced_target = null
@@ -204,11 +204,19 @@ func _post_guard() -> void:
 	if _target == null or entity == null or not is_instance_valid(entity):
 		return
 	if entity.has_method("holds_post") and entity.holds_post() \
-			and _tier_of(_target) >= TargetTier.UNREACHABLE:
+			and _tier_safe(_target) >= TargetTier.UNREACHABLE:
 		_target = null
 
 
 # ─────────────────────────────── 内部 ────────────────────────────────
+
+## _tier_of 的安全入口：已释放对象过类型化参数（t: Node）在调用边界即报错
+## （函数体内的 is_instance_valid 根本进不去）——先在此验活再传。
+func _tier_safe(t: Node) -> int:
+	if t == null or not is_instance_valid(t):
+		return TargetTier.LOST
+	return _tier_of(t)
+
 
 ## 目标分层：死亡/失效 = LOST；距离带三档（射程/追击带/追丢）
 func _tier_of(t: Node) -> int:

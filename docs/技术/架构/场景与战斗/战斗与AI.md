@@ -442,3 +442,10 @@ modules/combat/
 **分离椭圆口径**（单一真相源 `formation_spacing.gd`，经 `FormationAPI` 转发）：旧圆形 `SEPARATION_RADIUS=40.5` 拆双轴——`SEPARATION_RADIUS_X=48`（横向）/ `SEPARATION_RADIUS_Y=72`（纵深，约横向 1.5 倍；billboard 竖长卡纵深视觉重叠是"排列太密集"主因）；`SEPARATION_RADIUS` 保留为兼容别名（=X）。数值【提案/待定·待实测校准】。不变式：碰撞体宽 < X ≤ 横向间距 < Y ≤ 列间距。**椭圆判定的消费方改造**（entity_motion `_apply_separation`/`_apply_static_separation`、battle_sim 分离循环，位置见收线报告清单）由集成批次落，改前消费方经别名自动跟随横向口径（圆 48）。编队列间距 `ROW_GAP_DEFAULT` 56→80（≥ Y+余量，调参表 `var_row_gap` 同步）。
 
 **班内聚拢**（`squad_cohesion.gd`，Boids 三力裁剪的二、三力；分离力归椭圆分离）：聚拢弹簧 = 单位距本班质心超过班散布半径（8 人班 140px、每增 1 人 +6）才回拉，随超出距离线性增强、上限封顶（220）——**死区内零施力，只拉掉队的不吸站好的**；对齐 = 行军速度向班均速收敛（班均速 > 20 才生效，站桩不抖）。门控：接战中（behavior=attack）回拉减半；撤退/避战（retreat/seek_cover）全零。消费出口 `FormationSystem.get_unit_cohesion_steer(unit)`（转向建议，加速度量纲）——**力的施加经消费方转向通道（entity_motion 集成清单见收线报告），不直改位置**。
+
+**运动质感四机制**（批3 治"热锅蚂蚁"，SWL 语义同构，`entity_motion.gd`/`stickman_entity.gd`/`battle_sim.gd`）：
+
+- **facing 滞回**（`note_move_facing`，0.25s）：反向移动意图连续持续才放行翻面请求——0.5s 节流只限速率（意图高频反号时每个节流窗放行一次照样甩头），滞回让瞬时反号攒不满窗。附身豁免；`face_battle_dir` 等稳定朝向源不经此闸（直接走节流）。
+- **分离不反转意图**（`_sep_no_reverse`，sim/节点双链同口径）：SWL PushApart 推的是刚体位置、从不反转移动意图——旧归一混合下逆意图推力压过意图即倒走（朝向翻转源头之一）。现反向推力压过走力 = **零速顶住**（velocity=0 自动落进卡死看门狗的无意图豁免，压阵单位不再被误判卡死吃随机推力），否则按横向分量偏航全速前进。前向/顶住二值，硬重叠归位置修正。
+- **分离错峰**：节点链扫描按实例奇偶相位错开（`_sep_phase`）；sim 链配对半交替（每对重叠偶轮低 sid 侧吃全额修正、奇轮高 sid 侧——两轮合计仍推完整重叠量，全场不再 15Hz 同刻同拍弹开成波浪）。
+- **换档斜坡**（`_speed_mult_chain` 单点维护倍率链）：run 档进/退/强制跑全部加速度限幅逼近不瞬跳（SWL walkPower/Run 力模型的连续速度观感等价物），退档减速带内维持跑步步态（步频随速度联动），掉进走速带自然换 walk。

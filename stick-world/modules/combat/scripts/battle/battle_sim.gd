@@ -365,6 +365,10 @@ func tick(delta: float) -> void:
 ## 分离：网格重建 + 内联邻域修正（soft-body 位置修正，与旧链
 ## _apply_static_separation 同语义：重叠一半互推、先累加再限幅、死者除外）。
 func _tick_separation() -> void:
+	## 配对半交替错峰（批3）：每个重叠对偶轮由低 sid 侧吃全额修正、奇轮高
+	## sid 侧——全场不再同刻同拍双侧弹开（15Hz 齐步脉冲=波浪抽动源）；两轮
+	## 合计仍推完整重叠量，成对解开速率不变。sid 比较确定性，回放不漂移。
+	var pair_round_low: bool = ((_sep_counter / SEP_RATE_DIV) % 2) == 0
 	_grid.clear()
 	var n: int = entities.size()
 	for sid in n:
@@ -406,6 +410,9 @@ func _tick_separation() -> void:
 					var oid: int = sid_v
 					if oid == sid:
 						continue
+					# 本轮该 oid→sid 方向吃修正吗（配对半交替，见函数头）
+					if (oid > sid) != pair_round_low:
+						continue
 					var ox: float = pos_x[oid]
 					var oy: float = pos_y[oid]
 					var dx: float = px - ox
@@ -420,12 +427,13 @@ func _tick_separation() -> void:
 						continue
 					var dist: float = sqrt(d_sq)
 					if dist <= 0.001:
-						# 完全重叠：固定向上推开（旧链同语义；纵深轴为名义尺度）
-						total_y -= SEPARATION_RADIUS_Y * 0.5
+						# 完全重叠：固定向上推开（旧链同语义；纵深轴为名义尺度）；
+						# 本侧吃全额（对面本轮不动）
+						total_y -= SEPARATION_RADIUS_Y
 						continue
-					# 重叠量的一半推给自己（对方同刻也推自己，双向合计推开重叠量）；
+					# 本侧吃整个重叠量（对面本轮不动，两轮合计=旧链双侧各半×两轮）；
 					# 深度按椭圆归一折算（纵深轴名义尺度）
-					var w: float = (1.0 - sqrt(e_sq)) * SEPARATION_RADIUS_Y * 0.5 / dist
+					var w: float = (1.0 - sqrt(e_sq)) * SEPARATION_RADIUS_Y / dist
 					total_x += dx * w
 					total_y += dy * w
 		if total_x != 0.0 or total_y != 0.0:

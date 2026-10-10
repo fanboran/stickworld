@@ -214,6 +214,12 @@ var _last_direction_change_frame: int = -1
 ## 0.5s × 30Hz = 15 帧——SW3 官方注释原话"Anti-jitter for very fast melee units
 ## that overshoot their melee point"）
 const FACING_RATE_LIMIT_FRAMES: int = 15
+## facing 滞回窗（批3 源治热锅蚂蚁）：反向移动意图须连续持续此时长才放行
+## 翻面请求。节流只限翻面速率——意图高频反号时每个节流窗放行一次照样甩头；
+## 滞回让瞬时反号（分离推挤换边/槽位路径横穿/y 微移）攒不满窗根本翻不动
+const FACING_PERSIST_SECS: float = 0.25
+## 反向移动意图连续持续时间（note_move_facing 累积，翻面放行判据）
+var _facing_desire_acc: float = 0.0
 ## 当前动画名
 var _current_anim: String = "idle"
 ## 散步模式（true=只走不跑，按 Alt 切换）
@@ -270,6 +276,8 @@ var _ai_tick_counter: int = 0
 var _ai_phase: int = 0
 var _ai_rate_div: int = 2
 var _sep_rate_div: int = 2
+## 分离扫描相位（实例奇偶——批3 错峰：扫描帧按奇偶错开，全场不同刻同拍）
+var _sep_phase: int = 0
 
 # ─────────────────────────────── 群体分离（防叠人/1字长蛇）────────────────────────────────
 ## 分离检测半径（真身与推力参数在 entity_motion.gd；bench_units_main.gd 直读本壳）。
@@ -384,6 +392,7 @@ func _ready() -> void:
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
 	_ai_phase = int(get_instance_id() % 2)
+	_sep_phase = _ai_phase
 	# 30Hz 物理刻下同样保持隔刻节流（perf/battle-30fps：反转原"降级放弃节流"分支）。
 	# 60Hz 时代设计的分频在 30Hz 下若退化为 div=1，AI 行为 update（逐刻 duck-typing
 	# + 目标全敌打分）与分离网格查询会全部逐刻全量跑满。div=2 时：AI 行为按 _ai_phase
@@ -563,7 +572,7 @@ func _physics_process(delta: float) -> void:
 		# sim 模式由 BattleSim._tick_separation 批处理（网格重建+内联修正），此处跳过
 		if not _sim_active():
 			_sep_frame_counter += 1
-			if _sep_frame_counter % _sep_rate_div == 0:
+			if _sep_frame_counter % _sep_rate_div == _sep_phase:
 				_motion._apply_static_separation()
 
 	if _sim_active():
@@ -1370,6 +1379,18 @@ func _set_facing_rate_limited(new_facing: int) -> bool:
 	_facing = new_facing
 	_apply_scale()
 	return true
+
+
+## 移动侧意图喂入（批3 facing 滞回，_apply_movement 每物理帧调用）：
+## 返回该侧翻面请求是否放行——反向意图连续 ≥ FACING_PERSIST_SECS 才 true。
+## 附身豁免（手控直给）；face_battle_dir 等稳定朝向源不经本闸（直接走
+## try_set_facing 的节流），站定收口不被移动滞回卡住。
+func note_move_facing(side: int, delta: float) -> bool:
+	if is_possessed() or side == 0 or side == _facing:
+		_facing_desire_acc = 0.0
+		return true
+	_facing_desire_acc += delta
+	return _facing_desire_acc >= FACING_PERSIST_SECS
 
 
 ## 战斗朝向锁（behavior_attack 置位：有活跃攻击目标时 true——朝向归

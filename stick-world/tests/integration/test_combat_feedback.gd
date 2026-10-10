@@ -35,7 +35,8 @@ func _register_tests() -> void:
 	# 顺序约束：分离测试在前（需要两个**活**单位），
 	# 血条死亡测试最后（会把 units[1] 打死——尸体不再参与分离/物理，P0-1 死亡收口）
 	_tests.append({"name": "血条: 组件已装配", "fn": Callable(self, "_test_bar_assembled"), "async": true})
-	_tests.append({"name": "分离: 贴近时 AI 方向被推开", "fn": Callable(self, "_test_separation_pushes"), "async": true})
+	_tests.append({"name": "分离: 不反转意图纯函数（零速顶住/前向偏航）", "fn": Callable(self, "_test_sep_no_reverse_fn")})
+	_tests.append({"name": "分离: 对顶不倒走", "fn": Callable(self, "_test_separation_pushes"), "async": true})
 	_tests.append({"name": "分离: 远处无影响", "fn": Callable(self, "_test_separation_far"), "async": true})
 	_tests.append({"name": "分离: 停住的单位被推开（防黏住）", "fn": Callable(self, "_test_static_separation"), "async": true})
 	_tests.append({"name": "血条: 满血圆点/掉血展开横条/比例正确", "fn": Callable(self, "_test_bar_visibility"), "async": true})
@@ -188,7 +189,25 @@ func _place_x(u: Node, x: float) -> void:
 	u.global_position.x = clampf(x, m.map_left + 60.0, m.map_right - 60.0)
 
 
-## 群体分离：贴近时 AI 移动方向被推开
+## 分离不反转意图的纯函数契约（批3）：反向推力压过走力=零速顶住（ZERO），
+## 否则按横向分量偏航全速前进（单位长）；前向/顶住二值，永不倒走。
+func _test_sep_no_reverse_fn() -> void:
+	var motion: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
+	var dir_r := Vector2(1, 0)
+	# 纯对顶：意图(1,0)+逆推力(-1.6,0) → 零速顶住
+	_runner.assert_true(motion._sep_no_reverse(Vector2(-0.6, 0), dir_r) == Vector2.ZERO,
+			"反向推力压过走力应零速顶住")
+	# 横推（垂直分量，不逆意图）：保持单位长偏航
+	var lat: Vector2 = motion._sep_no_reverse(Vector2(1.0, 0.2), dir_r)
+	_runner.assert_true(is_equal_approx(lat.length(), 1.0) and lat.x > 0.9,
+			"横推应偏航不减速（单位长），实际 %s" % str(lat))
+	# 强横推弱逆推（净投影仍>0）：前向偏航
+	var weak_opp: Vector2 = motion._sep_no_reverse(Vector2(0.3, 0.9), dir_r)
+	_runner.assert_true(weak_opp.x > 0.0 and is_equal_approx(weak_opp.length(), 1.0),
+			"净前向推挤应保持前进（单位长），实际 %s" % str(weak_opp))
+
+
+## 群体分离：对顶不倒走（分离不反转意图）——批3 契约
 func _test_separation_pushes() -> void:
 	var a: Node = _helper.units[0]
 	var b: Node = _helper.units[1]
@@ -199,18 +218,21 @@ func _test_separation_pushes() -> void:
 	_place_x(a, 1000.0)
 	_place_x(b, a.global_position.x + 20.0)
 	await get_tree().physics_frame
-	# a 朝右移动（dir=+x），b 在右方应把 a 的移动方向推开（x 速度下降/y 偏离）
+	# a 朝右移动（dir=+x），b 在正右方对顶——批3 分离不反转意图（SWL PushApart
+	# 推位置不推意图）：对顶全程 vel.x 不取负（顶住/前进均可，倒走不可）。
+	# （纯函数契约另见"分离: 不反转意图纯函数"用例；重叠解开速率属整场动态，
+	# 由 --twitch 探针的待机漂移指标对账，不在此断言——AI 自治意图会盖掉
+	# 测试输入，多帧位置断言天生脆弱）
 	if not a.has_method("ai_move"):
 		_runner.assert_true(false, "实体缺 ai_move")
 		return
 	a.ai_move(Vector2(1, 0), false)
-	# 物理行为断言等物理帧（30Hz 物理 + headless 高渲染帧率下，
-	# process_frame 不保证物理帧已跑——分离修正在 _physics_process 里）
-	await get_tree().physics_frame
-	# 读 a 的 velocity（物理帧已应用分离修正）
+	# 等 12 物理帧：速度爬升 + 对顶失速进入稳态（物理行为断言等物理帧——
+	# 30Hz 物理 + headless 高渲染帧率下 process_frame 不保证物理帧已跑）
+	for i in 12:
+		await get_tree().physics_frame
 	var vel: Vector2 = a.velocity
-	# 纯右向 = (speed, 0)；被推开后应偏离 x 轴（y 分量非零或 x 速度低于全速）
-	_runner.assert_true(absf(vel.y) > 5.0 or vel.x < 100.0, "贴近友军时移动方向应被推开，vel=%s" % str(vel))
+	_runner.assert_true(vel.x >= -1.0, "对顶友军时不倒走（分离不反转意图），vel=%s" % str(vel))
 	a.ai_stop()
 
 

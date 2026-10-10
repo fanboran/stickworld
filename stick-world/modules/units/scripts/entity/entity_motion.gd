@@ -87,7 +87,9 @@ func _blocking_speed_mult() -> float:
 	return 1.0
 
 
-func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
+## 移速倍率链（地形×档案×减速态×持盾×护甲）——加速/减速/换档斜坡共用，
+## 单点维护防漂移（原减速路径漏 slow_mult 一项，斜坡化后两路同源）
+func _speed_mult_chain() -> float:
 	var se: Node = _entity.get_status_effects()
 	if not _entity._se_checked:
 		_entity._se_checked = true
@@ -97,24 +99,31 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	var slow_mult: float = 1.0
 	if se != null and _entity._se_has_speed_mult:
 		slow_mult = se.get_speed_mult()
-	# 持盾移速惩罚（盾姿态分层，计划 5）：举盾行军更沉稳（档案 block_move_mult）
-	var block_mult: float = _blocking_speed_mult()
-	var mult: float = _terrain_speed_mult() * _entity.move_speed_mult * slow_mult * block_mult * _entity.armor_speed_factor
+	return _terrain_speed_mult() * _entity.move_speed_mult * slow_mult \
+			* _blocking_speed_mult() * _entity.armor_speed_factor
+
+
+func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
+	var mult: float = _speed_mult_chain()
 	var walk_cap: float = _entity.WALK_SPEED * mult
 	var run_cap: float = _entity.RUN_SPEED * mult
 	# 攻击动画期间不切移动动画（SWL 攻击与移动解耦：走 A 边跑边拉弓，
 	# 动画播完由 rig animation_finished 回切；否则 run/walk 每帧覆盖拉弓动画）
 	var attacking: bool = _entity._current_anim.begins_with("attack")
 	if _entity._is_running:
-		_entity._current_speed = run_cap
+		# 换档斜坡（批3）：跑档速度不瞬设——加速度限幅逼近跑速（SWL walkPower/Run
+		# 力模型的连续速度观感等价物；walk→run 瞬跳 160→320 是速度硬跳观感源）；
+		# 步频随爬升速度联动（攻击期间不动动画速率）
+		_entity._current_speed = move_toward(_entity._current_speed, run_cap, _entity.accel * delta)
+		if not attacking:
+			_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		return
 	_entity._current_speed += _entity.accel * delta
 	if allow_run and _entity._current_speed >= walk_cap:
+		# 进跑档只翻档位不跳速度——速度由跑档分支斜坡爬升
 		_entity._is_running = true
-		_entity._current_speed = run_cap
 		if not attacking:
 			_entity._visual.play("run")
-			_entity._visual.set_anim_speed(run_cap / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 	else:
 		# 不允许跑时，速度封顶在 walk_cap（受地形影响）
 		_entity._current_speed = minf(_entity._current_speed, walk_cap)
@@ -126,9 +135,10 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 
 func _handle_deceleration(delta: float) -> void:
 	if _entity._is_running:
+		# 换档斜坡（批3）：退档不瞬降（原 run→walk 为 320→160 瞬跳+立即换 walk）——
+		# 速度保留由下方减速段统一下坡；跑速带内维持跑步步态（步频随速度联动，
+		# 不提前换 walk——高速播 walk=快走滑步），掉进走速带自然换档
 		_entity._is_running = false
-		_entity._current_speed = _entity.WALK_SPEED * _terrain_speed_mult() * _entity.move_speed_mult * _blocking_speed_mult() * _entity.armor_speed_factor
-		_entity._visual.play("walk")
 	# 攻击动画期间不切移动动画（同 _handle_acceleration：走 A 保护）
 	var attacking: bool = _entity._current_anim.begins_with("attack")
 	if _entity._current_speed > 0:
@@ -137,6 +147,12 @@ func _handle_deceleration(delta: float) -> void:
 			_entity._current_speed = 0.0
 			if not attacking:
 				_entity._visual.play("idle")
+		elif _entity._current_speed > _entity.WALK_SPEED * _speed_mult_chain():
+			# 跑速带内减速：跑步步态+步频联动
+			if not attacking:
+				if _entity._current_anim != "run":
+					_entity._visual.play("run")
+				_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		else:
 			if not attacking and _entity._current_anim == "idle":
 				_entity._visual.play("walk")
@@ -167,6 +183,18 @@ func _sep_ellipse_d(offset: Vector2) -> float:
 	return sqrt(ex * ex + ey * ey)
 
 
+## 分离不反转意图（批3 治"分离推挤换边"）：SWL PushApart 推的是刚体位置、
+## 从不反转移动意图——归一混合下逆意图分量一旦压过意图本身，单位就会倒着走
+## （朝向翻转/热锅蚂蚁源头之一）。反向推力压过走力 = **零速顶住**（SWL 走力
+## 对抗推力的失速观感；velocity=0 自动落进卡死看门狗的无意图豁免，压阵单位
+## 不再被误判卡死吃随机推力）；否则按横向分量偏航全速前进。前向/顶住二值，
+## 硬重叠交给静态分离的位置修正。
+static func _sep_no_reverse(mixed: Vector2, dir_n: Vector2) -> Vector2:
+	if mixed.dot(dir_n) < 0.0:
+		return Vector2.ZERO
+	return mixed.normalized()
+
+
 ## 班内一次性归队（SWL 滞回+节流直译；内核 formation/squad_cohesion——
 ## JOIN/SETTLE 滞回进/出判定、0.4s 触发节流、接战/避战战斗优先全在内核门控）。
 ## 非归队态内核返回 ZERO（零施力：不打扰任务执行——站桩不拉、行军不扰、
@@ -194,7 +222,7 @@ func _apply_separation(dir: Vector2) -> Vector2:
 		var result := dir
 		var push_sim: Vector2 = _entity._sim.separation_push_ellipse(_entity._sim_sid)
 		if push_sim != Vector2.ZERO:
-			result = (result + push_sim * SEPARATION_FORCE).normalized()
+			result = _sep_no_reverse(result + push_sim * SEPARATION_FORCE, dir_n)
 		# 让路扫描与 AI 决策同拍（相位错峰，免逐帧邻居查询分配）；帧间持有缓存向量
 		if _entity._ai_tick_counter % _entity._ai_rate_div == _entity._ai_phase % _entity._ai_rate_div:
 			_yield_cache = _sim_ally_yield(dir_n)
@@ -204,8 +232,9 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	var map_ref: Node2D = _entity._map_ref
 	if map_ref == null or not is_instance_valid(map_ref) or not _entity._map_has_query:
 		return dir
-	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）
-	if _entity._sep_frame_counter % _entity._sep_rate_div != 0:
+	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）；
+	# 相位按实例奇偶错开（批3 错峰）——全场不再同刻同拍扫描修正
+	if _entity._sep_frame_counter % _entity._sep_rate_div != _entity._sep_phase:
 		return dir
 	var push := Vector2.ZERO
 	var yield_side: float = 0.0
@@ -236,7 +265,7 @@ func _apply_separation(dir: Vector2) -> Vector2:
 		return dir
 	var result := dir
 	if push != Vector2.ZERO:
-		result = (result + push * SEPARATION_FORCE).normalized()
+		result = _sep_no_reverse(result + push * SEPARATION_FORCE, dir_n)
 	if yield_mag > 0.0:
 		result = (result + _ally_yield_lateral(dir_n, yield_side, yield_mag)).normalized()
 	return result
@@ -335,12 +364,22 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 		if dir.length() > 1.0:
 			dir = dir.normalized()
 		if dir.x != 0:
-			# 朝向节流走闸（SWL DIRECTION_CHANGE_FREQUENCY=0.5 直译）：节流窗内
-			# 保持原朝向（人向新向走、脸缓半拍转——SWL 转身节奏），不逐帧甩头
-			_entity.try_set_facing(1 if dir.x > 0 else -1)
+			# facing 滞回（批3 源治热锅蚂蚁）+ 朝向节流走闸（SWL
+			# DIRECTION_CHANGE_FREQUENCY=0.5 直译）：反向意图连续持续
+			# FACING_PERSIST_SECS 才放行翻面请求——节流窗内保持原朝向
+			# （人向新向走、脸缓半拍转——SWL 转身节奏），瞬时反号攒不满
+			# 滞回窗根本翻不动；节流兜底低频翻转
+			var side := 1 if dir.x > 0 else -1
+			if _entity.note_move_facing(side, delta):
+				_entity.try_set_facing(side)
+		else:
+			_entity.note_move_facing(0, delta)
 		if run:
 			_entity._is_running = true
-			_entity._current_speed = _entity.RUN_SPEED * _terrain_speed_mult() * _entity.move_speed_mult
+			# 换档斜坡（批3）：强制跑同样不瞬跳——AI run/walk 意图切换即速度
+			# 硬跳的主源；加速度限幅逼近跑速（步频随速度联动）
+			var run_target: float = _entity.RUN_SPEED * _terrain_speed_mult() * _entity.move_speed_mult
+			_entity._current_speed = move_toward(_entity._current_speed, run_target, _entity.accel * delta)
 			_entity._visual.play("run")
 			_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		else:

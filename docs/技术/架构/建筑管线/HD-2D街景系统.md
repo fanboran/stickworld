@@ -1,6 +1,6 @@
 # HD-2D 街景系统
 
-> **定位**：HD-2D 场景图的技术层单一真相源。八方旅人式呈现：3D 场景 + Blender 烘焙卡 + 2D 逻辑角色经部件级直渲（3D MultiMesh 桶）站进场景。
+> **定位**：HD-2D 场景图的技术层单一真相源。八方旅人式呈现：3D 场景 + Blender 烘焙卡 + 2D 逻辑角色经整卡烘焙（char_sprite_3d SubViewport→billboard）站进场景。
 > 原型可行性论证与烘焙管线见 [`2.5D与HD-2D可行性.md`](2.5D与HD-2D可行性.md)；本文写**运行时系统**怎么设计、为什么。
 > 场景图（卷轴地图）整体架构见 [`场景与战斗架构.md`](../场景与战斗/场景与战斗架构.md)。
 
@@ -15,7 +15,7 @@
 ```
 Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ├─ buildings.py 27 装配器 → 烘建筑卡              ├─ modules/hd2d/scenes/hd2d_world.tscn  3D 世界（卡+地面+光照）
-├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world + char_rig_3d + char_direct_buckets）
+├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world + char_sprite_3d）
 ├─ nature.py 16 类 → 烘自然物卡                  ├─ Hd2dMapBase 系宿主（world 侧，MapBase 子类）
 └─ city_layout.py 规模档布局算法                  └─ 布局 JSON ←── export_city_layout.py
 
@@ -74,21 +74,19 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - **设施门控**：`supports_village_facilities()`=false 跳过 2D 建筑设施（仓库/程序化资源点）；`wants_villager_npcs()`=true 照常生成村民——两个门控分开，因为村民不需要 2D 建筑也能干活（见 2.6）。
 - **建筑宿主**：`_setup_building_hosting()`（_ready 尾部）装配 `PlacementGrid`（duck 属性 + WorldAPI 子节点名双契约，覆盖整图含负 cell）、把 3D 前排建筑/杂物/城墙带登记为 blocked（玩家建筑不叠街景）、推导 `building_baseline_offset`（楼排墙脚线中位）与逐格 `get_building_baseline_at`（建造范围压到哪栋楼卡就站那栋的 foot 线——预览/工地/成品与 3D 邻居同线；foot = 516 + z×24，实测 530~574）、补 `BuildMaskLayer`（工地占位/进度条挂载）——建造菜单→选址→占用→落位链在本图全通。建筑视觉为过渡态：2D 程序化外观叠画在画布层（画布在 3D 之上），3D 卡视觉随 plan 物化（ROOT-2）替换。
 
-### 2.4 角色渲染：2D 逻辑 + 3D 视觉（char_rig_3d.gd 直渲）
+### 2.4 角色渲染：2D 逻辑 + 3D 视觉（char_sprite_3d.gd 整卡烘焙）
 
-**为什么**：角色浮在 2D canvas 上永远盖住 3D（无遮挡/无接地/无纵深），且 2D 画布坐标与 3D 投影速度不一致（跟手框错位的根因）。定稿：**逻辑留 2D（物理/输入/AI 不动），视觉进 3D**。且本引擎组合下 **spatial 管线采样画布 RT 会在细亮线两侧产生逐通道错位的红青镶边**（自定义 shader 与 Sprite3D 同病，换格式/尺寸/过滤/MSAA 全无效，属引擎/驱动层缺陷，工程侧不可修）——任何"角色画进视口再贴 3D quad"的路线都必须回读绕行；S2 起角色改为**部件级直渲**，从根上不再过视口。
+**为什么**：角色浮在 2D canvas 上永远盖住 3D（无遮挡/无接地/无纵深），且 2D 画布坐标与 3D 投影速度不一致（跟手框错位的根因）。定稿：**逻辑留 2D（物理/输入/AI 不动），视觉进 3D**。
 
-**直渲路线（默认，S2）**：每实体一个 `char_rig_3d` 宿主——真 StickmanRig（Skeleton2D + AnimationTree + 程序化叠加全照旧）藏在隐藏 CanvasLayer 里**只解算不绘制**；晚优先级 `_process`（1100 = rig 推进(0) 与俯仰叠加(1000) 之后，写序铁律）读骨骼先序累乘，把每部件的 2D 变换折进 26° 取景平面，整段写入 `char_direct_buckets` 的全局 3D MultiMesh 桶（4 身体桶 × 不透明/渐隐双材质 + 武器/盾按纹理分桶 + 血条 wobble 相位组）。**零视口、零回读、零纹理上传**；渲染侧成本 = 部件变换数学 + 桶缓冲段写入（crowd_renderer 同量级）。
+**机制（char_sprite_3d）**：每实体一个宿主——真 StickmanRig（Skeleton2D + AnimationTree + 程序化叠加）画进该实体专属 SubViewport（transparent_bg、msaa_2d 禁用、UPDATE_ALWAYS），按节拍把视口内容回读落成**带真实 mip 链的 ImageTexture**（`_blit_capture`）喂与相机同基的 billboard quad（26° 俯角正对）。回读是绕行手段：本引擎组合下 **spatial 管线采样画布 RT 会在细亮线两侧产生逐通道错位的红青镶边**（自定义 shader 与 Sprite3D 同病，换格式/尺寸/过滤/MSAA 全无效，属引擎/驱动层缺陷，工程侧不可修），直采视口纹理不可用。
 
-- 部件几何/桶序/发射序与 2D 战场 crowd 桶同源（`crowd_renderer_bake.build_bucket_tables`：描边垫后填充置顶、腿→躯干→颈/头→臂）——两条战场观感同源。
-- 整缓冲布局（temp/mm3d_render_probe 实证）：TRANSFORM_3D 为**列连续** 12 浮点 [cx.xyz, ox, cy.xyz, oy, cz.xyz, oz] + use_colors（spatial COLOR）+ use_custom_data（INSTANCE_CUSTOM）双通道均可达 shader——与 2D MultiMesh 的行交错布局不同，勿混用。
-- 同角色部件共面，层序由 z_bias 决定（描边 −0.004 垫后、填充按发射序朝相机递进 +i×1e-5、武器 +0.008）；跨角色遮挡交深度缓冲（每部件真深度，比整卡排序更正确）。
-- **颜色空间**：画布色值喂 spatial 实例色前须过 `srgb_to_linear()`（spatial ALBEDO 是线性域，直写会在输出端被提亮一档）。
-- feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state…）与旧烘焙宿主同名同义——地图侧 `_sync_character_render` 零改动。
-- 尸体：死亡动画由 rig 播完停尾帧 + 插箭（SWL Death 轨迹），实体淡出期部件段迁入渐隐桶逐帧压 alpha。
-- 接地影/劳作条/附身四角框仍是独立 3D quad（char_sprite_3d 同款方案，随宿主走）。
-- 渲染帧插值（#9）同机制：位置物理刻双缓冲 + 渲染帧分数插值。
-- **回退闸**：`STICK_CHAR_RENDER=bake` 切回烘焙路线（char_sprite_3d SubViewport billboard）——创始人观感验收后删除。
+**已知代价（战场规模的元凶，机制级待换血）**：每角色一个常开视口（96 单位=96 视口每帧重渲）+ 回读 sync 点必须节流（FIFO 公平队列 + 每帧预算 BLIT_BUDGET + 分档节拍/坏帧闸/最小间隔）——远档姿态 10~15Hz 低频采样即"动作跳变"，满编帧时被视口成本拖进幻灯片。**此为"整卡"烘焙独有；关节烘焙（小贴图挂骨、满帧率跟随骨骼）无此类成本**——机制替换的候选方向与处置状态见交接档（战场观感重构），不在本档展开。
+
+- feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state…）由 `hd2d_map_base._sync_character_render` 逐帧驱动。
+- 尸体：死亡动画播完停尾帧 + 插箭，实体淡出期 `set_master_alpha` 压整卡透明度。
+- 接地影/劳作条/附身四角框为独立 3D quad，随宿主走。
+- 渲染帧插值（#9）：位置物理刻双缓冲 + 渲染帧分数插值。
+- 运行期注意：不要对 SubViewport 做 size 重分配——实测会永久破坏其 CanvasGroup 内容（回读全白）。
 
 ### 2.5 全融合描边（stickman_outline.gd + 双 shader）
 
@@ -102,9 +100,9 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 2. 每个零件容器挂 ID shader：把 part_id 写进 alpha（全融合=全部零件同一 ID）；
 3. CanvasGroup 自身材质 = 描边 shader：`hint_screen_texture` 采到的就是**组自身缓冲**——前景像素查 8 邻域，不同 ID 且不邻接→分隔线；背景像素邻近前景→外轮廓白线。
 
-生效范围=**烘焙回退路线**的 char_host（每角色独立 SubViewport，屏幕空间描边付得起）；直渲路线与 2D 战场 crowd 桶为**几何描边**（部件级加宽描边件垫底，同色不透明并集=剪影描边——观感同口径）。武器无描边三路径一致（见上）。
+生效范围=char_host 的每角色独立 SubViewport（屏幕空间描边付得起）；2D 战场 crowd 桶为**几何描边**（部件级加宽描边件垫底，同色不透明并集=剪影描边——观感同口径）。武器无描边两路径一致（见上）。
 
-**角色 SubViewport 禁开 msaa_2d（仅烘焙回退路线）**：描边材质经 `hint_screen_texture` 读回组缓冲，
+**角色 SubViewport 禁开 msaa_2d**：描边材质经 `hint_screen_texture` 读回组缓冲，
 msaa_2d 开着时读到未 resolve 的多重采样数据（逐通道错采样）——色散直接烘焙进
 角色贴图。视口保持 MSAA_DISABLED，边缘平滑由 px_scale 超采样承担。
 
@@ -113,15 +111,6 @@ post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工�
 开着时同样逐通道错采样——全屏 RGB 色散，草地噪点/血条镶边即此（细白线处才肉眼
 可见）。HD-2D 场景内 3D 抗锯齿走 msaa_3d 不受影响；纯 2D 场景不经 hd2d_world，
 工程级 msaa_2d=2（2D 路径抗锯齿生命线，测试金丝雀锚定）保持不动。
-
-**烘焙回退路线（char_sprite_3d `_blit_capture`；`STICK_CHAR_RENDER=bake` 显式启用）**：
-渲染机制=每角色独立 SubViewport，按节拍把视口内容回读落成**带真实 mip 链的
-ImageTexture** 喂 billboard quad——绕开 spatial 采样画布 RT 的逐通道色散（引擎层
-缺陷，见 §2.4），代价是回读 sync 点必须节流：FIFO 公平队列 + 每帧预算
-（BLIT_BUDGET）摊帧 + 分档节拍/坏帧闸/最小间隔等修补层。A/B 实测（S2，
-arena_renderperf）48v48 帧时比直渲慢 2.3~2.6×、draw calls 多 13~23×、显存多
-200~460MB——被直渲取代，代码保留至创始人观感验收后删除。运行期注意：不要对
-SubViewport 做 size 重分配——实测会永久破坏其 CanvasGroup 内容（回读全白）。
 
 **火柴人渲染踩坑备查**（本节知识曾完全无记载，复排查了两天）：
 - 骨架渲染是**全局两遍**（stickman_skeleton.gd）：所有描边层 z=-1 压底、所有填充层 z=0 置顶——肢体重叠处填充无缝融合，描边只在整体剪影外轮廓出线（"只有剪影描边"口径，与 ID Buffer 全融合同语义）。部件间相对遮挡靠填充层之间的树序（`reorder_render_order`）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。

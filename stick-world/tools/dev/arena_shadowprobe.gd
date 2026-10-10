@@ -1,8 +1,8 @@
 extends Node
-## 观察场影子/卡对账探针——由 arena_shot_boot 挂到 SceneTree.root（--probe 模式）。
-## 等揭幕后逐秒采样 N 次，对每个 StickmanEntity 打印：卡是否在 _char_map、
-## 是否已烘焙（_blit_tex 非空）、卡渲染位 vs 实体逻辑位偏差、影子是否可见、
-## 影子位 vs 卡位偏差。定位"孤儿影/缺影/偏移"三类缺陷的归属。
+## 观察场影子/宿主对账探针——由 arena_shot_boot 挂到 SceneTree.root（--probe 模式）。
+## 等揭幕后逐秒采样 N 次，对每个 StickmanEntity 打印：宿主是否在 _char_map、
+## 宿主渲染位 vs 实体逻辑位偏差、影子是否可见、影子位 vs 宿主位偏差。
+## 定位"孤儿影/缺影/偏移"三类缺陷的归属。
 
 
 const COVER_WAIT_FRAMES := 4200
@@ -57,7 +57,6 @@ func _audit() -> void:
 	var cell: float = float(hd_map.get("CELL_PX"))
 	var n_total := 0
 	var n_no_card := 0
-	var n_unbaked := 0
 	var n_no_shadow := 0
 	var n_shadow_offset := 0
 	var n_card_lag := 0
@@ -74,13 +73,9 @@ func _audit() -> void:
 		if card == null or not is_instance_valid(card):
 			n_no_card += 1
 			continue
-		var baked: bool = card.get("_blit_tex") != null
-		if not baked:
-			n_unbaked += 1
-		var shadow: Node3D = card.get("_my_shadow")
-		var quad: MeshInstance3D = card.get("_quad")
+		var shadow: Node3D = card.get("_shadow")
+		var qp: Vector3 = card.get("_pos")
 		var shadow_off := -1.0
-		var qp: Vector3 = quad.position if quad != null and is_instance_valid(quad) else Vector3.ZERO
 		if shadow == null or not is_instance_valid(shadow) or not shadow.visible:
 			n_no_shadow += 1
 		else:
@@ -99,13 +94,11 @@ func _audit() -> void:
 		var lag := Vector2(qp.x - ex, qp.z - ez).length()
 		worst_lag = maxf(worst_lag, lag)
 		if lag >= worst_lag and lag > 0.0:
-			worst_e = [ex, ez, qp.x, qp.z, body.position, quad.position]
-		if lag >= worst_lag and lag > 0.0:
-			worst_e = [ex, ez, qp.x, qp.z, body.position, quad.position]
+			worst_e = [ex, ez, qp.x, qp.z, body.position, qp]
 		if lag > 0.5:
 			n_card_lag += 1
-	print("[ShadowProbe] 实体 %d | 无卡 %d | 未烘焙 %d | 影不可见 %d | 影偏移>0.15 %d (worst %.2f) | 卡滞后>0.5格 %d (worst %.2f) | 喂入陈旧>40px %d (worst %.0fpx)" % [
-		n_total, n_no_card, n_unbaked, n_no_shadow, n_shadow_offset, worst_shadow, n_card_lag, worst_lag, n_fed_stale, worst_fed_stale])
+	print("[ShadowProbe] 实体 %d | 无宿主 %d | 影不可见 %d | 影偏移>0.15 %d (worst %.2f) | 宿主滞后>0.5格 %d (worst %.2f) | 喂入陈旧>40px %d (worst %.0fpx)" % [
+		n_total, n_no_card, n_no_shadow, n_shadow_offset, worst_shadow, n_card_lag, worst_lag, n_fed_stale, worst_fed_stale])
 	if not worst_e.is_empty():
 		print("[ShadowProbe]   worst: 实体格(ex=%.2f,ez=%.2f) 卡格(qx=%.2f,qz=%.2f) | 实体2D=%s 卡local=%s" % [
 			worst_e[0], worst_e[1], worst_e[2], worst_e[3], worst_e[4], worst_e[5]])

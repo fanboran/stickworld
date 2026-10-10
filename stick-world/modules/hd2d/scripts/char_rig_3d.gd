@@ -1,12 +1,13 @@
 extends Node3D
-## char_rig_3d.gd —— 关节烘焙路线的角色宿主（char_sprite_3d 的 duck 兼容替身）。
+## char_rig_3d.gd —— 关节烘焙路线的角色视觉宿主（HD-2D 角色渲染唯一路线，
+## 2026-10-10 创始人观感验收通过后整卡烘焙退役、本路线转正）。
 ##
-## 是什么：每实体一个本实例。与烘焙路线同构地持有一份真 StickmanRig
-##（Skeleton2D + AnimationTree + 程序化叠加全照旧，藏在隐藏 CanvasLayer 里只
-## 解算不绘制——CanvasItem 隐藏只停绘制，_process/动画推进不受影响），但
-## **不再装配 SubViewport/回读烘焙**：晚优先级 _process（1100 = rig 推进(0)
-## 与俯仰叠加(1000) 之后，写序铁律）把部件折进 26° 取景平面，整段写入
-## char_direct_buckets 的全局 3D MultiMesh 桶。零逐帧视口、零逐帧回读。
+## 是什么：每实体一个本实例。持有一份真 StickmanRig（Skeleton2D +
+## AnimationTree + 程序化叠加全照旧，藏在隐藏 CanvasLayer 里只解算不绘制
+## ——CanvasItem 隐藏只停绘制，_process/动画推进不受影响）：晚优先级
+## _process（1100 = rig 推进(0) 与俯仰叠加(1000) 之后，写序铁律）把部件
+## 折进 26° 取景平面，逐行写入 char_direct_buckets 的全局 3D MultiMesh 桶。
+## 零逐帧视口、零逐帧回读（预烘贴图一次性离线生成）。
 ##
 ## 部件来源（忠实搬运立项时的矢量渲染架构，stickman_skeleton.build_limbs）：
 ## rig 因 STICK_BATCH_RIG=0 真建了矢量部件节点（sprite_* 容器 + stroke/fill
@@ -23,16 +24,16 @@ extends Node3D
 ##     直接改节点宽度/半径，本侧逐帧读节点；宽度变化按指纹懒触发图集重烘
 ##     （格位量化恒定，重烘只换贴图像素，零闪变）。
 ##
-## 尺寸契约（与烘焙路线逐位同源，见 char_sprite_3d 尺寸契约段）：
+## 尺寸契约（历史沿革出自整卡烘焙的视口契约，现由本路线独承）：
 ##   rig px → 世界单位 S = RIG_SCALE(0.35625) × PX(1/24) = 0.01484375；
 ##   FOOT_ANCHOR(3,141) 钉在角色世界脚点；depth 纵深缩放乘进 S。
-## tilt 基（与 char_sprite_3d._cam_basis 同式）：X=(1,0,0) 右，Y=(0,cos t,−sin t)
-## 上仰，Z=(0,sin t,cos t) 朝相机。rig 空间 y-down，折 3D 时 y 取负。
-## feed API（set_world_pos/set_anim/set_weapon_type/…）与 char_sprite_3d 同名
-## 同义——hd2d_map_base._sync_character_render 零改动切换路线。
+## tilt 基：X=(1,0,0) 右，Y=(0,cos t,−sin t) 上仰，Z=(0,sin t,cos t) 朝相机。
+## rig 空间 y-down，折 3D 时 y 取负。
+## feed API（set_world_pos/set_anim/set_weapon_type/…）由
+## hd2d_map_base._sync_character_render 逐帧驱动。
 ##
 ## 血条：原版 health_bar_indicator 的驱动镜像画进共享图集视口
-##（char_bar_atlas，与烘焙路线同一 apply_bar_state 协议），3D 面片贴头顶锚点。
+##（char_bar_atlas，原版 HealthBarIndicator 同一 apply_bar_state 协议），3D 面片贴头顶锚点。
 ##
 ## 尸体：死亡动画由 rig 播完停尾帧（状态机 dead 态），实体淡出期
 ## set_master_alpha<1 把部件段迁入渐隐桶逐帧压 alpha——rig 姿态 + 插箭，
@@ -43,12 +44,7 @@ const ANIMS := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const RIG_SCENE_PATH: String = StickRigAPI.RIG_SCENE_PATH
 
-## 路线开关：默认 bake（烘焙卡路线为创始人定稿观感）；STICK_CHAR_RENDER=joint3d
-## 显式开 3D 化关节烘焙实验路线（观感未过验收前不动默认）。
-static func route_enabled() -> bool:
-	return OS.get_environment("STICK_CHAR_RENDER") == "joint3d"
-
-const RIG_SCALE := 0.35625   # 与烘焙路线同值（rig px → SV px；SV px → 世界 = PX）
+const RIG_SCALE := 0.35625   # rig px → SV px（SV px → 世界 = PX；比例锚见类头）
 const PX := 1.0 / 24.0
 const S := RIG_SCALE * PX    # rig px → 世界单位
 const FOOT_ANCHOR := Vector2(3.0, 141.0)
@@ -116,7 +112,7 @@ var _bar_state: Dictionary = {}
 var _shadow: MeshInstance3D = null
 var _shadow_mat: ShaderMaterial = null
 
-# 镜像通道缓存（与 char_sprite_3d 同义）
+# 镜像通道缓存
 var _anim_seq: int = -2
 var _swap_state := ""
 var _swap_anim := ""
@@ -127,7 +123,7 @@ var _stance_idle := ""
 var _stable_idle_variant := ""
 var _shield_on := false
 
-# 渲染帧插值（#9，与烘焙路线同机制）
+# 渲染帧插值（#9：sim 30Hz 写位置 → 渲染帧插值）
 var _pos_prev := Vector3.ZERO
 var _pos_cur := Vector3.ZERO
 var _pos_pf := -1
@@ -149,7 +145,7 @@ func build(world: Node, buckets: Node, rig_parent: Node2D, anim: String, tilt_de
 	_pure_sim = DisplayServer.get_name() == "headless"
 	OS.set_environment("STICK_BATCH_RIG", "0")  # 矢量部件真建（读节点搬运的唯一来源）
 	var inst: Node2D = load(RIG_SCENE_PATH).instantiate()
-	inst.set_script(null)  # 摘掉演示控制器（同烘焙路线）
+	inst.set_script(null)  # 摘掉演示控制器
 	_rig_parent.add_child(inst)
 	_rig = inst.get_node("OutlineGroup/StickmanRig") as Node2D
 	_rig.play(anim)
@@ -277,9 +273,9 @@ func _exit_tree() -> void:
 		if _buckets.get("bar_atlas") != null:
 			(_buckets.get("bar_atlas") as Node).release(get_instance_id())
 
-# ─────────────────────────── feed API（duck 兼容 char_sprite_3d） ───────────────────────────
+# ─────────────────────────── feed API（hd2d_map_base 逐帧驱动） ───────────────────────────
 
-## 逐帧世界摆位（烘焙路线同参：x/z 格坐标、朝向、纵深缩放、地面抬升）
+## 逐帧世界摆位：x/z 格坐标、朝向、纵深缩放、地面抬升
 func set_world_pos(x: float, z: float, flip: bool, depth: float = 1.0,
 		ground_lift: float = 0.0) -> void:
 	_flip = flip
@@ -336,7 +332,7 @@ func set_master_alpha(a: float) -> void:
 	_master_alpha = a
 
 
-## 描边 zoom 补偿（与烘焙路线同式转发）：世界 zoom 作为等效画布缩放推给
+## 描边 zoom 补偿：世界 zoom 作为等效画布缩放推给
 ## rig（outline_zoom_external 停自动补偿，apply_outline_zoom 直接改矢量节点
 ## 宽度/半径），本侧线宽逐帧读节点即恒为补偿后真值，圆半径置脏重读。
 func set_outline_zoom(z: float) -> void:
@@ -348,7 +344,7 @@ func set_outline_zoom(z: float) -> void:
 	_circ_stale = true
 
 
-## 武器镜像（挂点补偿口径与 char_sprite_3d.set_weapon_type 同式）：读武器场景
+## 武器镜像（挂点补偿口径与 WeaponMount._mount_one 同式）：读武器场景
 ## Sprite 贴图 + GripPoint 补偿 + 手骨下标，不建可见节点（贴图分桶直渲）。
 func set_weapon_type(wt: int) -> void:
 	if _pure_sim or _weapon_type_cached == wt:
@@ -422,7 +418,7 @@ func set_stance_anims(walk_anim: String, idle_anim: String) -> void:
 		_rig.set_state_anim("idle", _stable_idle_variant)
 	else:
 		_rig.set_state_anim("idle", idle_anim)
-	# 换装不重播（churn 治理，同烘焙路线注释）
+	# 换装不重播（churn 治理：重播会把 walk/idle 拉回第 0 帧）
 
 
 func apply_health_state(s: Dictionary) -> void:
@@ -441,7 +437,7 @@ func set_chars_visible(v: bool) -> void:
 	_hidden = not v
 
 
-# ── 3D 头顶劳作进度条 + 附身四角框（char_sprite_3d 同款 quad 方案）──
+# ── 3D 头顶劳作进度条 + 附身四角框（quad 方案）──
 
 const WP_SIZE := Vector2(1.3, 0.16)
 const WP_LIFT := -0.15
@@ -505,7 +501,7 @@ func _layout_work_bar() -> void:
 	_wp_fill.position = Vector3(anchor.x - WP_SIZE.x * 0.5 * (1.0 - r) * d, anchor.y, anchor.z + 0.02)
 
 
-## 附身四角框（possessed 玩家专用，贴地 quad——char_sprite_3d 同款）
+## 附身四角框（possessed 玩家专用，贴地 quad）
 static var _bracket_tex: ImageTexture = null
 
 static func _get_bracket_tex() -> ImageTexture:

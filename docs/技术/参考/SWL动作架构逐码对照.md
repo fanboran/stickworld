@@ -21,9 +21,9 @@
 | 单位对象 | `Unit : MonoBehaviour`——逻辑(Update)与表现(SkeletonAnimation)同体同进程 | 逻辑/表现分离：battle_sim 确定性批模拟（SoA 数据）+ 表现镜像链 |
 | 动画播放 | `Spine.AnimationState`（track 制）每单位一套 | `AnimationTree` 状态机 + LOD 节流手动 advance（`stickman_rig._process`） |
 | 表现写入时机 | `LateUpdate()`（动画应用后、渲染前）——**运行时改骨的合法窗口** | 帧尾晚优先级 `_process`（`process_priority=1000`）+ 批渲染标脏 |
-| 渲染 | 每单位 SkeletonRenderer（Unity 侧合批） | SubViewport 烘焙成卡 → `char_sprite_3d` billboard / 远景 MultiMesh 桶 |
+| 渲染 | 每单位 SkeletonRenderer（Unity 侧合批） | 预烘关节贴图挂骨 → 全局 MultiMesh 桶（`char_rig_3d` 关节烘焙） |
 
-**结构差异的代价【事实】**：SWL 里"直写表现"一行代码的事（`LateUpdate` 里 `FindBone().rotation = aim`），本作要走完整镜像链（实体态 → visual_controller → feed → char_sprite_3d → rig → overlay），且**必须晚于动画推进**。弓手俯仰第一版臂写挂在 `process_frame` 信号——该信号先于一切 `_process`（含 rig 的 AnimationTree advance），先写后必被轨道值覆盖，全帧失效、战场读数平射（探针 `tools/dev/aim_pitch_probe` 0 差异实锤）。这是镜像架构自带的坑，本文档后半每条链路都标注了对应窗口。
+**结构差异的代价【事实】**：SWL 里"直写表现"一行代码的事（`LateUpdate` 里 `FindBone().rotation = aim`），本作要走完整镜像链（实体态 → visual_controller → feed → char_rig_3d → rig → overlay），且**必须晚于动画推进**。弓手俯仰第一版臂写挂在 `process_frame` 信号——该信号先于一切 `_process`（含 rig 的 AnimationTree advance），先写后必被轨道值覆盖，全帧失效、战场读数平射（探针 `tools/dev/aim_pitch_probe` 0 差异实锤）。这是镜像架构自带的坑，本文档后半每条链路都标注了对应窗口。
 
 ## 2. 骨骼层：逐骨对应表
 
@@ -133,7 +133,7 @@ SWL:  ShouldAim(站定+目标进射程) → isAiming → 播 Draw ──0.5s─�
 
 | SWL | 本作 | 注记 |
 |---|---|---|
-| SkeletonRenderer 逐单位网格 | 整卡烘焙 char_sprite_3d（每角色视口+回读，机制级待换血，见交接档） | 语义同构=逐单位真骨架渲染；机制成本见交接档 |
+| SkeletonRenderer 逐单位网格 | 关节烘焙 char_rig_3d（预烘关节贴图挂骨→全局 MultiMesh，2026-10-10 转正） | 语义同构=逐单位真骨架渲染；零逐帧视口零逐帧回读 |
 | `IsInSimpleColliderMode` 大群降耗 | sim 模式批推进 + 报表节流 | 架构不同 |
 | 帧同步 | battle_sim 确定性（墙钟/RNG 治理过的双体制） | 本作强项 |
 

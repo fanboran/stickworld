@@ -22,7 +22,6 @@ const ANIMS_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/stickman
 ## 头顶血条脚本（HealthBarIndicator：HP 显示 + crowd GPU 烘制参数）
 const HEALTH_BAR_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/health_bar_indicator.gd")
 ## 描边脚本（StickmanOutline：CanvasGroup 双 pass 描边，HD-2D billboard 消费）
-const OUTLINE_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/stickman_outline.gd")
 ## crowd 批量渲染器脚本（远景单位合批；combat BattleInstance 与 units 装配消费）
 const CROWD_RENDERER_SCRIPT: GDScript = preload("res://modules/stick_rig/scripts/crowd_renderer.gd")
 ## 骨架定义脚本（StickmanSkeleton：骨骼拓扑/部件参数/颜色与描边常量）

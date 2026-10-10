@@ -289,7 +289,7 @@ func _mount_weapons() -> void:
 		# is_shield_blocking 第一重判定只认 _shield 实例存在，此前本分支早退
 		# 使 blockChance 0.35 在观察场从未掷出。2D 骨架未建 → 盾以隐藏逻辑
 		# 实例挂 WeaponMount 自身（数据与状态留 2D 侧），billboard 视觉由
-		# char_sprite_3d 镜像挂盾（渲染走镜像——HD-2D 铁律）。
+		# char_rig_3d 镜像挂盾（渲染走镜像——HD-2D 铁律）。
 		if shield_visual_enabled():
 			_mount_shield(owner_entity)
 		return
@@ -335,7 +335,7 @@ func _mount_shield(owner_entity: CharacterBody2D) -> void:
 	if off_hand == null:
 		# HD-2D billboard 图（2D 骨架未创建，rig==null）：逻辑盾挂 WeaponMount
 		# 自身并隐藏——格挡判定（weapon_block 只看 _shield 实例存在性）由此
-		# 真实生效；本实例不进任何渲染（billboard 视觉由 char_sprite_3d 镜像
+		# 真实生效；本实例不进任何渲染（billboard 视觉由 char_rig_3d 镜像
 		# 挂盾，数据与状态留 2D 侧、渲染走镜像）。2D 图走到这里 = 骨骼缺失，仍告警。
 		if owner_entity.get("rig") == null:
 			_shield = scene.instantiate() as Node2D
@@ -464,7 +464,7 @@ func _reload_weapons() -> void:
 	# 武器走姿分层（2026-09-30 实机验收：持弓行走要有脚步+持弓姿态）：
 	# walk state 资源换装（盾姿态分层同款机制）。BOW → walk_bow（Archidon-Walk，
 	# 下肢走步 + 上肢保持持弓），其余兵种恢复通用走姿。HD-2D 镜像侧同步换装在
-	# char_sprite_3d.set_weapon_type（本实体侧 rig 在该图型下为 null）。
+	# char_rig_3d.set_weapon_type（本实体侧 rig 在该图型下为 null）。
 	if owner_entity != null and "rig" in owner_entity:
 		var rig: Node = owner_entity.get("rig")
 		if rig != null and rig.has_method("set_state_anim"):
@@ -625,7 +625,7 @@ func _end_bow_aim_visual(return_to_idle: bool) -> void:
 
 ## 持瞄窗 walk 换装开关（经实体 VisualController 的持瞄保持通道）：2D rig
 ## set_state_anim 换装与 billboard 镜像（visual_controller.get_stance_anims
-## 观测口 → char_sprite_3d.set_stance_anims）两处同口径——状态留本挂载，
+## 观测口 → char_rig_3d.set_stance_anims）两处同口径——状态留本挂载，
 ## 名字解析与换装执行在 VisualController（walk state 资源替换，state 不增）。
 func _set_bow_aim_walk_override(on: bool) -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()

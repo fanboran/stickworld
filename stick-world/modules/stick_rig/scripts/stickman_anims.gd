@@ -192,7 +192,7 @@ static func idle_for_weapon(weapon_type: int) -> String:
 ## 武器类型 -> 持械行走动画名（键序对齐 WeaponMount.WeaponType；缺省 = 通用 walk）。
 ## 原版各兵种 Walk：剑士 Swordwrath-Walk（通用）、弓手 Archidon-Walk（下肢走步、
 ## 上肢无通道 = 保持持弓 setup 姿态，与 idle_bow 同源）——其余兵种暂用通用走姿。
-## 消费方（weapon_mount 实体侧换装 / char_sprite_3d 镜像层换装）经 walk_for_weapon
+## 消费方（weapon_mount 实体侧换装 / char_rig_3d 镜像层换装）经 walk_for_weapon
 ## 取名，走 set_state_anim 换 walk state 资源（盾姿态分层同款机制，不增状态节点）。
 const ANIM_WALK_BOW := "walk_bow"
 ## 持弓跑动（Archidon-Run 真数据直译：弓手专属步态，换装消费见 WEAPON_RUN_ANIM）
@@ -228,7 +228,7 @@ static func run_for_weapon(weapon_type: int) -> String:
 ## 无保持变体，消费方回落 walk_for_weapon 的基础走姿）。持瞄窗（attack_bow_hold
 ## 激活期间）内移动时 walk state 换装成本变体——上身保持拉满、下肢照常走步；
 ## 窗结束恢复 walk_for_weapon。消费方与盾姿态分层同通道（weapon_mount 瞄准窗
-## 开关 → visual_controller.set_bow_aim_stance 换装 / char_sprite_3d.set_stance_anims 镜像）。
+## 开关 → visual_controller.set_bow_aim_stance 换装 / char_rig_3d.set_stance_anims 镜像）。
 const WEAPON_WALK_HOLD_ANIM: Dictionary = {
 	2: ANIM_WALK_BOW_HOLD,  # BOW：拉弓保持行走（walk_bow_hold 合并变体）
 }

@@ -1,14 +1,12 @@
 extends Node
-## 观察场抽搐/色块诊断探针——arena_shot_boot `--twitch` 挂 root 驱动。
-## 三路证据（只读，不改游戏代码）：
-##   A. 烘焙内容审计：逐帧盯每张卡的 _blit_tex 实例（每次重烘都换新实例），
-##      前 3 次烘焙回读分类——剪影（正常）vs 整幅色块（出生爆大色块实锤）。
+## 观察场抽搐诊断探针——arena_shot_boot `--twitch` 挂 root 驱动。
+## 两路证据（只读，不改游戏代码）：
 ##   B. 出生窗连拍：首单位出现后 200 帧内每 2 帧截中幅 crop，供肉眼复核。
 ##   C. 抽搐采样：揭幕后逐物理帧记录全员 位置/速度/动画/seq/盾态/移动意图，
 ##      统计 同名重播churn / vx翻转率 / 待机漂移 / 盾态抖动 / 姿态换装抖动。
+##（烘焙内容审计段随整卡烘焙退役删除——关节烘焙无逐帧回读，无坏帧可言。）
 
 
-const FIRST_BAKES_TO_AUDIT := 3
 const BURST_FRAMES := 200
 const SETTLE := 12
 
@@ -20,9 +18,8 @@ func run(_tag: String, _preset: int, secs: int, _every: int) -> void:
 	get_tree().quit(0)
 
 
-# ───────── A+B：出生窗（烘焙审计 + 连拍） ─────────
+# ───────── B：出生窗连拍 ─────────
 
-var _audited := {}          # card_id -> 已审计烘焙次数
 var _first_spawn_frame := -1
 var _shot_idx := 0
 
@@ -74,42 +71,18 @@ func _phase_spawn_audit_and_burst() -> void:
 		if map != null and map.get("_char_map") != null \
 				and (map.get("_char_map") as Dictionary).size() > 0:
 			break
-	print("[TwitchProbe] 图就绪，开始出生窗审计 frame=%d" % Engine.get_process_frames())
-	var blocks := 0
-	var silhouettes := 0
-	var samples: Array = []   # (frame, age_frames, card_id, verdict_detail)
-	while _shot_idx * 2 < BURST_FRAMES or _pending_audit_any():
+	print("[TwitchProbe] 图就绪，开始出生窗连拍 frame=%d" % Engine.get_process_frames())
+	while _shot_idx * 2 < BURST_FRAMES:
 		await get_tree().process_frame
 		var map := _find_map()
 		if map == null:
 			continue
-		var char_map: Dictionary = map.get("_char_map")
-		if char_map.is_empty():
+		if (map.get("_char_map") as Dictionary).is_empty():
 			continue
 		if _first_spawn_frame < 0:
 			_first_spawn_frame = Engine.get_process_frames()
-		# A. 烘焙审计：_blit_tex 实例变化 = 新烘焙
-		for id in char_map:
-			var card: Node = char_map[id]
-			if card == null or not is_instance_valid(card):
-				continue
-			var n_audited: int = _audited.get(id, 0)
-			if n_audited >= FIRST_BAKES_TO_AUDIT:
-				continue
-			var tex: ImageTexture = card.get("_blit_tex")
-			if tex == null or not is_instance_valid(tex):
-				continue
-			var verdict: String = _audit_bake(tex)
-			_audited[id] = n_audited + 1
-			var age: int = Engine.get_process_frames() - _first_spawn_frame
-			if verdict.begins_with("BLOCK"):
-				blocks += 1
-			else:
-				silhouettes += 1
-			if samples.size() < 80 and verdict.begins_with("BLOCK"):
-				samples.append([Engine.get_process_frames(), age, id, verdict])
-		# B. 连拍（每 2 帧一张，全幅缩到 960x540——出生军在屏幕两翼，窄裁会漏）
-		if _shot_idx * 2 < BURST_FRAMES and Engine.get_process_frames() % 2 == 0:
+		# 连拍（每 2 帧一张，全幅缩到 960x540——出生军在屏幕两翼，窄裁会漏）
+		if Engine.get_process_frames() % 2 == 0:
 			var img := get_viewport().get_texture().get_image()
 			if img != null and not img.is_empty():
 				var full := Image.create(960, 540, false, Image.FORMAT_RGB8)
@@ -117,60 +90,10 @@ func _phase_spawn_audit_and_burst() -> void:
 				full = img
 				full.save_png("user://twitch_burst/b%04d.png" % _shot_idx)
 				_shot_idx += 1
-	print("[TwitchProbe] 烘焙审计：色块 %d 次 / 剪影 %d 次（每卡前 %d 烘）" % [
-			blocks, silhouettes, FIRST_BAKES_TO_AUDIT])
-	for s in samples:
-		print("[TwitchProbe]   %s @frame=%d age=%d card=%s" % [s[3], s[0], s[1], s[2]])
 
 
-func _pending_audit_any() -> bool:
-	# 仍有卡未审满次数（最多再等 240 帧兜底，防止个别卡永不烘焙拖死探针）
-	if Engine.get_process_frames() - _first_spawn_frame > BURST_FRAMES + 240:
-		return false
-	var map := _find_map()
-	if map == null:
-		return false
-	var char_map: Dictionary = map.get("_char_map")
-	for id in char_map:
-		if _audited.get(id, 0) < 1:
-			return true
-	return false
 
 
-## 单次烘焙分类：不透明占比 + 主色集中度。正常帧 = 稀疏剪影（不透明 <35%、
-## 无单色统治）；坏帧 = 整幅/大半幅单色（出生爆的"大色块"）。返回带主色明细
-func _audit_bake(tex: ImageTexture) -> String:
-	var img := tex.get_image()
-	if img == null or img.is_empty():
-		return "EMPTY"
-	var w := img.get_width()
-	var h := img.get_height()
-	var opaque := 0
-	var hist := {}
-	var step := 2   # 隔行采样，量级足够
-	for y in range(0, h, step):
-		for x in range(0, w, step):
-			var c := img.get_pixel(x, y)
-			if c.a > 0.05:
-				opaque += 1
-				var key: int = (int(c.r * 15.0) << 8) | (int(c.g * 15.0) << 4) | int(c.b * 15.0)
-				hist[key] = int(hist.get(key, 0)) + 1
-	var total := (w / step) * (h / step)
-	var opaque_frac := float(opaque) / float(total)
-	var dom := 0
-	var dom_key := -1
-	for k in hist:
-		if int(hist[k]) > dom:
-			dom = int(hist[k])
-			dom_key = int(k)
-	var dom_frac := float(dom) / float(maxi(opaque, 1))
-	var dom_col := "(n/a)"
-	if dom_key >= 0:
-		dom_col = "rgb(%d,%d,%d)" % [(dom_key >> 8 & 0xF) * 17,
-				(dom_key >> 4 & 0xF) * 17, (dom_key & 0xF) * 17]
-	if opaque_frac > 0.35 or (opaque_frac > 0.12 and dom_frac > 0.80):
-		return "BLOCK opq=%.2f dom=%.2f %s" % [opaque_frac, dom_frac, dom_col]
-	return "SILHOUETTE"
 
 
 # ───────── C：抽搐采样 ─────────

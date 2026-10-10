@@ -90,20 +90,20 @@ var depth_y_max: float = 970.5
 const DEPTH_SCALE_MIN := 0.92
 const DEPTH_SCALE_MAX := 1.10
 
-## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_sprite_3d 尺寸
+## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_rig_3d 尺寸
 ## 契约——rig 原生 ~274px × RIG_SCALE 0.475 = 130 SV px（§0.3 比例锚 130px=
 ## 1.70m）× SIZE_K 1.2（2026-09-14 偏小反馈的占位放大，纹理随 quad 同步放大
 ## = 视觉身高）= 156；PX(1/32 格/SV px) 与"1 格=32 canvas px"相抵，故 130×1.2
-## 直接就是 canvas px。⚠ 改 char_sprite_3d 的 RIG_SCALE/SIZE_K 时同步本值。
+## 直接就是 canvas px。⚠ 改 char_rig_3d 的 RIG_SCALE/SIZE_K 时同步本值。
 ## billlboard 不随 body_scale 缩放（set_world_pos 无此参），本值亦不乘。
 const BILLBOARD_BODY_H_PX := 156.0
 
-## billboard 髋高（canvas px）：视觉脚线以上到髋 = char_sprite_3d 的脚底锚
+## billboard 髋高（canvas px）：视觉脚线以上到髋 = char_rig_3d 的脚底锚
 ## FOOT_ANCHOR.y 141 × RIG_SCALE 0.35625 = 50.23（billboard 按脚墨迹落 FOOT_ROW，
 ## 故量到脚墨迹而非脚骨 marker；24px 换轨下 1 SubViewport px = 1 canvas px、
 ## SIZE_K=1，直接用 canvas px 量纲）。随身特效（命中飘字/挥砍弧/箭矢）锚点
 ## 从视觉脚线抬到身体高度用本值（身体纵向不压缩，见视觉域协议铁律 2）。
-## ⚠ 改 char_sprite_3d 的 RIG_SCALE/FOOT_ANCHOR 时同步本值
+## ⚠ 改 char_rig_3d 的 RIG_SCALE/FOOT_ANCHOR 时同步本值
 ## （tests/unit/test_hd2d_projection.gd 有同步断言）。
 const BILLBOARD_HIP_H_PX := 50.23
 
@@ -160,9 +160,7 @@ func _ready() -> void:
 	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
 	ground_ratio = (walk_front_y - ground_y) / 1080.0
 	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
-	# 视觉走 proto 的 billboard 通道——写深度、可被前景遮挡、自带接地影
-	if _hd.has_method("enable_play_characters"):
-		_hd.enable_play_characters()
+	# 视觉走关节烘焙通道（spawn_character 按需装配）——写深度、可被前景遮挡、自带接地影
 	_build_solid_bodies(_hd)
 	_spawn_resource_nodes()
 	_build_gate_portals()

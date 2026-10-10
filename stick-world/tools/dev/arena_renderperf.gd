@@ -4,8 +4,7 @@ extends Node
 ## 相关的性能口径（烘焙基线 vs 直渲 A/B 同口径对比）：
 ##   - 帧时分位：逐渲染帧 ticks_usec 差（mean/p50/p95/max，ms）
 ##   - draw calls / 显存 / 纹理显存：RenderingServer 帧级读数（报告时刻快照）
-##   - 烘焙计数：char 宿主 _blit_count/_blit_usec 差分 → blits/s、烘焙耗时 ms/s
-##   - 实体数/宿主数/渲染路线（env STICK_CHAR_RENDER，默认 bake）
+##   - 实体数/宿主数/渲染路线（joint3d，唯一路线）
 ## JSON 落 user://renderperf/，由 arena_renderperf.sh 归集。带窗口跑（真实渲染帧）。
 
 const RENDERPERF_OUT := "user://renderperf"
@@ -14,8 +13,6 @@ var _t0: float = 0.0
 var _prev_usec: int = 0
 var _win_ms: PackedFloat32Array = PackedFloat32Array()
 var _hosts: Array = []
-var _blit_count_prev := 0
-var _blit_usec_prev := 0.0
 const COVER_WAIT_FRAMES := 4200
 
 
@@ -29,7 +26,7 @@ func run(_tag: String, _preset: int, secs: int, every: int) -> void:
 			waited = true
 			break
 	print("[RenderPerf] cover gone=%s，采样 %ds（route=%s）" % [
-		waited, secs, OS.get_environment("STICK_CHAR_RENDER") if not OS.get_environment("STICK_CHAR_RENDER").is_empty() else "bake"])
+		waited, secs, "joint3d"])
 	for i in 12:
 		await get_tree().process_frame
 	# 首帧差分基准
@@ -51,7 +48,7 @@ func _elapsed() -> float:
 	return Time.get_ticks_msec() / 1000.0 - _t0
 
 
-## 角色宿主扫描（bake=char_sprite_3d：有 _blit_capture；direct=新宿主：无烘焙字段）
+## 角色宿主扫描（char_rig_3d 关节烘焙宿主）
 func _scan_hosts() -> void:
 	_hosts.clear()
 	var arena := get_tree().current_scene
@@ -71,14 +68,6 @@ func _percentile(sorted: PackedFloat32Array, q: float) -> float:
 
 func _report(prefix: String, _final: bool) -> void:
 	_scan_hosts()
-	var blit_n := 0
-	var blit_us := 0.0
-	for h in _hosts:
-		if "_blit_count" in h:
-			# 计数器打印后回卷归零（每 600 次），差分只在递增时累计（下限估计）
-			var n: int = int(h._blit_count)
-			blit_n += n if n > 0 else 0
-			blit_us += float(h._blit_usec) if n > 0 else 0.0
 	var win := _win_ms.duplicate()
 	win.sort()
 	var mean := 0.0
@@ -90,17 +79,13 @@ func _report(prefix: String, _final: bool) -> void:
 	var arena := get_tree().current_scene
 	if arena != null and is_instance_valid(arena):
 		entities = arena.find_children("", "StickmanEntity", true, false).size()
-	print("[RenderPerf] %s fps=%.0f 帧ms mean=%.2f p50=%.2f p95=%.2f max=%.2f | draws=%d vidMem=%.0fMB texMem=%.0fMB | blit=%.1f/s %.2fms/s | 实体=%d 宿主=%d" % [
+	print("[RenderPerf] %s fps=%.0f 帧ms mean=%.2f p50=%.2f p95=%.2f max=%.2f | draws=%d vidMem=%.0fMB texMem=%.0fMB | 实体=%d 宿主=%d" % [
 		prefix, Engine.get_frames_per_second(), mean, _percentile(win, 0.5),
 		_percentile(win, 0.95), _percentile(win, 0.99),  # max 列打 p99 防单帧野值淹没中位信息
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED) / 1048576.0,
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED) / 1048576.0,
-		blit_n - _blit_count_prev if blit_n > _blit_count_prev else 0,
-		blit_us - _blit_usec_prev if blit_us > _blit_usec_prev else 0.0,
 		entities, _hosts.size()])
-	_blit_count_prev = blit_n
-	_blit_usec_prev = blit_us
 	_win_ms.clear()
 
 
@@ -110,7 +95,7 @@ func _finish(secs: int, tag: String, preset: int) -> void:
 		"tag": tag,
 		"preset": preset,
 		"secs": secs,
-		"route": OS.get_environment("STICK_CHAR_RENDER") if not OS.get_environment("STICK_CHAR_RENDER").is_empty() else "bake",
+		"route": "joint3d",
 	}
 	DirAccess.make_dir_recursive_absolute(RENDERPERF_OUT)
 	var path := "%s/renderperf_%s_p%d_%d.json" % [RENDERPERF_OUT, tag, preset, Time.get_ticks_msec()]

@@ -1,6 +1,6 @@
 # HD-2D 街景系统
 
-> **定位**：HD-2D 场景图的技术层单一真相源。八方旅人式呈现：3D 场景 + Blender 烘焙卡 + 2D 逻辑角色经整卡烘焙（char_sprite_3d SubViewport→billboard）站进场景。
+> **定位**：HD-2D 场景图的技术层单一真相源。八方旅人式呈现：3D 场景 + Blender 烘焙卡 + 2D 逻辑角色经关节烘焙（char_rig_3d 预烘关节贴图→全局 MultiMesh）站进场景。
 > 原型可行性论证与烘焙管线见 [`2.5D与HD-2D可行性.md`](2.5D与HD-2D可行性.md)；本文写**运行时系统**怎么设计、为什么。
 > 场景图（卷轴地图）整体架构见 [`场景与战斗架构.md`](../场景与战斗/场景与战斗架构.md)。
 
@@ -15,7 +15,7 @@
 ```
 Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ├─ buildings.py 27 装配器 → 烘建筑卡              ├─ modules/hd2d/scenes/hd2d_world.tscn  3D 世界（卡+地面+光照）
-├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world + char_sprite_3d）
+├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world + char_rig_3d）
 ├─ nature.py 16 类 → 烘自然物卡                  ├─ Hd2dMapBase 系宿主（world 侧，MapBase 子类）
 └─ city_layout.py 规模档布局算法                  └─ 布局 JSON ←── export_city_layout.py
 
@@ -74,50 +74,40 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - **设施门控**：`supports_village_facilities()`=false 跳过 2D 建筑设施（仓库/程序化资源点）；`wants_villager_npcs()`=true 照常生成村民——两个门控分开，因为村民不需要 2D 建筑也能干活（见 2.6）。
 - **建筑宿主**：`_setup_building_hosting()`（_ready 尾部）装配 `PlacementGrid`（duck 属性 + WorldAPI 子节点名双契约，覆盖整图含负 cell）、把 3D 前排建筑/杂物/城墙带登记为 blocked（玩家建筑不叠街景）、推导 `building_baseline_offset`（楼排墙脚线中位）与逐格 `get_building_baseline_at`（建造范围压到哪栋楼卡就站那栋的 foot 线——预览/工地/成品与 3D 邻居同线；foot = 516 + z×24，实测 530~574）、补 `BuildMaskLayer`（工地占位/进度条挂载）——建造菜单→选址→占用→落位链在本图全通。建筑视觉为过渡态：2D 程序化外观叠画在画布层（画布在 3D 之上），3D 卡视觉随 plan 物化（ROOT-2）替换。
 
-### 2.4 角色渲染：2D 逻辑 + 3D 视觉（char_sprite_3d.gd 整卡烘焙）
+### 2.4 角色渲染：2D 逻辑 + 3D 视觉（char_rig_3d.gd 关节烘焙）
 
 **为什么**：角色浮在 2D canvas 上永远盖住 3D（无遮挡/无接地/无纵深），且 2D 画布坐标与 3D 投影速度不一致（跟手框错位的根因）。定稿：**逻辑留 2D（物理/输入/AI 不动），视觉进 3D**。
 
-**机制（char_sprite_3d）**：每实体一个宿主——真 StickmanRig（Skeleton2D + AnimationTree + 程序化叠加）画进该实体专属 SubViewport（transparent_bg、msaa_2d 禁用、UPDATE_ALWAYS），按节拍把视口内容回读落成**带真实 mip 链的 ImageTexture**（`_blit_capture`）喂与相机同基的 billboard quad（26° 俯角正对）。回读是绕行手段：本引擎组合下 **spatial 管线采样画布 RT 会在细亮线两侧产生逐通道错位的红青镶边**（自定义 shader 与 Sprite3D 同病，换格式/尺寸/过滤/MSAA 全无效，属引擎/驱动层缺陷，工程侧不可修），直采视口纹理不可用。
+**机制（char_rig_3d，2026-10-10 创始人观感验收通过；前身整卡烘焙——每角色 SubViewport+回读成卡——已整体退役）**：每实体一个宿主持真 StickmanRig（Skeleton2D + AnimationTree + 程序化叠加），藏在隐藏 CanvasLayer 里只解算不绘制；晚优先级 `_process`（1100 = rig 推进(0) 与俯仰叠加(1000) 之后，写序铁律）读 rig 实建矢量部件节点（`sprite_*` 容器），每部件一对 quad 逐行写进 `char_direct_buckets` 的全局 MultiMesh——**描边贴图垫底（实深度 ZB_STROKE 分离）/填充贴图置顶**，两遍层序照抄矢量「全局两遍」语义，填充遍内按画布树序（腿→躯干→颈/头→臂）。**写段官方 setter 全程**（set_instance_transform/color/custom_data 紧凑行制：帧戳游标追加+尾部退化清隐——裸 buffer 手打包布局无引擎保证，是历史事故源，禁用）。
 
-**已知代价（战场规模的元凶，机制级待换血）**：每角色一个常开视口（96 单位=96 视口每帧重渲）+ 回读 sync 点必须节流（FIFO 公平队列 + 每帧预算 BLIT_BUDGET + 分档节拍/坏帧闸/最小间隔）——远档姿态 10~15Hz 低频采样即"动作跳变"，满编帧时被视口成本拖进幻灯片。**此为"整卡"烘焙独有；关节烘焙（小贴图挂骨、满帧率跟随骨骼）无此类成本**——机制替换的候选方向与处置状态见交接档（战场观感重构），不在本档展开。
+- **贴图由引擎画布光栅化器预烘**（char_joint_atlas）：rig 同款 Line2D 圆头线段/40 边圆画进一次性 SubViewport 回读成白色胶囊/圆图集（RGB 恒白、形状在 alpha，实例色染描边白/填充身体色）——观感与画布渲染同源；格位 4px 量化（zoom 补偿改描边宽只换贴图像素不换 UV，零闪变），宿主按宽度指纹懒触发重烘。
+- **血条 = char_bar_atlas 原版驱动镜像图集**：你逐值微调的 HealthBarIndicator 以驱动镜像画进共享视口（同一 apply_bar_state 协议，30Hz 回读），3D 面片贴头顶锚点。
+- 武器/盾：读武器场景 Sprite 贴图 + GripPoint 补偿挂手骨，贴图分桶 quad（ZB_WEAPON 恒在身体之上——原版树序「武器盾盖头」）。
+- 尸体：死亡动画播完停尾帧 + 插箭，实体淡出期 `set_master_alpha` 压实例色 alpha（透明混合单桶，不换桶）。
+- 接地影/劳作条/附身四角框为独立 3D quad，随宿主走；渲染帧插值（#9）：位置物理刻双缓冲 + 渲染帧分数插值。
+- feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state/set_outline_zoom…）由 `hd2d_map_base._sync_character_render` 逐帧驱动。
+- **引擎级约束（沿自整卡烘焙时代的实测，仍然有效）**：spatial 管线采样画布 RT 会在细亮线两侧逐通道色散（引擎/驱动层缺陷，不可修）——一切画布→3D 的纹路必须走「视口渲染→get_image 回读→ImageTexture」绕行（关节图集与血条图集同此口径）；画布视口 msaa_2d 必须关（同源色散，见 §2.5）。
 
-**实验并行路线（关节烘焙，`STICK_CHAR_RENDER=joint3d` 显式开启；默认仍为整卡烘焙，观感过创始人验收后才切换）**：`char_rig_3d` 宿主持真 rig 只解算不进视口，晚优先级 _process 读 rig 实建矢量部件节点，每部件一对 quad 写进 `char_direct_buckets` 的全局 MultiMesh（官方 setter 紧凑行制）——描边贴图垫底（实深度分离）/填充贴图置顶，两遍层序照抄矢量「全局两遍」语义；贴图由 `char_joint_atlas` 用引擎画布光栅化器预烘（rig 同款 Line2D 圆头线段/40 边圆→一次性视口回读图集，观感与烘焙卡同源）；血条走 `char_bar_atlas` 原版驱动镜像图集；武器/接地影/劳作条/插值与整卡路线同款。feed API 同名同义，`hd2d_map_base` 零改动切换。
-
-- feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state…）由 `hd2d_map_base._sync_character_render` 逐帧驱动。
-- 尸体：死亡动画播完停尾帧 + 插箭，实体淡出期 `set_master_alpha` 压整卡透明度。
-- 接地影/劳作条/附身四角框为独立 3D quad，随宿主走。
-- 渲染帧插值（#9）：位置物理刻双缓冲 + 渲染帧分数插值。
-- 运行期注意：不要对 SubViewport 做 size 重分配——实测会永久破坏其 CanvasGroup 内容（回读全白）。
-
-### 2.5 全融合描边（stickman_outline.gd + 双 shader）
+### 2.5 剪影描边口径（两遍层序实现）
 
 创始人定稿口径：**白描边只包整体剪影外轮廓，内部零描边**（肘/膝/臂身交界都不出线，肢体靠剪影读形）。
-**武器全场景无描边（创始人全游戏口径）**：武器不属于剪影描边范围——billboard
-镜像武器挂 viewport 根（CanvasGroup 描边组之外，细武器会被外轮廓白线吞成"白武器"）；
-2D 骨架武器为普通 Sprite 无 stroke 层；crowd 批渲染不渲染武器。三条路径均无武器描边。
+**武器全场景无描边（创始人全游戏口径）**：武器不属于剪影描边范围——3D 宿主武器为独立贴图桶（无描边件）；2D 骨架武器为普通 Sprite 无 stroke 层；crowd 批渲染不渲染武器。三条路径均无武器描边。
 
-机制（ID Buffer + 邻接表，最早版即此设计）：
-1. OutlineGroup 整棵收进 CanvasGroup（**子树同搬**，rig→IK marker 相对路径不变）；
-2. 每个零件容器挂 ID shader：把 part_id 写进 alpha（全融合=全部零件同一 ID）；
-3. CanvasGroup 自身材质 = 描边 shader：`hint_screen_texture` 采到的就是**组自身缓冲**——前景像素查 8 邻域，不同 ID 且不邻接→分隔线；背景像素邻近前景→外轮廓白线。
-
-生效范围=char_host 的每角色独立 SubViewport（屏幕空间描边付得起）；2D 战场 crowd 桶为**几何描边**（部件级加宽描边件垫底，同色不透明并集=剪影描边——观感同口径）。武器无描边两路径一致（见上）。
-
-**角色 SubViewport 禁开 msaa_2d**：描边材质经 `hint_screen_texture` 读回组缓冲，
-msaa_2d 开着时读到未 resolve 的多重采样数据（逐通道错采样）——色散直接烘焙进
-角色贴图。视口保持 MSAA_DISABLED，边缘平滑由 px_scale 超采样承担。
+机制（矢量骨架「全局两遍」的 3D 直译，历史沿革：ID Buffer+邻接表的 CanvasGroup 全融合描边随整卡烘焙退役）：
+- 矢量侧（stickman_skeleton）：每段肢体 stroke 层（白色，宽 w+2×OUTLINE_WIDTH）z=-1 压底、fill 层 z=0 置顶——肢体重叠处填充无缝融合，描边只在整体剪影外轮廓出线；部件间相对遮挡靠填充层树序（`reorder_render_order`）。
+- 3D 侧（char_rig_3d）：同语义直译——描边遍先写且实深度垫后（ZB_STROKE），填充遍后写置顶；描边贴图=部件形状外扩描边宽的胶囊/圆（图集格位），重叠处被填充覆盖，只留外轮廓环带。部件分离（张腿/抬臂）时部件间缝隙两侧各出描边线——两遍层序语义的自然结果（矢量侧同此）。
+- 描边宽 zoom 补偿（屏幕像素恒定，`Skeleton.outline_world_width`）：矢量路径 `stickman_rig._update_outline_zoom`（改 stroke 几何——3D 宿主逐帧读节点即恒为补偿后真值，圆半径置脏重读）；批渲染 `StickmanBatchRig.set_outline_width`（重烘预烘局部变换）；crowd `CrowdRenderer._refresh_outline_zoom`（重烘静态共享表）。
 
 **HD-2D post 通道运行期关所在视口的 msaa_2d（hd2d_world 进树时改、_exit_tree 恢复）**：
 post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工程级 msaa_2d
-开着时同样逐通道错采样——全屏 RGB 色散，草地噪点/血条镶边即此（细白线处才肉眼
+开着时逐通道错采样——全屏 RGB 色散，草地噪点/血条镶边即此（细白线处才肉眼
 可见）。HD-2D 场景内 3D 抗锯齿走 msaa_3d 不受影响；纯 2D 场景不经 hd2d_world，
-工程级 msaa_2d=2（2D 路径抗锯齿生命线，测试金丝雀锚定）保持不动。
+工程级 msaa_2d=2（2D 路径抗锯齿生命线，测试金丝雀锚定）保持不动。关节图集/
+血条图集的烘焙视口同理必须 MSAA_DISABLED（画布组缓冲直读出彩散）。
 
-**火柴人渲染踩坑备查**（本节知识曾完全无记载，复排查了两天）：
-- 骨架渲染是**全局两遍**（stickman_skeleton.gd）：所有描边层 z=-1 压底、所有填充层 z=0 置顶——肢体重叠处填充无缝融合，描边只在整体剪影外轮廓出线（"只有剪影描边"口径，与 ID Buffer 全融合同语义）。部件间相对遮挡靠填充层之间的树序（`reorder_render_order`）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
-- 渲染双路径：MultiMesh 批渲染（`render/batch_rig` 工程设置，默认开；环境变量 `STICK_BATCH_RIG` 强制覆盖）vs 矢量 Line2D 路径。批渲染是战场规模的技术，SubViewport 里两条路径都可用。crowd 桶（`render/crowd_renderer` / `STICK_CROWD`）同款"描边先画、填充后画"语义（y 分带内）。
-- 描边宽 zoom 补偿（屏幕像素恒定，`Skeleton.outline_world_width`）三条渲染路径都接：矢量 `stickman_rig._update_outline_zoom`（改 stroke 几何）、批渲染 `StickmanBatchRig.set_outline_width`（重烘预烘局部变换）、crowd `CrowdRenderer._refresh_outline_zoom`（重烘静态共享表，按 1.0 体型基准）。
+**火柴人渲染踩坑备查**：
+- 骨架渲染是**全局两遍**（stickman_skeleton.gd，见上）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
+- 渲染双路径：MultiMesh 批渲染（`render/batch_rig` 工程设置，默认开；环境变量 `STICK_BATCH_RIG` 强制覆盖）vs 矢量 Line2D 路径——3D 宿主读实建矢量节点，强制 `STICK_BATCH_RIG=0`。crowd 桶（`render/crowd_renderer` / `STICK_CROWD`）同款"描边先画、填充后画"语义（y 分带内）。
 - 体色常量 `Skeleton.DEFAULT_BODY` = 深灰紫 (0.156,0.156,0.182)——经直方图核实与旧版逐像素一致，别再怀疑它。
 
 ### 2.6 碰撞模型（get_solid_rects → HD2DSolids）
@@ -131,7 +121,7 @@ post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工�
 - 落脚点：地图 `get_npc_spawn_points()` 按语义预排（铁砧旁/森林带资源点旁/街市）；没有则退回 2D 村图的两簇硬编码。
 - **露天工位** duck：TownLife 找不到建筑工位时，向上找地图 `get_open_work_sites()`——铁匠铺卡前的露天铁砧就是铁匠工位（`work_site_def="smithy_lv1"`）。回退链：建筑 WorkSlots > 露天工位 > 占位表。
 - 伐木/矿工直接用场上的 2D ResourceNode（13 个采集点由自然物摆位表驱动生成，2D 笔触视觉隐藏、PBR 卡负责观感）。
-- **劳作可见（billboard 通道）**：镜像层动画**全放行**——attack 是 oneshot，播完实体侧自动回切 idle/walk，逐拍重触发靠 `set_anim` 变更检测天然完成；此前 attack 被强制降级 walk/idle，挥镐/挥锤在街上不可见，干活与罚站无法区分。头顶进度条走双通道：2D 条挂 **RigHost**（街上随 RigHost 整体隐藏，不再重复渲染），billboard 用自带 3D 条（`char_sprite_3d.set_work_progress`，bg+fill 双 quad 左锚定、随 depth 缩放）；数据源统一为 `entity.get_action_progress()`（VisualController 进度值缓存，采集/派工/搬运同源）。
+- **劳作可见（3D 角色通道）**：镜像层动画**全放行**——attack 是 oneshot，播完实体侧自动回切 idle/walk，逐拍重触发靠 `set_anim` 变更检测天然完成；此前 attack 被强制降级 walk/idle，挥镐/挥锤在街上不可见，干活与罚站无法区分。头顶进度条走双通道：2D 条挂 **RigHost**（街上随 RigHost 整体隐藏，不再重复渲染），角色宿主自带 3D 条（`char_rig_3d.set_work_progress`，bg+fill 双 quad 左锚定、随 depth 缩放）；数据源统一为 `entity.get_action_progress()`（VisualController 进度值缓存，采集/派工/搬运同源）。
 - **读档劳作恢复**：职业 id 与 `is_villager` 随 entities.extra_data 落档（`SaveHandler._save_entities`），读档回填并经 `TownLifeAPI.apply_profession_appearance` 重挂装具（工具不入档，按 id 重应用）——此前存档从不带这两字段，读档村民是"无职业、非村民"实体，AI 决策双拒（不采集也不闲逛），主街读档即全员罚站。老档（extra 无字段）安全回退保持默认；配置已删改的职业 id 回待业池。锁：`tests/unit/test_townlife_save_persistence.gd`。
 
 ## 三、跑法与资产再生产
@@ -146,7 +136,7 @@ python tools/blender_buildings/export_city_layout.py --tier village --seed 61103
 # 烘完把 temp/{proto25d,proto_hd2d} 的 png+json 同步进 stick-world/modules/hd2d/assets/tex/（随包入库）；
 # 只补夜版时同步 *_night.png 即可（月夜档，见 §2.3）
 # 出图/调试
-godot --path stick-world res://modules/hd2d/scenes/hd2d_world.tscn -- --shots=b --layout=village_b
+godot --path stick-world res://modules/hd2d/scenes/hd2d_world.tscn -- --shots=c --layout=village_b
 # 实机链路验证
 godot --path stick-world res://tests/dev/verify_hd2d_map.tscn
 ```
@@ -380,11 +370,12 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
 - 行走带钳制、AI 站位、交互判定、存档坐标全部用 origin——物理上"角色站在 P"
   指的是髋部在 P，脚在 P+142。
 
-**HD-2D 视觉链（char_sprite_3d.gd）**：
+**HD-2D 视觉链（char_rig_3d.gd）**：
 
-- RigHost（2D 骨架）与 2D 接触影隐藏；每实体一个 SubViewport billboard：
-  骨架按 `rig.scale=0.5` 缩到 131px 高，脚底墨迹钉在 SubViewport 第 144 行
-  （FOOT_ROW，含 ~10px 圆头线墨迹修正），quad 以"**脚底落世界 y=0**"贴地落位。
+- RigHost（2D 骨架）与 2D 接触影隐藏；每实体一个宿主：真 rig 解算后部件折
+  26° 取景平面写全局 MultiMesh（机制见 §2.4），rig px→世界 S=0.35625/24，
+  脚底锚 FOOT_ANCHOR(3,141)（含 ~10px 圆头线墨迹修正）钉在角色世界脚点
+  （"**脚底落世界 y=0**"贴地落位）。
 - **视觉脚线 = origin 的地面线**（z=(origin.y−516)/24）——接地影、脚下四角框、
   FX 飘字粒子（remap_fx_pos）全部锚同一条线，互相严格对齐。
 - 纵深缩放：`depth = lerp(0.92, 1.10, 行走带 t)` 由宿主逐帧传给
@@ -490,7 +481,7 @@ offset/limits 变化时手搓漂、变换不会）。
 
 - 道路/守城/森林/室内/L1 聚落图仍是 2D 旧图；战斗类测试以 battlefield_2d（2D 空旷演练场，`boot_map_id_override` 开机）为底。
 - 设施类测试 7 套 SUSPENDED（.tscn.suspended 摘出矩阵；盘上 6 套，驻军套随据点 M0 拆除退役）：待 `ROOT-3` 翻 `supports_village_facilities()` + `ROOT-5` 在生产图重建。设施宿主本体已就位——ROOT-1 装配 PlacementGrid/BuildingHost，ROOT-2把 CityGen plan 前排物化为视觉壳 Building 实体（3D 烘卡继续只做视觉；映射表 `building_gen/api.gd`；`ConstructionManager.set_map` 自动物化，存档不落档）。
-- 角色 billboard 已镜像主手武器：`weapon_mount.weapon_type` → `char_sprite_3d.set_weapon_type`，武器场景挂进 billboard 内部骨架的同名手骨（GripPoint 对齐口径同 WeaponMount）——武器随 2D RigHost 隐藏导致的"村民空手=没有职业"观感由此闭合；副手/盾不在 WeaponMount 类型表内，未镜像。
+- 角色 3D 视觉已镜像主手武器：`weapon_mount.weapon_type` → `char_rig_3d.set_weapon_type`，武器场景读 Sprite 贴图 + GripPoint 补偿挂手骨（贴图分桶 quad，口径同 WeaponMount._mount_one）——武器随 2D RigHost 隐藏导致的"村民空手=没有职业"观感由此闭合；副手/盾不在 WeaponMount 类型表内，未镜像。
 - 村民待业/工作行为依赖 WorldState.game_time 节律，与昼夜挂钩同源。
 
 ## 六、主街结构解剖（现状基线）

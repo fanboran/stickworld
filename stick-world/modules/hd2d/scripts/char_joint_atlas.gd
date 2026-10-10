@@ -171,7 +171,7 @@ func _layout(specs: Array) -> void:
 		_vp.name = "JointBakeViewport"
 		_vp.transparent_bg = true
 		_vp.disable_3d = true
-		_vp.msaa_2d = Viewport.MSAA_DISABLED   # 同烘焙卡口径（色散根因，见 char_sprite_3d）
+		_vp.msaa_2d = Viewport.MSAA_DISABLED   # MSAA 必须关：画布组缓冲直读出彩散（历史实测教训）
 		_vp.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 		add_child(_vp)
 	_vp.size = Vector2i(_atlas_size.x * SUPERSAMPLE, _atlas_size.y * SUPERSAMPLE)

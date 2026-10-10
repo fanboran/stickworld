@@ -29,11 +29,10 @@ const HealthBarIndicator := preload("res://modules/stick_rig/api.gd").HEALTH_BAR
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const RIG_SCENE_PATH: String = StickRigAPI.RIG_SCENE_PATH
 
-## 路线开关：默认 direct（S2 定夺——A/B 实测 48v48 帧时 2.3~2.6×、draw calls
-## 13~23×、显存 −200~460MB）；STICK_CHAR_RENDER=bake 显式回退烘焙路线
-##（回退闸保留至创始人观感验收，验收后烘焙管线整体删除）。
+## 路线开关：默认 bake（直渲观感已否决——见交接档裁决#10/#13）；
+## STICK_CHAR_RENDER=direct 显式开直渲实验路线（新渲染路线未裁决前不动默认）。
 static func route_enabled() -> bool:
-	return OS.get_environment("STICK_CHAR_RENDER") != "bake"
+	return OS.get_environment("STICK_CHAR_RENDER") == "direct"
 
 const RIG_SCALE := 0.35625   # 与烘焙路线同值（rig px → SV px；SV px → 世界 = PX）
 const PX := 1.0 / 24.0

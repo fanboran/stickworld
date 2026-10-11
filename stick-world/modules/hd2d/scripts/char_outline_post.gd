@@ -12,8 +12,12 @@ extends Node
 ##   只看 MASK_LAYER，挂中性 Environment——世界 tonemap 会改写深度打包值）
 ##   → 桶的掩码孪生（char_direct_buckets.enable_outline_mask：同一
 ##   MultiMesh 双宿主，主视口正常材质 / 掩码视口深度打包材质）
-##   → 合成层 CanvasLayer(90，主后处理 100 之下——描边随全屏分级走，
-##   HUD 恒在其上) ColorRect 环形膨胀描边。
+##   → 合成层 CanvasLayer(90，主后处理 100 之下——描边随全屏分级走)
+##   ColorRect 方阵膨胀描边。
+## 层序实况（与旧注释不符，勿按旧注释改）：HUD 是 LayerOrder.HUD = 1，故 90 的
+## 合成层在 HUD **之上**——"HUD 恒在其上"做不到，除非把 UIRoot 抬到 100 之上
+## （那会连带改掉"HUD 一起被后处理分级"这条既有观感）。现状副作用：角色描边
+## 会画到压在其上的 HUD 部件上；HUD 与 3D 世界重叠区域才有感，暂留待裁决。
 ## 深度语义：正交相机下同卡面部件视深 = 屏幕高度的线性函数 ⇒ 屏内重叠
 ## 必等深，单角色内部永不因深度出线（平面剪影）；前后角色按深度差出
 ## 分隔线；被建筑挡住的角色由建筑遮挡块孪生（hd2d_world._spawn_card

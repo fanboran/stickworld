@@ -28,28 +28,33 @@ vec2 decode_mask(vec3 rgb) {
 
 void fragment() {
 	vec4 m0 = texture(mask_tex, UV);
+	bool self_is_char = m0.a > 0.5;
+	float self_d = 0.0;
+	if (self_is_char) {
+		self_d = decode_mask(m0.rgb).x;
+	}
+	// 邻域 = 以 outline_w/2 为格距的 5×5 方阵（去四角 = 21 采样，半径 ≤2.24px）。
+	// 原「16 方向 × 2 半径」环形采样在细/斜特征上会漏采（最近邻 + 硬边掩码下，
+	// 两个采样点之间的像素可能整圈都探不到）——描边断续，肉眼即"描边变浅"。
+	// 方阵逐像素铺满邻域、无角度空档，采样数还比原来少。
+	float step_px = max(outline_w, 1.0) * 0.5;
 	float best_d = 1e9;
 	float best_fade = 0.0;
 	bool hit = false;
-	for (int i = 0; i < 16; i++) {
-		float ang = TAU * float(i) / 16.0;
-		vec2 o = vec2(cos(ang), sin(ang)) * (outline_w / vp_size);
-		vec4 m = texture(mask_tex, UV + o);
-		if (m.a > 0.5) {
-			vec2 df = decode_mask(m.rgb);
-			if (df.x > 0.001 && df.x < best_d) {   // 哨兵0=武器占位，不是描边源
-				best_d = df.x;
-				best_fade = df.y;
-				hit = true;
+	for (int dy = -2; dy <= 2; dy++) {
+		for (int dx = -2; dx <= 2; dx++) {
+			if (abs(dx) == 2 && abs(dy) == 2) {
+				continue;   // 四角（半径 2.83）去掉：让外圈半径 ≤2.24，描边宽度均匀
 			}
-		}
-		vec4 m2 = texture(mask_tex, UV + o * 0.5);
-		if (m2.a > 0.5) {
-			vec2 df = decode_mask(m2.rgb);
-			if (df.x > 0.001 && df.x < best_d) {
-				best_d = df.x;
-				best_fade = df.y;
-				hit = true;
+			vec2 o = vec2(float(dx), float(dy)) * step_px / vp_size;
+			vec4 m = texture(mask_tex, UV + o);
+			if (m.a > 0.5) {
+				vec2 df = decode_mask(m.rgb);
+				if (df.x > 0.001 && df.x < best_d) {   // 哨兵0=武器占位，不是描边源
+					best_d = df.x;
+					best_fade = df.y;
+					hit = true;
+				}
 			}
 		}
 	}
@@ -57,9 +62,8 @@ void fragment() {
 	//   背景像素：命中即画；角色像素：邻居明显更靠前才画（前后分隔线），等深不画
 	vec4 col = vec4(0.0);
 	if (hit) {
-		bool on_background = m0.a <= 0.5;
-		bool front_sep = m0.a > 0.5 && best_d < decode_mask(m0.rgb).x - depth_eps;
-		if (on_background || front_sep) {
+		bool front_sep = self_is_char && best_d < self_d - depth_eps;
+		if (!self_is_char || front_sep) {
 			col = vec4(outline_col.rgb, outline_col.a * best_fade);
 		}
 	}

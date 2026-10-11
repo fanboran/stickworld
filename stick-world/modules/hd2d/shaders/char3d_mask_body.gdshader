@@ -26,7 +26,12 @@ void vertex() {
 
 void fragment() {
 	vec4 t = texture(atlas_tex, slot_uv.xy + UV * slot_uv.zw);
-	if (t.a <= 0.5) {
+	// 形状判据与身体主材质同阈值（char3d_body_opaque: t.a <= 0.004）——掩码轮廓
+	// 必须**等于**可见身体轮廓：此前用 0.5 硬阈值，掩码比身体内缩一圈且边缘是硬的，
+	// 描边就贴在那条内缩锯齿上（观感=描边变细变淡、断续）。掩码视口不开 MSAA：
+	// MSAA 在轮廓边把「块级编码 RGB」与背景平均，块编码被平均就解错（边缘像素的
+	// fade 解成乱值 ⇒ 那圈描边忽隐忽现），故宁要硬边也不要被平均的编码。
+	if (t.a <= 0.004) {
 		discard;
 	}
 	float q = clamp(v_depth / cam_far, 0.0, 1.0) * 32767.0;

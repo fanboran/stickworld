@@ -16,13 +16,12 @@ extends Node3D
 ## 引擎画布光栅化器烘出——观感与烘焙卡同源贴图直出）：
 ##   - 挂靠：容器挂在哪根骨上就跟哪根骨（头圆挂 head 骨 −HEAD_ORBIT，
 ##     build_limbs 的修复自动生效，不经 crowd 战场表的旧死码约定）；
-##   - 层序照抄「全局两遍」：所有描边层（z=-1）垫底（实深度 ZB_STROKE
-##     分离——等深平局在 Forward+ 深度预-pass 下裁决不可靠）、所有填充层
-##     （z=0）置顶——重叠处填充无缝融合，描边只在剪影外轮廓出线；
-##     填充遍内按画布树序（DFS 序）编号实例序（外臂盖内臂、武器盾盖头）；
-##   - 描边宽：rig 的 zoom 补偿（set_outline_canvas_scale→apply_outline_zoom）
-##     直接改节点宽度/半径，本侧逐帧读节点；宽度变化按指纹懒触发图集重烘
-##     （格位量化恒定，重烘只换贴图像素，零闪变）。
+##   - 只写填充行（裁决#20）：描边不在几何里——char_outline_post 对角色
+##     剪影掩码做屏幕空间膨胀出整剪影描边（恒定屏幕宽），关节内透线
+##     （逐件环带的覆盖竞争）整类消失；填充遍内按画布树序（DFS 序）编号
+##     实例序（同色共面无缝融合）；
+##   - 部件宽度/半径只在构建期读一次（填充几何运行期不变；描边宽随 zoom
+##     补偿的历史已随描边行退役）。
 ##
 ## 尺寸契约（历史沿革出自整卡烘焙的视口契约，现由本路线独承）：
 ##   rig px → 世界单位 S = RIG_SCALE(0.35625) × PX(1/24) = 0.01484375；
@@ -51,37 +50,26 @@ const FOOT_ANCHOR := Vector2(3.0, 141.0)
 const SIZE_K := 1.0
 ## 血条锚点高度（沿 26° 上仰轴，随 depth 缩放）：卡顶留白 8 原生行 = 条中心
 const BAR_H := (144.0 - 8.0) * PX
-## 描边遍的真实深度垫后（世界单位）：等深平局在完整场景（Forward+ 深度
-## 预-pass）下裁决不可靠，改用实深度分离；取值须盖过姿势期部件四边形的
-## z 起伏（0.06 实测会在个别姿势让邻件填充盖不住描边 → 关节处白缝/单件
-## 描边环闪现，创始人 2026-10-11 点正；0.12 实测消除），仍远小于相邻角色
-## 纵深差（≥0.3），不产生穿层
-const ZB_STROKE := -0.12
 ## 武器/盾的深度微移：恒在全部身体部件之上（原版树序「武器/盾盖头」）
 const ZB_WEAPON := 0.008
 
 # ─────────────────────────── 部件记录（rig 实建矢量节点 → 3D 实例） ───────────────────────────
 
 ## 一个 sprite_* 容器的搬运表：容器引用 + 父骨走查下标 + 几何/颜色。
-## 线段肢体宽度与圆半径逐帧读节点（zoom 补偿后真值）；颜色构建期定格
-##（运行期无 apply_colors 触发源）并转线性域（spatial ALBEDO）。
+## 描边层节点只作配对存在性校验（部件对 = stroke+fill 两层），不再搬运
+## ——描边走屏幕空间后处理（裁决#20）。颜色构建期定格（运行期无
+## apply_colors 触发源）并转线性域（spatial ALBEDO）。
 class Part:
 	var cont: Node2D = null
-	var stroke_l: Line2D = null      # 线段肢体两层（圆肢体为 null）
-	var fill_l: Line2D = null
-	var stroke_p: Polygon2D = null   # 圆肢体两层（线段肢体为 null）
-	var fill_p: Polygon2D = null
-	var pidx := 0                    # 容器父骨的走查下标
-	var length := 0.0                # 线段长（fill points 跨度，恒定）
-	var r_stroke := 0.0              # 圆半径缓存（zoom 补偿变更时重读）
-	var r_fill := 0.0
-	var col_stroke := Color.WHITE
+	var fill_l: Line2D = null      # 线段肢体填充层（圆肢体为 null）
+	var fill_p: Polygon2D = null   # 圆肢体填充层（线段肢体为 null）
+	var pidx := 0                  # 容器父骨的走查下标
+	var length := 0.0              # 线段长（fill points 跨度，恒定）
+	var r_fill := 0.0              # 圆半径（构建期定格）
 	var col_fill := Color.WHITE
 
 var _parts: Array = []              # Array[Part]
-var _circ_stale := true             # 圆半径待重读（zoom 补偿变更置位）
 var _joint_atlas: Node = null       # char_joint_atlas（build 时取引）
-var _spec_fp := 0.0                 # 已申报规格的宽度指纹（逐帧比对懒重烘）
 
 # ─────────────────────────── 装配 ───────────────────────────
 
@@ -156,7 +144,6 @@ func build(world: Node, buckets: Node, rig_parent: Node2D, anim: String, tilt_de
 	if _pure_sim:
 		return
 	_joint_atlas = buckets.get("joint_atlas")
-	_spec_fp = _width_fingerprint()
 	if _joint_atlas != null:
 		_joint_atlas.ensure(_build_specs())
 	_build_shadow()
@@ -199,6 +186,7 @@ func _walk_parts(node: Node, widx: int) -> void:
 func _parse_part(cont: Node2D, widx: int) -> void:
 	var stroke_n: Node = cont.get_node_or_null("stroke")
 	var fill_n: Node = cont.get_node_or_null("fill")
+	# stroke+fill 两层同在 = rig 实建部件的配对信号（描边层不再搬运，裁决#20）
 	if stroke_n == null or fill_n == null:
 		return
 	var p := Part.new()
@@ -206,50 +194,31 @@ func _parse_part(cont: Node2D, widx: int) -> void:
 	p.pidx = widx
 	if fill_n is Line2D:
 		p.fill_l = fill_n
-		p.stroke_l = stroke_n
 		var pts := p.fill_l.points
 		if pts.size() < 2:
 			return
 		p.length = absf(pts[pts.size() - 1].x - pts[0].x)
 		p.col_fill = p.fill_l.default_color.srgb_to_linear()
-		p.col_stroke = p.stroke_l.default_color.srgb_to_linear()
 	elif fill_n is Polygon2D:
 		p.fill_p = fill_n
-		p.stroke_p = stroke_n
 		p.col_fill = p.fill_p.color.srgb_to_linear()
-		p.col_stroke = p.stroke_p.color.srgb_to_linear()
-		_refresh_circle_radii(p)
+		var pts_f := p.fill_p.polygon
+		p.r_fill = pts_f[0].length() if pts_f.size() > 0 else 0.0
 	else:
 		return
 	_parts.append(p)
 
 
-## 圆半径重读（构建期 + zoom 补偿变更后：apply_outline_zoom 重建 stroke 多边形）
-func _refresh_circle_radii(p: Part) -> void:
-	var pts_f := p.fill_p.polygon
-	p.r_fill = pts_f[0].length() if pts_f.size() > 0 else 0.0
-	var pts_s := p.stroke_p.polygon
-	p.r_stroke = pts_s[0].length() if pts_s.size() > 0 else 0.0
-
-
-## 宽度指纹（描边宽集求和）：zoom 补偿改宽度 → 指纹变 → 图集重烘
-func _width_fingerprint() -> float:
-	var fp := 0.0
-	for p in _parts:
-		fp += p.stroke_l.width if p.fill_p == null else p.r_stroke
-	return fp
-
-
-## 从实建部件拼图集规格（char_joint_atlas.ensure 的输入契约见其类头）
+## 从实建部件拼图集规格（char_joint_atlas.ensure 的输入契约见其类头；填充层
+## 单行——描边不进图集，裁决#20）
 func _build_specs() -> Array:
 	var specs := []
 	for p in _parts:
 		if p.fill_p != null:
-			specs.append({"name": p.cont.name, "circle": true,
-					"r_stroke": p.r_stroke, "r_fill": p.r_fill})
+			specs.append({"name": p.cont.name, "circle": true, "r_fill": p.r_fill})
 		else:
 			specs.append({"name": p.cont.name, "circle": false, "length": p.length,
-					"w_stroke": p.stroke_l.width, "w_fill": p.fill_l.width})
+					"w_fill": p.fill_l.width})
 	return specs
 
 
@@ -332,18 +301,6 @@ func set_master_alpha(a: float) -> void:
 	if is_equal_approx(a, _master_alpha):
 		return
 	_master_alpha = a
-
-
-## 描边 zoom 补偿：世界 zoom 作为等效画布缩放推给
-## rig（outline_zoom_external 停自动补偿，apply_outline_zoom 直接改矢量节点
-## 宽度/半径），本侧线宽逐帧读节点即恒为补偿后真值，圆半径置脏重读。
-func set_outline_zoom(z: float) -> void:
-	if _rig == null:
-		return
-	_rig.outline_zoom_external = true
-	if _rig.has_method("set_outline_canvas_scale"):
-		_rig.set_outline_canvas_scale(z)
-	_circ_stale = true
 
 
 ## 武器镜像（挂点补偿口径与 WeaponMount._mount_one 同式）：读武器场景
@@ -596,18 +553,6 @@ func _process(_delta: float) -> void:
 	if _hidden:
 		_release_bar_slot()
 		return
-	# 圆半径重读（zoom 补偿变更后）
-	if _circ_stale:
-		for p in _parts:
-			if p.fill_p != null:
-				_refresh_circle_radii(p)
-		_circ_stale = false
-	# 宽度指纹比对（zoom 补偿改描边宽）：变了→图集懒重烘
-	var fp := _width_fingerprint()
-	if absf(fp - _spec_fp) > 0.05:
-		_spec_fp = fp
-		if _joint_atlas != null:
-			_joint_atlas.ensure(_build_specs())
 	# 先序累乘（batch_rig._write_transforms 同式：骨骼局部 → rig 局部）
 	for i in _bones.size():
 		var bone := _bones[i] as Bone2D
@@ -634,35 +579,24 @@ func _release_bar_slot() -> void:
 
 
 ## 身体写入：逐部件读 rig 实建节点的变换/宽度/半径，折 26° 平面写行。
-## 层序 = 画布「全局两遍」的 3D 直译：描边遍先写且实深度垫后 ZB_STROKE
-##（画布描边层全底的直译），填充遍后写置顶——描边只留剪影外轮廓环带；
-## 填充遍内按画布树序（DFS 序：腿→躯干→颈/头→臂）。跨角色走真深度。
-## 每部件一对 quad（裁决#15）：描边贴图格 + 填充贴图格；quad 尺寸 = 图集
-## 格位尺寸（量化恒定），实际宽度承运在贴图像素里（见 char_joint_atlas）。
+## 只写填充遍（裁决#20）——描边由 char_outline_post 屏幕空间膨胀生成，
+## 逐件描边环带的关节内透线整类消失；填充遍内按画布树序（DFS 序：
+## 腿→躯干→颈/头→臂），同色共面重叠无缝融合。跨角色走真深度。
+## quad 尺寸 = 图集格位尺寸（量化恒定），实际宽度承运在贴图像素里。
 func _write_body() -> void:
 	if _joint_atlas == null or _buckets.body == null:
 		return
 	var tr := _tint
 	var alpha := _master_alpha
 	var buckets: Node = _buckets
-	# 描边遍（实深度垫后 ZB_STROKE——画布描边层全底的直译）
 	for p in _parts:
 		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
 		var name: String = p.cont.name
-		var cs: Vector2 = _joint_atlas.cell_size(name, true)
-		buckets.body_row(_fold3d(xf * _sc2(cs.x, cs.y), ZB_STROKE),
-				Color(p.col_stroke.r * tr.r, p.col_stroke.g * tr.g,
-						p.col_stroke.b * tr.b, p.col_stroke.a * alpha),
-				_joint_atlas.uv_rect(name, true))
-	# 填充遍后写（描边环带之外全覆盖：重叠处填充无缝融合，同色无层序痕）
-	for p in _parts:
-		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
-		var name: String = p.cont.name
-		var cs: Vector2 = _joint_atlas.cell_size(name, false)
+		var cs: Vector2 = _joint_atlas.cell_size(name)
 		buckets.body_row(_fold3d(xf * _sc2(cs.x, cs.y), 0.0),
 				Color(p.col_fill.r * tr.r, p.col_fill.g * tr.g,
 						p.col_fill.b * tr.b, p.col_fill.a * alpha),
-				_joint_atlas.uv_rect(name, false))
+				_joint_atlas.uv_rect(name))
 
 
 ## 2D 部件变换折 3D（官方 Transform3D 构造，零手打包）：

@@ -54,8 +54,6 @@ const HOUR_NIGHT_FALL := 19.0
 var _hd: Node3D = null
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
-## 上次广播描边补偿的世界 zoom（变化才广播）
-var _last_outline_zoom := -1.0
 
 ## resource_gen 算法对接（野外资源分布）：算法只认"硬化地面不长资源"，
 ## 这里把 ±墙线内算硬化（城内无资源点），墙外算野外——林区梯度（近墙净空
@@ -208,14 +206,6 @@ func _process(_delta: float) -> void:
 			var base: float = float(cam2d.get("base_zoom")) if "base_zoom" in cam2d else 1.0
 			var z: float = cam2d.zoom.x / maxf(base, 0.001)
 			_hd.set_cam_zoom(z)   # 滚轮缩放同步，防两套相机脱钩
-			# 描边 zoom 补偿广播（变化才推；billboard 纹理在变焦后描边会等比变粗，
-			# 武器薄刃上尤其刺眼——SubViewport 无相机，rig 自动补偿恒按 zoom=1 烘）
-			if not is_equal_approx(z, _last_outline_zoom):
-				_last_outline_zoom = z
-				for id in _char_map:
-					var ch: Node3D = _char_map[id]
-					if ch != null and is_instance_valid(ch) and ch.has_method("set_outline_zoom"):
-						ch.set_outline_zoom(z)
 	_sync_character_render()
 	_apply_time_of_day(false)
 

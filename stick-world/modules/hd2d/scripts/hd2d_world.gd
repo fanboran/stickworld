@@ -43,6 +43,7 @@ const TILT_DEG := 26.0                   # 俯角：创始人要求"稍微增加
 const CARD_SHADER := preload("res://modules/hd2d/shaders/card.gdshader")
 const CharRig3D := preload("res://modules/hd2d/scripts/char_rig_3d.gd")
 const CHAR_DIRECT_BUCKETS := preload("res://modules/hd2d/scripts/char_direct_buckets.gd")
+const CHAR_OUTLINE_POST := preload("res://modules/hd2d/scripts/char_outline_post.gd")
 const POST_SHADER := preload("res://modules/hd2d/shaders/post_hd2d.gdshader")
 const BUILDING_SHADOW_SHADER := preload("res://modules/hd2d/shaders/building_shadow.gdshader")
 
@@ -558,7 +559,25 @@ func _spawn_card(card: String, x: float, z_off: float, skyline: bool = false,
 	mi.material_override = m
 	mi.name = "Card_" + card
 	_card_root.add_child(mi)
+	_attach_mask_blocker(mi)
 	return mi
+
+
+## 掩码视口的建筑遮挡块孪生（裁决#20）：同一网格再挂一份只写深度的
+## 遮挡块（char3d_mask_blocker，掩码层），把「被建筑挡住的角色」从描边
+## 掩码里深度拒掉——屏幕空间描边不穿墙。描边后处理未启用时为无操作。
+func _attach_mask_blocker(card_mi: MeshInstance3D) -> void:
+	if _joint_buckets == null or not _joint_buckets.has_method("mask_blocker_material"):
+		return
+	if card_mi.get_node_or_null("MaskBlocker") != null:
+		return
+	var twin := MeshInstance3D.new()
+	twin.name = "MaskBlocker"
+	twin.mesh = card_mi.mesh
+	twin.material_override = _joint_buckets.mask_blocker_material()
+	twin.layers = 1 << 19   # 与桶 MASK_LAYER 同值（char_direct_buckets 常量镜像）
+	twin.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	card_mi.add_child(twin)
 
 
 ## 背景卡 = skyline 卡 + 按层距离染色；同时**实测卡底世界 z**（供层基线辅助线与
@@ -1390,6 +1409,7 @@ func spawn_character() -> Node:
 ## 承运，零逐帧视口零逐帧回读）。桶/隐藏 rig 画布按需装配一次。
 var _joint_buckets: Node = null
 var _joint_rig_parent: Node2D = null
+var _outline_post: Node = null
 
 func _spawn_joint_character() -> Node:
 	if _joint_buckets == null:
@@ -1405,6 +1425,18 @@ func _spawn_joint_character() -> Node:
 		rigs.name = "Rigs"
 		layer.add_child(rigs)
 		_joint_rig_parent = rigs
+		# 描边后处理（裁决#20）：掩码视口 + 屏幕空间膨胀合成；建筑先于角色
+		# 落场时遮挡块缺席，这里回补既有卡。headless 不装配（桶无 body，
+		# 视口无渲染）
+		if DisplayServer.get_name() != "headless":
+			var post: Node = CHAR_OUTLINE_POST.new()
+			post.name = "CharOutlinePost"
+			add_child(post)
+			post.setup(_cam, b, get_world_3d())
+			_outline_post = post
+			for card_mi in _card_root.get_children():
+				if card_mi is MeshInstance3D:
+					_attach_mask_blocker(card_mi)
 	var h: Node = CharRig3D.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1

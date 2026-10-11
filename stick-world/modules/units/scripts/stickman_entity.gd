@@ -1385,10 +1385,22 @@ func _set_facing_rate_limited(new_facing: int) -> bool:
 ## 返回该侧翻面请求是否放行——反向意图连续 ≥ FACING_PERSIST_SECS 才 true。
 ## 附身豁免（手控直给）；face_battle_dir 等稳定朝向源不经本闸（直接走
 ## try_set_facing 的节流），站定收口不被移动滞回卡住。
+## 出生朝向宽限窗（裁决#21c）：出生/参战登记落定的朝向是"第一眼"观感——
+## 窗口内移动侧一律不产生翻面请求，否则单位开场第一步（去槽位/被推挤）就把
+## 脸转向移动方向，肉眼即"开局转身背对"。战斗面向（face_towards → _force_facing）
+## 不经本闸，瞄准/攻击照旧是朝向权威。
+const SPAWN_FACING_GRACE_FRAMES: int = 30   ## 1s @30Hz
+var _first_move_facing_frame: int = -1
+
 func note_move_facing(side: int, delta: float) -> bool:
 	if is_possessed() or side == 0 or side == _facing:
 		_facing_desire_acc = 0.0
 		return true
+	if _first_move_facing_frame < 0:
+		_first_move_facing_frame = Engine.get_physics_frames()
+	elif Engine.get_physics_frames() - _first_move_facing_frame < SPAWN_FACING_GRACE_FRAMES:
+		_facing_desire_acc = 0.0
+		return false
 	_facing_desire_acc += delta
 	return _facing_desire_acc >= FACING_PERSIST_SECS
 

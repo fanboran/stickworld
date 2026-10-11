@@ -168,6 +168,41 @@ func add_unit(unit: Node, faction: int) -> void:
 		_units_attacker.append(unit)
 	else:
 		_units_defender.append(unit)
+	_settle_spawn_facing(unit, faction)
+
+
+## 出生朝向统一落定（裁决#21c）：所有出生路径（战场遭遇/驻军/召唤/测试夹具）都经
+## add_unit 登记，故朝向在此一次性落定——朝**敌军一侧的质心**。历史只有观察场在
+## 出生点自己设了朝向，生产路径全军保持默认 _facing=+1（背敌），开局肉眼可见
+## "橘方转身"。先出生的一侧（对面还没有单位）挂起，对面首个单位登记时补定。
+var _face_pending: Array = []
+
+
+func _settle_spawn_facing(unit: Node, faction: int) -> void:
+	if not unit.has_method("face_towards") or not unit.has_method("get_faction"):
+		return
+	if not (unit is Node2D):
+		return
+	var foes: Array = _units_defender if faction == FACTION_ATTACKER else _units_attacker
+	var cx: float = 0.0
+	var n: int = 0
+	for f in foes:
+		if is_instance_valid(f) and not (f.has_method("is_dead") and f.is_dead()):
+			cx += (f as Node2D).global_position.x
+			n += 1
+	if n == 0:
+		if not _face_pending.has(unit):
+			_face_pending.append(unit)
+		return
+	cx /= float(n)
+	unit.face_towards(Vector2(cx, (unit as Node2D).global_position.y))
+	if _face_pending.is_empty():
+		return
+	var pend: Array = _face_pending
+	_face_pending = []
+	for p in pend:
+		if is_instance_valid(p) and p is Node2D:
+			p.face_towards(Vector2(cx, (p as Node2D).global_position.y))
 
 
 ## 开始战斗（PREPARING -> ENGAGED）

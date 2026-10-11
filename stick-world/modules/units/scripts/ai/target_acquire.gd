@@ -137,12 +137,17 @@ func _elect() -> void:
 		"only_forward": true,
 	})
 	if best == null:
-		best = ScriptFinder.find_target(entity, {
+		var anywhere: Node = ScriptFinder.find_target(entity, {
 			"battle": battle,
 			"ignore_current_attackers": true,
 			"prefer_large": _p("prefer_large", 0.0),
 			"only_forward": false,
 		})
+		# 全域回退门控（裁决#21c）：回退是为"被近身 / 被抄后"解死锁——候选须在
+		# 追击带内（够得着）才采纳，否则身后半个战场外的敌人也会被锁定 ⇒ 开局
+		# 第一拍就 180° 回头（创始人点正的"开局橘色转身看后面"即此路）。
+		if anywhere != null and _tier_safe(anywhere) <= TargetTier.OUT_OF_FIRE_RANGE:
+			best = anywhere
 	if best != null and _should_switch_to(best):
 		_accept(best)
 	_post_guard()

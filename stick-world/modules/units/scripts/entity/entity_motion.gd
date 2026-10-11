@@ -41,8 +41,9 @@ const IDLE_THRESHOLD: float = 5.0
 ## 半径 < 编队间距）唯一维护在 formation 模块 formation_spacing.gd——历史上本处
 ## 与实体壳/批模拟各持一份副本，换轨漏改导致分离力对抗槽位、阵型挤散
 const SEPARATION_RADIUS: float = preload("res://modules/formation/api.gd").SEPARATION_RADIUS
-## 椭圆分离双轴（创始人 2026-09-30 观感裁决：billboard 竖长卡纵深重叠，纵向
-## 半径加大；单一真相源 formation_spacing，消费方判定已全部改椭圆口径）
+## 椭圆分离双轴（纵半径 = 前排间距量级——创始人 2026-10-11 裁决：垂直碰撞
+## 箱设成前排那么大，接战战团靠碰撞自然展开，不需要阵型算法管接战期间距；
+## 单一真相源 formation_spacing，消费方判定已全部改椭圆口径）
 const _FormationAPI := preload("res://modules/formation/api.gd")
 const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X
 const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y

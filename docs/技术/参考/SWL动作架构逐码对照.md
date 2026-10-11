@@ -115,7 +115,7 @@ SWL:  ShouldAim(站定+目标进射程) → isAiming → 播 Draw ──0.5s─�
 |---|---|---|
 | `FaceDirection` + X 翻转 | `try_set_facing`/`_apply_scale`（scale.x 翻面） | ✅ |
 | `DIRECTION_CHANGE_FREQUENCY=0.5`（`lastDirectionChangeTime`） | 帧号制 15 帧节流（`_set_facing_rate_limited`） | ✅ 直译 |
-| `OnlyTargetsUnitsForward`（前向目标过滤，按兵种开关） | `target_acquire.only_forward`（能力在、接线 false 按兵种分级待批4+） | ≈ |
+| `OnlyTargetsUnitsForward`（前向目标过滤，按兵种开关） | `target_acquire` 自主寻敌层接线 `only_forward: true`（身前无敌回退全域——被抄后不死锁；近战集火共享目标另加扎堆限 3） | ✅ 直译 |
 | `AttackWhileRunning`（边打朝向锁） | `_combat_face_lock` + `_force_facing` 强制通道 | ✅（背身拉弓修复后同语义） |
 | `walkPower`/`Run`（Rigidbody 力模型） | `entity_motion`（速度+换档斜坡，批3） | ≈ 架构不同、观感目标同 |
 

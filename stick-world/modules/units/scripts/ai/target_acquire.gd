@@ -126,13 +126,23 @@ func _elect() -> void:
 			_accept(squad)
 		_post_guard()
 		return
-	# 3. 自主寻敌（增量改进）：扫最优候选，滞回/驻留/分层判定换靶
+	# 3. 自主寻敌（SWL OnlyTargetsUnitsForward 直译——只打身前目标防回头送，
+	#    前向配对让接触沿正面自然分布）；身前无敌（被抄后/残局）回退全域寻敌，
+	#    防站立挨打死锁（SWL 单位会转身使半平面旋转，我方面向跟随目标——
+	#    回退层兜住等价语义）
 	var best: Node = ScriptFinder.find_target(entity, {
 		"battle": battle,
 		"ignore_current_attackers": true,
 		"prefer_large": _p("prefer_large", 0.0),
-		"only_forward": false,
+		"only_forward": true,
 	})
+	if best == null:
+		best = ScriptFinder.find_target(entity, {
+			"battle": battle,
+			"ignore_current_attackers": true,
+			"prefer_large": _p("prefer_large", 0.0),
+			"only_forward": false,
+		})
 	if best != null and _should_switch_to(best):
 		_accept(best)
 	_post_guard()

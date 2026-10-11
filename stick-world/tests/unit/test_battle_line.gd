@@ -12,6 +12,7 @@ signal test_done(code: int)
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
+const _Spacing := preload("res://modules/formation/scripts/formation_spacing.gd")
 const ScriptBehaviorMove := preload("res://modules/units/scripts/ai/behavior_move.gd")
 
 var _runner: TestRunner
@@ -41,15 +42,15 @@ func _test_lattice() -> void:
 		line.add_unit(u)
 	line.tick(0.0)  # 只跑接战拍（重算槽位），零推进保几何断言确定性
 	var upc: int = BattleLine.group_upc(12, 360.0, w["fs"].SPREAD_SPACING)
-	_runner.assert_equal(upc, 7, "带宽 720 / 间距 110 → 容 7 列（6×110=660 ≤ 720）")
+	_runner.assert_equal(upc, 6, "带宽 720 / 间距 140 → 容 6 列（5×140=700 ≤ 720）")
 	var s0: Vector2 = line.get_unit_slot(w["units"][0])
 	_runner.assert_approx(s0.x, 0.0, 0.5, "首员前列贴线（col0 → x = line_x）")
-	_runner.assert_approx(s0.y, 500.0 - 3.0 * w["fs"].SPREAD_SPACING, 0.5,
-			"前列 row0 横展 −3×SPREAD（7 列居中）")
+	_runner.assert_approx(s0.y, 500.0 - 2.5 * w["fs"].SPREAD_SPACING, 0.5,
+			"前列 row0 横展 −2.5×SPREAD（6 列居中）")
+	var s5: Vector2 = line.get_unit_slot(w["units"][5])
+	_runner.assert_approx(s5.x, 0.0, 0.5, "第 6 员仍在前列（6 宽铺满带，未到后列）")
 	var s6: Vector2 = line.get_unit_slot(w["units"][6])
-	_runner.assert_approx(s6.x, 0.0, 0.5, "第 7 员仍在前列（7 宽铺满带，未到后列）")
-	var s7: Vector2 = line.get_unit_slot(w["units"][7])
-	_runner.assert_approx(s7.x, -w["fs"].ROW_GAP, 0.5, "第 8 员 = col1（后列退 ROW_GAP）")
+	_runner.assert_approx(s6.x, -w["fs"].ROW_GAP, 0.5, "第 7 员 = col1（后列退 ROW_GAP）")
 	var stranger := Node2D.new()
 	_runner.assert_true(is_inf(line.get_unit_slot(stranger).x), "非成员槽位 = INF")
 	stranger.free()
@@ -57,17 +58,17 @@ func _test_lattice() -> void:
 
 
 func _test_reserve_and_meric() -> void:
-	# 二线驻位：30 近战 = 7×3 块（21）+ 第 22 员起 col3 = 块尾 + RESERVE_GAP
+	# 二线驻位：30 近战 = 6×3 块（18）+ 第 19 员起 col3 = 块尾 + RESERVE_GAP
 	var w := _make_world(30, 0)
 	var line: RefCounted = w["fs"].create_battle_line(1, 1, 1000.0, 0.0, 500.0, 360.0)
 	for u in w["units"]:
 		line.add_unit(u)
 	line.tick(0.0)
-	var s20: Vector2 = line.get_unit_slot(w["units"][20])
-	_runner.assert_approx(s20.x, -2.0 * w["fs"].ROW_GAP, 0.5, "第 21 员 = col2（块末排）")
-	var s21: Vector2 = line.get_unit_slot(w["units"][21])
-	_runner.assert_approx(s21.x, -(2.0 * w["fs"].ROW_GAP + BattleLine.RESERVE_GAP), 0.5,
-			"第 22 员 = col3 二线驻位（块尾 + RESERVE_GAP）")
+	var s17: Vector2 = line.get_unit_slot(w["units"][17])
+	_runner.assert_approx(s17.x, -2.0 * w["fs"].ROW_GAP, 0.5, "第 18 员 = col2（块末排）")
+	var s18: Vector2 = line.get_unit_slot(w["units"][18])
+	_runner.assert_approx(s18.x, -(2.0 * w["fs"].ROW_GAP + BattleLine.RESERVE_GAP), 0.5,
+			"第 19 员 = col3 二线驻位（块尾 + RESERVE_GAP）")
 	# 远程随行动态层距：近战全纵深（含二线）+ GROUP_GAP（30 人 = cols 0~4，
 	# 二线两排：2×ROW_GAP + RESERVE_GAP + 1×ROW_GAP）
 	var melee_depth: float = 3.0 * w["fs"].ROW_GAP + BattleLine.RESERVE_GAP
@@ -121,7 +122,7 @@ func _test_advance_and_block() -> void:
 
 
 func _test_ranged_follow_and_freeze() -> void:
-	var w := _make_world(8, 0, true)  # 8 弓手（upc 7 → 2 列，纵深 1×ROW_GAP）
+	var w := _make_world(8, 0, true)  # 8 弓手（upc 6 → 2 列，纵深 1×ROW_GAP）
 	var line: RefCounted = w["fs"].create_battle_line(1, 1, 1000.0, 0.0, 500.0, 360.0)
 	for u in w["units"]:
 		line.add_unit(u)
@@ -244,13 +245,15 @@ func _test_y_drift() -> void:
 		line_b.tick(0.5)
 	var upc: int = BattleLine.group_upc(8, 360.0, w1["fs"].SPREAD_SPACING)
 	var s0: Vector2 = line_a.get_unit_slot(w1["units"][0])
-	_runner.assert_approx(s0.y, 500.0 - 3.0 * w1["fs"].SPREAD_SPACING, 0.5,
-			"首漂前槽位 y = 格点（漂移零，7 列居中）")
+	_runner.assert_approx(s0.y, 500.0 - 2.5 * w1["fs"].SPREAD_SPACING, 0.5,
+			"首漂前槽位 y = 格点（漂移零，6 列居中）")
 	# 长局：20s 漂移激活——有界 + 同种子孪生线逐成员一致
 	for i in 35:
 		line_a.tick(0.5)
 		line_b.tick(0.5)
-	var limit: float = w1["fs"].SPREAD_SPACING * 0.25 + 0.01
+	# 漂移上限 = min(比例值, 椭圆余量半宽)——同 battle_line._tick_y_drift 口径
+	var limit: float = minf(w1["fs"].SPREAD_SPACING * 0.25,
+			(w1["fs"].SPREAD_SPACING - _Spacing.SEPARATION_RADIUS_Y) * 0.5) + 0.01
 	for i in w1["units"].size():
 		var ya: float = line_a.get_unit_slot(w1["units"][i]).y
 		var yb: float = line_b.get_unit_slot(w2["units"][i]).y

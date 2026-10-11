@@ -52,7 +52,8 @@ func _ready() -> void:
 
 ## 构造一个含 n 个单位的 FormationSystem（fake org api；单位不带 get_facing → 回退 +x）。
 ## same_point=true 时全员同点出生（贪心换位成本对称无改善 → 保持入队序，确定性）；
-## false 时沿 y 向 200px 大间距散开（任意换位后成员距自身槽位仍超死区，确定性）。
+## false 时沿 y 向 260px 大间距散开（间距 > 槽距 140+死区余量：成员距自身
+## 槽位必超死区，确定性——槽距改值时同步核本夹具）。
 func _make_formation(n: int, same_point: bool = true) -> Array:
 	var fs: Node = ScriptFormationSystem.new()
 	var org: Node = FakeOrgApi.new()
@@ -61,7 +62,7 @@ func _make_formation(n: int, same_point: bool = true) -> Array:
 	for i in n:
 		var u := Node2D.new()
 		u.name = "U%d" % i
-		u.position = Vector2(100, 500) if same_point else Vector2(100, 500 + i * 200.0)
+		u.position = Vector2(100, 500) if same_point else Vector2(100, 500 + i * 260.0)
 		var s := GDScript.new()
 		s.source_code = "extends Node2D\nfunc is_dead(): return false\nfunc get_ai_controller(): return null\n"
 		s.reload()

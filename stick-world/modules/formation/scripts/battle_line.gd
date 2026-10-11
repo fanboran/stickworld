@@ -49,14 +49,15 @@ const RESERVE_GAP: float = 140.0
 const ENGAGE_HYSTERESIS: int = 2
 # ── 个性 y 漂移（SWL Ai.personalityControlledY / personalityNextYControlShift 直译）──
 # 单位在槽位横排（y）上按个体个性缓慢漂移——大军 y 分布不机械（02 二-A.5）。
-# 每成员到点换漂移目标（间隔 3~8s），指数趋近；幅度夹 ±spread×DRIFT_MAX_RATIO
-#（同列相邻最坏间距 = spread − 2×幅度，保持在分离半径外——分离椭圆是硬冲突区，
-# 不是密度旋钮）。确定性：种子注入（宿主可按 battle_id 派生），同种子同漂移。
+# 每成员到点换漂移目标（间隔 3~8s），指数趋近；幅度夹 ±min(spread×DRIFT_MAX_RATIO,
+# (spread−半径Y)/2)——相向漂移最坏压近仍不出分离椭圆（同列相邻间距 = spread −
+# 2×幅值 ≥ 半径Y）。确定性：种子注入（宿主可按 battle_id 派生），同种子同漂移。
 const DRIFT_MAX_RATIO: float = 0.25
 const DRIFT_SHIFT_MIN: float = 3.0
 const DRIFT_SHIFT_MAX: float = 8.0
 const DRIFT_RATE: float = 0.6
 const DRIFT_SEED_FALLBACK: int = 20261009
+const _Spacing := preload("res://modules/formation/scripts/formation_spacing.gd")
 
 enum Stance { ATTACK, DEFEND, GARRISON }
 
@@ -239,7 +240,9 @@ func ranged_count() -> int:
 func _tick_y_drift(delta: float) -> void:
 	if delta <= 0.0 or _y_drift.is_empty():
 		return
-	var limit: float = _spread * DRIFT_MAX_RATIO
+	# 幅值上限：比例值与「椭圆余量半宽」取小——相向漂移最坏不出分离椭圆
+	var limit: float = minf(_spread * DRIFT_MAX_RATIO,
+			(_spread - _Spacing.SEPARATION_RADIUS_Y) * 0.5)
 	for iid in _y_drift.keys():
 		var wait: float = float(_y_next_shift[iid]) - delta
 		if wait <= 0.0:

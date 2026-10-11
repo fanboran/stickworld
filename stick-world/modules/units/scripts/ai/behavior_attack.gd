@@ -892,6 +892,10 @@ func _determine_x_run_power(desired_pos: Vector2, attack_range: float) -> float:
 
 ## 队伍级共享攻击目标（反编译参考实装 D-B）：本兵所属小队的排长决策目标。
 ## 无 formation / 无小队 / 无共享目标时返回 null（回退各自寻敌）。
+## 近战扎堆闸（2026-10-11）：共享目标已被 ≥3 个攻击者咬住时近战不再领同一个
+## 目标（回退各自前向寻敌——接战密度交给分离碰撞自然摊开，创始人裁决方向；
+## 3 = SWL MeleeAttack.NumberOfUnitsThatCanHit 量级）。远程不受限——齐射集火
+## 正是远程的特化收益（01-组织 §2.2），且远程站槽互不挤。
 func _get_squad_target() -> Node:
 	if entity == null or not entity.has_method("get_formation_system"):
 		return null
@@ -901,7 +905,19 @@ func _get_squad_target() -> Node:
 	var squad_id: String = fs.get_unit_squad(entity)
 	if squad_id.is_empty() or not fs.has_method("get_squad_target"):
 		return null
-	return fs.get_squad_target(squad_id)
+	var t: Node = fs.get_squad_target(squad_id)
+	if t == null:
+		return null
+	if not _is_ranged_weapon(entity.get_weapon() if entity.has_method("get_weapon") else null) \
+			and _battle != null and is_instance_valid(_battle) \
+			and _battle.has_method("get_attacker_count") \
+			and _battle.get_attacker_count(t) >= SQUAD_TARGET_MAX_MELEE:
+		return null
+	return t
+
+
+## 近战共享目标扎堆上限（SWL MeleeAttack.NumberOfUnitsThatCanHit 量级）
+const SQUAD_TARGET_MAX_MELEE: int = 3
 
 
 ## 是否远程武器（弓/杖——弹道延迟结算且解算自带移动目标预判）。

@@ -22,7 +22,15 @@ extends Node
 ##     直立参考 = Swordwrath-Stand1 各骨骼 t=0 角（缺省回退 setup rotation / 0）。
 ##   - Spine 用 >360° 的螺旋值表示跨圈插值（如 -325.75 = 34.25° 转了 1 圈），
 ##     需按"与前一帧最短角差"归一化，否则 LINEAR 插值会绕圈。
-##   - 只提取 rotate（肢体摆动）；未映射骨骼（装饰/武器/指节）忽略。
+##   - translate 一并提取（不再是"只提取 rotate"）：逐骨位移 = 肢体在父骨局部系
+##     里的平移（跑步抬腿的垂直起伏、矛刺的身体前冲、拉弓的握弓手位移都在这条
+##     通道上）。键值是**相对 setup 的局部偏移增量**（实证：按增量解释时头/髋/脚
+##     维持直立合理位置，按绝对局部位置解释时整具骨架塌到原点）；写进 .tres 时
+##     必须换算成绝对局部位置 = 骨架 rest 偏移 + 该增量（Godot position 轨是绝对
+##     值，不是增量——只写增量会把骨拉到父骨原点，人物塌成团块）。坐标映射与
+##     rotate 同款镜像：x 原样、y 取负（Spine y-up → Godot y-down），增量乘骨架
+##     尺度 _scale 换算到 rig px。
+##   - 未映射骨骼（装饰/武器/指节）忽略。
 ##   - 动画只列"发生变化"的骨骼，未列骨骼保持骨架默认（本项目直立姿势）。
 ##   - 生成动画名对齐 stickman_anims 使用的名字，覆盖旧程序化动画。
 ##
@@ -39,6 +47,12 @@ const SPINE_FILE := "F:/VSCode/game-2/external/decompiled/legacy/spine_raw/核�
 
 ## 实际输出目录（--out-dir 覆盖；缺省 = OUTPUT_DIR，保持现行为不动）
 var _out_dir: String = OUTPUT_DIR
+
+## 单位换算：Spine 逻辑 px → 本项目 rig px。translate 位移量必须过这道换算才与
+## 骨架自己的骨长同量纲（两具骨架比例不同：Spine 全骨 y 极差 372.4、rig 223.3）。
+## 取值口径与 L1 验收门禁 compare_pose.py 的 scale 完全一致（两侧 dump 的
+## skeleton_height 之比），启动时按当前数据现算——改骨架/换源自动跟随，不留常数。
+var _scale: float = 1.0
 
 ## Spine 骨骼名 -> 本项目骨骼 ID（只映射核心肢体骨骼）
 const SPINE_TO_MY: Dictionary = {
@@ -162,6 +176,9 @@ func _ready() -> void:
 	var animations: Dictionary = data.get("animations", {})
 	# 构建直立参考角：Stand1 t=0 优先，缺省 setup rotation / 0
 	_build_ref(data, animations)
+	# 单位换算（Spine px → rig px）：translate 位移量进图前必须过这道换算
+	_scale = _compute_scale(data)
+	print("  Spine→rig 单位换算 scale = %.4f" % _scale)
 	var ok: int = 0
 	var err: int = 0
 	# --out-dir=路径：输出目录覆盖（忠实版直出用）；目录不存在则创建
@@ -247,6 +264,37 @@ func _convert_one(spine_anim: Dictionary, godot_name: String, cfg: Dictionary) -
 			for k in keys:
 				k["v"] += shift
 		tracks.append([my_id, keys])
+	# 逐骨位移（translate 通道）→ 对应骨 position 轨。Godot 的 position 轨写的是
+	# **绝对局部位置**（不是增量）——必须写成「骨架 rest 偏移 + 位移增量」，否则
+	# 有位移通道的骨会被拉到父骨原点附近（整具骨架塌成一团；2026-10-11 踩过：
+	# 只写增量时躯干上移、腿压进躯干，人物变成粗短团块，而增量对比门禁看不出
+	# 这种"整体塌陷"）。位移增量本身的映射：x 原样、y 取负（y 镜像），乘 _scale
+	# 换算到 rig px；rest 已是 rig px 不参与换算。全零通道不产轨。
+	const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
+	for spine_bone in bones_data.keys():
+		if not SPINE_TO_MY.has(spine_bone):
+			continue
+		var bdata_t: Dictionary = bones_data[spine_bone]
+		var tr: Array = bdata_t.get("translate", [])
+		if tr.is_empty():
+			continue
+		var bid: int = int(SPINE_TO_MY[spine_bone])
+		var bd_rest: Dictionary = Skeleton.SKELETON_DATA.get(bid, {})
+		var rest := Vector2(float(bd_rest.get("x", 0.0)), float(bd_rest.get("y", 0.0)))
+		var pkeys: Array = []
+		var any_move: bool = false
+		for kf in tr:
+			if not (kf is Dictionary):
+				continue
+			var pt: float = float(kf.get("time", 0.0))
+			var dlt := Vector2(float(kf.get("x", 0.0)), -float(kf.get("y", 0.0))) * _scale
+			if absf(dlt.x) > 0.001 or absf(dlt.y) > 0.001:
+				any_move = true
+			pkeys.append({"t": pt, "v": rest + dlt, "curve": _read_curve(kf)})
+			max_time = maxf(max_time, pt)
+		if pkeys.is_empty() or not any_move:
+			continue
+		tracks.append(["pos_%d" % bid, pkeys])
 	# 全骨补垫：未列骨垫 0 值常轨（t=0 单键）。AnimationPlayer 值轨不重置未覆盖
 	# 属性——切动画时旧动画的末值会残留（陈旧旋转，2026-08 拉弓低头批次实锤）。
 	# 补垫后每动画对全部映射骨都有轨，姿态权威完整、陈旧态整类消灭
@@ -362,26 +410,28 @@ func _apply_segment_transforms(tracks: Array, hold_from: float, freeze_after: fl
 
 ## 键字典序列在 t 时刻的曲线感知采样（null=linear / stepped=保持 / bezier=
 ## 三次贝塞尔[0,1]²区域，Newton 迭代解时间参数；t 越界钳到端点值）。
-func _eval_keys(keys: Array, t: float) -> float:
+## 返回 Variant：旋转轨是 float（度→弧度前）、位移轨是 Vector2——两轨共用本采样，
+## 故 v 一律不做数值强转，靠 Vector2 自身的加减乘运算承接。
+func _eval_keys(keys: Array, t: float) -> Variant:
 	if t <= float(keys[0]["t"]):
-		return float(keys[0]["v"])
+		return keys[0]["v"]
 	var n: int = keys.size()
 	if t >= float(keys[n - 1]["t"]):
-		return float(keys[n - 1]["v"])
+		return keys[n - 1]["v"]
 	var i := 0
 	while i + 1 < n and float(keys[i + 1]["t"]) <= t:
 		i += 1
 	var k0: Dictionary = keys[i]
 	var k1: Dictionary = keys[i + 1]
 	var dt: float = float(k1["t"]) - float(k0["t"])
-	var dv: float = float(k1["v"]) - float(k0["v"])
-	var curve: Variant = k0.get("curve")
 	if dt <= 0.0:
-		return float(k0["v"])
+		return k0["v"]
+	var dv: Variant = k1["v"] - k0["v"]
+	var curve: Variant = k0.get("curve")
 	if curve == null:
-		return float(k0["v"]) + dv * ((t - float(k0["t"])) / dt)
+		return k0["v"] + dv * ((t - float(k0["t"])) / dt)
 	if str(curve) == "stepped":
-		return float(k0["v"])   # 保持到段末（stepped 语义：下一键才跳变）
+		return k0["v"]   # 保持到段末（stepped 语义：下一键才跳变）
 	var c: Array = curve
 	# 归一化时间参数 u（解 bezier x(u)=target，Newton 迭代；target 固定不动）
 	var target: float = (t - float(k0["t"])) / dt
@@ -393,7 +443,7 @@ func _eval_keys(keys: Array, t: float) -> float:
 			break
 		u -= (bx - target) / dx
 		u = clampf(u, 0.0, 1.0)
-	return float(k0["v"]) + dv * _bez1(u, c[1], c[3])
+	return k0["v"] + dv * _bez1(u, c[1], c[3])
 
 
 static func _bez1(u: float, c1: float, c2: float) -> float:
@@ -478,15 +528,102 @@ func _build_ref(data: Dictionary, animations: Dictionary) -> void:
 	print("  直立参考角:", _ref)
 
 
+## 单位换算 scale = rig 骨架高 / Spine 骨架高（口径同 L1 门禁 compare_pose.py）。
+## rig 侧：SKELETON_DATA 纯平移 FK（rotation=0 即本项目直立姿势）全骨关节 y 极差；
+## Spine 侧：源 setup 姿势（无动画增量）全骨 FK 世界 y 极差——两侧同算法才可比。
+func _compute_scale(data: Dictionary) -> float:
+	var rig_h: float = _rig_setup_height()
+	var spine_h: float = _spine_setup_height(data)
+	if spine_h <= 0.0 or rig_h <= 0.0:
+		printerr("  骨架高度异常（rig=%.3f spine=%.3f），换算取 1.0" % [rig_h, spine_h])
+		return 1.0
+	print("  骨架高：rig=%.3f  spine=%.3f" % [rig_h, spine_h])
+	return rig_h / spine_h
+
+
+## rig 骨架高：SKELETON_DATA 拓扑逐骨累加局部偏移（rest rotation 全 0 = 直立），
+## 取全骨关节 y 极差。与 dump_rig_pose.gd 的 skeleton_height 同算法。
+static func _rig_setup_height() -> float:
+	const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
+	var y_of: Dictionary = {}
+	var min_y: float = INF
+	var max_y: float = -INF
+	# 多趟收敛（数据是父先于子的拓扑序，但保守起见按依赖趟）
+	var pending: Dictionary = Skeleton.SKELETON_DATA.duplicate()
+	var guard: int = 0
+	while not pending.is_empty() and guard < 64:
+		guard += 1
+		var progressed: bool = false
+		for id in pending.keys():
+			var d: Dictionary = pending[id]
+			var pid: int = int(d.get("parent", -1))
+			if pid < 0:
+				y_of[id] = 0.0
+			elif y_of.has(pid):
+				y_of[id] = float(y_of[pid]) + float(d.get("y", 0.0))
+			else:
+				continue
+			pending.erase(id)
+			progressed = true
+			var y: float = y_of[id]
+			min_y = minf(min_y, y)
+			max_y = maxf(max_y, y)
+		if not progressed:
+			break
+	return max_y - min_y
+
+
+## Spine 骨架高：源 setup 姿势（无动画增量）全骨世界 y 极差。
+## FK 口径与 dump_spine_pose.py / compare_pose.py 一致（局部角 = setup rotation，
+## 子骨位置 = 父世界位置 + R(父世界角) × 局部偏移）。
+static func _spine_setup_height(data: Dictionary) -> float:
+	var world: Dictionary = {}
+	var min_y: float = INF
+	var max_y: float = -INF
+	# 源数据 bones 数组本身即父先于子的顺序，但同样按依赖趟走
+	var pending: Array = data.get("bones", []).duplicate()
+	var guard: int = 0
+	while not pending.is_empty() and guard < 64:
+		guard += 1
+		var rest: Array = []
+		var progressed: bool = false
+		for b in pending:
+			var name: String = str(b.get("name", ""))
+			var parent: Variant = b.get("parent")
+			var a_loc: float = float(b.get("rotation", 0.0))
+			var lx: float = float(b.get("x", 0.0))
+			var ly: float = float(b.get("y", 0.0))
+			if parent == null or not world.has(str(parent)):
+				if parent != null:
+					rest.append(b)
+					continue
+				world[name] = Vector3(lx, ly, a_loc)
+			else:
+				var pw: Vector3 = world[str(parent)]
+				var pr: float = deg_to_rad(pw.z)
+				world[name] = Vector3(
+						pw.x + lx * cos(pr) - ly * sin(pr),
+						pw.y + lx * sin(pr) + ly * cos(pr),
+						pw.z + a_loc)
+			progressed = true
+			min_y = minf(min_y, world[name].y)
+			max_y = maxf(max_y, world[name].y)
+		pending = rest
+		if not progressed:
+			break
+	return max_y - min_y
+
+
 ## 提取 root translate（只取 y 上下起伏，x 行走位移不做，避免角色漂移）。
-## y 取负：Spine y-up → Godot y-down 轴翻转（当前源数据 translate 全零占位，
-## 翻转零值无感；未来带起伏的数据若不翻会上下颠倒）。
+## y 取负：Spine y-up → Godot y-down 轴翻转；乘 _scale 换算到 rig px。
+## 注：本骨架源数据的 root translate 实测全零（通道存在、键里无 x/y 字段），
+## 故髋部起伏轨当前恒为 0；真实起伏数据在其它骨（逐骨 translate 见 _convert_one）。
 ## translate 格式: [{"time":t,"x":..,"y":..}, ...]
 func _extract_translate(translate: Array) -> Array:
 	var keys: Array = []
 	for kf in translate:
 		var t: float = float(kf.get("time", 0.0))
-		var y: float = -float(kf.get("y", 0.0))
+		var y: float = -float(kf.get("y", 0.0)) * _scale
 		# 相对起伏（首帧为基准），映射到髋部上下位移
 		keys.append([t, y])
 	return keys
@@ -506,9 +643,14 @@ func _save_anim(anim_name: String, tracks: Array, length: float, loop_mode: int,
 		var keys: Array = track_data[1]
 		if keys.is_empty():
 			continue
-		var is_pos: bool = typeof(bone_key) == TYPE_STRING and bone_key == "hip_pos"
+		var key_str: String = str(bone_key)
+		var is_hip: bool = typeof(bone_key) == TYPE_STRING and key_str == "hip_pos"
+		var is_bone_pos: bool = typeof(bone_key) == TYPE_STRING and key_str.begins_with("pos_")
+		var is_pos: bool = is_hip or is_bone_pos
 		var path: String = _bone_path(is_pos, bone_key)
-		if is_pos:
+		if is_bone_pos:
+			_build_pos_track(anim, path, keys)
+		elif is_hip:
 			if keys.size() < 2:
 				continue
 			var track_idx: int = anim.add_track(Animation.TYPE_VALUE)
@@ -604,6 +746,40 @@ static func _build_bezier_track(anim: Animation, path: String, keys: Array) -> v
 		anim.bezier_track_insert_key(tid, float(k["t"]), deg_to_rad(float(k["v"])), tin, tout)
 
 
+## 位置轨构建（逐骨 translate → 骨的 position 属性）：TYPE_VALUE + LINEAR 键。
+## 曲线处理：线性键直写；含 stepped/bezier 段的轨按 POS_SAMPLE_HZ 密集采样降级为
+## 线性键（Godot TYPE_VALUE 轨的 bezier 键柄格式另有约定、写错即静默劣化，而位移
+## 量级小、30Hz 采样与曲线的差值在视觉阈值内——降级口径与 crowd_renderer_bake
+## 的 BEZIER→30Hz 平铺表同源）。stepped 段经采样后是"1/30s 内完成的瞬跳"，等效保持。
+const POS_SAMPLE_HZ := 30.0
+
+func _build_pos_track(anim: Animation, path: String, keys: Array) -> void:
+	var pts: Array = []
+	var needs_sample: bool = false
+	for k in keys:
+		if k.get("curve") != null:
+			needs_sample = true
+			break
+	if needs_sample:
+		var t0: float = float(keys[0]["t"])
+		var t1: float = float(keys[keys.size() - 1]["t"])
+		if t1 <= t0:
+			pts.append([t0, keys[0]["v"]])
+		else:
+			var n: int = maxi(2, int(ceil((t1 - t0) * POS_SAMPLE_HZ)))
+			for i in n + 1:
+				var t: float = t0 + (t1 - t0) * float(i) / float(n)
+				pts.append([t, _eval_keys(keys, t)])
+	else:
+		for k in keys:
+			pts.append([float(k["t"]), k["v"]])
+	var tid: int = anim.add_track(Animation.TYPE_VALUE)
+	anim.track_set_path(tid, path)
+	anim.track_set_interpolation_type(tid, Animation.INTERPOLATION_LINEAR)
+	for p in pts:
+		anim.track_insert_key(tid, float(p[0]), p[1])
+
+
 ## 段出柄（段起点键 k0 → 段终点键 k1）：bezier 取 c1 控制点，其余按线性
 static func _out_handle(k0: Dictionary, k1: Dictionary) -> Vector2:
 	var dt: float = float(k1["t"]) - float(k0["t"])
@@ -626,16 +802,23 @@ static func _in_handle(k0: Dictionary, k1: Dictionary) -> Vector2:
 	return Vector2(-dt / 3.0, -dv / 3.0)
 
 
-## 骨骼路径（相对 AnimationPlayer root_node = StickmanRig/Skeleton2D）
+## 骨骼路径（相对 AnimationPlayer root_node = StickmanRig/Skeleton2D）。
+## is_pos=true 时：bone_key 为 "hip_pos"（髋部平铺轨）或 "pos_<骨id>"（逐骨位移轨）；
+## is_pos=false 时：bone_key 为骨 id（旋转轨）。两种轨都按 SKELETON_DATA 父链拼路径。
 static func _bone_path(is_pos: bool, bone_key: Variant) -> String:
 	const Skeleton := preload("res://modules/stick_rig/scripts/stickman_skeleton.gd")
+	var bone_id: int = -1
 	if is_pos:
-		return "hip:position"
-	var bone_id: int = bone_key
+		if typeof(bone_key) == TYPE_STRING and str(bone_key).begins_with("pos_"):
+			bone_id = int(str(bone_key).trim_prefix("pos_"))
+		else:
+			return "hip:position"   # hip_pos：髋部平铺轨
+	else:
+		bone_id = int(bone_key)
 	var parts: Array[String] = []
 	var current: int = bone_id
 	while current >= 0:
 		parts.push_front(Skeleton.BONE_NAMES.get(current, "bone_%d" % current))
 		var d: Dictionary = Skeleton.SKELETON_DATA.get(current, {})
 		current = int(d.get("parent", -1))
-	return "/".join(parts) + ":rotation"
+	return "/".join(parts) + (":position" if is_pos else ":rotation")

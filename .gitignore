@@ -189,6 +189,8 @@ export/**/*.zip
 
 # 诊断截图等临时产物（不入库）
 temp/
+# 动画产线验证暂存区（_faithful：重导/L1 验收的中间产物，与发布目录同源数据不入库）
+stick-world/tools/baking/_faithful/
 external/swl_apk/
 .tmp_shots/
 docs/.obsidian/

@@ -14,10 +14,16 @@
   与本 dump 无关，dump 里不存在任何取负
 
 【求值口径（与产线假设一致）】
-- rotate 曲线按时间线性插值；忽略 curve 字段（stepped / bezier 一律按 linear 处理），
-  但会统计并打印有多少轨道带非 linear curve，供后续评估
-- 仅 root 骨的 translate 曲线线性插值并参与世界位置计算（会向子骨传播）；
-  其余骨骼的 translate / 全部 scale / ik / slots 通道不参与求值（产线也没译）
+- rotate / translate 曲线都**按曲线字段求值**（linear / stepped / bezier 三段一律
+  照产线 spine_import._eval_keys 的同一算法：stepped 保持到段末、bezier 用 Newton
+  迭代解归一化时间参数）；只做统计打印的"非 linear 轨道数"保留作体检指标
+- translate 曲线**逐骨**参与世界位置计算：局部偏移 = setup(x,y) + translate(t)，
+  再按父骨世界角旋转合成——Spine 的 translate 通道是"相对 setup 的局部位移增量"，
+  root 与肢体骨一视同仁（早期产线只译了 root，基准侧也照抄忽略，两侧同款盲区 →
+  L1 永远绿；2026-10-11 起两侧同步改为全骨求值）
+- 全部 scale / ik / slots 通道仍不参与求值（产线也没译）
+- 每骨同时输出 lx/ly（局部偏移，即产线 position 轨传递的量）——位移验收判据取它，
+  因为世界位置增量 ∝ 骨长，两具骨架比例不同天然不可比
 - Spine 3.8 关键帧常省略字段：rotate 键缺 "angle" 按 0，缺 "time" 按 0；
   空键 {} 合法（angle=0）。注意：t=0 时取【第一键的值】（Spine hold-first 语义），
   这与旧 render_swl_ref.py「跳过不带 angle 的键」的取法在首键为空键时会不同——
@@ -51,29 +57,70 @@ def load_skeleton(path):
         return json.load(f)
 
 
-def _sample_linear(keys, t, field):
-    """对单条曲线在时间 t 处线性插值取 field 字段值。
+def _read_curve(kf):
+    """Spine 3.8.99 紧凑曲线格式 → None（线性）/ 'stepped' / (cx1,cy1,cx2,cy2)。
 
-    - 键缺 time 按 0；缺目标字段按 0（Spine 3.8 省略即缺省值）
-    - t 早于首键 → hold 首键值；t 晚于末键 → hold 末键值
-    - 忽略 curve 字段（stepped/bezier 一律按 linear，见模块 docstring）
+    与产线 spine_import._read_curve 同一读法：curve 为数值 f 时是贝塞尔首控制点
+    cx1，其余控制点取伴生字段 c2(cy1，缺省 0)/c3(cx2，缺省 1)/c4(cy2，缺省 1)。
+    curve 属于"该键到下一键"的段。
+    """
+    c = kf.get('curve')
+    if c is None:
+        return None
+    if c == 'stepped':
+        return 'stepped'
+    if isinstance(c, list):
+        return tuple(float(v) for v in c)
+    return (float(c), float(kf.get('c2', 0.0)),
+            float(kf.get('c3', 1.0)), float(kf.get('c4', 1.0)))
+
+
+def _bez1(u, c1, c2):
+    v = 1.0 - u
+    return 3.0 * v * v * u * c1 + 3.0 * v * u * u * c2 + u * u * u
+
+
+def _bez1d(u, c1, c2):
+    v = 1.0 - u
+    return 3.0 * v * v * c1 + 6.0 * v * u * (c2 - c1) + 3.0 * u * u * (1.0 - c2)
+
+
+def _sample_linear(keys, t, field):
+    """曲线感知采样单条曲线在 t 处的 field 值（linear / stepped / bezier）。
+
+    与产线 spine_import._eval_keys 同一算法（stepped=保持到段末；bezier 用 Newton
+    迭代解归一化时间参数 u）。曲线必须参与求值，否则基准侧把产线的曲线直译当成
+    线性近似，凭空造出"残差"（attack 族 39° 假残差即此）。
+    键缺 time 按 0、缺目标字段按 0（Spine 3.8 省略即缺省值）；
+    t 早于首键 / 晚于末键 → hold 端点值。
     """
     if not keys:
         return 0.0
-    # 展开成 (time, value) 序列
-    tv = [(float(k.get('time', 0.0)), float(k.get(field, 0.0))) for k in keys]
+    tv = [(float(k.get('time', 0.0)), float(k.get(field, 0.0)), _read_curve(k)) for k in keys]
     if t <= tv[0][0]:
         return tv[0][1]
     if t >= tv[-1][0]:
         return tv[-1][1]
     for i in range(len(tv) - 1):
-        t0, v0 = tv[i]
-        t1, v1 = tv[i + 1]
+        t0, v0, curve = tv[i]
+        t1, v1, _ = tv[i + 1]
         if t0 <= t <= t1:
             if t1 <= t0:
                 return v1
-            u = (t - t0) / (t1 - t0)
-            return v0 + (v1 - v0) * u
+            dt = t1 - t0
+            if curve is None:
+                return v0 + (v1 - v0) * ((t - t0) / dt)
+            if curve == 'stepped':
+                return v0
+            target = (t - t0) / dt
+            u = target
+            for _it in range(8):
+                bx = _bez1(u, curve[0], curve[2])
+                dx = _bez1d(u, curve[0], curve[2])
+                if abs(dx) < 1e-6:
+                    break
+                u = min(1.0, max(0.0, u - (bx - target) / dx))
+            return v0 + (v1 - v0) * _bez1(u, curve[1], curve[3])
     return tv[-1][1]
 
 
@@ -94,7 +141,7 @@ def unwrap_rotate(keys):
     Spine 原始角度可含 >360° 螺旋值（如 -325.75 表示 34.25），直接线性插值会绕整圈；
     产线转换时逐键归一到最短角差路径，基准侧必须同款处理，否则两侧插值路径不同
     产生虚假残差。注意用 math.fmod（符号随被除数）对齐 GDScript fmod 语义。
-    首键原样保留（与产线一致）。
+    首键原样保留（与产线一致）。曲线字段原样带过（采样时才解释）。
     """
     out = []
     prev = 0.0
@@ -105,7 +152,10 @@ def unwrap_rotate(keys):
             a = prev + math.fmod(a - prev + 180.0, 360.0) - 180.0
             if abs(a - prev) > 180.0:
                 a -= 360.0 if a > prev else -360.0
-        out.append({'time': t, 'angle': a})
+        rec = dict(k)
+        rec['time'] = t
+        rec['angle'] = a
+        out.append(rec)
         prev = a
     return out
 
@@ -126,34 +176,31 @@ def eval_pose(bones, anim_data, t):
     - bones：Spine JSON 的 bones 数组（已保证父骨先于子骨出现，按数组序迭代即可）
     - 世界角 = 链上各骨局部角之和；局部角 = setup rotation + rotate(t)（线性插值增量）。
       与 Godot 侧 dump 的 global_transform.rotation 同语义，可直接对比
-    - root 世界位置 = setup(x, y) + translate(t)；该偏移随父子链传播到全部子骨
-    - 其余骨骼位置 = 父世界位置 + R(父角) * setup(x, y)（不用动画 translate，产线口径）
+    - 世界位置：局部偏移 = setup(x, y) + translate(t)（translate 是相对 setup 的局部
+      位移增量，逐骨都可能带），再按父骨世界角旋转合成；该偏移随父子链传播到全部子骨
     """
-    rotate = anim_data.get('bones', {})
-    root_ch = rotate.get('root', {})
-    root_tx = _sample_linear(root_ch.get('translate', []), t, 'x')
-    root_ty = _sample_linear(root_ch.get('translate', []), t, 'y')
+    ch_map = anim_data.get('bones', {})
 
-    world = {}  # 骨名 -> (x, y, 世界角)
+    world = {}  # 骨名 -> (x, y, 世界角, lx, ly)：lx/ly = 局部偏移（setup + translate）
     for b in bones:
         name = b['name']
         parent = b.get('parent')
+        ch = ch_map.get(name, {})
         # 局部绝对角 = setup rotation + 动画 rotate 增量（约定见模块 docstring，无任何翻转）
         a_local = float(b.get('rotation', 0.0)) + _sample_linear(
-            rotate.get(name, {}).get('rotate', []), t, 'angle')
-        x = float(b.get('x', 0.0))
-        y = float(b.get('y', 0.0))
+            ch.get('rotate', []), t, 'angle')
+        lx = float(b.get('x', 0.0)) + _sample_linear(ch.get('translate', []), t, 'x')
+        ly = float(b.get('y', 0.0)) + _sample_linear(ch.get('translate', []), t, 'y')
         if parent is None:
-            # root：setup 位置 + 动画 translate 增量
-            wx, wy = x + root_tx, y + root_ty
+            wx, wy = lx, ly
             a_world = a_local
         else:
-            px, py, pa = world[parent]
+            px, py, pa = world[parent][0], world[parent][1], world[parent][2]
             pr = math.radians(pa)
-            wx = px + x * math.cos(pr) - y * math.sin(pr)
-            wy = py + x * math.sin(pr) + y * math.cos(pr)
+            wx = px + lx * math.cos(pr) - ly * math.sin(pr)
+            wy = py + lx * math.sin(pr) + ly * math.cos(pr)
             a_world = pa + a_local
-        world[name] = (wx, wy, a_world)
+        world[name] = (wx, wy, a_world, lx, ly)
     return world
 
 
@@ -205,7 +252,8 @@ def dump_anim(bones, anim_data, fps):
         pose = eval_pose(bones, anim_data, t)
         key = f'{t:.3f}'
         frames[key] = {
-            name: {'x': round(p[0], 3), 'y': round(p[1], 3), 'angle': round(p[2], 3)}
+            name: {'x': round(p[0], 3), 'y': round(p[1], 3), 'angle': round(p[2], 3),
+                   'lx': round(p[3], 3), 'ly': round(p[4], 3)}
             for name, p in pose.items()
         }
     return {'duration': round(duration, 4), 'frames': frames}

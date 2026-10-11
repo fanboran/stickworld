@@ -101,54 +101,58 @@ tracks/8/keys = {
 "points": PackedFloat32Array(-0.11676253, -0.11111111, 0, 0.3889, -0.015591608, -0.16353735, -0.3889, 0.015591608, 0.11111111, 0),
 "times": PackedFloat32Array(0, 1.1667)
 }
-tracks/9/type = "bezier"
+tracks/9/type = "value"
 tracks/9/imported = false
 tracks/9/enabled = true
-tracks/9/path = NodePath("hip/spine_root/thigh_outer:rotation")
+tracks/9/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer:position")
 tracks/9/interp = 1
 tracks/9/loop_wrap = true
 tracks/9/keys = {
-"handle_modes": PackedInt32Array(0),
-"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
-"times": PackedFloat32Array(0)
+"times": PackedFloat32Array(0, 0.1667, 0.3333, 1.1667),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(14.315989, -35.99451), Vector2(10.597898, -39.08892), Vector2(12.94869, -41.61962), Vector2(9.212609, -32.630238)]
 }
-tracks/10/type = "bezier"
+tracks/10/type = "value"
 tracks/10/imported = false
 tracks/10/enabled = true
-tracks/10/path = NodePath("hip/spine_root/thigh_outer/shin_outer:rotation")
+tracks/10/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner:position")
 tracks/10/interp = 1
 tracks/10/loop_wrap = true
 tracks/10/keys = {
-"handle_modes": PackedInt32Array(0),
-"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
-"times": PackedFloat32Array(0)
+"times": PackedFloat32Array(0, 0.032408334, 0.06481667, 0.097225, 0.12963334, 0.16204166, 0.19445, 0.22685833, 0.25926667, 0.291675, 0.32408333, 0.35649166, 0.3889, 0.42130834, 0.45371667, 0.486125, 0.51853335, 0.55094165, 0.58335, 0.61575836, 0.64816666, 0.680575, 0.7129833, 0.74539167, 0.7778, 0.8102083, 0.8426167, 0.875025, 0.90743333, 0.9398417, 0.97225, 1.0046583, 1.0370667, 1.069475, 1.1018833, 1.1342916, 1.1667),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(9.674373, -27.472889), Vector2(9.677094, -27.479366), Vector2(9.684392, -27.496737), Vector2(9.695284, -27.522661), Vector2(9.709069, -27.555473), Vector2(9.725228, -27.593933), Vector2(9.7433605, -27.63709), Vector2(9.763147, -27.684187), Vector2(9.78433, -27.734606), Vector2(9.806695, -27.787838), Vector2(9.83006, -27.843449), Vector2(9.854266, -27.901066), Vector2(9.879177, -27.960358), Vector2(9.90467, -28.021032), Vector2(9.930631, -28.082825), Vector2(9.956957, -28.145487), Vector2(9.983553, -28.20879), Vector2(10.010325, -28.272512), Vector2(10.037186, -28.336445), Vector2(10.064047, -28.400377), Vector2(10.090819, -28.4641), Vector2(10.117415, -28.527403), Vector2(10.143742, -28.590065), Vector2(10.169703, -28.651857), Vector2(10.195195, -28.712532), Vector2(10.220106, -28.771824), Vector2(10.244312, -28.829441), Vector2(10.267677, -28.885052), Vector2(10.290042, -28.938284), Vector2(10.311225, -28.988703), Vector2(10.331012, -29.035799), Vector2(10.349144, -29.078957), Vector2(10.365303, -29.117416), Vector2(10.379088, -29.150229), Vector2(10.38998, -29.176153), Vector2(10.397278, -29.193523), Vector2(10.4, -29.2)]
 }
-tracks/11/type = "bezier"
+tracks/11/type = "value"
 tracks/11/imported = false
 tracks/11/enabled = true
-tracks/11/path = NodePath("hip/spine_root/thigh_outer/shin_outer/foot_outer:rotation")
+tracks/11/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer:position")
 tracks/11/interp = 1
 tracks/11/loop_wrap = true
 tracks/11/keys = {
-"handle_modes": PackedInt32Array(0),
-"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
-"times": PackedFloat32Array(0)
+"times": PackedFloat32Array(0, 0.1667, 0.3333, 0.4333, 1.1667),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(-28.811026, 53.24034), Vector2(-32.079346, 52.67063), Vector2(-27.179863, 54.36776), Vector2(-34.873913, 52.160896), Vector2(-30.640087, 55.723064)]
 }
-tracks/12/type = "bezier"
+tracks/12/type = "value"
 tracks/12/imported = false
 tracks/12/enabled = true
-tracks/12/path = NodePath("hip/spine_root/thigh_inner:rotation")
+tracks/12/path = NodePath("hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_outer/forearm_outer/hand_outer/shield_hand:position")
 tracks/12/interp = 1
 tracks/12/loop_wrap = true
 tracks/12/keys = {
-"handle_modes": PackedInt32Array(0),
-"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
-"times": PackedFloat32Array(0)
+"times": PackedFloat32Array(0, 0.2667, 0.4333, 0.5, 0.5667, 0.6333, 0.7333, 0.7667, 0.8333, 0.9, 1.0333, 1.0667, 1.1, 1.1333, 1.1667),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(13.3011675, -13.654985), Vector2(8.179798, -31.993563), Vector2(21.073174, -21.468971), Vector2(10.236741, -33.52278), Vector2(-6.704556, -44.46116), Vector2(-19.663898, -25.606846), Vector2(-4.305788, -16.13771), Vector2(-4.2578125, -10.086818), Vector2(-11.340175, 3.4242408), Vector2(-4.839514, 5.0314155), Vector2(-8.101838, -9.42116), Vector2(-4.74956, -15.831866), Vector2(-1.4932328, -18.578455), Vector2(-0.3957967, -20.065691), Vector2(0.1559199, -16.13771)]
 }
 tracks/13/type = "bezier"
 tracks/13/imported = false
 tracks/13/enabled = true
-tracks/13/path = NodePath("hip/spine_root/thigh_inner/shin_inner:rotation")
+tracks/13/path = NodePath("hip/spine_root/thigh_outer:rotation")
 tracks/13/interp = 1
 tracks/13/loop_wrap = true
 tracks/13/keys = {
@@ -159,7 +163,7 @@ tracks/13/keys = {
 tracks/14/type = "bezier"
 tracks/14/imported = false
 tracks/14/enabled = true
-tracks/14/path = NodePath("hip/spine_root/thigh_inner/shin_inner/foot_inner:rotation")
+tracks/14/path = NodePath("hip/spine_root/thigh_outer/shin_outer:rotation")
 tracks/14/interp = 1
 tracks/14/loop_wrap = true
 tracks/14/keys = {
@@ -170,7 +174,7 @@ tracks/14/keys = {
 tracks/15/type = "bezier"
 tracks/15/imported = false
 tracks/15/enabled = true
-tracks/15/path = NodePath("hip/spine_root:rotation")
+tracks/15/path = NodePath("hip/spine_root/thigh_outer/shin_outer/foot_outer:rotation")
 tracks/15/interp = 1
 tracks/15/loop_wrap = true
 tracks/15/keys = {
@@ -181,7 +185,7 @@ tracks/15/keys = {
 tracks/16/type = "bezier"
 tracks/16/imported = false
 tracks/16/enabled = true
-tracks/16/path = NodePath("hip/spine_root/lower_torso:rotation")
+tracks/16/path = NodePath("hip/spine_root/thigh_inner:rotation")
 tracks/16/interp = 1
 tracks/16/loop_wrap = true
 tracks/16/keys = {
@@ -189,13 +193,57 @@ tracks/16/keys = {
 "points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
 "times": PackedFloat32Array(0)
 }
-tracks/17/type = "value"
+tracks/17/type = "bezier"
 tracks/17/imported = false
 tracks/17/enabled = true
-tracks/17/path = NodePath("hip:position")
+tracks/17/path = NodePath("hip/spine_root/thigh_inner/shin_inner:rotation")
 tracks/17/interp = 1
 tracks/17/loop_wrap = true
 tracks/17/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
+"times": PackedFloat32Array(0)
+}
+tracks/18/type = "bezier"
+tracks/18/imported = false
+tracks/18/enabled = true
+tracks/18/path = NodePath("hip/spine_root/thigh_inner/shin_inner/foot_inner:rotation")
+tracks/18/interp = 1
+tracks/18/loop_wrap = true
+tracks/18/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
+"times": PackedFloat32Array(0)
+}
+tracks/19/type = "bezier"
+tracks/19/imported = false
+tracks/19/enabled = true
+tracks/19/path = NodePath("hip/spine_root:rotation")
+tracks/19/interp = 1
+tracks/19/loop_wrap = true
+tracks/19/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
+"times": PackedFloat32Array(0)
+}
+tracks/20/type = "bezier"
+tracks/20/imported = false
+tracks/20/enabled = true
+tracks/20/path = NodePath("hip/spine_root/lower_torso:rotation")
+tracks/20/interp = 1
+tracks/20/loop_wrap = true
+tracks/20/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(0, -0.11111111, 0, 0.11111111, 0),
+"times": PackedFloat32Array(0)
+}
+tracks/21/type = "value"
+tracks/21/imported = false
+tracks/21/enabled = true
+tracks/21/path = NodePath("hip:position")
+tracks/21/interp = 1
+tracks/21/loop_wrap = true
+tracks/21/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,

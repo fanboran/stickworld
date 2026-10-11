@@ -122,6 +122,16 @@ def common_frames(fa, fb):
     return ts, ka, kb
 
 
+def _span_y(frame):
+    """帧内全骨世界 y 极差（骨架跨度）——两具骨架比例不同，跨度之比应与
+    skeleton_height 之比（scale）一致；用于抓"位置轨写成增量致整具骨架塌陷"
+    这类每骨同向偏移、增量对比看不出的错。"""
+    ys = [v['y'] for v in frame.values() if isinstance(v, dict) and 'y' in v]
+    if len(ys) < 2:
+        return 0.0
+    return max(ys) - min(ys)
+
+
 def lin_fit(xs, ys):
     """最小二乘一次拟合 ys ≈ s*xs + b，返回 (s, b)。"""
     n = len(xs)
@@ -149,14 +159,19 @@ def fit_fixed(xs, ys, sign):
 
 
 def mode_diff(spine, godot, tol_angle, tol_pos):
-    """diff 模式：每动画每骨的角度增量轨迹对比。
+    """diff 模式：每动画每骨的角度增量轨迹对比 + 逐骨局部位移增量对比。
 
     两侧骨架零位不同（Godot 零位=直立、Spine 零位=setup 姿势），世界角绝对值差一个
     每骨常数（W_godot ≈ b(骨) - W_spine，负号模型，discover 模式可验证）。该常数是
     结构性骨架差异、不是翻译误差——动作保真度的正确判据是**增量**：
     负号模型下两侧增量互为相反数，残差 = |wrap((g(t)-g(0)) + (a(t)-a(0)))|。
     静态偏移全部消除后，剩余残差 = 真实翻译误差（未映射骨缺口 / unwrap 分歧 /
-    KEYFRAME_FIXES 手工修正）。位置对比同理：相对 t=0 的位移增量。
+    手工修正）。
+
+    位移判据同理取增量，但量取**局部偏移**（骨相对父骨的 position）而非世界位置：
+    产线把 Spine translate 写成本项目骨的 position 轨，传递量就是局部偏移；世界位置
+    增量 ∝ 骨长，两具骨架比例不同（Spine 大腿 82.7 vs rig 66）天然不可比。镜像模型
+    下 x 同号、y 反号。
     """
     scale = godot['skeleton_height'] / spine['skeleton_height'] \
         if spine['skeleton_height'] else 1.0
@@ -174,10 +189,14 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
         return 2
 
     angle_pairs = [(s, g) for s, g in BONE_MAP.items() if s != 'root']
+    # 位移判据取全部骨对（含 root↔hip——髋部起伏本身就是一条 position 轨）
+    pos_pairs = [(s, g) for s, g in BONE_MAP.items()]
 
     all_pass = True
     detail_lines = []
-    bone_worst = {}  # 骨对 -> max 增量残差
+    bone_worst = {}  # 骨对 -> max 角度增量残差
+    bone_pos_worst = {}  # 骨对 -> max 局部位移增量残差（px）
+    pos_checked = 0
     for an in common_anims:
         fa, fb = sanims[an]['frames'], godot['anims'][an]['frames']
         ts, ka, kb = common_frames(fa, fb)
@@ -188,7 +207,6 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
 
         # 每动画首帧基准（角度增量 + 位置增量共用 t=0 基准）
         sa0, ga0 = fa[ka[ts[0]]], fb[kb[ts[0]]]
-        pos0 = None
         n_total = 0
         n_bad = 0
         n_fix = 0
@@ -196,25 +214,51 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
         err_max = 0.0
         pos_bad = 0
         pos_max = 0.0
+        span_bad = 0
+        span_worst = 0.0
         for t in ts:
             sa, ga = fa[ka[t]], fb[kb[t]]
-            p_root = bone_of(sa, 'root', 'hip')
-            p_hip = bone_of(ga, 'root', 'hip')
-            if p_root is not None and p_hip is not None:
-                disp_a = (p_root['x'] * scale, p_root['y'] * scale)
-                disp_g = (p_hip['x'], p_hip['y'])
-                if pos0 is None:
-                    pos0 = (disp_g[0] - disp_a[0], disp_g[1] - disp_a[1])
-                dx = disp_g[0] - pos0[0] - disp_a[0]
-                dy = disp_g[1] - pos0[1] - disp_a[1]
+            # ── 骨架跨度守卫（每帧）：世界 y 极差之比须与尺度一致 ──────────
+            # 增量对比对"整体塌陷"不敏感（每骨都偏同一方向时增量仍对得上），
+            # 故补一条每帧全骨世界 y 跨度检查：跨度比偏离尺度 >25% 即判 FAIL。
+            span_a = _span_y(sa)
+            span_g = _span_y(ga)
+            if span_a and span_g:
+                exp = scale * span_a
+                if exp > 1e-6:
+                    rel = abs(span_g - exp) / exp
+                    span_worst = max(span_worst, rel)
+                    if rel > 0.25:
+                        span_bad += 1
+                        if len(detail_lines) < 30:
+                            detail_lines.append(
+                                f'  {an} t={t:.3f} 骨架跨度异常: spine={span_a:.1f} '
+                                f'godot={span_g:.1f} 期望={exp:.1f} 偏差={rel:.0%}')
+            # ── 位移判据：逐骨**局部偏移增量**（父骨系）──────────────
+            # 产线把 Spine translate 写成本项目骨的 position 轨，传递量正是局部
+            # 偏移；世界位置增量 ∝ 骨长，两具骨架比例不同（Spine 大腿 82.7 vs rig
+            # 66）天然不可比，故判据取局部偏移。镜像模型：x 同号、y 反号。
+            for sb, gb in pos_pairs:
+                pa_ = bone_of(sa, sb, gb)
+                pb_ = bone_of(ga, sb, gb)
+                pa0_ = bone_of(sa0, sb, gb)
+                pb0_ = bone_of(ga0, sb, gb)
+                if pa_ is None or pb_ is None or pa0_ is None or pb0_ is None:
+                    continue
+                if 'lx' not in pa_ or 'lx' not in pb_:
+                    continue
+                dx = (pb_['lx'] - pb0_['lx']) - scale * (pa_['lx'] - pa0_['lx'])
+                dy = (pb_['ly'] - pb0_['ly']) + scale * (pa_['ly'] - pa0_['ly'])
                 dist = math.hypot(dx, dy)
+                pos_checked += 1
                 pos_max = max(pos_max, dist)
+                bone_pos_worst[(sb, gb)] = max(bone_pos_worst.get((sb, gb), 0.0), dist)
                 if dist > tol_pos:
                     pos_bad += 1
                     if len(detail_lines) < 30:
                         detail_lines.append(
-                            f'  {an} t={t:.3f} root↔hip 位移增量差 dx={dx:.2f} dy={dy:.2f} '
-                            f'距离={dist:.3f}px')
+                            f'  {an} t={t:.3f} {sb}↔{gb} 局部位移增量差 '
+                            f'dx={dx:+.2f} dy={dy:+.2f} 距离={dist:.3f}px')
             for sb, gb in angle_pairs:
                 pa_ = bone_of(sa, sb, gb)
                 pb_ = bone_of(ga, sb, gb)
@@ -242,11 +286,12 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
                     n_fix += 1
 
         mean_err = err_sum / n_total if n_total else 0.0
-        ok = (n_bad == 0 and pos_bad == 0)
+        ok = (n_bad == 0 and pos_bad == 0 and span_bad == 0)
         all_pass = all_pass and ok
         print(f'{an:<15} max={err_max:6.2f}°  mean={mean_err:5.2f}°  '
               f'超差 {n_bad}/{n_total}'
               + (f'  [位移超差 {pos_bad}(max {pos_max:.1f}px)]' if pos_bad else '')
+              + (f'  [跨度异常帧 {span_bad}(最大偏差 {span_worst:.0%})]' if span_bad else '')
               + (f'  [已知修正帧 {n_fix}]' if n_fix else '')
               + ('  [PASS]' if ok else '  [FAIL]'))
 
@@ -254,6 +299,11 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
     print('每骨最差增量残差（定位缺口骨，0 = 转换精确）:')
     for (sb, gb), worst in sorted(bone_worst.items(), key=lambda kv: -kv[1]):
         print(f'  {sb:<14}↔ {gb:<18} max残差={worst:7.2f}°')
+
+    print()
+    print(f'每骨最差局部位移增量残差（样本 {pos_checked}，0 = 位移传递精确）:')
+    for (sb, gb), worst in sorted(bone_pos_worst.items(), key=lambda kv: -kv[1]):
+        print(f'  {sb:<14}↔ {gb:<18} max残差={worst:7.3f}px')
 
     print()
     print('超差明细（最多 30 行）:')

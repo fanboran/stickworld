@@ -214,6 +214,9 @@ func _reset_pose(bones: Dictionary, setup_rot: Dictionary, setup_pos: Dictionary
 
 
 ## 契约帧快照：按 BONE_NAMES 顺序输出全部骨骼 {x, y, angle}（全局变换，3 位小数）
+## 另附 lx/ly = 该骨**局部偏移**（相对父骨的 position，即 position 轨写入的量）。
+## 局部位移是产线传递 translate 的载体，且与两具骨架的骨长比例无关（世界位置增量
+## ∝ 骨长，比例不同天然不可比）——L1 门禁的位移判据取这条。
 func _snapshot_pose(bones: Dictionary) -> Dictionary:
 	var out := {}
 	for id in Skeleton.BONE_NAMES.keys():
@@ -225,6 +228,8 @@ func _snapshot_pose(bones: Dictionary) -> Dictionary:
 			"x": xf.origin.x,
 			"y": xf.origin.y,
 			"angle": rad_to_deg(xf.get_rotation()),
+			"lx": b.position.x,
+			"ly": b.position.y,
 		}
 	return out
 

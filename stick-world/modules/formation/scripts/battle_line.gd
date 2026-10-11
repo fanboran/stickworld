@@ -10,11 +10,17 @@ extends RefCounted
 ##     到位滞回 FormationPositionIsStable）、接敌就打、打完归位、战线继续。
 ##
 ## 本类等价实现（每方一台，FormationSystem 宿主驱动）：
-##   - 近战组：全组一个 upc 宽方阵，前列贴 line_x，ATTACK 下 line_x 以 speed 连续
+##   - 近战组：全组一个组方阵，前列贴 line_x，ATTACK 下 line_x 以 speed 连续
 ##     向 goal_x 推进；任一成员主手射程内有敌 = 接战，战线停（后队槽位填上=战线
 ##     在接火处成形），滞回后无接战续推；
-##   - 远程组：随行于近战组后 GROUP_GAP；任一成员接战即**冻结**远程线（冻结线 =
+##   - 组方阵**纵向铺满行动带**（02 二-A.3）：列数随人数扩展、上限 = 带宽容列数
+##     （group_upc），带满才加深纵深；纵深超 LINE_MAX_DEPTH 排的余部隔
+##     RESERVE_GAP 二线驻位（槽位随线走 = 站定面向敌阵待命，不游走）；
+##   - 远程组：随行于近战组**全纵深**后 GROUP_GAP（动态层距——SWL
+##     GapBetweenFormationGroups() 本是计算方法非常量；固定距在大编制下会让
+##     远程线叠进近战方阵后排）；任一成员接战即**冻结**远程线（冻结线 =
 ##     最前接战投影 + 方阵纵深——末列贴射程线，全组齐射），脱战滞回后解冻随行；
+##   - 祭司随远程组（wt=5；SWL 层序 HEALERS 在 ARCHERS 后——治疗者贴后排线）；
 ##   - 号令面：未接战成员每节拍收到 move 号令（engage_in_range：敌进射程即交还
 ##     战斗行为；line_order 标记，玩家/上级号令不覆盖）——SWL 阵线跟走的等价通道。
 ##
@@ -30,8 +36,15 @@ const CONTACT_TICK: float = 0.5
 const LINE_DEADZONE: float = 24.0
 ## 距槽位超此值转奔跑追赶（UpdateCatchingUpToFormation 直译）
 const RUN_DIST: float = 240.0
-## 远程组随行间距（近战组前列线后方；GapBetweenFormationGroups 量级）
+## 远程组随行间距（近战组全纵深之后；GapBetweenFormationGroups 量级）
 const GROUP_GAP: float = 260.0
+## 战线方阵纵深上限（排）：0~2 排贴线成块，第 3 排起为二线驻位（02 二-A.3
+## 「多到装不下的余部归二线驻位待命」——观感标定档每侧十几二十几人时
+## 7 列×3 排 = 21 席全员在块内，纵深上限只在密度压力档吃紧）
+const LINE_MAX_DEPTH: int = 3
+## 二线驻位与方阵块的间隔（px）：比列距大一截，读得出「第二线」而不是又
+## 一排；二线槽位随线走（驻位待命），接战语义与在线成员一致
+const RESERVE_GAP: float = 140.0
 ## 接战/脱战滞回拍数（防目标切换瞬时空窗导致停线/解冻抖动）
 const ENGAGE_HYSTERESIS: int = 2
 # ── 个性 y 漂移（SWL Ai.personalityControlledY / personalityNextYControlShift 直译）──
@@ -47,6 +60,28 @@ const DRIFT_SEED_FALLBACK: int = 20261009
 
 enum Stance { ATTACK, DEFEND, GARRISON }
 
+# ─────────────────────── 静态几何（出生侧共用单一真相源） ───────────────────────
+## 组列高：纵向铺满行动带——列数随人数扩展，上限 = 带宽容列数（(k-1)×槽距 ≤ 带宽
+## ⇒ k ≤ 带宽/槽距 + 1）。观察场出生块用同一式摆人，出生位即槽位。
+static func group_upc(n: int, band_half: float, spread: float) -> int:
+	return mini(n, floori((maxf(band_half, 100.0) * 2.0) / maxf(spread, 40.0)) + 1)
+
+
+## 列的纵深退距：0~LINE_MAX_DEPTH-1 排贴线成块（列距线性），其后为二线驻位
+## （块尾 + RESERVE_GAP 起继续列距）
+static func rank_depth(col: int, row_gap: float) -> float:
+	if col < LINE_MAX_DEPTH:
+		return float(col) * row_gap
+	return float(LINE_MAX_DEPTH - 1) * row_gap + RESERVE_GAP \
+			+ float(col - LINE_MAX_DEPTH) * row_gap
+
+
+## 组方阵全纵深（n 人按 upc 排满后的最深列退距；出生块/指挥官后排推导用）
+static func block_depth(n: int, upc: int, row_gap: float) -> float:
+	if n <= 0 or upc <= 0:
+		return 0.0
+	return rank_depth(ceili(float(n) / float(upc)) - 1, row_gap)
+
 # ─────────────────────── 状态 ───────────────────────
 var faction: int = 0
 var facing: int = 1            ## 推进方向（±1：左军 +1 / 右军 −1）
@@ -60,7 +95,8 @@ var band_half: float = 360.0
 var _host: Node = null         ## FormationSystem 宿主（接战判定/间距真值）
 var _spread: float = 110.0
 var _row_gap: float = 80.0
-var _upc: int = 6              ## 组方阵列高（带宽 / 横向间距取整，夹 4~8）
+var _upc_melee: int = 6        ## 近战组列高（随存活数自适应，见 _recompute_slots）
+var _upc_ranged: int = 6       ## 远程组列高（同式，各组独立）
 
 var _melee: Array = []
 var _ranged: Array = []
@@ -90,7 +126,6 @@ func setup(host: Node, p_faction: int, p_facing: int, p_goal_x: float, p_line_x:
 	band_half = maxf(p_band_half, 100.0)
 	_spread = maxf(spread, 40.0)
 	_row_gap = maxf(row_gap, 40.0)
-	_upc = clampi(floori((band_half * 2.0) / _spread), 4, 8)
 	_rng.seed = DRIFT_SEED_FALLBACK + p_faction
 
 
@@ -100,16 +135,17 @@ func seed_drift(seed_value: int) -> void:
 	_rng.seed = seed_value
 
 
-## 成员入线（按主手武器分组：BOW=2/STAFF=4 远程，其余近战；守位/指挥单位由
-## 调用方过滤，不入线）。入线即建个性漂移账本（首漂零——短局几何断言稳定，
-## 首次换目标最早 DRIFT_SHIFT_MIN 后）。
+## 成员入线（按主手武器分组：BOW=2/STAFF=4/MERIC=5 归远程组——SWL 层序
+## CASTERS/ARCHERS/HEALERS 皆后置；其余近战；守位/指挥单位由调用方过滤，
+## 不入线）。入线即建个性漂移账本（首漂零——短局几何断言稳定，首次换目标
+## 最早 DRIFT_SHIFT_MIN 后）。
 func add_unit(u: Node) -> void:
 	if u == null or not is_instance_valid(u):
 		return
 	var w: Node = u.get_weapon() if u.has_method("get_weapon") else null
 	var wt: int = int(w.weapon_type) if w != null and "weapon_type" in w else -1
 	var iid: int = u.get_instance_id()
-	if wt == 2 or wt == 4:
+	if wt == 2 or wt == 4 or wt == 5:
 		_ranged.append(u)
 	else:
 		_melee.append(u)
@@ -141,15 +177,27 @@ func tick(delta: float) -> void:
 			line_x = maxf(line_x, goal_x)
 
 
-## 远程组前列线：冻结期用冻结线，否则随行近战线后 GROUP_GAP
+## 远程组前列线：冻结期用冻结线，否则随行近战组全纵深后 GROUP_GAP（动态——
+## 近战纵深加长（含二线）时远程线跟着退，不叠进方阵后排）
 func ranged_line_x() -> float:
 	if not is_nan(frozen_ranged_x):
 		return frozen_ranged_x
-	return line_x - float(facing) * GROUP_GAP
+	return line_x - float(facing) * (melee_formation_depth() + GROUP_GAP)
+
+
+## 近战组全纵深（含二线驻位；无成员 = 0）——远程随行距与出生几何共用
+func melee_formation_depth() -> float:
+	var max_col: int = -1
+	for s in _slots_melee.values():
+		max_col = maxi(max_col, (s as Vector2i).x)
+	if max_col < 0:
+		return 0.0
+	return rank_depth(max_col, _row_gap)
 
 
 ## 单位的战线槽位（世界坐标；非成员/无槽位 = INF）。近战组贴 line_x，
-## 远程组贴 ranged_line_x；同列沿带横展、后列沿面向反侧退。
+## 远程组贴 ranged_line_x；同列沿带横展、后列沿面向反侧退（超纵深上限的
+## 排隔 RESERVE_GAP 退 = 二线驻位）。
 func get_unit_slot(u: Node) -> Vector2:
 	if u == null or not is_instance_valid(u):
 		return Vector2.INF
@@ -159,12 +207,12 @@ func get_unit_slot(u: Node) -> Vector2:
 	if _slots_melee.has(iid):
 		slot = _slots_melee[iid]
 		base_x = line_x
+		return _slot_world(slot, base_x, iid, _upc_melee)
 	elif _slots_ranged.has(iid):
 		slot = _slots_ranged[iid]
 		base_x = ranged_line_x()
-	else:
-		return Vector2.INF
-	return _slot_world(slot, base_x, iid)
+		return _slot_world(slot, base_x, iid, _upc_ranged)
+	return Vector2.INF
 
 
 func get_line_x() -> float:
@@ -202,10 +250,10 @@ func _tick_y_drift(delta: float) -> void:
 		_y_drift[iid] = cur + (float(_y_drift_target[iid]) - cur) * minf(1.0, DRIFT_RATE * delta)
 
 
-func _slot_world(slot: Vector2i, base_x: float, iid: int = 0) -> Vector2:
+func _slot_world(slot: Vector2i, base_x: float, iid: int, upc: int) -> Vector2:
 	var col: float = float(slot.x)
-	var lateral: float = (float(slot.y) - float(_upc - 1) * 0.5) * _spread
-	return Vector2(base_x - float(facing) * col * _row_gap,
+	var lateral: float = (float(slot.y) - float(upc - 1) * 0.5) * _spread
+	return Vector2(base_x - float(facing) * rank_depth(slot.x, _row_gap),
 			band_center_y + lateral + float(_y_drift.get(iid, 0.0)))
 
 
@@ -226,17 +274,26 @@ func _cleanup() -> void:
 				_y_next_shift.erase(iid)
 
 
-## 槽位重算（入队序 = 行列；组方阵整组一格一格排——SWL Formation 全组一个格）
+## 槽位重算（入队序 = 行列；组方阵整组一格一格排——SWL Formation 全组一个格）。
+## 列高随存活数自适应（纵向铺满行动带：列数 = min(存活数, 带宽容列数)，带满
+## 才加深纵深）；死亡重排即列高收缩/前顶补位（SWL FilterDownARandomRow 的
+## 压实同源）
 func _recompute_slots() -> void:
-	_slots_melee = _lattice(_melee)
-	_slots_ranged = _lattice(_ranged)
+	_upc_melee = _group_upc(_melee.size())
+	_upc_ranged = _group_upc(_ranged.size())
+	_slots_melee = _lattice(_melee, _upc_melee)
+	_slots_ranged = _lattice(_ranged, _upc_ranged)
 
 
-func _lattice(units: Array) -> Dictionary:
+func _group_upc(n: int) -> int:
+	return mini(n, floori((band_half * 2.0) / _spread) + 1)
+
+
+func _lattice(units: Array, upc: int) -> Dictionary:
 	var slots: Dictionary = {}
 	for i in units.size():
 		slots[units[i].get_instance_id()] = Vector2i(
-				floori(float(i) / float(_upc)), i % _upc)
+				floori(float(i) / float(upc)), i % upc)
 	return slots
 
 
@@ -273,7 +330,8 @@ func _update_contact() -> void:
 
 
 ## 远程组冻结线：全组入射程——前列线 = 最前成员投影 + 方阵纵深（末列恰贴
-## 首接战成员的射程线，前列更近照样打；与批5 班战斗锚同式，组级放大）
+## 首接战成员的射程线，前列更近照样打；与批5 班战斗锚同式，组级放大）。
+## 纵深按战线块封顶（超上限的二线排在冻结线后照旧站得住）
 func _frozen_ranged_x() -> float:
 	var front: float = -1.0e9
 	for u in _ranged:
@@ -283,7 +341,8 @@ func _frozen_ranged_x() -> float:
 		return ranged_line_x()
 	var depth: float = 0.0
 	for s in _slots_ranged.values():
-		depth = maxf(depth, float((s as Vector2i).x) * _row_gap)
+		depth = maxf(depth, rank_depth(
+				mini((s as Vector2i).x, LINE_MAX_DEPTH - 1), _row_gap))
 	return (front + depth) * float(facing)
 
 
@@ -297,11 +356,11 @@ func _engaged(u: Node) -> bool:
 ## 未接战成员的随线号令（SWL 阵线跟走）：已接战/附身/撤退类/玩家号令跳过；
 ## 槽位死区内不重发（防 travel 重入抖动）；远距奔跑追赶。
 func _issue_march_orders() -> void:
-	_march_group(_melee, _slots_melee, line_x)
-	_march_group(_ranged, _slots_ranged, ranged_line_x())
+	_march_group(_melee, _slots_melee, line_x, _upc_melee)
+	_march_group(_ranged, _slots_ranged, ranged_line_x(), _upc_ranged)
 
 
-func _march_group(units: Array, slots: Dictionary, base_x: float) -> void:
+func _march_group(units: Array, slots: Dictionary, base_x: float, upc: int) -> void:
 	for u in units:
 		if u.has_method("is_possessed") and u.is_possessed():
 			continue
@@ -316,7 +375,7 @@ func _march_group(units: Array, slots: Dictionary, base_x: float) -> void:
 		var slot: Vector2i = slots.get(u.get_instance_id(), Vector2i(-1, -1))
 		if slot.x < 0:
 			continue
-		var dest: Vector2 = _slot_world(slot, base_x, u.get_instance_id())
+		var dest: Vector2 = _slot_world(slot, base_x, u.get_instance_id(), upc)
 		if (u as Node2D).global_position.distance_to(dest) <= LINE_DEADZONE:
 			continue  # 阵位稳定（FormationPositionIsStable 同源防抖）
 		# 已有他人号令（无 line_order/follow_order 标记 = 玩家/上级号令）→ 不覆盖

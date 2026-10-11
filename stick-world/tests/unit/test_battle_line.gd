@@ -2,10 +2,11 @@ extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
 ## 单元测试：战线（SWL Team.Attack + MoveInFormation 直译，批5 战线重构）。
-## 覆盖：组级方阵槽位（全组一个格子，upc 由带宽推）/ 连续推进与接战停线
-##（滞回复推）/ 远程组随行与接战冻结（末列贴射程线）/ 随线号令（接战跳过、
-## 玩家号令不覆盖、line_order 标记）/ FormationSystem 战线优先级 / 个性 y 漂移
-##（首漂前恒格点、有界、同种子确定）。
+## 覆盖：组级方阵槽位（全组一个格子，列高纵向铺满行动带：min(存活, 带宽容列)）/
+## 二线驻位（纵深超 LINE_MAX_DEPTH 的排隔 RESERVE_GAP）/ 祭司归远程组 /
+## 连续推进与接战停线（滞回复推）/ 远程组动态随行与接战冻结（末列贴射程线）/
+## 随线号令（接战跳过、玩家号令不覆盖、line_order 标记）/ FormationSystem
+## 战线优先级 / 个性 y 漂移（首漂前恒格点、有界、同种子确定）。
 ## 确定性：漂移走注入种子（同种子同序列）；不进场景树（tick 直调，节拍 0.5s 对齐）。
 
 @warning_ignore("shadowed_global_identifier")
@@ -18,7 +19,8 @@ var _runner: TestRunner
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("组方阵: 12 近战 = 6 宽 × 2 深（带宽推列高），槽位/非成员 INF", _test_lattice)
+	_runner.add_test("组方阵: 12 近战 = 7 宽 × 2 深（带满扩列），槽位/非成员 INF", _test_lattice)
+	_runner.add_test("二线驻位: 超 3 排隔 RESERVE_GAP / 动态远程层距 / 祭司归远程组", _test_reserve_and_meric)
 	_runner.add_test("推进: ATTACK 连续平移 / 接战停线 / 脱战滞回复推", _test_advance_and_block)
 	_runner.add_test("远程组: 随行近战线后 GAP / 接战冻结（末列贴射程线）", _test_ranged_follow_and_freeze)
 	_runner.add_test("随线号令: 未接战收令（line_order）/ 接战跳过 / 玩家号令不覆盖", _test_march_orders)
@@ -38,18 +40,55 @@ func _test_lattice() -> void:
 	for u in w["units"]:
 		line.add_unit(u)
 	line.tick(0.0)  # 只跑接战拍（重算槽位），零推进保几何断言确定性
-	var upc: int = clampi(floori(720.0 / w["fs"].SPREAD_SPACING), 4, 8)
-	_runner.assert_equal(upc, 6, "带宽 720 / 间距 110 → 列高 6")
+	var upc: int = BattleLine.group_upc(12, 360.0, w["fs"].SPREAD_SPACING)
+	_runner.assert_equal(upc, 7, "带宽 720 / 间距 110 → 容 7 列（6×110=660 ≤ 720）")
 	var s0: Vector2 = line.get_unit_slot(w["units"][0])
 	_runner.assert_approx(s0.x, 0.0, 0.5, "首员前列贴线（col0 → x = line_x）")
-	_runner.assert_approx(s0.y, 500.0 - 2.5 * w["fs"].SPREAD_SPACING, 0.5,
-			"前列 row0 横展 −2.5×SPREAD")
+	_runner.assert_approx(s0.y, 500.0 - 3.0 * w["fs"].SPREAD_SPACING, 0.5,
+			"前列 row0 横展 −3×SPREAD（7 列居中）")
 	var s6: Vector2 = line.get_unit_slot(w["units"][6])
-	_runner.assert_approx(s6.x, -w["fs"].ROW_GAP, 0.5, "第 7 员 = col1（后列退 ROW_GAP）")
+	_runner.assert_approx(s6.x, 0.0, 0.5, "第 7 员仍在前列（7 宽铺满带，未到后列）")
+	var s7: Vector2 = line.get_unit_slot(w["units"][7])
+	_runner.assert_approx(s7.x, -w["fs"].ROW_GAP, 0.5, "第 8 员 = col1（后列退 ROW_GAP）")
 	var stranger := Node2D.new()
 	_runner.assert_true(is_inf(line.get_unit_slot(stranger).x), "非成员槽位 = INF")
 	stranger.free()
 	_teardown_world(w)
+
+
+func _test_reserve_and_meric() -> void:
+	# 二线驻位：30 近战 = 7×3 块（21）+ 第 22 员起 col3 = 块尾 + RESERVE_GAP
+	var w := _make_world(30, 0)
+	var line: RefCounted = w["fs"].create_battle_line(1, 1, 1000.0, 0.0, 500.0, 360.0)
+	for u in w["units"]:
+		line.add_unit(u)
+	line.tick(0.0)
+	var s20: Vector2 = line.get_unit_slot(w["units"][20])
+	_runner.assert_approx(s20.x, -2.0 * w["fs"].ROW_GAP, 0.5, "第 21 员 = col2（块末排）")
+	var s21: Vector2 = line.get_unit_slot(w["units"][21])
+	_runner.assert_approx(s21.x, -(2.0 * w["fs"].ROW_GAP + BattleLine.RESERVE_GAP), 0.5,
+			"第 22 员 = col3 二线驻位（块尾 + RESERVE_GAP）")
+	# 远程随行动态层距：近战全纵深（含二线）+ GROUP_GAP（30 人 = cols 0~4，
+	# 二线两排：2×ROW_GAP + RESERVE_GAP + 1×ROW_GAP）
+	var melee_depth: float = 3.0 * w["fs"].ROW_GAP + BattleLine.RESERVE_GAP
+	_runner.assert_approx(line.ranged_line_x(), line.get_line_x() - melee_depth - BattleLine.GROUP_GAP,
+			0.5, "远程线随行 = 近战全纵深 + GROUP_GAP（不叠进二线）")
+	# 祭司（wt=5）归远程组：随 CASTERS/ARCHERS/HEALERS 后置层序
+	var w2 := _make_world(2, 0)
+	var line2: RefCounted = w2["fs"].create_battle_line(1, 1, 1000.0, 0.0, 500.0, 360.0)
+	var meric := FakeUnit.new()
+	var mw := FakeWeapon.new()
+	mw.weapon_type = 5  # MERIC
+	meric.weapon = mw
+	meric.add_child(mw)
+	line2.add_unit(w2["units"][0])  # 剑士 → 近战组
+	line2.add_unit(meric)
+	line2.tick(0.0)
+	_runner.assert_equal(line2.melee_count(), 1, "剑士入近战组")
+	_runner.assert_equal(line2.ranged_count(), 1, "祭司入远程组（SWL HEALERS 后置）")
+	meric.free()
+	_teardown_world(w)
+	_teardown_world(w2)
 
 
 func _test_advance_and_block() -> void:
@@ -82,7 +121,7 @@ func _test_advance_and_block() -> void:
 
 
 func _test_ranged_follow_and_freeze() -> void:
-	var w := _make_world(8, 0, true)  # 8 弓手（upc 6 → 2 列，纵深 1×ROW_GAP）
+	var w := _make_world(8, 0, true)  # 8 弓手（upc 7 → 2 列，纵深 1×ROW_GAP）
 	var line: RefCounted = w["fs"].create_battle_line(1, 1, 1000.0, 0.0, 500.0, 360.0)
 	for u in w["units"]:
 		line.add_unit(u)
@@ -203,10 +242,10 @@ func _test_y_drift() -> void:
 	for i in 5:
 		line_a.tick(0.5)
 		line_b.tick(0.5)
-	var upc: int = clampi(floori(720.0 / w1["fs"].SPREAD_SPACING), 4, 8)
+	var upc: int = BattleLine.group_upc(8, 360.0, w1["fs"].SPREAD_SPACING)
 	var s0: Vector2 = line_a.get_unit_slot(w1["units"][0])
-	_runner.assert_approx(s0.y, 500.0 - 2.5 * w1["fs"].SPREAD_SPACING, 0.5,
-			"首漂前槽位 y = 格点（漂移零）")
+	_runner.assert_approx(s0.y, 500.0 - 3.0 * w1["fs"].SPREAD_SPACING, 0.5,
+			"首漂前槽位 y = 格点（漂移零，7 列居中）")
 	# 长局：20s 漂移激活——有界 + 同种子孪生线逐成员一致
 	for i in 35:
 		line_a.tick(0.5)

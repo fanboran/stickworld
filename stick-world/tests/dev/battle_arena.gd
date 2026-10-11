@@ -25,22 +25,20 @@ extends Node
 ##       + 阵地护卫 3 名（96 档封存，仅作极端压力对照）
 ##   （观感验收默认档 = 16 = 设计口径「每侧最多十几二十几」；48/96 为密度/极端
 ##   压力档——高于设计标定 2~3 倍，观感问题可能被密度放大，验收对号入座）
-##   一屏战场（创始人：战场范围限定在屏幕一样大）：出生中心 ±700、全部武器行按
-##   纵深行距 ROW_GAP=50 均匀收排（相邻行任意两员 Δx≥50 > 分离椭圆横半径 48，
-##   任意纵距都不违反分离不变式；行内纵向间距仍由 MIN_ROW_GAP≥72 分离下限把关），
-##   指挥官阵列再后退 120——三档全场横向跨度最大 ≈ ±1170（96 档含指挥官），
-##   观战缩放 0.75（缩放条 100% 档）可见半宽 1280px，整场一屏内可见。
-##   开战先锋班下 ADVANCE_ALL（formation row/col 列阵）压至中线交战；后队班由编队动态
-##   跟队（set_squad_follow_squad）锚定前队质心后方 gap 处，保持纵深推进、接战即还战斗；
-##   前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长集火 +
-##   兵种行为档案（冲脸/持阵/风筝）接管；排长阵亡该排失去集火但班仍执行规划器号令。
+##   一屏战场（创始人：战场范围限定在屏幕一样大）：出生中心 ±430、组方阵
+##   出生（近战组/远程组各一个组级方阵，纵向铺满行动带）+ 指挥官后撤——三档
+##   全场横向跨度最大 ≈ ±1170（96 档含指挥官），观战一屏内可见。
+##   开战推进 = 战线（battle_line）：双方各一条，组方阵沿 x 连续推向敌阵、
+##   接战即停/冻结、打完续推；纵深超上限的余部二线驻位待命。接战后
+##   FormationSystem 排长集火 + 兵种行为档案（冲脸/持阵/风筝）接管；排长
+##   阵亡该排失去集火但班仍执行规划器号令。
 ##
 ## 开战推进（夺点模式已退役，CAPTURE_ENABLED 默认关——夺点/旗/占领圈是 AI 线
 ##   自立的开发态模拟非游戏机制，创始人裁决整体下线；战斗输赢 = 全面战争式
-##   全灭/撤离/超时，02 八-A）：先锋班 ADVANCE_ALL 压中线（advance_x 纵深目标），
-##   后队班动态跟队（set_squad_follow_squad 锚前队质心后方 gap 处）保持纵深推进、
-##   接敌即还战斗；前队全灭自动解除锚定转自主决策。接战后 FormationSystem 排长
-##   集火 + 兵种行为档案（冲脸/持阵/风筝）接管；排长阵亡该排失去集火但班仍自主。
+##   全灭/撤离/超时，02 八-A）：战线推进（SWL Team.Attack + MoveInFormation
+##   直译，battle_line.gd）——双方各一条战线，近战组/远程组各一个组级方阵沿 x
+##   连续推进，接战即停/冻结，打完续推；未接战成员收随线号令（engage_in_range
+##   敌进射程即战）。旧「先锋班 ADVANCE 压中线 + 跟队链」退役。
 ##   夺点规划器（SquadIntentPlanner）与其号令粘性（保持期/未完成续期/事件节流）
 ##   作为资产保留在 tactics 模块，正式宏观意图源接入时复用。
 ##
@@ -68,13 +66,10 @@ const W_PICKAXE: int = 3
 const W_STAFF: int = 4
 const W_MERIC: int = 5
 
-## 每方编制 rows 自前向后；front_x = 班最前排相对团队中心的 x，攻方朝 +x，
-## advance_x = 该班推进目标相对中线的 x，**正值=越过中线（敌方向），负值=停在己方侧**；
-## follow_gap > 0 = 锚定跟随前一班（编队动态跟队），不下推进号令）：
-## 兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 → 矛先锋卡线、火力压后。
-## platoons = 班下标分组建排（排聚合层，2~3 班/排），每排任命排长（rank 2）。
-## 纵深布阵（一屏收拢口径）：全部武器行按纵深行距 ROW_GAP=50 均匀收排——
-## front_x 沿行序每行递减 50（跨班同口径），班结构只体现在编制层不体现在间距上。
+## 每方编制 rows 自前向后；兵种射程 矛120 / 剑80 / 杖280（施法）/ 弓300 →
+## 矛先锋卡线、火力压后。platoons = 班下标分组建排（排聚合层，2~3 班/排），
+## 每排任命排长（rank 2）。出生位 = 战线组方阵槽位本位（近战组/远程组各一个
+## 组级方阵，列高/槽深同 BattleLine 静态式——出生即成阵，无开战收拢走位）。
 ##
 ## 对战预设（控制面板 1/2/3 切换，重开保持所选档位）：
 const PRESETS: Array = [
@@ -82,11 +77,11 @@ const PRESETS: Array = [
 		"name": "遭遇战·16",
 		"squads": [
 			{
-				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"name": "矛兵班",
 				"rows": [{ "weapon": W_SPEAR, "count": 8 }],
 			},
 			{
-				"name": "中坚火力班", "front_x": 100.0, "follow_gap": 600.0,
+				"name": "中坚火力班",
 				"rows": [
 					{ "weapon": W_SWORD, "count": 4 }, { "weapon": W_STAFF, "count": 1 },
 					{ "weapon": W_BOW, "count": 2 }, { "weapon": W_MERIC, "count": 1 },
@@ -101,19 +96,19 @@ const PRESETS: Array = [
 		"name": "密度压力·48",
 		"squads": [
 			{
-				"name": "矛兵班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"name": "矛兵班",
 				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "矛剑混编班", "front_x": 100.0, "follow_gap": 150.0,
+				"name": "矛剑混编班",
 				"rows": [{ "weapon": W_SPEAR, "count": 4 }, { "weapon": W_SWORD, "count": 8 }],
 			},
 			{
-				"name": "剑士班", "front_x": 0.0, "follow_gap": 150.0,
+				"name": "剑士班",
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力班", "front_x": -50.0, "follow_gap": 600.0,
+				"name": "火力班",
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -125,35 +120,35 @@ const PRESETS: Array = [
 		"name": "极端压力·96",
 		"squads": [
 			{
-				"name": "矛兵一班", "front_x": 150.0, "advance_x": 60.0, "follow_gap": 0.0,
+				"name": "矛兵一班",
 				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "矛兵二班", "front_x": 100.0, "follow_gap": 150.0,
+				"name": "矛兵二班",
 				"rows": [{ "weapon": W_SPEAR, "count": 12 }],
 			},
 			{
-				"name": "矛剑混编班", "front_x": 50.0, "follow_gap": 150.0,
+				"name": "矛剑混编班",
 				"rows": [{ "weapon": W_SPEAR, "count": 4 }, { "weapon": W_SWORD, "count": 8 }],
 			},
 			{
-				"name": "剑士一班", "front_x": -50.0, "follow_gap": 150.0,
+				"name": "剑士一班",
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "剑士二班", "front_x": -100.0, "follow_gap": 150.0,
+				"name": "剑士二班",
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "剑士三班", "front_x": -150.0, "follow_gap": 150.0,
+				"name": "剑士三班",
 				"rows": [{ "weapon": W_SWORD, "count": 12 }],
 			},
 			{
-				"name": "火力一班", "front_x": -200.0, "follow_gap": 600.0,
+				"name": "火力一班",
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 			{
-				"name": "火力二班", "front_x": -300.0, "follow_gap": 600.0,
+				"name": "火力二班",
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
@@ -167,25 +162,6 @@ const PRESETS: Array = [
 ## 默认 0 = 遭遇战·16——观感验收主档对齐设计口径（02-战斗 二-A.1「每侧最多
 ## 十几二十几」，96 档封存；48/96 只作密度压力对照）
 static var _preset_idx: int = 0
-## 出生几何与分离半径同源联动（2026-10-05 限位环复发教训：半径改 60/92 而
-## 出生几何没跟，出生阵列压穿椭圆 → 全员蛇形抽动。此后三个几何常量直接
-## 从 formation_spacing 推导，单一真相源，不另立数值）
-const FormationSpacing := preload("res://modules/formation/scripts/formation_spacing.gd")
-## 纵深行距（px）：相邻武器行/班的 x 间距 = 横半径+2——Δx 超横半径，任意纵距
-## 椭圆判别恒 >1，行间分离力不激活
-const ROW_GAP: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
-## 排内左右间距（px）：≥ 分离纵半径 + 余量——26° 投影把纵距压 ~0.44 倍，
-## 90px 投影后 ~40px 屏距，90px 高立绘叠死（「沙丁鱼罐头」根因之一）
-const LINE_GAP: float = 130.0
-## 行内最小纵距（px，诊断 A1/B）：= 分离椭圆纵深半径——行内自适应压缩的钳制
-## 下限。压穿它 = 分离力常驻 + 位置伺服极限环（移动单位水平翻转 4.3~5.1 次/s、
-## 友邻纵距 43~57px 的根因；半径 60/92 试验期未联动本值，2026-10-05 复发实测
-## 8.67 次/s）
-const MIN_ROW_GAP: float = FormationSpacing.SEPARATION_RADIUS_Y
-## 奇偶错排横向错位（px，诊断 B）：一行按 MIN_ROW_GAP 放不下时改错排——相邻
-## 单位 x 错开超横半径，任意纵距都不违反分离不变式（椭圆判别恒 >1），
-## 只须保同列纵距 ≥ MIN_ROW_GAP
-const STAGGER_X: float = FormationSpacing.SEPARATION_RADIUS_X + 2.0
 ## 左右两团出生中心 x 相对地图中线的偏移。一屏战场（创始人两次定口径：地图 =
 ## 正常游玩缩放 1.0 下一屏，双方视野各半）：1.0 可见宽 1920px——出生 ±430 +
 ## 阵列纵深（48 档最前 150 最深 -100）+ 指挥官后撤，全场跨度 ≈ ±640，
@@ -274,8 +250,6 @@ var _ft_label: Label = null
 var _preset_buttons: Array = []
 var _attacker: Array = []
 var _defender: Array = []
-## 本场已出生的远程班计数（方阵出生横移错班用；每场 _spawn_and_start 重置）
-var _ranged_spawn_count: int = 0
 ## 夺点实例列表（tactics CapturePoint；布点顺序 = 左/中/右）
 var _capture_points: Array = []
 ## 意图规划器（faction -> SquadIntentPlanner；夺点模式每方一台）
@@ -384,110 +358,63 @@ func _spawn_and_start() -> void:
 			rig.set_follow_target(_cam_proxy)
 		if rig.has_method("snap_to_follow_target"):
 			rig.snap_to_follow_target()
-	# 按编制分排出生（左攻右守，镜像）
+	# 按编制出生（左攻右守，镜像）——出生位 = 战线组方阵槽位本位（02 二-A.3
+	# 「组方阵纵向铺满行动带」落码）：近战组/远程组各一个组级方阵，列高/槽深
+	# 用 BattleLine 静态式（单一真相源），出生序 = 槽序 = 入线序——开局即成阵
+	# 面向敌军，无收拢期倒走/横穿（旧按班行块出生与战线槽位两套几何，开战
+	# 走位 transient = 「全员回头」根因之一）。祭司随远程组（SWL 层序 HEALERS
+	# 后置，battle_line.add_unit 同口径）。
 	var squad_defs: Array = PRESETS[_preset_idx]["squads"]
-	_ranged_spawn_count = 0
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
+	var melee_total: int = 0
+	var ranged_total: int = 0
+	for def in squad_defs:
+		for row in def["rows"]:
+			if int(row["weapon"]) in [W_BOW, W_STAFF, W_MERIC]:
+				ranged_total += int(row["count"])
+			else:
+				melee_total += int(row["count"])
+	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
+	var upc_r: int = BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
+	# 远程组出生基线 = 近战组全纵深 + GROUP_GAP（与 ranged_line_x 同式：开局
+	# 远程恰好站进自己的随行槽位）
+	var ranged_base_off: float = BattleLine.block_depth(melee_total, upc_m, fs.ROW_GAP) \
+			+ BattleLine.GROUP_GAP
+	var ranged_depth: float = BattleLine.block_depth(ranged_total, upc_r, fs.ROW_GAP)
+	var line_x0_l: float = mid_x - TEAM_OFFSET_X + 150.0
+	var line_x0_r: float = mid_x + TEAM_OFFSET_X - 150.0
+	var melee_idx: int = 0
+	var ranged_idx: int = 0
 	for si in squad_defs.size():
 		var def: Dictionary = squad_defs[si]
 		var l_units: Array = []
 		var r_units: Array = []
 		var rows: Array = def["rows"]
-		# 远程班方阵出生（批5 远程槽位锚定配套）：整班直接落在与编队槽位同构的
-		# upc 宽 × N 深方阵上——开局即成块，不再单条纵列挤一行。槽序 = 行序 =
-		# 入队序（与 formation_geometry.assign_formation_slots 的索引序一致，
-		# 出生位≈未来槽位，接战收拢步幅最小）；staff 行在前 = SWL formationOrder
-		# 的 CASTERS 在 ARCHERS 前。横距取 max(槽距, 纵半径+8)：出生即满足
-		# 分离椭圆不变式，无出生互推。
-		var all_ranged: bool = not rows.is_empty()
 		for row in rows:
-			if int(row["weapon"]) != W_BOW and int(row["weapon"]) != W_STAFF:
-				all_ranged = false
-				break
-		if all_ranged:
-			var total: int = 0
-			for row in rows:
-				total += int(row["count"])
-			# 班现役列高（与 formation_geometry.squad_units_per_column 同式：
-			# ceil(n/3) 夹 [UNITS_PER_COLUMN, 6]）
-			var upc: int = clampi(ceili(float(total) / 3.0), FormationSpacing.UNITS_PER_COLUMN, 6)
-			var spawn_gap: float = maxf(fs.SPREAD_SPACING, MIN_ROW_GAP + 8.0)
-			var block_depth: float = float(ceili(float(total) / float(upc)) - 1) * fs.ROW_GAP
-			# 整块钳入看门狗域（保块形平移，不逐人钳制压扁方阵）：后列不越
-			# mid ± ARENA_X_HALF（留 30px 余量）——深预设后置火力班超预算时
-			# 前移整块而不是被看门狗压成一条线
-			var fx: float = maxf(float(def["front_x"]),
-					-(ARENA_X_HALF - TEAM_OFFSET_X) + block_depth + 30.0)
-			# 多个远程班同预算平移后 x 重叠 → 上/下半带错班（轮换横移半块宽），
-			# 避免叠块出生互推
-			_ranged_spawn_count += 1
-			var center_y: float = spawn_y
-			if _ranged_spawn_count > 1:
-				center_y += (1.0 if _ranged_spawn_count % 2 == 0 else -1.0) \
-						* (upc * spawn_gap * 0.55)
-			var idx: int = 0
-			for ri in rows.size():
-				var row_r: Dictionary = rows[ri]
-				for k in int(row_r["count"]):
-					var slot := Vector2i(floori(float(idx) / float(upc)), idx % upc)
-					var lateral: float = (float(slot.y) - float(upc - 1) * 0.5) * spawn_gap
-					var depth: float = float(slot.x) * fs.ROW_GAP
-					var y_r: float = center_y + lateral
-					# 左军面向 +x：后列向自方退（−depth）；右军镜像（+depth）
-					var xl: float = mid_x - TEAM_OFFSET_X + fx - depth
-					var xr: float = mid_x + TEAM_OFFSET_X - fx + depth
-					var lt := _spawn_unit(map, Vector2(xl, y_r), int(row_r["weapon"]), fs)
-					if lt != null:
-						l_units.append(lt)
-						_attacker.append(lt)
-					var rt := _spawn_unit(map, Vector2(xr, y_r), int(row_r["weapon"]), fs)
-					if rt != null:
-						r_units.append(rt)
-						_defender.append(rt)
-					idx += 1
-		else:
-			for ri in rows.size():
-				var row: Dictionary = rows[ri]
-				var x_off: float = float(def["front_x"]) - ri * ROW_GAP
-				var count: int = int(row["count"])
-				# 行内间距按行宽自适应压缩，但下限 = 分离椭圆纵深半径（MIN_ROW_GAP）：
-				# 压缩穿底会把友邻纵距压到 43~57px < 72px → 分离力常驻 + 位置伺服极限环
-				# （诊断 A1）。单排放不下改奇偶错排（相邻 x 错开 ≥ 椭圆横半径 48，纵距
-				# 再近也不违反分离不变式），不再压间距。
-				var half_span: float = (count - 1) * 0.5 * LINE_GAP
-				# 一屏战场行动带半宽（02 二-A.2「半屏高」：地面行动带 ≈ 半屏地面深，
-				# 1.0 缩放视高 45 格、天空占上 1/3 → 地面 ~30 格 → 半宽 ~15 格=360px）：
-				# 行展开超此宽自动进错排（纵距减半/横向错开），部队收在行动带内
-				# ——资产带 85 格深是旧全景档口径，1.0 一屏装不下也不该装
-				var max_half: float = ACTION_BAND_HALF_PX
-				var staggered: bool = false
-				var gap: float = LINE_GAP
-				if half_span > max_half:
-					var gap_single: float = (max_half * 2.0) / float(maxi(count - 1, 1))
-					if gap_single >= MIN_ROW_GAP:
-						gap = gap_single
-					else:
-						# 奇偶错排：纵距减半（同列间距 = 2×gap ≥ MIN_ROW_GAP），
-						# 相邻同学横向错开 STAGGER_X
-						staggered = true
-						gap = clampf(gap_single, MIN_ROW_GAP * 0.5, LINE_GAP * 0.5)
-				for k in count:
-					var y: float = spawn_y + (float(k) - (count - 1) * 0.5) * gap
-					# 错排横向偏移：偶数位 −STAGGER_X/2、奇数位 +STAGGER_X/2（相邻 Δx=50，
-					# 阵列中线不动）；右军镜像取反保持两军点对称
-					var stag_x: float = 0.0
-					if staggered:
-						stag_x = -STAGGER_X * 0.5 if k % 2 == 0 else STAGGER_X * 0.5
-					var lt := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + x_off + stag_x, y), int(row["weapon"]), fs)
-					if lt != null:
-						l_units.append(lt)
-						_attacker.append(lt)
-					var rt := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - x_off - stag_x, y), int(row["weapon"]), fs)
-					if rt != null:
-						r_units.append(rt)
-						_defender.append(rt)
+			var ranged_grp: bool = int(row["weapon"]) in [W_BOW, W_STAFF, W_MERIC]
+			for _k in int(row["count"]):
+				var idx: int = ranged_idx if ranged_grp else melee_idx
+				var upc: int = upc_r if ranged_grp else upc_m
+				var slot := Vector2i(floori(float(idx) / float(upc)), idx % upc)
+				var lateral: float = (float(slot.y) - float(upc - 1) * 0.5) * fs.SPREAD_SPACING
+				var depth: float = BattleLine.rank_depth(slot.x, fs.ROW_GAP) \
+						+ (ranged_base_off if ranged_grp else 0.0)
+				var y: float = spawn_y + lateral
+				# 左军面向 +x：后列向自方退（−depth）；右军镜像（+depth）
+				var lt := _spawn_unit(map, Vector2(line_x0_l - depth, y), int(row["weapon"]), fs, 1)
+				if lt != null:
+					l_units.append(lt)
+					_attacker.append(lt)
+				var rt := _spawn_unit(map, Vector2(line_x0_r + depth, y), int(row["weapon"]), fs, -1)
+				if rt != null:
+					r_units.append(rt)
+					_defender.append(rt)
+				if ranged_grp:
+					ranged_idx += 1
+				else:
+					melee_idx += 1
 		squads_left.append(l_units)
 		squads_right.append(r_units)
 		await get_tree().process_frame
@@ -495,24 +422,20 @@ func _spawn_and_start() -> void:
 	# 推进令，被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）。阵亡不判负
 	# （旧"斩首即败"已退役）：他是纪律线打击因子（01-组织系统 §3.1，纪律线
 	# 后续批次实装），战斗仍打到全灭/撤离/超时收束。
-	# 纵深随预设编成推导（多班纵深分排收拢后 96 档阵列深 ~500px，固定 rear 会把
-	# 指挥官埋进队列中部挨打）——取最深一排再后退 COMMANDER_REAR_OFFSET。
+	# 站位从实际出生阵形推导（近战块 + 远程随行距 + 远程块全纵深再后退
+	# COMMANDER_REAR_OFFSET——旧按班行结构推后排，与组方阵出生几何脱节）。
 	if COMMANDER_ENABLED:
-		var rear_x: float = 0.0
-		for si in squad_defs.size():
-			var sdef: Dictionary = squad_defs[si]
-			rear_x = minf(rear_x, float(sdef["front_x"]) - (float(sdef["rows"].size()) - 1.0) * ROW_GAP)
-		rear_x -= COMMANDER_REAR_OFFSET
-		# 图内钳制：站位 = |TEAM_OFFSET_X + rear_x|（rear_x 为负，两段相加），
-		# 不得越过图缘贴边站——离图缘至少 500px。超深阵列推导触此限时，指挥官会
-		# 落到阵列纵深中部（图幅不够的无解退化），属预设几何与图幅的匹配问题，
-		# 归编制侧调预设纵深，不在此放大 offset 硬顶。
+		var rear_off: float = ranged_base_off + ranged_depth + COMMANDER_REAR_OFFSET
+		# 图内钳制：站位 = |TEAM_OFFSET_X + rear_off|（rear_off 为正深），不得越过
+		# 图缘贴边站——离图缘至少 500px。超深阵形触此限时指挥官会落到阵列纵深
+		# 中部（图幅不够的无解退化），属编制与图幅的匹配问题，不在此放大
+		# offset 硬顶。
 		var half_width: float = (map.map_right - map.map_left) * 0.5
-		rear_x = maxf(rear_x, -(half_width - TEAM_OFFSET_X - 500.0))
+		rear_off = minf(rear_off, half_width - TEAM_OFFSET_X - 500.0)
 		# y 相对带中心错开：编队出生带沿 y 展开占满中位区，同 y 出生会遭分离推挤
 		var cmd_y: float = spawn_y + COMMANDER_Y_OFFSET
-		var l_cmd := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + rear_x, cmd_y), COMMANDER_WEAPON, fs)
-		var r_cmd := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - rear_x, cmd_y), COMMANDER_WEAPON, fs)
+		var l_cmd := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X - rear_off, cmd_y), COMMANDER_WEAPON, fs, 1)
+		var r_cmd := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X + rear_off, cmd_y), COMMANDER_WEAPON, fs, -1)
 		if l_cmd != null:
 			l_cmd.set_rank(3)
 			_attacker.append(l_cmd)
@@ -528,8 +451,8 @@ func _spawn_and_start() -> void:
 		var guards_n: int = int(PRESETS[_preset_idx].get("guards", 0))
 		for gi in guards_n:
 			var g_y: float = cmd_y + (float(gi) - float(guards_n - 1) * 0.5) * GUARD_Y_STAGGER
-			var l_guard := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X + rear_x + GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs)
-			var r_guard := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X - rear_x - GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs)
+			var l_guard := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X - rear_off + GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs, 1)
+			var r_guard := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X + rear_off - GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs, -1)
 			if l_guard != null:
 				l_guard.set("guard_post", true)
 				_attacker.append(l_guard)
@@ -777,7 +700,10 @@ func _spawn_lineup() -> void:
 		print("[Arena]   first_unit=null（分组后已丢？）")
 
 
-func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
+## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器 + 开局朝向。
+## face ±1 = 按阵营面向敌军（右军默认朝 +x 背对敌人 = 开战全员回头的半个根因；
+## 出生首翻不受节流限，try_set_facing 直放行）；0 = 不设（lineup 站桩等）。
+func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node, face: int = 0) -> Node2D:
 	var e: Node2D = map.spawn_entity(_StickmanScene, pos)
 	if e == null:
 		return null
@@ -788,6 +714,9 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node) -> Node2D:
 		e.global_position.y = pos.y - e.foot_offset
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)
+	# 开局朝向：先于一切行为/移动意图落定（战列对峙的第一眼）
+	if face != 0 and e.has_method("try_set_facing"):
+		e.try_set_facing(face)
 	# 编队系统注入（审计 P1-1）：职责过滤/小队集火查询需要
 	if fs != null and e.has_method("set_formation_system"):
 		e.set_formation_system(fs)

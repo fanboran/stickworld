@@ -376,11 +376,11 @@ func _spawn_and_start() -> void:
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
-	# 战场疏排档（创始人 2026-10-12 点正「出生点有些摆位本身就有点密」，#18
-	# 「出场排面稀疏一档」再加档）：横距 140→170、列距 80→100（+21%/+25%）。
-	# 只覆写战场编队几何——村居/劳作小队维持 FormationSpacing 默认档。
-	fs.SPREAD_SPACING = 170.0
-	fs.ROW_GAP = 100.0
+	# 战场列距 = 碰撞箱校准档（创始人 2026-10-12 规格：初始状态碰撞箱零重合）：
+	# 单位 Collider 宽 83px（stickman_entity.tscn），列距须 ≥ 83+余量 → 90。
+	# 横距维持默认 140（Collider 深 24px，140 远不重叠——上批误升 170 是把
+	# 不密的弄更密，已撤）。村居/劳作小队不受影响。
+	fs.ROW_GAP = 90.0
 	var melee_total: int = 0
 	var ranged_total: int = 0
 	for def in squad_defs:
@@ -720,6 +720,9 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node, face: int = 0)
 	var e: Node2D = map.spawn_entity(_StickmanScene, pos)
 	if e == null:
 		return null
+	if OS.get_environment("STICK_TRACE_SPAWN") == "1":
+		print("[SpawnTrace] f=%d wtype=%d 入参=(%.0f,%.0f) 落地=(%.0f,%.0f)" % [Engine.get_process_frames(), 
+				wtype, pos.x, pos.y, e.global_position.x, e.global_position.y])
 	# 脚部对齐：HD-2D 图 origin 即视觉脚线（billboard 脚锚），不上移；
 	# 2D 图 origin=髋、脚在 origin+foot_offset，仍需上移校正（口径同 world.InitialContent）
 	if e.get("foot_offset") != null \

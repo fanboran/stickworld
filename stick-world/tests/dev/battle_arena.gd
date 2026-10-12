@@ -25,20 +25,23 @@ extends Node
 ##       + 阵地护卫 3 名（96 档封存，仅作极端压力对照）
 ##   （观感验收默认档 = 16 = 设计口径「每侧最多十几二十几」；48/96 为密度/极端
 ##   压力档——高于设计标定 2~3 倍，观感问题可能被密度放大，验收对号入座）
-##   一屏战场（创始人：战场范围限定在屏幕一样大）：出生中心 ±430、组方阵
-##   出生（近战组/远程组各一个组级方阵，纵向铺满行动带）+ 指挥官后撤——三档
-##   全场横向跨度最大 ≈ ±1170（96 档含指挥官），观战一屏内可见。
-##   开战推进 = 战线（battle_line）：双方各一条，组方阵沿 x 连续推向敌阵、
-##   接战即停/冻结、打完续推；纵深超上限的余部二线驻位待命。接战后
-##   FormationSystem 排长集火 + 兵种行为档案（冲脸/持阵/风筝）接管；排长
-##   阵亡该排失去集火但班仍执行规划器号令。
+##   一屏战场（创始人：战场大小=视野，测试场景的摆场设定而非运行时机制）：
+##   出生列阵整体收进可视半宽（1080p@1.0 缩放 = ±960，出生最深 ±910 含
+##   指挥官），可走边界 = 视野内收 40（map_left/right 收窄——实体层每帧
+##   钳地图边界天然兜底，无运行时看门狗；相机对"图窄于视野"自动居中）。
+##   开战推进（裁决#28：运行期槽位追逐拔除）= 一次性推进令：每单位开局一条
+##   move 号令（目标=敌方阵线、沿途 engage_in_range 接敌即战、hold_on_arrive
+##   未接战到达则站定），此后位置只由接战行为＋分离推挤管——战线槽位令
+##   （battle_line 随线号令）、班组归槽（get_squad_dest/跟队）、战斗锚驻防
+##   （批5 combat_anchor）本场全部不启用；TeamAi 姿态号令抑制（观察场只看
+##   战斗不看宏观决策，TaskBoard 决策槽系统本身不动）。接战后个体 AI
+##   （索敌/攻击/风筝）+ FormationSystem 排长集火接管。
 ##
 ## 开战推进（夺点模式已退役，CAPTURE_ENABLED 默认关——夺点/旗/占领圈是 AI 线
 ##   自立的开发态模拟非游戏机制，创始人裁决整体下线；战斗输赢 = 全面战争式
-##   全灭/撤离/超时，02 八-A）：战线推进（SWL Team.Attack + MoveInFormation
-##   直译，battle_line.gd）——双方各一条战线，近战组/远程组各一个组级方阵沿 x
-##   连续推进，接战即停/冻结，打完续推；未接战成员收随线号令（engage_in_range
-##   敌进射程即战）。旧「先锋班 ADVANCE 压中线 + 跟队链」退役。
+##   全灭/撤离/超时，02 八-A）：裁决#28 拔运行期槽位追逐后，推进 = 每单位
+##   一次性 move 号令（engage_in_range 敌进射程即战——SWL Team.Attack 整线
+##   推进的槽位-free 等价）；此后接战行为 + 分离推挤接管位置。
 ##   夺点规划器（SquadIntentPlanner）与其号令粘性（保持期/未完成续期/事件节流）
 ##   作为资产保留在 tactics 模块，正式宏观意图源接入时复用。
 ##
@@ -162,12 +165,15 @@ const PRESETS: Array = [
 ## 默认 0 = 遭遇战·16——观感验收主档对齐设计口径（02-战斗 二-A.1「每侧最多
 ## 十几二十几」，96 档封存；48/96 只作密度压力对照）
 static var _preset_idx: int = 0
-## 左右两团出生中心 x 相对地图中线的偏移。一屏战场（创始人两次定口径：地图 =
-## 正常游玩缩放 1.0 下一屏，双方视野各半）：1.0 可见宽 1920px——出生 ±430 +
-## 阵列纵深（48 档最前 150 最深 -100）+ 指挥官后撤，全场跨度 ≈ ±640，
-## 整场在游玩视野内。
-##【提案/待定·待实测校准】
-const TEAM_OFFSET_X: float = 430.0
+## 左右两团出生线 x 相对地图中线的偏移。视野预算（创始人 2026-10-12 裁决：
+## 出生范围要在视野范围内列阵）：1.0 缩放可视半宽 960，纵深链（48 档最坏）
+## = 阵线偏移 330 + 近战块 290 + 组隙 130 + 远程块 90 + 指挥条 70 = 910 ≤
+## 可走边界 920。前线间距 = 2×(330−150) = 360：矛追击带 480 内（开局可索敌
+## 推进）、弓射程 300 外（不出生即对射）。
+const TEAM_OFFSET_X: float = 330.0
+## 视野内收边距（px）：可走边界 = 可视半宽 − 此值（立绘不出视野缘）。
+## 16:9 任意分辨率下 1.0 缩放的可视半宽恒 960（base_zoom=vp_h/1080 随高缩放）
+const VIEW_INSET: float = 40.0
 ## 行动带半宽（px）：一屏战场的地面行动带半宽（见出生段注释）。
 ## 2026-10-12 底部空带治理（创始人点正「画面最底下的一片范围没有利用上」）：
 ## 360px 档实测（1080p/缩放 0.75）单位只占到地面 63%、底部空 200px——
@@ -205,25 +211,28 @@ const CAPTURE_POINT_LABELS: Array = ["中线", "蓝阵", "红阵", "蓝后排", 
 
 ## ── 战场指挥官（将领+卫队，全战式编制）：双方后方各 1 名留守 ──
 const COMMANDER_ENABLED: bool = true
-## 指挥官出生在本方阵列最末行再后退的纵深（px；一屏口径收紧——v2 战场 200，
-## 阵列收拢后 120 即可脱离接战第一排；越界由实体地面约束钳到图缘）
-##【提案/待定·待实测校准】（批2 拉大到 200：120px 在观战缩放 0.46 下仅 ~55px
-## 屏距，指挥官+护卫小群与主力贴成一团辨不出「后方阵地」）
-const COMMANDER_REAR_OFFSET: float = 200.0
-## 指挥官出生 y 相对带中心的错开（px）。**0 = 居中**（创始人多次定口径居中；
-## 旧 300 防挤参数已无必要——x 向已在阵列后 200+ 与主力天然错开）
-const COMMANDER_Y_OFFSET: float = 0.0
+## 指挥官出生在远程块后缘再后退的纵深（px）。视野预算压缩（裁决#28）：
+## 70 + 与远程末列的横向错开共同保证不与远程块碰撞箱相交
+##（x 差 70<83 由 y 错开兜底，见 COMMANDER_STRIP_Y）
+const COMMANDER_REAR_OFFSET: float = 70.0
+## 指挥条带 y（相对带中心，px）：远程组横展上限（±336）之外的带内空带——
+## 指挥官/护卫整组站此条带，与远程块（横展铺满带心区）在 y 上天然分离，
+## x 深度可与远程块重叠不碰撞；带下缘（+456）留 45px 余量不出行动带
+const COMMANDER_STRIP_Y: float = 408.0
+## 远程组列高上限：横展不铺满行动带（±336），给指挥条带留空带
+const RANGED_UPC_CAP: int = 7
 ## 指挥官武器（佩剑；持旗视觉后议，机制先行）
 const COMMANDER_WEAPON: int = W_SWORD
 
 ## ── 阵地护卫（02 一-A.4：指挥前方阵地配 0~3 名，各档人数见 PRESETS guards）──
 ## 护卫守位行为面与指挥官同款（guard_post 职责：留守+LEASH 迎击+号令拦截），
 ## 不判任何全局胜负（rank 0 士兵）——守位判定口 StickmanEntity.holds_post()。
-## 护卫相对指挥官的前向偏移（px，朝中线方向 = 指挥前方"阵地"）
-##【提案/待定·待实测校准】
+## 护卫相对指挥官的前向偏移（px，朝主力方向 = 指挥前方"阵地"；
+## 与远程末列 x 差 20<83，靠 y 条带分离保证不碰撞）
 const GUARD_FORWARD_OFFSET: float = 90.0
-## 多名护卫间纵向错开（px；≥分离纵半径防出生互推）
-const GUARD_Y_STAGGER: float = 90.0
+## 多名护卫间纵向错开（px；指挥条带内 45px 錯开——条带内无他人，≥24 碰撞
+## 箱深即不叠，同时全部落在远程横展（±336）外 24px 的净空里）
+const GUARD_Y_STAGGER: float = 45.0
 ## 护卫武器（剑：近身自卫）
 const GUARD_WEAPON: int = W_SWORD
 
@@ -264,6 +273,10 @@ var _arena_formation: Node = null
 var _arena_fireteams: Dictionary = {}
 ## 双方指挥官（faction -> 单位；HUD 阵亡提示用）
 var _arena_commanders: Dictionary = {}
+## 出生 lattice x 账本（iid → 出生 x）：推进令做**刚体平移**（目标 = 出生位 +
+## 统一位移向量）——全员同向同距同到，终点保持列阵间距（SWL MoveInFormation
+## 整线平移的槽位-free 等价；同点目标会让快慢列追尾压进碰撞箱）
+var _spawn_march_x: Dictionary = {}
 ## 相机跟随代理（camera_rig 居中模式目标；缓动到稳定锚——前线中点）
 var _cam_proxy: Marker2D = null
 ## 稳定锚目标（死区过滤后的双方前线中点；相机缓动终点）
@@ -328,8 +341,8 @@ func _spawn_and_start() -> void:
 	if hd != null and is_instance_valid(hd) and hd.has_method("set_bf_ground_ratio"):
 		hd.set_bf_ground_ratio(BF_GROUND_RATIO)
 	# 接管相机（审计 P0-6）：不停用 rig——滚轮缩放/边界钳制/平滑全保留；
-	# 居中模式跟随"质心代理"；缩放让整场一屏内可见：一屏战场全宽最大 ≈2340px
-	#（96 档 ±1170 含指挥官）< 0.75 缩放可见宽 2560px（1920/0.75），全宽入画
+	# 居中模式跟随"质心代理"（战场=视野窄于视口时相机自动居中钉死，
+	# 放大观察时可在战场内平移）
 	var rig: Node = _game_root.get("camera_rig")
 	# 垂直锁定 = 行动带正中（一屏战场终极口径：地图可走范围=视野，竖直取景
 	# 恒钉死——地面零漂移、战场带居中半屏、脚永不出屏；旧 follow_target_y
@@ -337,21 +350,8 @@ func _spawn_and_start() -> void:
 	# 乱跳"三症状的同根）
 	if rig != null and rig.has_method("set_vertical_lock"):
 		rig.set_vertical_lock(spawn_y)
-	# 一屏战场：小地图/相机边界 = 战场行动区（创始人口径：战场就只有视野这么大
-	# ——地图资产 ±3072 是地图口径，若小地图显示整图，战场缩成中间一小段）
-	var arena_left: float = mid_x - 720.0
-	var arena_right: float = mid_x + 720.0
-	if rig != null and rig.has_method("set_map_bounds"):
-		rig.set_map_bounds(arena_left, arena_right)
-	var minimap: Node = _game_root.get("_minimap")
-	if minimap != null and is_instance_valid(minimap) and minimap.has_method("set_map_info"):
-		minimap.set_map_info(arena_left, arena_right, map.ground_y, map.ground_ratio)
 	if rig != null and rig.has_method("set_centered_mode"):
 		rig.set_centered_mode(true)
-		# 纵向贴住战场质心（rig 默认把视野下边界锚死 ground_bottom，混战线
-		# 南漂时大军沉出屏幕下沿；RTS 观战开 Y 跟随，rig 侧带内钳制）
-		if rig.has_method("set_follow_target_y"):
-			rig.set_follow_target_y(true)
 		# 一屏战场（创始人两次定口径：地图 = 正常游玩缩放一屏大，双方视野各半
 		# ——全场即视野，不设全景档）：全程 1.0 游玩缩放
 		if rig.has_method("set_user_zoom"):
@@ -366,6 +366,25 @@ func _spawn_and_start() -> void:
 			rig.set_follow_target(_cam_proxy)
 		if rig.has_method("snap_to_follow_target"):
 			rig.snap_to_follow_target()
+	# 战场大小 = 视野（创始人 2026-10-12 口径：测试场景把战场设成和视野一样
+	# ——摆场设定，不是运行时机制）：可走边界 = 缩放落定后的可视半宽内收
+	# VIEW_INSET。实体层每帧钳 map_left/right 兜底（出生/追击/分离出界即拉回），
+	# 相机/小地图用同一边界。旧 ARENA_X_HALF 运行时看门狗（每帧拽全员回框）
+	# 已删——它是"全军回卷挤团"的元凶，且与出生几何打架。
+	var eff_zoom: float = 1.0
+	if rig != null and "effective_zoom" in rig:
+		eff_zoom = maxf(float(rig.effective_zoom), 0.05)
+	var vp_w: float = 1920.0
+	if get_viewport() != null:
+		vp_w = get_viewport().get_visible_rect().size.x
+	var bounds_half: float = vp_w / (2.0 * eff_zoom) - VIEW_INSET
+	map.map_left = mid_x - bounds_half
+	map.map_right = mid_x + bounds_half
+	if rig != null and rig.has_method("set_map_bounds"):
+		rig.set_map_bounds(map.map_left, map.map_right)
+	var minimap: Node = _game_root.get("_minimap")
+	if minimap != null and is_instance_valid(minimap) and minimap.has_method("set_map_info"):
+		minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
 	# 按编制出生（左攻右守，镜像）——出生位 = 战线组方阵槽位本位（02 二-A.3
 	# 「组方阵纵向铺满行动带」落码）：近战组/远程组各一个组级方阵，列高/槽深
 	# 用 BattleLine 静态式（单一真相源），出生序 = 槽序 = 入线序——开局即成阵
@@ -376,11 +395,18 @@ func _spawn_and_start() -> void:
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
-	# 战场列距 = 碰撞箱校准档（创始人 2026-10-12 规格：初始状态碰撞箱零重合）：
-	# 单位 Collider 宽 83px（stickman_entity.tscn），列距须 ≥ 83+余量 → 90。
-	# 横距维持默认 140（Collider 深 24px，140 远不重叠——上批误升 170 是把
-	# 不密的弄更密，已撤）。村居/劳作小队不受影响。
+	# 战场间距档（视野预算 + 碰撞箱零重叠双约束，裁决#27/#28）：
+	# - 列距 90 = 碰撞箱校准（Collider 宽 83 + 7 余量，#27 规格）；
+	# - 横距 112 = 视野预算压缩（140 装不进 1.0 一屏；不变式链全过：
+	#   83 < 分离X 48 < 分离Y 110 ≤ 112、90 ≤ 112、容差 170 ∈ [112, 224)、
+	#   死区 40 < 112——分离半径不动，横距对碰撞箱深 24 仍有 88px 余量）；
+	# - RESERVE 110 / GROUP 130 = 纵深链压缩（48 档最坏 290+130+90+70 = 580，
+	#   阵线偏移 330 → 出生最深 910 ≤ 可走边界 920）。
+	# 均为观察场覆写（BattleLine 静态与 FormationSpacing 默认是产线口径）。
 	fs.ROW_GAP = 90.0
+	fs.SPREAD_SPACING = 112.0
+	BattleLine.RESERVE_GAP = 110.0
+	BattleLine.GROUP_GAP = 130.0
 	var melee_total: int = 0
 	var ranged_total: int = 0
 	for def in squad_defs:
@@ -390,7 +416,10 @@ func _spawn_and_start() -> void:
 			else:
 				melee_total += int(row["count"])
 	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
-	var upc_r: int = BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
+	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带——±(cap-1)/2×112 = ±336，
+	# 给指挥条带（COMMANDER_STRIP_Y 408 起）留净空
+	var upc_r: int = mini(BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING),
+			RANGED_UPC_CAP)
 	# 远程组出生基线 = 近战组全纵深 + GROUP_GAP（与 ranged_line_x 同式：开局
 	# 远程恰好站进自己的随行槽位）
 	var ranged_base_off: float = BattleLine.block_depth(melee_total, upc_m, fs.ROW_GAP) \
@@ -420,10 +449,14 @@ func _spawn_and_start() -> void:
 				if lt != null:
 					l_units.append(lt)
 					_attacker.append(lt)
+					_spawn_march_x[lt.get_instance_id()] = line_x0_l - depth
+					_hold_at_spawn(lt)
 				var rt := _spawn_unit(map, Vector2(line_x0_r + depth, y), int(row["weapon"]), fs, -1)
 				if rt != null:
 					r_units.append(rt)
 					_defender.append(rt)
+					_spawn_march_x[rt.get_instance_id()] = line_x0_r + depth
+					_hold_at_spawn(rt)
 				if ranged_grp:
 					ranged_idx += 1
 				else:
@@ -433,20 +466,13 @@ func _spawn_and_start() -> void:
 		await get_tree().process_frame
 	# 战场指挥官（将领，全战式编制）：双方后方各 1 名——留守后方，不编班不下
 	# 推进令，被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）。阵亡不判负
-	# （旧"斩首即败"已退役）：他是纪律线打击因子（01-组织系统 §3.1，纪律线
+	#（旧"斩首即败"已退役）：他是纪律线打击因子（01-组织系统 §3.1，纪律线
 	# 后续批次实装），战斗仍打到全灭/撤离/超时收束。
-	# 站位从实际出生阵形推导（近战块 + 远程随行距 + 远程块全纵深再后退
-	# COMMANDER_REAR_OFFSET——旧按班行结构推后排，与组方阵出生几何脱节）。
+	# 站位 = 远程块后缘再退 COMMANDER_REAR_OFFSET、y 落指挥条带（COMMANDER_STRIP_Y
+	# ——远程横展外的带内空带）：x 差 70<83 的碰撞由 y 错开（≥72）兜底。
 	if COMMANDER_ENABLED:
 		var rear_off: float = ranged_base_off + ranged_depth + COMMANDER_REAR_OFFSET
-		# 图内钳制：站位 = |TEAM_OFFSET_X + rear_off|（rear_off 为正深），不得越过
-		# 图缘贴边站——离图缘至少 500px。超深阵形触此限时指挥官会落到阵列纵深
-		# 中部（图幅不够的无解退化），属编制与图幅的匹配问题，不在此放大
-		# offset 硬顶。
-		var half_width: float = (map.map_right - map.map_left) * 0.5
-		rear_off = minf(rear_off, half_width - TEAM_OFFSET_X - 500.0)
-		# y 相对带中心错开：编队出生带沿 y 展开占满中位区，同 y 出生会遭分离推挤
-		var cmd_y: float = spawn_y + COMMANDER_Y_OFFSET
+		var cmd_y: float = spawn_y + COMMANDER_STRIP_Y
 		var l_cmd := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X - rear_off, cmd_y), COMMANDER_WEAPON, fs, 1)
 		var r_cmd := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X + rear_off, cmd_y), COMMANDER_WEAPON, fs, -1)
 		if l_cmd != null:
@@ -459,8 +485,8 @@ func _spawn_and_start() -> void:
 			_arena_commanders[2] = r_cmd
 		# 阵地护卫（02 一-A.4）：指挥官前方（阵地）配 0~3 名——守位行为面同指挥官
 		#（guard_post：留守+LEASH 迎击+号令拦截），不判任何全局胜负（rank 0 士兵）。
-		# 站位 = 指挥官前向 GUARD_FORWARD_OFFSET（阵地），多名时纵向对称错开
-		# GUARD_Y_STAGGER（≥分离纵半径，防出生互推）。
+		# 站位 = 指挥官前向 GUARD_FORWARD_OFFSET（朝主力 = 指挥前方"阵地"），
+		# 条带内 GUARD_Y_STAGGER 错开（条带在远程横展外，x 穿远程块纵深也不碰）。
 		var guards_n: int = int(PRESETS[_preset_idx].get("guards", 0))
 		for gi in guards_n:
 			var g_y: float = cmd_y + (float(gi) - float(guards_n - 1) * 0.5) * GUARD_Y_STAGGER
@@ -473,11 +499,30 @@ func _spawn_and_start() -> void:
 				r_guard.set("guard_post", true)
 				_defender.append(r_guard)
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
-	print("[Arena] 预设[%s] 战斗开始: battle=%s 左 %d 人 vs 右 %d 人" % [PRESETS[_preset_idx]["name"], battle, _attacker.size(), _defender.size()])
+	# 出生域视野自检（裁决#28 硬验收「出生范围在视野范围内列阵」）：主档/密度档
+	# 须整体入画；96 封存档密度几何装不进一屏，预期超界（打印告示不阻断）。
+	var spawn_far: float = 0.0
+	for u in _attacker + _defender:
+		if is_instance_valid(u):
+			spawn_far = maxf(spawn_far, absf((u as Node2D).global_position.x - mid_x))
+	var bounds_half_now: float = (map.map_right - map.map_left) * 0.5
+	if spawn_far > bounds_half_now:
+		print("[Arena] 预设[%s] 出生域半宽 %.0f 超出可走边界 %.0f（封存压力档预期超界）"
+				% [PRESETS[_preset_idx]["name"], spawn_far, bounds_half_now])
+	print("[Arena] 预设[%s] 战斗开始: battle=%s 左 %d 人 vs 右 %d 人（出生半宽 %.0f / 视野边界 %.0f）"
+			% [PRESETS[_preset_idx]["name"], battle, _attacker.size(), _defender.size(), spawn_far, bounds_half_now])
 	# 开战自动暂停豁免（TimeManager._on_battle_started，game/auto_pause_battle 默认
 	# true 会把全局时间置 PAUSED）：观察场要直接开演，自动恢复 X1；空格仍可手动暂停
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(TimeManager.Speed.X1)
+	# 列阵站定令：出生同帧即全员 idle 钉在出生位（号令压制自主决策——否则出生
+	# 到开拔的窗口里自主漫步把 lattice 间距走散，「初始状态碰撞箱零重叠」的窗口
+	# 就不存在了）。主循环里逐单位即时下发（_hold_at_spawn），此处只补指挥官/
+	# 护卫（守位者的号令守卫对 idle 放行——留守语义兼容）。
+	for u in _attacker + _defender:
+		if u == null or not is_instance_valid(u):
+			continue
+		_hold_at_spawn(u)
 	# 编队注入（审计 P1-1）：每方按预设建班（fp_combat_squad 预设）+ 任命班长——
 	# 班长 rank 1，阵亡经组织侧补位免费无缝轮转
 	var left_squad_ids: Array = []
@@ -506,39 +551,38 @@ func _spawn_and_start() -> void:
 		_arena_fireteams[2].append_array(_make_fireteams(fs, right_squad_ids[si]))
 	# 开战推进接管权分流：夺点模式 = 意图规划器（布点 + 双方各一台，0.5s 节拍
 	# 自主攻点/驻防/接火）；关闭 = 完整回退旧开战逻辑（下 else 分支，逐行原样）
+	# 宏观号令抑制（双脑仲裁，延迟到帧末——BattleDirector 也是帧末才注册
+	# 生产 TeamAi，本方排其后才能拿到实例）：观察场只看战斗——TeamAi 姿态
+	# 号令（GARRISON/DEFEND 守驻）会冻结推进，TaskBoard 决策槽系统本身不动。
+	if battle != null:
+		_suppress_team_ai.call_deferred(battle)
 	var to: Node = _game_root.get_tactical_orders()
 	if CAPTURE_ENABLED:
 		_setup_capture_mode(mid_x, spawn_y, map, fs, to, left_squad_ids, right_squad_ids)
-		# 双脑仲裁：夺点模式号令权归规划器，TeamAi 姿态机让位（延迟到帧末——
-		# BattleDirector 也是帧末才注册生产 TeamAi，本方排其后才能拿到实例）
-		if battle != null:
-			_suppress_team_ai.call_deferred(battle)
 	else:
-		# 战线推进（SWL Team.Attack + MoveInFormation 直译）：双方各一条战线——
-		# 近战组/远程组各一个组级方阵，前列贴线连续推进，接战即停/冻结，打完续推；
-		# 未接战成员收随线号令（engage_in_range 敌进射程即战）。
-		# 旧「先锋班 ADVANCE 压中线 + 跟队链」退役（班各为阵 = 全军挤中间的根因）。
-		if fs != null and fs.has_method("create_battle_line"):
-			var goal_l: float = mid_x + TEAM_OFFSET_X + 150.0
-			var goal_r: float = mid_x - TEAM_OFFSET_X - 150.0
-			var line_l: RefCounted = fs.create_battle_line(1, 1, goal_l,
-					mid_x - TEAM_OFFSET_X + 150.0, spawn_y, ACTION_BAND_HALF_PX)
-			var line_r: RefCounted = fs.create_battle_line(2, -1, goal_r,
-					mid_x + TEAM_OFFSET_X - 150.0, spawn_y, ACTION_BAND_HALF_PX)
-			# 个性 y 漂移种子：按战斗 id 派生（同战斗可复现、跨战斗不同相）
-			if line_l != null and line_l.has_method("seed_drift"):
-				line_l.seed_drift(hash("arena%d_1" % (battle.get_battle_id().hash() if battle != null and battle.has_method("get_battle_id") else 0)))
-			if line_r != null and line_r.has_method("seed_drift"):
-				line_r.seed_drift(hash("arena%d_2" % (battle.get_battle_id().hash() if battle != null and battle.has_method("get_battle_id") else 0)))
-			for u in _attacker:
-				if u != null and is_instance_valid(u) and not _holds_post(u):
-					line_l.add_unit(u)
-			for u in _defender:
-				if u != null and is_instance_valid(u) and not _holds_post(u):
-					line_r.add_unit(u)
-			print("[Arena] 战线就绪: 蓝 goal=%.0f / 红 goal=%.0f" % [goal_l, goal_r])
-		else:
-			push_warning("[Arena] FormationSystem 无战线 API，推进跳过")
+		# 开战推进 = 一次性推进令（裁决#28：运行期槽位追逐拔除——战线槽位令
+		#〔battle_line 随线号令〕/班组归槽〔get_squad_dest/跟队〕/战斗锚驻防
+		#〔批5 combat_anchor〕本场全部不启用）：每单位一条 move 号令指向
+		# 敌方阵线（保各自出生 y 平行行进 = SWL 整线平移的槽位-free 等价），
+		# engage_in_range 沿途敌进射程即交还战斗行为，hold_on_arrive 未接战
+		# 到达则站定待敌。此后位置只由接战行为＋分离推挤管。
+		# 先站定成阵再开拔（0.6s）：出生 lattice 是零重叠的（#27 规格），但
+		# 出生即开拔会让前沿先行、列距瞬时压进碰撞箱（起步斜坡有先后）——
+		# 「初始状态碰撞箱零重合」的验收窗口必须是静止成阵的一刻。
+		if fs != null:
+			fs.set("combat_anchor_enabled", false)
+		await get_tree().create_timer(0.6).timeout
+		# 刚体平移：目标 = 出生 lattice 位 + 统一位移（goal − 本方 line_x0）——
+		# 全员同向同距，终点保持列阵间距；同点目标会让快慢列追尾压进碰撞箱
+		var delta_l: float = (mid_x + TEAM_OFFSET_X) - line_x0_l
+		var delta_r: float = (mid_x - TEAM_OFFSET_X) - line_x0_r
+		var issued: int = 0
+		for u in _attacker:
+			issued += _issue_advance(u, delta_l)
+		for u in _defender:
+			issued += _issue_advance(u, delta_r)
+		print("[Arena] 开拔: 推进令 %d 单位（槽位追逐已拔除）蓝 Δ=%.0f / 红 Δ=%.0f"
+				% [issued, delta_l, delta_r])
 	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
 	# 观察场不看新手引导）
 	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
@@ -578,9 +622,41 @@ func _reveal() -> void:
 
 ## 创建小队并任命班长（班长 = 队列中间成员，rank 1 由 formation 侧写入）。
 ## 返回 squad_id（失败返回 ""）。
-## 守位单位判定（指挥官 rank 3 / 阵地护卫 guard_post）：留守后方不随战线推进
+## 守位单位判定（指挥官 rank 3 / 阵地护卫 guard_post）：留守后方不随推进
 func _holds_post(u: Node) -> bool:
 	return u.has_method("holds_post") and u.holds_post()
+
+
+## 出生即钉位（idle 号令，同帧下发）：压制自主漫步，保住「初始状态碰撞箱零
+## 重叠」的静止成阵窗口；开拔时推进令覆盖。守位者（指挥官/护卫）的号令守卫
+## 对 idle 放行（留守语义兼容）。
+func _hold_at_spawn(u: Node) -> void:
+	if u == null or not is_instance_valid(u):
+		return
+	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+	if ai != null and ai.has_method("set_order"):
+		ai.set_order("idle", {})
+
+
+## 一次性推进令（裁决#28）：刚体平移语义——目标 x = 出生 lattice x + delta_x
+##（全员同向同距），y 保出生位；engage_in_range 沿途敌进射程即交还战斗行为，
+## hold_on_arrive 到达未接战则站定待敌。守位者（指挥官/护卫）不下。
+## 返回 1=已下 / 0=跳过。
+func _issue_advance(u: Node, delta_x: float) -> int:
+	if u == null or not is_instance_valid(u) or _holds_post(u):
+		return 0
+	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
+	if ai == null or not ai.has_method("set_order"):
+		return 0
+	var iid: int = u.get_instance_id()
+	var base_x: float = _spawn_march_x.get(iid, (u as Node2D).global_position.x)
+	ai.set_order("move", {
+		"target": Vector2(base_x + delta_x, (u as Node2D).global_position.y),
+		"engage_in_range": true,
+		"run": false,
+		"hold_on_arrive": true,
+	})
+	return 1
 
 
 func _make_squad(fs: Node, units: Array, squad_name: String) -> String:
@@ -862,30 +938,12 @@ func _fireteam_status_text() -> String:
 	return "火：%s / %s" % [parts[0], parts[1]]
 
 
-## 可走域看门狗（一屏战场执法）：单位位置每帧钳在视野行动区内——
-## 地图=视野（创始人口径），任何原因（分离推挤/追击/风筝）出界立即拉回，
-## 脚出屏在几何上不可能。【钳制域=出生域+追击余量，非硬贴边】
-const ARENA_X_HALF: float = 700.0
-## 可走域 y = 单位带 ± 60px 余量（追击/分离出界拉回；带本身在可见地面内，
-## 脚出屏几何不可能）
-const ARENA_Y_MARGIN: float = 60.0
-
-
-func _clamp_units_into_view() -> void:
-	var map: Node2D = _game_root.get_current_map()
-	if map == null:
-		return
-	var mid_x: float = (map.map_left + map.map_right) * 0.5
-	var y_top: float = map.ground_y + (BF_UNIT_BAND_CENTER_Z - BF_UNIT_BAND_HALF_Z) * 24.0 - ARENA_Y_MARGIN
-	var y_bottom: float = map.ground_y + (BF_UNIT_BAND_CENTER_Z + BF_UNIT_BAND_HALF_Z) * 24.0 + ARENA_Y_MARGIN
-	for u in _attacker + _defender:
-		if not is_instance_valid(u):
-			continue
-		var p: Vector2 = u.global_position
-		var cy: float = clampf(p.y, y_top, y_bottom)
-		var cx: float = clampf(p.x, mid_x - ARENA_X_HALF, mid_x + ARENA_X_HALF)
-		if cx != p.x or cy != p.y:
-			u.global_position = Vector2(cx, cy)
+## 可走域兜底（裁决#28 起）＝实体层地图边界钳制：战场大小=视野是摆场设定
+##（map_left/right 收窄到可视域，见 _spawn_and_start），单位每帧钳地图边界
+## ＋ 走带 y 的约束都在 stickman_entity 的地面约束里——观察场不再有独立的
+## 运行时看门狗。旧 ARENA_X_HALF=700 逐帧拽回曾把生在 ±1000~±1560 的远程块/
+## 预备列/指挥官全卷进近战块（「最后一排挤几十人」根因，2026-10-12 探针实锤），
+## 整段已删，勿复活。
 
 
 func _process(delta: float) -> void:
@@ -894,7 +952,6 @@ func _process(delta: float) -> void:
 	if _hud_timer <= 0.0:
 		_hud_timer = 0.25
 		_update_hud()
-	_clamp_units_into_view()
 	_update_camera(delta)
 	# 夺点意图规划（每方一台；规划器内部 0.5s 节拍 + 暂停守卫，此处只喂帧 delta）
 	for k in _planners:

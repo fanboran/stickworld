@@ -100,6 +100,11 @@ const COMBAT_ANCHOR_TICK: float = 0.5
 ## 危险重冻结比（批5）：敌方压近锚线 < 成员最短射程 × 此比 → 锚以当前质心重冻结，
 ## 方阵整体有序后撤（SWL MoveInFormation 队伍平移语义），替代人各自散架
 const COMBAT_ANCHOR_DANGER_RATIO: float = 0.4
+## 战斗锚驻防链总闸（锚冻结 + get_unit_combat_slot 槽位消费一起关）：true =
+## 批5 语义（接战班冻结锚、远程按锚收拢方阵）；false = 整链关停，远程回落
+## 原站桩语义。观察场 2026-10-12 裁决#28 拔运行期槽位追逐时置 false；产线
+## 默认保持批5 语义
+var combat_anchor_enabled: bool = true
 ## 共享目标选择内核（tactics TargetFinder；显式 preload 走 tactics/api.gd 契约出口，
 ## headless 防御惯例 §七.3）。缺省 opts 语义 = 最近存活敌人（faction_id 阵营口径 +
 ## battle 存活列表），小队共享目标与战斗目标过滤同源。
@@ -310,7 +315,10 @@ func _process(_delta: float) -> void:
 	# 队伍级目标决策（反编译参考实装 D-B）：排长决策 → 队员执行
 	_decide_squad_targets(_delta)
 	# 战斗驻防锚（批5 远程槽位锚定）：接战班冻结锚点，远程行为按锚收拢方阵
-	_tick_combat_anchors(_delta)
+	#（combat_anchor_enabled=false 时整链关停——观察场 2026-10-12 裁决#28：
+	#  运行期槽位追逐拔除，远程原站桩语义）
+	if combat_anchor_enabled:
+		_tick_combat_anchors(_delta)
 	# 战线推进（SWL MoveInFormation）：连续平移 + 组方阵随线号令
 	for line in _battle_lines.values():
 		line.tick(_delta)
@@ -1345,6 +1353,8 @@ func get_unit_combat_slot(unit: Node) -> Vector2:
 	var line_slot: Vector2 = get_unit_line_slot(unit)
 	if not is_inf(line_slot.x):
 		return line_slot
+	if not combat_anchor_enabled:
+		return Vector2.INF
 	if unit == null or not is_instance_valid(unit):
 		return Vector2.INF
 	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")

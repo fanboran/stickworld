@@ -36,15 +36,18 @@ const CONTACT_TICK: float = 0.5
 const LINE_DEADZONE: float = 24.0
 ## 距槽位超此值转奔跑追赶（UpdateCatchingUpToFormation 直译）
 const RUN_DIST: float = 240.0
-## 远程组随行间距（近战组全纵深之后；GapBetweenFormationGroups 量级）
-const GROUP_GAP: float = 260.0
+## 远程组随行间距（近战组全纵深之后；GapBetweenFormationGroups 量级）。
+## static var：出生侧几何可按战场图幅（观察场视野预算）整体压缩——默认 260
+## 是开阔产线口径
+static var GROUP_GAP: float = 260.0
 ## 战线方阵纵深上限（排）：0~2 排贴线成块，第 3 排起为二线驻位（02 二-A.3
 ## 「多到装不下的余部归二线驻位待命」——观感标定档每侧十几二十几人时
 ## 7 列×3 排 = 21 席全员在块内，纵深上限只在密度压力档吃紧）
 const LINE_MAX_DEPTH: int = 3
 ## 二线驻位与方阵块的间隔（px）：比列距大一截，读得出「第二线」而不是又
-## 一排；二线槽位随线走（驻位待命），接战语义与在线成员一致
-const RESERVE_GAP: float = 140.0
+## 一排；二线槽位随线走（驻位待命），接战语义与在线成员一致。
+## static var：出生侧几何可按战场图幅压缩（同 GROUP_GAP）
+static var RESERVE_GAP: float = 140.0
 ## 接战/脱战滞回拍数（防目标切换瞬时空窗导致停线/解冻抖动）
 const ENGAGE_HYSTERESIS: int = 2
 # ── 个性 y 漂移（SWL Ai.personalityControlledY / personalityNextYControlShift 直译）──

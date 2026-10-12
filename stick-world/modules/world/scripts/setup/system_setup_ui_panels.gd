@@ -286,6 +286,8 @@ func _setup_inventory() -> void:
 	_host._root.ui_root.add_to_slot("HudOverlay", hb)
 	if hb.has_method("setup"):
 		hb.setup(_host._root, service)
+	_host._root._hotbar = hb
+	_host._root._apply_observer_view()   # 观战机位可能早于装配置位（见 observer_view 声明）
 	var inv := UIKit.full_rect(_host._InventoryScreenScript, "InventoryScreen")
 	if not _host._root.ui_root.add_to_slot("ModalOverlay", inv):
 		return

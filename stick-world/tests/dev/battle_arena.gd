@@ -279,6 +279,10 @@ func _ready() -> void:
 
 
 func _spawn_and_start() -> void:
+	# 观战机位：本工具只看不打，收起底部物品栏（观战者没有背包语境，物品栏
+	# 只挡战场画面）。置位后 SystemSetup 装物品栏时会自动套用，故可先置。
+	if _game_root.has_method("set_observer_view"):
+		_game_root.set_observer_view(true)
 	# 战场图已退役自动刷敌（出征与领地架构 §4.3），本工具自行组织战斗，无幽灵战斗问题
 	# 等启动序列走完（boot 阶段列表异步推进——死等帧数会撞在地图注册/首图
 	# 装配完成前：轻则 load_map 静默失败遮罩不撤=黑屏，重则启动收尾把刚切的

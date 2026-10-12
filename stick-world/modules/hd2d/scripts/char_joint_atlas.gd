@@ -110,6 +110,7 @@ func _bake(specs: Array) -> void:
 			break
 		img = null
 	if img != null:
+		_whiten_rgb(img)         # 先白化再生成 mip（见函数注释），否则部件外缘发暗
 		img.generate_mipmaps()   # 远档缩小的平滑由 mip 链承担（同烘焙卡）
 		_tex = ImageTexture.create_from_image(img)
 		_version += 1
@@ -121,6 +122,22 @@ func _bake(specs: Array) -> void:
 		var next: Array = _pending_specs
 		_fp = fingerprint(next)
 		_bake.call_deferred(next)
+
+
+## 白化：图集 RGB 恒白是既定口径（`char3d_body_opaque` 里 `ALBEDO = t.rgb × 实例色`，
+## 形状信息全在 alpha），但视口回读出来的形状外是**透明黑垫**（PAD 区、圆角外、
+## 圆外一律 (0,0,0,0)）。`generate_mipmaps()` 逐级平均时会把这些黑 RGB 混进形状
+## 边缘——部件外缘一圈 albedo 被压暗，深色身体上表现为"面片边缘还有更深色的描边"
+## （创始人 2026-10-11 点正）。烘焙期先把 RGB 全刷白再生成 mip：alpha 仍承运形状，
+## 任何 mip 级别的混合 RGB 都是白，边缘不再发暗。
+## 代价：一次 O(w×h) 遍历（图集 ~2.8k×48 量级、每个 hd2d_world 实例烘一次）。
+static func _whiten_rgb(img: Image) -> void:
+	var white := Color(1.0, 1.0, 1.0, 1.0)
+	for y in img.get_height():
+		for x in img.get_width():
+			# 只改 RGB、保留 alpha——形状仍由 alpha 承运
+			var a := img.get_pixel(x, y).a
+			img.set_pixel(x, y, Color(white.r, white.g, white.b, a))
 
 
 ## 布局：填充层单行横带。两步走：先量格位（行高/总宽），再落原点、

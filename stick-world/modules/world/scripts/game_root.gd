@@ -125,6 +125,11 @@ var inventory_service: Node = null
 ## 背包界面（InventoryScreen；E 键开关，SystemSetup 装配；shortcuts 助手经 _host 读写）
 @warning_ignore("unused_private_class_variable")
 var _inventory_screen: Control = null
+## 底部物品栏（Hotbar；HudOverlay 常驻，SystemSetup 装配）
+var _hotbar: Control = null
+## 观战视图（观察场/战斗演练场等"只看不打"的机位置位）：置位时收起物品栏——
+## 观战者没有背包语境，物品栏只是挡住战场画面的装饰。默认关（正常游玩不受影响）。
+var observer_view: bool = false
 @warning_ignore("unused_private_class_variable")
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
@@ -752,6 +757,18 @@ func handle_shortcuts(event: InputEvent) -> void:
 ## 开关背包界面（E 键）：Hotbar 调用。逻辑在 game_root_shortcuts.gd。
 func toggle_inventory() -> void:
 	_shortcuts.toggle_inventory()
+
+
+## 观战视图开关（观察场/战斗演练场等只看不打的机位调用；语义见 observer_view 声明）。
+## 物品栏可能晚于调用装配，故置位与装配两侧都走 _apply_observer_view。
+func set_observer_view(v: bool) -> void:
+	observer_view = v
+	_apply_observer_view()
+
+
+func _apply_observer_view() -> void:
+	if _hotbar != null and is_instance_valid(_hotbar):
+		_hotbar.visible = not observer_view
 
 
 ## 开关角色属性面板（C 键）：Hotbar 调用。逻辑在 game_root_shortcuts.gd。

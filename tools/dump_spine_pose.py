@@ -14,16 +14,16 @@
   与本 dump 无关，dump 里不存在任何取负
 
 【求值口径（与产线假设一致）】
-- rotate / translate 曲线都**按曲线字段求值**（linear / stepped / bezier 三段一律
-  照产线 spine_import._eval_keys 的同一算法：stepped 保持到段末、bezier 用 Newton
-  迭代解归一化时间参数）；只做统计打印的"非 linear 轨道数"保留作体检指标
-- translate 曲线**逐骨**参与世界位置计算：局部偏移 = setup(x,y) + translate(t)，
-  再按父骨世界角旋转合成——Spine 的 translate 通道是"相对 setup 的局部位移增量"，
-  root 与肢体骨一视同仁（早期产线只译了 root，基准侧也照抄忽略，两侧同款盲区 →
-  L1 永远绿；2026-10-11 起两侧同步改为全骨求值）
-- 全部 scale / ik / slots 通道仍不参与求值（产线也没译）
-- 每骨同时输出 lx/ly（局部偏移，即产线 position 轨传递的量）——位移验收判据取它，
-  因为世界位置增量 ∝ 骨长，两具骨架比例不同天然不可比
+- rotate 曲线**按 curve 字段求值**（linear / stepped / bezier 照产线
+  spine_import._eval_keys 同一算法：stepped 保持到段末、bezier 用 Newton 迭代解
+  归一化时间参数）。曲线必须参与，否则基准侧把产线的曲线直译当成线性近似，凭空
+  造出"残差"（attack 族 39° 假残差即此，2026-10-11 实证）
+- 仅 root 骨的 translate 曲线参与世界位置计算（会向子骨传播）；
+  其余骨骼的 translate / 全部 scale / ik / slots 通道不参与求值（产线也没译）
+- ⚠ 逐骨 translate **不导入产线**：本项目 rig 是重新手写的骨架（rest 偏移自成一套
+  参数化，且肢体是建骨时一次成型的静态胶囊、胶囊端点钉在子骨 rest 偏移上），
+  运行时改骨 position 只会让胶囊与关节脱开、剪影融成团（2026-10-11 实拍实证）。
+  故两侧都只认 root 位移；不要试图把逐骨 translate「补齐」到任一侧
 - Spine 3.8 关键帧常省略字段：rotate 键缺 "angle" 按 0，缺 "time" 按 0；
   空键 {} 合法（angle=0）。注意：t=0 时取【第一键的值】（Spine hold-first 语义），
   这与旧 render_swl_ref.py「跳过不带 angle 的键」的取法在首键为空键时会不同——
@@ -88,9 +88,7 @@ def _bez1d(u, c1, c2):
 def _sample_linear(keys, t, field):
     """曲线感知采样单条曲线在 t 处的 field 值（linear / stepped / bezier）。
 
-    与产线 spine_import._eval_keys 同一算法（stepped=保持到段末；bezier 用 Newton
-    迭代解归一化时间参数 u）。曲线必须参与求值，否则基准侧把产线的曲线直译当成
-    线性近似，凭空造出"残差"（attack 族 39° 假残差即此）。
+    与产线 spine_import._eval_keys 同一算法；曲线必须参与求值（见模块 docstring）。
     键缺 time 按 0、缺目标字段按 0（Spine 3.8 省略即缺省值）；
     t 早于首键 / 晚于末键 → hold 端点值。
     """
@@ -176,31 +174,34 @@ def eval_pose(bones, anim_data, t):
     - bones：Spine JSON 的 bones 数组（已保证父骨先于子骨出现，按数组序迭代即可）
     - 世界角 = 链上各骨局部角之和；局部角 = setup rotation + rotate(t)（线性插值增量）。
       与 Godot 侧 dump 的 global_transform.rotation 同语义，可直接对比
-    - 世界位置：局部偏移 = setup(x, y) + translate(t)（translate 是相对 setup 的局部
-      位移增量，逐骨都可能带），再按父骨世界角旋转合成；该偏移随父子链传播到全部子骨
+    - root 世界位置 = setup(x, y) + translate(t)；该偏移随父子链传播到全部子骨
+    - 其余骨骼位置 = 父世界位置 + R(父角) * setup(x, y)（不用动画 translate，产线口径）
     """
-    ch_map = anim_data.get('bones', {})
+    rotate = anim_data.get('bones', {})
+    root_ch = rotate.get('root', {})
+    root_tx = _sample_linear(root_ch.get('translate', []), t, 'x')
+    root_ty = _sample_linear(root_ch.get('translate', []), t, 'y')
 
-    world = {}  # 骨名 -> (x, y, 世界角, lx, ly)：lx/ly = 局部偏移（setup + translate）
+    world = {}  # 骨名 -> (x, y, 世界角)
     for b in bones:
         name = b['name']
         parent = b.get('parent')
-        ch = ch_map.get(name, {})
         # 局部绝对角 = setup rotation + 动画 rotate 增量（约定见模块 docstring，无任何翻转）
         a_local = float(b.get('rotation', 0.0)) + _sample_linear(
-            ch.get('rotate', []), t, 'angle')
-        lx = float(b.get('x', 0.0)) + _sample_linear(ch.get('translate', []), t, 'x')
-        ly = float(b.get('y', 0.0)) + _sample_linear(ch.get('translate', []), t, 'y')
+            rotate.get(name, {}).get('rotate', []), t, 'angle')
+        x = float(b.get('x', 0.0))
+        y = float(b.get('y', 0.0))
         if parent is None:
-            wx, wy = lx, ly
+            # root：setup 位置 + 动画 translate 增量
+            wx, wy = x + root_tx, y + root_ty
             a_world = a_local
         else:
-            px, py, pa = world[parent][0], world[parent][1], world[parent][2]
+            px, py, pa = world[parent]
             pr = math.radians(pa)
-            wx = px + lx * math.cos(pr) - ly * math.sin(pr)
-            wy = py + lx * math.sin(pr) + ly * math.cos(pr)
+            wx = px + x * math.cos(pr) - y * math.sin(pr)
+            wy = py + x * math.sin(pr) + y * math.cos(pr)
             a_world = pa + a_local
-        world[name] = (wx, wy, a_world, lx, ly)
+        world[name] = (wx, wy, a_world)
     return world
 
 
@@ -252,8 +253,7 @@ def dump_anim(bones, anim_data, fps):
         pose = eval_pose(bones, anim_data, t)
         key = f'{t:.3f}'
         frames[key] = {
-            name: {'x': round(p[0], 3), 'y': round(p[1], 3), 'angle': round(p[2], 3),
-                   'lx': round(p[3], 3), 'ly': round(p[4], 3)}
+            name: {'x': round(p[0], 3), 'y': round(p[1], 3), 'angle': round(p[2], 3)}
             for name, p in pose.items()
         }
     return {'duration': round(duration, 4), 'frames': frames}

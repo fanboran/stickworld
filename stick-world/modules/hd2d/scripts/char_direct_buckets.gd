@@ -1,9 +1,11 @@
 extends Node
 ## char_direct_buckets.gd —— 关节烘焙路线的全局 3D 桶管理（每 hd2d_world 一份）。
 ##
-## 职责：角色身体（1 桶，预烘关节贴图图集采样）+ 武器/盾（按纹理分桶）+
-## 关节贴图图集（char_joint_atlas 子节点，宿主申报规格、本节点在版本变化时
-## 把新贴图绑给身体桶材质）+ 血条图集（char_bar_atlas 子节点）。
+## 职责：角色身体两桶（几何两遍·裁决#24：描边桶 + 填充桶，同款预烘关节
+## 贴图图集采样、同 shader 不同 edge_cutoff——见 char3d_body_opaque 头注）
+## + 武器/盾（按纹理分桶）+ 关节贴图图集（char_joint_atlas 子节点，宿主
+## 申报规格、本节点在版本变化时把新贴图绑给两桶材质）+ 血条图集
+##（char_bar_atlas 子节点）。
 ##
 ## 写段铁律＝**官方 setter 全程**（set_instance_transform/color/custom_data，
 ## 交接档 §二b-1 裁定：裸 buffer 手打包编码是死路，官方 setter 是唯一无格式
@@ -104,8 +106,21 @@ class RowBucket:
 
 # ─────────────────────────── 实例状态 ───────────────────────────
 
-var body: RowBucket = null          # 身体部件桶（填充行，描边走后处理）
+## 描边桶（几何两遍的底遍：加宽胶囊行、白色实例色、ZB_STROKE 垫后；
+## edge_cutoff=0.004 保留外缘软过渡）——行由宿主 _write_body 成对写
+var stroke: RowBucket = null
+var _stroke_mat: ShaderMaterial = null
+var body: RowBucket = null          # 身体填充桶（edge_cutoff=0.5 硬切边——内边界 crisp）
 var _body_mat: ShaderMaterial = null
+## 描边单侧宽（rig px）——画布同款「屏幕像素下限」补偿（裁决#24 照抄
+## stickman_skeleton.outline_world_width 语义）：屏上 1 rig px =
+## RIG_SCREEN×zoom（char_rig_3d.RIG_SCALE 同源常数），描边屏幕宽恒 ≥1px、
+## 特写不低于设计世界宽 2 rig px。宿主量化 0.5 步申报图集（格位 4px 量化
+## 下重烘频次极低）。初值按默认观察档 zoom=0.75。
+const OUTLINE_WIDTH_RIG := 2.0
+const OUTLINE_SCREEN_PX := 1.0
+const RIG_SCREEN := 0.35625
+var outline_eff := maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * 0.75))
 ## 武器桶：纹理路径 → 桶（每纹理独立 MultiMesh，纹理=uniform；紧凑行制）
 var _weapon_buckets: Dictionary = {}  # path -> {bucket, tex}
 ## 关节贴图图集（headless 跳过装配；宿主申报规格，版本变化时绑新贴图）
@@ -118,10 +133,19 @@ var bar_atlas: Node = null
 func _ready() -> void:
 	process_priority = 1200  # 宿主(1100) 之后清尾
 	if DisplayServer.get_name() != "headless":
+		# 描边桶先建（树序即绘制序，语义上「底遍」；深度语义下非必需）
+		var stroke_node := RowBucket.new()
+		add_child(stroke_node)
+		_stroke_mat = ShaderMaterial.new()
+		_stroke_mat.shader = BODY_SHADER
+		_stroke_mat.set_shader_parameter("edge_cutoff", 0.004)
+		stroke_node._setup("Char3DBodyStroke", get_quad3d(), _stroke_mat, true)
+		stroke = stroke_node
 		var body_node := RowBucket.new()
 		add_child(body_node)
 		_body_mat = ShaderMaterial.new()
 		_body_mat.shader = BODY_SHADER
+		_body_mat.set_shader_parameter("edge_cutoff", 0.5)
 		body_node._setup("Char3DBody", get_quad3d(), _body_mat, true)
 		body = body_node
 		joint_atlas = JOINT_ATLAS_SCRIPT.new()
@@ -132,15 +156,26 @@ func _ready() -> void:
 		add_child(bar_atlas)
 
 
+## 相机缩放变化时刷新描边宽（hd2d_world.set_cam_zoom 调；宿主逐帧读
+## outline_eff，量化档变化才触发图集重烘）
+func update_outline_eff(cam_zoom: float) -> void:
+	outline_eff = maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * cam_zoom))
+
+
 func _process(_delta: float) -> void:
 	if body == null:
 		return
-	# 关节贴图版本监视：图集重烘后绑新贴图给身体桶材质
+	# 图集原子发布：格位表+贴图同帧落地（重烘期间宿主继续用旧套，零错配帧）
 	if joint_atlas != null:
+		joint_atlas.publish()
+		# 关节贴图版本监视：版本 bump（发布）后绑新贴图给两桶材质
 		var v: int = joint_atlas.version()
 		if v != _joint_tex_version:
 			_joint_tex_version = v
-			_body_mat.set_shader_parameter("atlas_tex", joint_atlas.texture())
+			var tex: Texture2D = joint_atlas.texture()
+			_body_mat.set_shader_parameter("atlas_tex", tex)
+			_stroke_mat.set_shader_parameter("atlas_tex", tex)
+	stroke.end_tick()
 	body.end_tick()
 	for path in _weapon_buckets:
 		(_weapon_buckets[path]["bucket"] as RowBucket).end_tick()
@@ -148,7 +183,11 @@ func _process(_delta: float) -> void:
 
 # ─────────────────────────── 宿主写行口（1100 内调用） ───────────────────────────
 
-## 身体部件行：变换 + 真色（填充身体色×tint×alpha）+ 格位 UV 子矩形
+## 描边行（几何两遍底遍）：变换 + 白×tint×alpha + 格位 UV 子矩形
+func stroke_row(xf: Transform3D, col: Color, uv: Rect2) -> void:
+	stroke.row(xf, col, Color(uv.position.x, uv.position.y, uv.size.x, uv.size.y))
+
+## 身体部件填充行：变换 + 真色（填充身体色×tint×alpha）+ 格位 UV 子矩形
 func body_row(xf: Transform3D, col: Color, uv: Rect2) -> void:
 	body.row(xf, col, Color(uv.position.x, uv.position.y, uv.size.x, uv.size.y))
 

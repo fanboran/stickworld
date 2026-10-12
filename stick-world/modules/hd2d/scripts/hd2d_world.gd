@@ -1003,6 +1003,8 @@ func set_cam_zoom(user_zoom: float) -> void:
 		return
 	_last_user_zoom = user_zoom
 	var uz: float = clampf(user_zoom, 0.25, 8.0)
+	if _joint_buckets != null:
+		_joint_buckets.update_outline_eff(uz)
 	var vp := _cam.get_viewport().get_visible_rect().size
 	_cam.size = DESIGN_HEIGHT * vp.x / (24.0 * vp.y * uz)
 	var t := deg_to_rad(TILT_DEG)
@@ -1396,6 +1398,9 @@ func _spawn_joint_character() -> Node:
 		var b: Node = CHAR_DIRECT_BUCKETS.new()
 		b.name = "CharJoint3D"
 		add_child(b)
+		# 描边宽档初值：桶默认按 zoom=0.75，本场景 set_cam_zoom 已跑过则以实档覆盖
+		if _last_user_zoom > 0.0:
+			b.update_outline_eff(clampf(_last_user_zoom, 0.25, 8.0))
 		_joint_buckets = b
 		var layer := CanvasLayer.new()
 		layer.name = "JointRigHosts"

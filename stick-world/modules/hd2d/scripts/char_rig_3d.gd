@@ -16,9 +16,15 @@ extends Node3D
 ## 引擎画布光栅化器烘出——观感与烘焙卡同源贴图直出）：
 ##   - 挂靠：容器挂在哪根骨上就跟哪根骨（头圆挂 head 骨 −HEAD_ORBIT，
 ##     build_limbs 的修复自动生效，不经 crowd 战场表的旧死码约定）；
-##   - 只写填充行，无描边层（创始人 2026-10-12 裁决：描边整体移除）；
-##     填充遍内按画布树序（DFS 序）编号实例序（同色共面无缝融合）；
-##   - 部件宽度/半径只在构建期读一次（填充几何运行期不变）。
+##   - 几何两遍（裁决#24，照抄画布「全局两遍」语义）：每部件一对行——
+##     描边行（加宽胶囊格位、白色实例色、ZB_STROKE 沿法线垫后）+ 填充行。
+##     depth_draw_always 下同角色填充恒比描边近 → 环带只在剪影外轮廓出线
+##     （#19 关节白线的元凶＝填充边 mip 软坡叠白，由填充桶 edge_cutoff=0.5
+##     硬切边治，见 char3d_body_opaque 头注）；填充遍内按画布树序（DFS 序）
+##     编号实例序（同色共面无缝融合）；
+##   - 部件宽度/半径只在构建期读一次（填充几何运行期不变）；描边宽 =
+##     填充宽 + 2×eff（eff 随相机缩放补偿，画布 outline_world_width 同款
+##     口径，量化 0.5 rig px 档变化才触发图集重烘）。
 ##
 ## 尺寸契约（历史沿革出自整卡烘焙的视口契约，现由本路线独承）：
 ##   rig px → 世界单位 S = RIG_SCALE(0.35625) × PX(1/24) = 0.01484375；
@@ -49,13 +55,18 @@ const SIZE_K := 1.0
 const BAR_H := (144.0 - 8.0) * PX
 ## 武器/盾的深度微移：恒在全部身体部件之上（原版树序「武器/盾盖头」）
 const ZB_WEAPON := 0.008
+## 描边行的深度垫后（沿 26° 法线）：同角色填充恒比描边近此量 → 深度缓冲
+## 天然实现「填充盖描边、只在剪影外轮廓出线」（画布描边 z=-1/填充 z=0
+## 的等价物；正交沿法线视角下 zb 无屏内位移，纯深度语义）。跨角色间距
+## （量级 ~0.3+）远大于此值，前角色连描边整体压后角色（画布 y-sort 等价）。
+const ZB_STROKE := -0.06
 
 # ─────────────────────────── 部件记录（rig 实建矢量节点 → 3D 实例） ───────────────────────────
 
 ## 一个 sprite_* 容器的搬运表：容器引用 + 父骨走查下标 + 几何/颜色。
-## 描边层节点只作配对存在性校验（部件对 = stroke+fill 两层），不再搬运
-## ——描边走屏幕空间后处理（裁决#20）。颜色构建期定格（运行期无
-## apply_colors 触发源）并转线性域（spatial ALBEDO）。
+## 描边层节点只作配对存在性校验（部件对 = stroke+fill 两层），几何不读
+## ——描边行 = 同容器变换 + 加宽格位（宽 +2×eff / 半径 +eff，画布公式）。
+## 颜色构建期定格（运行期无 apply_colors 触发源）并转线性域（spatial ALBEDO）。
 class Part:
 	var cont: Node2D = null
 	var fill_l: Line2D = null      # 线段肢体填充层（圆肢体为 null）
@@ -67,6 +78,8 @@ class Part:
 
 var _parts: Array = []              # Array[Part]
 var _joint_atlas: Node = null       # char_joint_atlas（build 时取引）
+## 描边单侧宽当前档（rig px，0.5 量化——档变才重报图集规格；裁决#24）
+var _eff_q := -1.0
 
 # ─────────────────────────── 装配 ───────────────────────────
 
@@ -142,6 +155,7 @@ func build(world: Node, buckets: Node, rig_parent: Node2D, anim: String, tilt_de
 		return
 	_joint_atlas = buckets.get("joint_atlas")
 	if _joint_atlas != null:
+		_eff_q = roundf(float(buckets.get("outline_eff")) * 2.0) * 0.5
 		_joint_atlas.ensure(_build_specs())
 	_build_shadow()
 
@@ -206,17 +220,28 @@ func _parse_part(cont: Node2D, widx: int) -> void:
 	_parts.append(p)
 
 
-## 从实建部件拼图集规格（char_joint_atlas.ensure 的输入契约见其类头；填充层
-## 单行——描边不进图集，裁决#20）
+## 从实建部件拼图集规格（char_joint_atlas.ensure 的输入契约见其类头）。
+## 几何两遍（裁决#24）：每部件双格位——填充 + 描边（线宽 +2×eff / 圆半径
+## +eff，画布 stroke 公式同款；格位居中契约保证描边环与填充同心，环带宽
+## 恒为 eff）。eff 用量化档（_eff_q），指纹随档稳定。
 func _build_specs() -> Array:
 	var specs := []
+	var eff := maxf(_eff_q, 0.5)
 	for p in _parts:
+		var n: String = p.cont.name
 		if p.fill_p != null:
-			specs.append({"name": p.cont.name, "circle": true, "r_fill": p.r_fill})
+			specs.append({"name": n, "circle": true, "r_fill": p.r_fill})
+			specs.append({"name": _stroke_key(n), "circle": true, "r_fill": p.r_fill + eff})
 		else:
-			specs.append({"name": p.cont.name, "circle": false, "length": p.length,
+			specs.append({"name": n, "circle": false, "length": p.length,
 					"w_fill": p.fill_l.width})
+			specs.append({"name": _stroke_key(n), "circle": false, "length": p.length,
+					"w_fill": p.fill_l.width + eff * 2.0})
 	return specs
+
+
+static func _stroke_key(name: String) -> String:
+	return name + "#s"
 
 
 func _build_shadow() -> void:
@@ -564,9 +589,22 @@ func _process(_delta: float) -> void:
 	_f_s = S * _depth
 	_f_sfx = _f_s * (-1.0 if _flip else 1.0)
 	_f_p = _pos
+	_watch_stroke_eff()
 	_write_body()
 	_write_weapons()
 	_feed_bar()
+
+
+## 描边宽档监视（裁决#24）：相机缩放改档（0.5 rig px 量化）时重报图集
+## 规格——格位 4px 量化下多数缩放不换格位尺寸（零 UV 闪变），跨档才异步
+## 重烘（旧贴图原子换新前照常服务）。
+func _watch_stroke_eff() -> void:
+	if _joint_atlas == null or _buckets == null:
+		return
+	var q := roundf(float(_buckets.get("outline_eff")) * 2.0) * 0.5
+	if q > 0.0 and q != _eff_q:
+		_eff_q = q
+		_joint_atlas.ensure(_build_specs())
 
 
 func _release_bar_slot() -> void:
@@ -575,10 +613,10 @@ func _release_bar_slot() -> void:
 		atlas.release(get_instance_id())
 
 
-## 身体写入：逐部件读 rig 实建节点的变换/宽度/半径，折 26° 平面写行。
-## 只写填充遍，无描边（创始人 2026-10-12 裁决：描边整体移除）；
-## 填充遍内按画布树序（DFS 序：腿→躯干→颈/头→臂），同色共面重叠无缝融合。
-## 跨角色走真深度。
+## 身体写入：逐部件读 rig 实建节点的变换，折 26° 平面写行。几何两遍
+##（裁决#24）：描边行（ZB_STROKE 垫后、白×tint）+ 填充行成对；填充遍内
+## 按画布树序（DFS 序：腿→躯干→颈/头→臂），同色共面重叠无缝融合。
+## 跨角色走真深度（前角色连描边整体压后角色＝画布 y-sort 等价）。
 ## quad 尺寸 = 图集格位尺寸（量化恒定），实际宽度承运在贴图像素里。
 func _write_body() -> void:
 	if _joint_atlas == null or _buckets.body == null:
@@ -586,9 +624,14 @@ func _write_body() -> void:
 	var tr := _tint
 	var alpha := _master_alpha
 	var buckets: Node = _buckets
+	var stroke_col := Color(tr.r, tr.g, tr.b, alpha)
 	for p in _parts:
 		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
 		var name: String = p.cont.name
+		var sk := _stroke_key(name)
+		var cs_s: Vector2 = _joint_atlas.cell_size(sk)
+		buckets.stroke_row(_fold3d(xf * _sc2(cs_s.x, cs_s.y), ZB_STROKE),
+				stroke_col, _joint_atlas.uv_rect(sk))
 		var cs: Vector2 = _joint_atlas.cell_size(name)
 		buckets.body_row(_fold3d(xf * _sc2(cs.x, cs.y), 0.0),
 				Color(p.col_fill.r * tr.r, p.col_fill.g * tr.g,

@@ -78,9 +78,9 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 
 **为什么**：角色浮在 2D canvas 上永远盖住 3D（无遮挡/无接地/无纵深），且 2D 画布坐标与 3D 投影速度不一致（跟手框错位的根因）。定稿：**逻辑留 2D（物理/输入/AI 不动），视觉进 3D**。
 
-**机制（char_rig_3d，2026-10-10 创始人观感验收通过；前身整卡烘焙——每角色 SubViewport+回读成卡——已整体退役）**：每实体一个宿主持真 StickmanRig（Skeleton2D + AnimationTree + 程序化叠加），藏在隐藏 CanvasLayer 里只解算不绘制；晚优先级 `_process`（1100 = rig 推进(0) 与俯仰叠加(1000) 之后，写序铁律）读 rig 实建矢量部件节点（`sprite_*` 容器），每部件**一个填充 quad** 逐行写进 `char_direct_buckets` 的全局 MultiMesh（只写填充行，无描边层——创始人定稿：角色不带描边，见 §2.5），填充遍内按画布树序（腿→躯干→颈/头→臂）。**写段官方 setter 全程**（set_instance_transform/color/custom_data 紧凑行制：帧戳游标追加+尾部退化清隐——裸 buffer 手打包布局无引擎保证，是历史事故源，禁用）。
+**机制（char_rig_3d，2026-10-10 创始人观感验收通过；前身整卡烘焙——每角色 SubViewport+回读成卡——已整体退役）**：每实体一个宿主持真 StickmanRig（Skeleton2D + AnimationTree + 程序化叠加），藏在隐藏 CanvasLayer 里只解算不绘制；晚优先级 `_process`（1100 = rig 推进(0) 与俯仰叠加(1000) 之后，写序铁律）读 rig 实建矢量部件节点（`sprite_*` 容器），每部件**一对行（描边+填充）**逐行写进 `char_direct_buckets` 的全局 MultiMesh（几何两遍，见 §2.5），填充遍内按画布树序（腿→躯干→颈/头→臂）。**写段官方 setter 全程**（set_instance_transform/color/custom_data 紧凑行制：帧戳游标追加+尾部退化清隐——裸 buffer 手打包布局无引擎保证，是历史事故源，禁用）。
 
-- **贴图由引擎画布光栅化器预烘**（char_joint_atlas）：rig 同款 Line2D 圆头线段/40 边圆画进一次性 SubViewport 回读成白色胶囊/圆图集（RGB 恒白、形状在 alpha，实例色染填充身体色）——观感与画布渲染同源；格位 4px 量化（宽度变化只换贴图像素不换 UV），宿主按宽度指纹懒触发重烘。
+- **贴图由引擎画布光栅化器预烘**（char_joint_atlas）：rig 同款 Line2D 圆头线段/40 边圆画进一次性 SubViewport 回读成白色胶囊/圆图集（RGB 恒白、形状在 alpha，实例色染描边白/填充身体色）——观感与画布渲染同源；格位 4px 量化（宽度变化只换贴图像素不换 UV），宿主按宽度指纹懒触发重烘；格位表与贴图**原子发布**（重烘期间宿主用旧套零错配帧）。
 - **血条 = char_bar_atlas 原版驱动镜像图集**：你逐值微调的 HealthBarIndicator 以驱动镜像画进共享视口（同一 apply_bar_state 协议，30Hz 回读），3D 面片贴头顶锚点。
 - 武器/盾：读武器场景 Sprite 贴图 + GripPoint 补偿挂手骨，贴图分桶 quad（ZB_WEAPON 恒在身体之上——原版树序「武器盾盖头」）。
 - 尸体：死亡动画播完停尾帧 + 插箭，实体淡出期 `set_master_alpha` 压实例色 alpha（透明混合单桶，不换桶）。
@@ -88,9 +88,15 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state…）由 `hd2d_map_base._sync_character_render` 逐帧驱动。
 - **引擎级约束（沿自整卡烘焙时代的实测，仍然有效）**：spatial 管线采样画布 RT 会在细亮线两侧逐通道色散（引擎/驱动层缺陷，不可修）——一切画布→3D 的纹路必须走「视口渲染→get_image 回读→ImageTexture」绕行（关节图集与血条图集同此口径）；画布视口 msaa_2d 必须关（同源色散，见下 msaa_2d 段）。
 
-### 2.5 描边口径（无描边）
+### 2.5 剪影描边口径（几何两遍）
 
-角色**不带描边**（创始人定稿）：3D 关节烘焙路线只写填充行，无描边几何、无描边后处理。2D 画布路径（矢量/批渲染/crowd）的 stroke 描边不受此口径影响，照旧。
+创始人定稿口径：**白描边只包整体剪影外轮廓，内部零描边**（肘/膝/臂身交界都不出线，肢体靠剪影读形）——与 2D 画布路径（矢量/批渲染/crowd）同一语义。**武器全场景无描边（创始人全游戏口径）**：武器桶只写武器贴图行，无 stroke 格位。
+
+**实现 = 几何两遍（裁决#24）**，照抄画布 `stickman_skeleton` 的「全局两遍」语义（所有描边层压底、所有填充层置顶）：
+
+1. **每部件一对行**：描边行（同容器变换 × 加宽胶囊格位——线宽 +2×eff / 圆半径 +eff，格位居中契约保证环与填充同心；白色实例色；`ZB_STROKE=-0.06` 沿 26° 法线垫后）+ 填充行（真色，zb=0）。`depth_draw_always` 下正交沿法线视角**视深 = 屏高线性函数**（同卡面部件屏内重叠必等深）⇒ 同角色填充恒比描边近 0.06 → 深度缓冲天然实现「填充盖描边、只在剪影外轮廓出线」＝画布 z=-1/z=0 层序的 3D 等价物。zb 沿法线无屏内位移（纯深度语义）；跨角色间距（~0.3+）远大于 0.06 ⇒ 前角色连描边整体压后角色（画布 y-sort 等价）；被建筑遮挡照旧走真深度，无需任何遮挡块。
+2. **两桶双刀抗锯齿**（同款 shader、不同 `edge_cutoff`）：描边桶 0.004 保留外缘 ~1px 软过渡（白对场景 AA）；填充桶 0.5 **硬切边**——填充边缘即描边内边界，图集对屏幕 ~5× 过采样（minification 恒吃 2~3 级 mip）下直通 alpha 的软坡叠在白描边上会显 2~3px 灰白镶边（关节白线/「mip 泛白」的机制），切在 0.5 等覆盖率线上后内边界 crisp、残余坡宽 ~1 屏幕像素＝恰到好处的 AA。cutoff 只作用于贴图 ramp（`t.a`），尸体淡出压实例色 alpha 时形状不提前蒸发。
+3. **描边宽补偿**（画布 `outline_world_width` 同款口径）：eff = max(2.0 rig px 设计世界宽, 1.0 屏幕像素下限 /(0.35625×zoom))——屏上 1 rig px = 0.35625×zoom 屏幕像素。`hd2d_world.set_cam_zoom` 推给桶 `update_outline_eff`，宿主按 0.5 rig px 量化档监视，跨档才重报图集规格（格位 4px 量化下多数缩放不换格位尺寸，零 UV 闪变）。
 
 **HD-2D post 通道运行期关所在视口的 msaa_2d（hd2d_world 进树时改、_exit_tree 恢复）**：
 post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工程级 msaa_2d
@@ -100,9 +106,9 @@ post（post_hd2d.gdshader）经 hint_screen_texture 整屏拷贝背缓冲，工�
 血条图集的烘焙视口同理必须 MSAA_DISABLED（画布组缓冲直读出彩散）。
 
 **火柴人渲染踩坑备查**：
-- 骨架渲染是**全局两遍**（stickman_skeleton.gd，画布语义——3D 关节烘焙路线不再直译它）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
+- 骨架渲染是**全局两遍**（stickman_skeleton.gd，画布语义——3D 关节烘焙路线经 §2.5 几何两遍直译）；武器/盾相对 z=+7 盖全身肢体（weapon_mount）。
 - 渲染双路径：MultiMesh 批渲染（`render/batch_rig` 工程设置，默认开；环境变量 `STICK_BATCH_RIG` 强制覆盖）vs 矢量 Line2D 路径——3D 宿主读实建矢量节点，强制 `STICK_BATCH_RIG=0`。crowd 桶（`render/crowd_renderer` / `STICK_CROWD`）同款"描边先画、填充后画"语义（y 分带内）。
-- 描边宽 zoom 补偿（屏幕像素恒定，`Skeleton.outline_world_width`）在 2D 画布路径仍生效：矢量 `stickman_rig._update_outline_zoom`（改 stroke 几何）、批渲染 `StickmanBatchRig.set_outline_width`（重烘预烘局部变换）、crowd `CrowdRenderer._refresh_outline_zoom`（重烘静态共享表）；3D 关节烘焙路线无描边层，不涉及。
+- 描边宽 zoom 补偿（屏幕像素恒定，`Skeleton.outline_world_width`）三路并存：矢量 `stickman_rig._update_outline_zoom`（改 stroke 几何）、批渲染 `StickmanBatchRig.set_outline_width`（重烘预烘局部变换）、crowd `CrowdRenderer._refresh_outline_zoom`（重烘静态共享表）；3D 关节路线 = 桶 `update_outline_eff` → 图集加宽格位重烘（§2.5 第 3 条）。
 - 体色常量 `Skeleton.DEFAULT_BODY` = 深灰紫 (0.156,0.156,0.182)——经直方图核实与旧版逐像素一致，别再怀疑它。
 
 ### 2.6 碰撞模型（get_solid_rects → HD2DSolids）

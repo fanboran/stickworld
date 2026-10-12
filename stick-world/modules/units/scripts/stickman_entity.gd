@@ -1344,6 +1344,8 @@ func face_towards(pos: Vector2) -> void:
 	# 战斗面向强制通道：绕过战斗朝向锁（锁只拦移动翻面，开火瞄准才是朝向
 	# 权威——被锁拦住时，目标丢失窗口里被移动翻成背向的单位会**卡死在背身
 	# 拉弓**：重锁后 _face_target 永远被拒，创始人点正「左下角弓手背对拉弓」）
+	if OS.get_environment("STICK_TRACE_FACING") == "1" and signf(dx) != signf(_facing):
+		print("[FaceTrace] aim iid=%d dx=%.0f pos=%s" % [get_instance_id(), dx, global_position])
 	_force_facing(1 if dx > 0.0 else -1)
 
 
@@ -1402,7 +1404,12 @@ func note_move_facing(side: int, delta: float) -> bool:
 		_facing_desire_acc = 0.0
 		return false
 	_facing_desire_acc += delta
-	return _facing_desire_acc >= FACING_PERSIST_SECS
+	var ok := _facing_desire_acc >= FACING_PERSIST_SECS
+	if ok and OS.get_environment("STICK_TRACE_FACING") == "1":
+		print("[FaceTrace] move iid=%d side=%+d acc=%.2f pos=%s vel=%s"
+				% [get_instance_id(), side, _facing_desire_acc,
+						global_position, velocity])
+	return ok
 
 
 ## 战斗朝向锁（behavior_attack 置位：有活跃攻击目标时 true——朝向归

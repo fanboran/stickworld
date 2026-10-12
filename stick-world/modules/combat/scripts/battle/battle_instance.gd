@@ -198,11 +198,16 @@ func _settle_spawn_facing(unit: Node, faction: int) -> void:
 	unit.face_towards(Vector2(cx, (unit as Node2D).global_position.y))
 	if _face_pending.is_empty():
 		return
+	# 挂起方补定：挂起单位要面朝**自己的敌人**＝刚登记的触发者（对面阵营）。
+	# 不能用触发者的 foes 质心——那是挂起方自己一侧：先出生一侧全员挂起、
+	# 对面首个单位触发补定时，旧实现把整军 face_towards(自方质心)＝开局
+	# 集体背敌（2026-10-12 验收图复现，face trace 全员瞄同一点实锤）。
 	var pend: Array = _face_pending
 	_face_pending = []
 	for p in pend:
-		if is_instance_valid(p) and p is Node2D:
-			p.face_towards(Vector2(cx, (p as Node2D).global_position.y))
+		if is_instance_valid(p) and p is Node2D \
+				and p.has_method("get_faction") and p.get_faction() != unit.get_faction():
+			p.face_towards((unit as Node2D).global_position)
 
 
 ## 开始战斗（PREPARING -> ENGAGED）

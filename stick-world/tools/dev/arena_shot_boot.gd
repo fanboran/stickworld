@@ -17,6 +17,7 @@ const ANIMPROBE_DRIVER := preload("res://tools/dev/arena_animprobe.gd")
 const P2PROBE_DRIVER := preload("res://tools/dev/arena_p2probe.gd")
 const P4PROBE_DRIVER := preload("res://tools/dev/arena_p4probe.gd")
 const SLOTPROBE_DRIVER := preload("res://tools/dev/arena_slotprobe.gd")
+const FACINGPROBE_DRIVER := preload("res://tools/dev/arena_facingprobe.gd")
 
 var _preset := 1
 var _secs := 20
@@ -30,6 +31,7 @@ var _animprobe := false
 var _p2probe := false
 var _p4probe := false
 var _slotprobe := false
+var _facingprobe := false
 var _lineup := false
 
 
@@ -66,6 +68,8 @@ func _ready() -> void:
 				_p4probe = true; i += 1
 			"--slotprobe":
 				_slotprobe = true; i += 1
+			"--facingprobe":
+				_facingprobe = true; i += 1
 			"--lineup":
 				_lineup = true; i += 1
 			_:
@@ -81,7 +85,9 @@ func _start() -> void:
 	var driver := Node.new()
 	var script: GDScript = DRIVER_SCRIPT
 	var driver_name := "ArenaShotDriver"
-	if _slotprobe:
+	if _facingprobe:
+		script = FACINGPROBE_DRIVER; driver_name = "ArenaFacingProbeDriver"
+	elif _slotprobe:
 		script = SLOTPROBE_DRIVER; driver_name = "ArenaSlotProbeDriver"
 	elif _p4probe:
 		script = P4PROBE_DRIVER; driver_name = "ArenaP4Driver"

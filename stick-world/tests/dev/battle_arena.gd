@@ -168,16 +168,20 @@ static var _preset_idx: int = 0
 ## 整场在游玩视野内。
 ##【提案/待定·待实测校准】
 const TEAM_OFFSET_X: float = 430.0
-## 行动带半宽（px）：一屏战场的地面行动带半宽（见出生段注释）
-const ACTION_BAND_HALF_PX: float = 360.0
+## 行动带半宽（px）：一屏战场的地面行动带半宽（见出生段注释）。
+## 2026-10-12 底部空带治理（创始人点正「画面最底下的一片范围没有利用上」）：
+## 360px 档实测（1080p/缩放 0.75）单位只占到地面 63%、底部空 200px——
+## 半宽扩到 456px（19 格），配合带心下移，近排脚线落屏底 8% 余量内。
+const ACTION_BAND_HALF_PX: float = 456.0
 ## ── 一屏战场竖直构图（02 二-A.2「半屏高」直给参数，z 从草远端 BF_HORIZON_Z 起算）──
 ## 地面占屏幕比例：0.5 = 地面占屏下 1/2、天空占上 1/2
 const BF_GROUND_RATIO: float = 0.5
-## 单位带中心（格）：居中于可见地面带（可见地面深 = 0.5×h_v/sin ≈ 51.4 格，
-## 带中心 = 25.7 格；取 23 留出前缘余量防脚贴底沿）
-const BF_UNIT_BAND_CENTER_Z: float = 23.0
-## 单位带半径（格）= 行动带半宽 360px / 24
-const BF_UNIT_BAND_HALF_Z: float = 15.0
+## 单位带中心（格）：可见地面 ≈51~68 格（随缩放档）；带心从 23 下移到 32
+## 用满下半屏（旧 23 档带体 [8,38] 悬在可见地面上半，底部 1/3 空置——
+## 创始人 2026-10-12 点正），前缘留 85-51≈余量防脚贴底沿。
+const BF_UNIT_BAND_CENTER_Z: float = 32.0
+## 单位带半径（格）= 行动带半宽 456px / 24
+const BF_UNIT_BAND_HALF_Z: float = 19.0
 ## 编制预设 id（FormationSystem 加载自 config/formations/formation_presets.tres）
 const SQUAD_PRESET := "fp_combat_squad"
 
@@ -372,6 +376,11 @@ func _spawn_and_start() -> void:
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
+	# 战场疏排档（创始人 2026-10-12 点正「出生点有些摆位本身就有点密」，#18
+	# 「出场排面稀疏一档」再加档）：横距 140→170、列距 80→100（+21%/+25%）。
+	# 只覆写战场编队几何——村居/劳作小队维持 FormationSpacing 默认档。
+	fs.SPREAD_SPACING = 170.0
+	fs.ROW_GAP = 100.0
 	var melee_total: int = 0
 	var ranged_total: int = 0
 	for def in squad_defs:

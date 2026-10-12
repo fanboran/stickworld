@@ -80,6 +80,12 @@ var _parts: Array = []              # Array[Part]
 var _joint_atlas: Node = null       # char_joint_atlas（build 时取引）
 ## 描边单侧宽当前档（rig px，0.5 量化——档变才重报图集规格；裁决#24）
 var _eff_q := -1.0
+## 脚底接地垫（rig px）：FOOT_ANCHOR 量到脚**骨线**，但线肢圆头半径 + 描边
+## 环会探出骨线之下（描边回归后白环压过地面线才显眼——创始人 2026-10-12
+## 点正「脚底穿模到地面以下」）。垫 = 最宽线肢半宽 + 当前描边档，几何两遍
+## 描边行同吃此垫（环外底贴地）。随 eff 档重算；不动 FOOT_ANCHOR 跨文件
+## 契约（hd2d_map_base 50.23 同步值/test_hd2d_projection 断言不受影响）。
+var _foot_pad_rig := 0.0
 
 # ─────────────────────────── 装配 ───────────────────────────
 
@@ -156,6 +162,7 @@ func build(world: Node, buckets: Node, rig_parent: Node2D, anim: String, tilt_de
 	_joint_atlas = buckets.get("joint_atlas")
 	if _joint_atlas != null:
 		_eff_q = roundf(float(buckets.get("outline_eff")) * 2.0) * 0.5
+		_foot_pad_rig = _line_pad()
 		_joint_atlas.ensure(_build_specs())
 	_build_shadow()
 
@@ -604,7 +611,18 @@ func _watch_stroke_eff() -> void:
 	var q := roundf(float(_buckets.get("outline_eff")) * 2.0) * 0.5
 	if q > 0.0 and q != _eff_q:
 		_eff_q = q
+		_foot_pad_rig = _line_pad()
 		_joint_atlas.ensure(_build_specs())
+
+
+## 脚底接地垫：最宽线肢半宽（圆头探出量）+ 当前描边档（环带外沿）——
+## 视觉脚底（描边环外底）恰好落在世界脚点/地面上。
+func _line_pad() -> float:
+	var wmx := 0.0
+	for p in _parts:
+		if p.fill_l != null:
+			wmx = maxf(wmx, p.fill_l.width)
+	return wmx * 0.5 + maxf(_eff_q, 0.5)
 
 
 func _release_bar_slot() -> void:
@@ -642,14 +660,15 @@ func _write_body() -> void:
 ## 2D 部件变换折 3D（官方 Transform3D 构造，零手打包）：
 ## rig y-down 折 3D 取负；基列 = rig 列 (a,b)/(c,d) 折上仰平面，
 ## 法列 = (0,sin t,cos t) 朝相机；zb 沿法线（描边垫后/武器置前）。
-## FOOT_ANCHOR 钉角色世界脚点，depth 纵深缩放乘进 _f_s/_f_sfx。
+## FOOT_ANCHOR+脚垫 钉角色世界脚点（垫补偿圆头+描边环探出量，见
+## _foot_pad_rig），depth 纵深缩放乘进 _f_s/_f_sfx。
 func _fold3d(inst: Transform2D, zb: float) -> Transform3D:
 	var a := _f_sfx * inst.x.x
 	var b := -_f_s * inst.x.y
 	var c := _f_sfx * inst.y.x
 	var d := -_f_s * inst.y.y
 	var dx := _f_sfx * (inst.origin.x - FOOT_ANCHOR.x)
-	var dy := -_f_s * (inst.origin.y - FOOT_ANCHOR.y)
+	var dy := -_f_s * (inst.origin.y - (FOOT_ANCHOR.y + _foot_pad_rig))
 	return Transform3D(
 			Basis(
 					Vector3(a, b * _f_ct, -b * _f_st),

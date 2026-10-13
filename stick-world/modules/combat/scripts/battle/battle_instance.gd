@@ -19,6 +19,7 @@ extends Node
 ## 不再悬挂，溃兵留在战场（战斗引用解除，不再重开）。
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
+const StickProf := preload("res://core/services/stick_prof.gd")
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 ## D 刀：数据化批模拟内核（ProjectSettings sim/battle_sim 开关，见 BattleSim.is_enabled）
@@ -218,6 +219,12 @@ func start() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("战团tick", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	if _state != State.ENGAGED:
 		return
 	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期不进入本函数）；

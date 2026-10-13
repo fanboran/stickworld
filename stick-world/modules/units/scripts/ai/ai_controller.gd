@@ -21,6 +21,7 @@ extends Node
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptDecisionClock := preload("res://modules/units/scripts/ai/ai_decision_clock.gd")
+const StickProf := preload("res://core/services/stick_prof.gd")
 const ScriptBehaviorRegistry := preload("res://modules/units/scripts/ai/behavior_registry.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
@@ -153,6 +154,12 @@ func _setup_state_machine() -> void:
 ## 由 StickmanEntity._physics_process 在处理 AI 输入前调用。
 ## 负责状态机调度 + 决策，设置 entity 的 AI 移动方向。
 func physics_update(delta: float) -> void:
+	var _pt := StickProf.t0()
+	physics_update_inner(delta)
+	StickProf.t1("AI思考", _pt)
+
+
+func physics_update_inner(delta: float) -> void:
 	if _entity == null or not is_instance_valid(_entity):
 		return
 	if _state_machine == null:

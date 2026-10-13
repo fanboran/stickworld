@@ -2,33 +2,27 @@ extends RefCounted
 ## 找目标系统——SWL Ai 锁定规则直译（裁决#31 重写：创始人点正「个体锁定规则
 ## 为什么这么混乱，就隔壁火柴人战争的锁定规则就可以了」）。
 ##
-## SWL 真相（docs/技术/参考/SWL-单位行为完整翻译.md §6.4）：
-##   - `Ai.target` + `UpdateTarget()`：当前目标 + 周期刷新；
-##   - 距离度量 `AiDistance` + 仇恨半径 `AGRO_RANGE`：候选须在仇恨半径内；
-##   - 前向过滤 `OnlyTargetsUnitsForward()` / `IsValidForForwardOnlyTarget`：
-##     只打身前目标（防回头送）；
-##   - 无滞回/无驻留/无分层——旧 SW3 系增量改进+滞回+驻留+分层机器已随本批拆除。
-##
-## 本作口径（创始人 2026-10-13「优先追击最近的敌人」）：
-##   - 选举 = 前向半平面内最近存活敌；身前无敌回退全域（SWL 单位会转身使
-##     半平面旋转，我方面向跟随目标——回退层兜住等价语义，防站立挨打死锁）；
-##   - **无距离门**——最近敌直接追（裁决#31 首版保留射程×4 仇恨半径被集成
-##     夹具实锤拦死跨距接战：两军对峙无伤亡；#21c 的回头问题由前向过滤兜住）；
-##   - 目标死亡/失效 → 立即重选；
-##   - 强制目标（打通态拦路者）最高优先；
-##   - 守位者守卫：目标须在仇恨半径内（跨半场冲锋 = 留守失效）。
+## 米拉奇战记锁定口径（裁决#35 创始人点正接敌参照，反编译方法体直读
+## `external/decompiled/miraqi/script/.../Isometric2DEntity.as`：findTarget 仅在
+## target==null/死亡时执行）+ SWL 前向过滤（`OnlyTargetsUnitsForward`，签名层
+## 实锤；刷新时机 dump 无方法体不可证，故锁定语义从米拉奇取）：
+##   - **锁定到死**——目标活着就照旧打，死亡/失效才重选。0.5s 例行「最近者得」
+##     刷新是「变心」抖动源（两等距敌间反复横跳、出手半途掉头），本版整删；
+##   - 选举 = 前向半平面内最近存活敌；身前无敌回退全域（防站立挨打死锁）；
+##   - **无距离门**——最近敌直接追（裁决#31 创始人口径）；
+##   - 强制目标（打通态拦路者）即时接管，最高优先；
+##   - 守位者守卫：目标超仇恨半径即放弃（跨半场冲锋 = 留守失效）。
 ##
 ## 参数经兵种档案（behavior_profiles）注入。消费点：behavior_attack（每物理帧
-## advance）。
+## advance）。acquire_interval 档案键保留但只供决策钟 combat 域探测节奏
+## （ai_decision_clock），与目标锁定无关。
 
 ## 目标选择器（tactics 对外公共类型；显式 preload 防 headless class_name 未注册）
 const ScriptFinder := preload("res://modules/tactics/api.gd").Finder
 
 # ─────────────────────── 常量（回退值，与 behavior_profiles.BASELINE 同值）────────────────────────────────
-## 目标扫视轮询间隔（s）
-const ACQUIRE_INTERVAL: float = 0.5
 ## 仇恨半径倍数（候选/当前目标距本单位不得超过 武器射程×此值——SWL AGRO_RANGE
-## 的数值等价：够得着才追，半个战场外不锁）
+## 的数值等价：够得着才追，半个战场外不锁；仅守位者守卫消费）
 const AGRO_MULT: float = 4.0
 
 # ─────────────────────── 宿主注入 ────────────────────────
@@ -44,8 +38,6 @@ var profile: Dictionary = {}
 var _target: Node = null
 ## 强制目标（打通态"打通"拦路者：params 注入；死亡/失效/超仇恨半径即清除回落）
 var _forced_target: Node = null
-## 下次选举倒计时（s）
-var _acquire_timer: float = 0.0
 ## 目标已驻留时长（s；换靶清零——纯观测面保留）
 var _dwell: float = 0.0
 
@@ -72,12 +64,18 @@ func get_dwell() -> float:
 	return _dwell
 
 
-## 每物理帧推进：计时 → 目标失效即时重选，到期例行刷新。返回当前目标
+## 每物理帧推进（米拉奇锁定到死）：目标活着原样奉还（零例行刷新——换靶只
+## 发生在 死亡/失效/守位出界）；强制目标即时接管；无目标才选举。返回当前目标
 ## （null = 无目标可打）。
 func advance(delta: float) -> Node:
-	_acquire_timer -= delta
 	_dwell += delta
-	if _acquire_timer > 0.0 and _target_ok(_target):
+	if _target_ok(_target):
+		_post_guard()
+		if _target != null:
+			return _target
+	var forced: Node = _valid_forced()
+	if forced != null:
+		_accept(forced)
 		return _target
 	_elect()
 	return _target
@@ -91,10 +89,9 @@ func is_beyond_leash() -> bool:
 
 # ─────────────────────── 选举（感知拍）────────────────────────────────
 
-## 选举一拍（SWL UpdateTarget）：强制目标 → 前向最近 → 全域最近（都须在
-## 仇恨半径内）。无滞回无驻留——最近者得。
+## 选举一拍（仅初始/目标死亡后到达此处）：强制目标 → 前向最近 → 全域最近。
+## 无滞回无驻留无刷新——最近者得，得即锁定到死。
 func _elect() -> void:
-	_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
 	# 1. 强制目标（打通态拦路者）：有效且未超仇恨半径 → 最高优先锁定
 	var forced: Node = _valid_forced()
 	if forced != null:

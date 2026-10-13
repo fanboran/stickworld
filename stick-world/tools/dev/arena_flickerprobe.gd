@@ -177,7 +177,7 @@ func _behavior_census(arena: Node) -> void:
 	# iid → 最近一次攻击动画帧（动画名 begins_with "attack" 即视为出手中）
 	var last_attack: Dictionary = {}
 	var agg := {"stalled": 0, "weave": 0, "mosh": 0, "kite": 0, "closing": 0, "attack": 0,
-			"still": 0, "samples": 0}
+			"still": 0, "samples": 0, "swing_slide": 0, "swing_slide_ranged": 0}
 	var speeds: PackedFloat32Array = []
 	var stalled_by_weapon: Dictionary = {}
 	var per_frame_stalled: PackedInt32Array = []
@@ -218,6 +218,13 @@ func _behavior_census(arena: Node) -> void:
 				var attacked_recently: bool = Engine.get_process_frames() - int(last_attack.get(iid, -100000)) \
 						< int(STALL_AFTER_SECS * 60.0)
 				var stunned: bool = u.has_method("is_in_hit_stun") and u.call("is_in_hit_stun")
+				if anim.begins_with("attack"):
+					if speed > 40.0:
+						var wt2: int = int(wm.weapon_type) if wm != null and "weapon_type" in wm else 0
+						if wt2 == 2 or wt2 == 4:  # BOW/STAFF：边撤边射合法态
+							agg["swing_slide_ranged"] += 1
+						else:
+							agg["swing_slide"] += 1  # 近战挥砍滑行（米拉奇锁足后应趋零）
 				if anim.begins_with("attack") or attacked_recently:
 					agg["attack"] += 1
 				elif near <= rng:
@@ -265,6 +272,8 @@ func _behavior_census(arena: Node) -> void:
 			int(agg["attack"]), float(agg["attack"]) / n * 100.0, int(agg["still"])])
 	print("[Census] 移动速度谱 n=%d p10=%.0f p50=%.0f p90=%.0f（走带~160×移速档 / 跑带~320×移速档）" % [
 			speeds.size(), pct.call(0.1), pct.call(0.5), pct.call(0.9)])
+	print("[Census] 挥砍滑行：近战 %d 帧（米拉奇锁足后应趋零）/ 远程 %d 帧（边撤边射合法态）" % [
+			int(agg["swing_slide"]), int(agg["swing_slide_ranged"])])
 	var peak := 0
 	for v in per_frame_stalled:
 		peak = maxi(peak, v)

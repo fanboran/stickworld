@@ -25,6 +25,9 @@ class FakeUnit:
 	var health: Node = null
 	var stun: bool = false
 	var stop_calls: int = 0
+	var move_calls: int = 0
+	var weapon: Node = null
+	var anim_attacking: bool = false
 
 	func set_faction(fid: int) -> void:
 		faction_id = fid
@@ -42,7 +45,7 @@ class FakeUnit:
 		return health
 
 	func get_weapon() -> Node:
-		return null
+		return weapon
 
 	func get_formation_system() -> Node:
 		return formation
@@ -53,11 +56,27 @@ class FakeUnit:
 	func is_in_hit_stun() -> bool:
 		return stun
 
+	func is_attack_anim_active() -> bool:
+		return anim_attacking
+
 	func ai_stop() -> void:
 		stop_calls += 1
 
 	func ai_move(_dir: Vector2, _run: bool) -> void:
-		pass
+		move_calls += 1
+
+
+class FakeWeapon:
+	extends Node
+	var attack_range: float = 120.0
+	var armed: bool = true
+	var attack_calls: int = 0
+
+	func can_attack() -> bool:
+		return armed
+
+	func perform_attack(_target: Node) -> void:
+		attack_calls += 1
 
 
 class FakeHealth:
@@ -80,7 +99,8 @@ func _ready() -> void:
 	_runner.add_test("追击范围: 超 leash 判追丢", _test_leash_far)
 	_runner.add_test("追击范围: 未超 leash 不追丢", _test_leash_near)
 	_runner.add_test("受击硬直: 硬直中停止行动", _test_hit_stun)
-	_runner.add_test("目标锁定: sticky 保留当前目标", _test_sticky_target)
+	_runner.add_test("目标锁定: 锁定到死（更近不换，死亡才换）", _test_sticky_target)
+	_runner.add_test("挥砍锁足: 冷却窗内不移动 冷却好解锁", _test_swing_lock)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -275,7 +295,7 @@ func _test_hit_stun() -> void:
 	_runner.assert_true(beh._target != null, "硬直结束后应恢复目标获取")
 
 
-## sticky target：当前目标有效未超 leash，刷新周期保留不重选
+## 锁定到死（裁决#35 米拉奇口径）：新敌更近不换靶；目标死亡才重选
 func _test_sticky_target() -> void:
 	var w: Dictionary = _make_battle()
 	var attacker: FakeUnit = w["attacker"]
@@ -284,10 +304,52 @@ func _test_sticky_target() -> void:
 	var beh: Node = ScriptBehaviorAttack.new()
 	beh.entity = attacker
 	beh.enter("", {"battle": w["battle"]})
-	beh.update(0.01)  # 首次刷新选目标（最近 = e1，100px）
+	beh.update(0.01)  # 首次选举（最近 = e1，100px）
 	var first: Node = beh._target
 	_runner.assert_true(first != null, "首次应选到目标")
-	# 强制刷新周期到期，目标仍有效 → 驻留+滞回保留（P1 后判定本体在 _acq）
-	beh._acq._acquire_timer = -1.0
+	# e2 挪到更近处推进数拍——锁定到死：0.5s 例行「最近者得」刷新已删，不换靶
+	#（旋试点 poke _acquire_timer 强制刷新拍，锁定到死后刷新机不存在）
+	e2.position = Vector2(40, 0)
+	for i in 5:
+		beh.update(0.01)
+	_runner.assert_equal(beh._target, first, "目标活着不换靶（米拉奇锁定到死）")
+	# 目标死亡 → 立即重选，更近的 e2 上位
+	first._dead = true
 	beh.update(0.01)
-	_runner.assert_equal(beh._target, first, "目标有效时应 sticky 保留不换")
+	_runner.assert_equal(beh._target, e2, "目标死亡立即重选（更近的 e2 上位）")
+
+
+## 挥砍锁足（裁决#35 米拉奇口径）：近战出手后冷却窗内不追不挪，冷却好解锁
+func _test_swing_lock() -> void:
+	var w: Dictionary = _make_battle()
+	var attacker: FakeUnit = w["attacker"]
+	var e1: FakeUnit = w["e1"]
+	e1.position = Vector2(100, 0)  # 射程内（fake 武器射程 120）
+	var beh: Node = ScriptBehaviorAttack.new()
+	beh.entity = attacker
+	var weap := FakeWeapon.new()
+	attacker.weapon = weap
+	beh.enter("", {"battle": w["battle"]})
+	beh.update(0.01)  # 射程内站桩出手（冷却好即打）
+	_runner.assert_true(weap.attack_calls > 0, "前置：冷却好即出手")
+	_runner.assert_true(beh._melee_swing_lock, "近战出手置挥砍锁足")
+	attacker.anim_attacking = true  # 挥砍动画开始（实体位决定移动闸）
+	# 目标跑出射程 + 动画没播完 → 锁足不追（零移动意图，ai_stop 持续）
+	weap.armed = false
+	var moves_before: int = attacker.move_calls
+	e1.position = Vector2(600, 0)
+	beh.update(0.01)
+	_runner.assert_true(attacker.stop_calls > 0, "动画窗内 ai_stop 锁足")
+	_runner.assert_equal(attacker.move_calls, moves_before, "动画窗内零移动意图（挥完这一剑再说）")
+	# 可打断窗开了（冷却好）且目标回到射程 → 原地出手不挪步（SWL AnimationCancel）
+	weap.armed = true
+	e1.position = Vector2(100, 0)
+	beh.update(0.01)
+	_runner.assert_true(weap.attack_calls > 1, "可打断窗原地提前出手（DPS 不掉）")
+	_runner.assert_equal(attacker.move_calls, moves_before, "出手不挪步（原地出下一手）")
+	# 动画播完 → 解锁；目标在射程外（600）→ 恢复追击移动
+	attacker.anim_attacking = false
+	e1.position = Vector2(600, 0)
+	beh.update(0.01)
+	_runner.assert_false(beh._melee_swing_lock, "动画播完解锁移动闸")
+	_runner.assert_true(attacker.move_calls > moves_before, "解锁后恢复追击移动")

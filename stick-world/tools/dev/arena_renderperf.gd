@@ -8,6 +8,7 @@ extends Node
 ## JSON 落 user://renderperf/，由 arena_renderperf.sh 归集。带窗口跑（真实渲染帧）。
 
 const RENDERPERF_OUT := "user://renderperf"
+const StickProf := preload("res://core/services/stick_prof.gd")
 
 var _t0: float = 0.0
 var _prev_usec: int = 0
@@ -86,6 +87,16 @@ func _report(prefix: String, _final: bool) -> void:
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED) / 1048576.0,
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED) / 1048576.0,
 		entities, _hosts.size()])
+	# 分账行（P0 帧成本量化）：引擎级 process/physics 总账（秒→ms）+ 物理档位
+	#（LOD panic 降频时 <60 一眼可见）+ StickProf 微计时窗口（STICK_PROF=1 时
+	# 有内容：rig宿主/血条回读/桶清尾/实体物理/AI思考/战团tick，降序）。
+	# 残差 = 帧时 − process − physics − 引擎固定开销 ≈ 渲染提交+GPU 等待。
+	print("[RenderPerf] %s 分账 process=%.2fms physics=%.2fms 物理档=%d" % [
+		prefix,
+		Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+		Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+		Engine.physics_ticks_per_second])
+	StickProf.report(prefix)
 	_win_ms.clear()
 
 

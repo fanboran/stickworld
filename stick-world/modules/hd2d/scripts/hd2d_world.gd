@@ -1193,8 +1193,12 @@ func _build_world() -> void:
 	add_child(we)
 
 	# --- 太阳（card 靠伪法线吃它）+ 冷天空补光 ---
+	# 实时阴影是诊断口（STICK_SUN_SHADOW=0 关）：方向光 shadow pass 每帧把
+	# 全 3D 场景（含 ~5k MultiMesh 实例）重渲一遍进 shadow map，成本与窗口
+	# 分辨率无关（P0 实测 720p 与 1080p 帧时同阶）。战场模式单位全在一屏、
+	# 接触阴影走脚底贴片，实时影的观感收益待与帧时一起验收定去留。
 	_sun = DirectionalLight3D.new()
-	_sun.shadow_enabled = true
+	_sun.shadow_enabled = OS.get_environment("STICK_SUN_SHADOW") != "0"
 	_sun.directional_shadow_max_distance = 140.0
 	add_child(_sun)
 	# 补光（fill）：从主光反侧打一盏**不投影**的冷光，专门抬暗部。

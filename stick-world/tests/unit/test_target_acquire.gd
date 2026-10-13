@@ -1,9 +1,9 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：找目标系统（SWL Ai 锁定规则直译，裁决#31 重写）。
-## 覆盖：最近敌选举 / 仇恨半径门（AGRO=射程×4，不锁半个战场外）/
-## 目标死亡即换 / 追丢即换（不等节拍）/ 强制目标（打通态）生命周期 /
+## 单元测试：找目标系统（米拉奇锁定到死口径，裁决#35；选举/过滤 SWL 直译）。
+## 覆盖：最近敌选举 / 锁定到死（更近者出现不换靶）/ 目标死亡即换 /
+## 无距离门（远敌也锁）/ 强制目标（打通态）生命周期 /
 ## 守位者守卫（指挥官与阵地护卫共口）。
 ## 不进场景树，确定性（无 RNG 依赖路径——掷骰不在本系统）。
 
@@ -64,7 +64,8 @@ func _ready() -> void:
 	_runner.add_test("选举: 最近敌当选", _test_nearest)
 	_runner.add_test("无距离门: 远敌也锁（追击最近敌）", _test_far_target_chase)
 	_runner.add_test("死亡: 目标死亡即时重选", _test_dead_re_elect)
-	_runner.add_test("远目标保持锁定: 更近者出现才换", _test_beyond_re_elect)
+	_runner.add_test("锁定到死: 更近者出现不换靶", _test_lock_keeps_on_nearer)
+	_runner.add_test("锁定到死: 目标走远仍追（无距离门）", _test_lock_keeps_on_far)
 	_runner.add_test("强制目标: 注入即锁 失效回落", _test_forced_target)
 	_runner.add_test("强制目标: 存活即锁（距离由打通态脱离距离管）", _test_forced_beyond_keeps)
 	_runner.add_test("守位者守卫: 超半径拒选 带内自卫", _test_post_guard)
@@ -104,11 +105,6 @@ func _test_nearest() -> void:
 	var acq: ScriptTargetAcquire = w["acq"]
 	var t: Node = acq.advance(0.1)
 	_runner.assert_equal(t, w["battle"].enemies[1], "首拍选最近敌（150px）")
-	# 更近敌出现 → 到期例行刷新即换（无滞回无驻留）
-	var near := _add_enemy(w["battle"], 90.0)
-	acq._acquire_timer = -1.0
-	t = acq.advance(0.1)
-	_runner.assert_equal(t, near, "刷新拍换最近敌（SWL：最近者得，无滞回）")
 
 
 func _test_far_target_chase() -> void:
@@ -126,21 +122,36 @@ func _test_dead_re_elect() -> void:
 	var t: Node = acq.advance(0.1)
 	_runner.assert_equal(t, w["battle"].enemies[0], "前置：最近敌当选")
 	(w["battle"].enemies[0] as FakeEnemy)._dead = true
-	acq._acquire_timer = 5.0  # 节拍未到——死亡是事件触发边，不等周期
 	t = acq.advance(0.1)
-	_runner.assert_equal(t, w["battle"].enemies[1], "目标死亡：节拍外也立即重选")
+	_runner.assert_equal(t, w["battle"].enemies[1], "目标死亡立即重选（锁定到死，死亡是唯一换靶边）")
 
 
-func _test_beyond_re_elect() -> void:
-	# 目标走远不弃追（无距离门）：刷新拍上更近者接管（最近者得）
+func _test_lock_keeps_on_nearer() -> void:
+	# 裁决#35 米拉奇口径：目标活着，更近者出现也不换——0.5s 例行「最近者得」
+	# 刷新已退役（换靶抖动 = 出手半途掉头/两等距敌间横跳的根源）
 	var w := _make_acq([150.0])
 	var acq: ScriptTargetAcquire = w["acq"]
+	var first: Node = acq.advance(0.1)
+	_runner.assert_equal(first, w["battle"].enemies[0], "前置：150px 敌当选")
+	var nearer := _add_enemy(w["battle"], 90.0)
+	for i in 5:
+		acq.advance(0.1)
+	_runner.assert_equal(acq.get_target(), first, "更近者出现不换靶（锁定到死）")
+	# 目标死亡才让位
+	(first as FakeEnemy)._dead = true
 	acq.advance(0.1)
-	var b := _add_enemy(w["battle"], 90.0)
-	(w["battle"].enemies[0] as FakeEnemy).position = Vector2(450.0, 0)
-	acq._acquire_timer = -1.0  # 刷新拍到期
-	acq.advance(0.1)
-	_runner.assert_equal(acq.get_target(), b, "刷新拍换最近敌（远目标不弃追但让位更近者）")
+	_runner.assert_equal(acq.get_target(), nearer, "原目标死亡 → 重选更近者上位")
+
+
+func _test_lock_keeps_on_far() -> void:
+	# 目标走远不弃追（无距离门）：锁定到死 + 无距离门 = 走到哪追到哪
+	var w := _make_acq([150.0])
+	var acq: ScriptTargetAcquire = w["acq"]
+	var first: Node = acq.advance(0.1)
+	(first as FakeEnemy).position = Vector2(450.0, 0)
+	for i in 5:
+		acq.advance(0.1)
+	_runner.assert_equal(acq.get_target(), first, "目标走远仍锁（追击语义，不受距离门）")
 
 
 func _test_forced_target() -> void:
@@ -153,7 +164,6 @@ func _test_forced_target() -> void:
 	_runner.assert_equal(t, forced, "强制目标（打通态）最高优先锁定")
 	# 强制目标死亡 → 清除回落正常选敌
 	forced._dead = true
-	acq._acquire_timer = -1.0
 	t = acq.advance(0.1)
 	_runner.assert_equal(t, near, "强制目标失效后回落自主寻敌")
 
@@ -166,7 +176,6 @@ func _test_forced_beyond_keeps() -> void:
 	var forced := _add_enemy(w["battle"], 320.0)
 	acq.set_forced_target(forced)
 	forced.position = Vector2(450.0, 0)
-	acq._acquire_timer = -1.0
 	var t: Node = acq.advance(0.1)
 	_runner.assert_equal(t, forced, "强制目标走远仍锁（脱离交给打通态距离门）")
 
@@ -180,7 +189,6 @@ func _test_post_guard() -> void:
 	_runner.assert_true(t == null, "指挥官对超半径候选拒选（留守不冲锋）")
 	# 半径内候选正常接敌（被近身自卫语义）
 	var near := _add_enemy(w["battle"], 150.0)
-	acq._acquire_timer = -1.0
 	t = acq.advance(0.1)
 	_runner.assert_equal(t, near, "指挥官对半径内目标正常自卫接敌")
 
@@ -196,6 +204,5 @@ func _test_guard_post_unit() -> void:
 	var t: Node = acq.advance(0.1)
 	_runner.assert_true(t == null, "护卫对超半径候选拒选（守阵地不冲锋）")
 	var near := _add_enemy(w["battle"], 150.0)
-	acq._acquire_timer = -1.0
 	t = acq.advance(0.1)
 	_runner.assert_equal(t, near, "护卫对半径内目标正常自卫接敌")

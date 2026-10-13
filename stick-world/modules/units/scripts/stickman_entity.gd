@@ -39,6 +39,7 @@ var BASE_SCALE: float = 0.5
 const WEAPON_ATTACK_ANIM: Dictionary = preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT.WEAPON_ATTACK_ANIM
 ## 动画名/变体池（死亡与受击变体选择用）
 const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 状态效果组件脚本（BURN/POISON/SLOW/STUN；显式 preload 防 headless class_name 未注册）
 const ScriptStatusEffects := preload("res://modules/units/scripts/entity/status_effects.gd")
 
@@ -503,6 +504,12 @@ func _mount_components() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("实体物理", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	# 死亡收口（2026-08-31 审计 P0-1）：尸体没有物理帧——不跑 AI、不减速回切
 	# （正是这套回切把 0.8s 死亡动画在 0.25s 内覆盖成 walk/idle，尸体"站起来"）、
 	# 不做分离推挤（尸体不当墙、不滑行）、不受击退。
@@ -1326,6 +1333,12 @@ func play_attack() -> void:
 		_visual.play_attack(anim, blocking)
 	elif _visual != null and _visual.has_method("play"):
 		_visual.play(anim)
+
+
+## 攻击动画播放中（behavior_attack 挥砍锁足的移动闸：动画没播完不追不挪；
+## 出手不受此限——命中帧后可打断尾段照常原地出下一手）
+func is_attack_anim_active() -> bool:
+	return _current_anim.begins_with("attack")
 
 
 ## 举盾姿态变化回调（盾姿态分层，计划 5）：WeaponMount.set_blocking 驱动，

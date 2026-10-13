@@ -65,6 +65,14 @@ var _drift_timer: float = 0.0
 ## 攻击后举盾截止时刻（s；SWL Ai.cooldownAfterAttackForBlock 直译——
 ## 矛兵攻击完举盾瞬间防反打，"盾墙"手感来源）
 var _post_block_until: float = 0.0
+## 挥砍锁足（米拉奇口径：出手=冷却窗全模停止，`Isometric2DEntity.as` 方法体
+## 直读——attack 期间 vx=vy=0 到 weaponSpeed 帧走完）：近战 perform_attack 置位，
+## 冷却好（can_attack 翻真）解锁。挥砍动画期带着走位 = 「边走边挥砍」滑行感
+## 的根治；远程不走此锁（边撤边射是 SWL 弓手真行为）
+var _melee_swing_lock: bool = false
+## 锁时限（_clock 时刻）：武器冷却 × 1.5——保险闸：低帧下动画结束回调若迟到
+## （_current_anim 卡在 attack 态），锁不会永久卡死单位
+var _melee_lock_until: float = 0.0
 
 # ── 实体能力位缓存（战斗性能优化）──
 ## update 每物理帧逐单位调用，链式 entity.has_method(...) 是纯重复开销：
@@ -123,6 +131,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	_aim_timer = 0.0
 	_drift_timer = 0.0
 	_drift_offset = 0.0
+	_melee_swing_lock = false
 
 
 func update(delta: float) -> void:
@@ -163,9 +172,9 @@ func update(delta: float) -> void:
 		finish()
 		return
 
-	# 找目标系统推进（SW3 FindTargetAiSystem 直译 P1——增量换靶/滞回/驻留时长/
-	# 分层阈值/强制目标/集火号令/指挥官守卫全在 target_acquire.gd；感知节奏按
-	# 兵种档案 acquire_interval）。null = 无目标可打交还决策层
+	# 找目标系统推进（裁决#35 米拉奇锁定到死：目标活着原样奉还，死亡/失效/
+	# 守位出界才重选；选举/强制目标/守位守卫全在 target_acquire.gd）。
+	# null = 无目标可打交还决策层
 	_ensure_acq()
 	_target = _acq.advance(delta)
 	if _target == null:
@@ -195,6 +204,30 @@ func update(delta: float) -> void:
 	_update_summon(dist, delta)
 	# 姿态举盾聚合（SWL 直译）：推进/接敌/风筝全程生效
 	_update_arrow_threat_block(weapon)
+	# 挥砍锁足（米拉奇口径 × SWL 可打断窗合取）：出手后挥砍动画没播完就全模
+	# 停止——目标走出射程也不追、新目标也不追，这一剑挥完再说（动画期带着走位
+	# = 「边走边挥砍」滑行感）。移动闸跟动画走；出手闸照常：命中帧已过进可打断
+	# 尾段（can_attack 翻真）时原地提前出下一手（SWL AnimationCancelFraction
+	# 真货，DPS 不掉）。受击硬直/压制在上方早退，优先级更高
+	if _melee_swing_lock:
+		if _clock >= _melee_lock_until or (
+				entity.has_method("is_attack_anim_active")
+				and not entity.is_attack_anim_active()):
+			_melee_swing_lock = false
+		else:
+			# 站桩中可打断窗开了且目标仍在射程 → 原地出手（不挪步）
+			if dist <= attack_range and weapon != null 					and weapon.has_method("can_attack") and weapon.can_attack() 					and not _arrows_wasted(_target, weapon):
+				weapon.perform_attack(_target)
+				_melee_lock_until = _clock + _swing_lock_duration(weapon)
+				if _cap_play_attack:
+					entity.play_attack()
+			if _cap_ai_stop:
+				entity.ai_stop()
+			_face_target()
+			# 站桩间距照常（SWL PushApartTolerance：锁足不当墙，人群仍自然松开）
+			if _p("push_apart", 0.0) > 0.0:
+				_apply_push_apart(_p("push_apart", 0.0), delta)
+			return
 	# 风筝 = 近身兜底（ArcherAi.ShouldKite 真意：敌贴脸才撤）：档案 kite_range
 	# 即"近身危险线"——敌进此线（远小于射程）背向短撤，撤出即站定继续射。
 	# **不与射程绑定**（曾误设射程−40：敌进射程内缘就撤 → 弓手全程乱跑，
@@ -231,6 +264,10 @@ func update(delta: float) -> void:
 				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			weapon.perform_attack(_target)
 			_aiming = false
+			# 近战挥砍锁足（米拉奇口径）：本剑挥完前不追不挪；远程边撤边射不锁
+			if not _is_ranged_weapon(weapon):
+				_melee_swing_lock = true
+				_melee_lock_until = _clock + _swing_lock_duration(weapon)
 			# 攻击后举盾（cooldownAfterAttackForBlock）：矛兵攻击完一拍盾防反打
 			if _p("block_after_attack", 0.0) > 0.0:
 				_post_block_until = _clock + _p("block_after_attack", 0.0)
@@ -685,6 +722,14 @@ func _is_ranged_weapon(weapon: Node) -> bool:
 ## SWL/SW3 出手只有冷却门，命中帧自检射程（weapon_mount._do_strike 的
 ## 结算帧检查即 SW3 HitUpdate.InRangeForHit 等价物），出手不做移动预判——
 ## 预判门在追击混战里退化成"目标在动就永不出手"= 射程内站桩不打的主闸
+
+
+## 挥砍锁时长 = 武器冷却 × 1.5（动画时长的上界近似；冷却读不到回退 1.2s）。
+## 常规解锁路径是动画播完（is_attack_anim_active 翻假），本时限只是卡死保险
+func _swing_lock_duration(weapon: Node) -> float:
+	if weapon != null and "cooldown" in weapon:
+		return float(weapon.cooldown) * 1.5
+	return 1.2
 
 
 ## 获取当前目标（供测试/调试；目标状态权威在 _acq）

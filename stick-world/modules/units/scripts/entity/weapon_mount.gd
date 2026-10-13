@@ -1,5 +1,6 @@
 class_name WeaponMount
 extends Node2D
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 武器挂载点 -- 管理武器/盾牌挂载、攻击动画触发与攻击执行。
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1（WeaponMount）。
@@ -500,6 +501,12 @@ func _find_shield_bone(owner_entity: Node2D) -> Node2D:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("武器挂载", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期冷却/放箭计时/命中帧全停）；
 	# 步长经 sim_delta 携带速度档
 	if TimeManager != null:
@@ -543,6 +550,12 @@ func _physics_process(delta: float) -> void:
 ## 渲染率关注、且 AI 侧（behavior_attack）照常在实体上跑——_process 两模通吃。
 
 func _process(_delta: float) -> void:
+	var _pt := StickProf.t0()
+	_process_tick(_delta)
+	StickProf.t1("武器瞄窗", _pt)
+
+
+func _process_tick(_delta: float) -> void:
 	if not _aim_visual_active:
 		return
 	if weapon_type != WeaponType.BOW:

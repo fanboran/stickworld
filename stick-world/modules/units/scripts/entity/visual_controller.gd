@@ -1,4 +1,5 @@
 extends Node
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 火柴人视觉控制器 —— 动画播放与头顶动作进度条。
 ##
 ## 职责：
@@ -80,6 +81,12 @@ func get_mirror_anim_state() -> Dictionary:
 ## oneshot 恒 1.0 速率（rig.set_anim_speed 同规：单次动画保命中帧不变速）；
 ## 暂停由引擎总闸负责（树暂停时物理帧停跑本计时自然冻结）
 func _physics_process(_delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(_delta)
+	StickProf.t1("视觉控制", _pt)
+
+
+func _physics_tick(_delta: float) -> void:
 	# 拉弓瞄准俯仰直推（2D rig 路径；billboard 镜像走 get_mirror_anim_state feed）
 	if _entity != null and _entity.rig != null:
 		var pitch: float = _entity.get_aim_pitch() if _entity.has_method("get_aim_pitch") else 0.0

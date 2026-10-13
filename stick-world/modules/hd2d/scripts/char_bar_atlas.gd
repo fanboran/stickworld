@@ -15,6 +15,7 @@ extends Node
 ##   由宿主算好传入 center。
 
 const HEALTH_BAR_SCRIPT: GDScript = preload("res://modules/stick_rig/api.gd").HEALTH_BAR_SCRIPT
+const StickProf := preload("res://core/services/stick_prof.gd")
 const BAR_SHADER := preload("res://modules/hd2d/shaders/char3d_bar_atlas.gdshader")
 
 const PX := 1.0 / 24.0
@@ -32,9 +33,10 @@ const SUPERSAMPLE := 2
 ## 96 封存档（192+指挥护卫）+ 召唤余量，溢出仍回落偷槽兜底
 const COLS := 18
 const ROWS := 12
-## 回读节拍（帧）：30Hz——条动画最快成分是受击抖动 46Hz，30Hz 采样与
-## 烘焙路线近景档节拍（2 帧）同量级
-const READ_EVERY := 2
+## 回读节拍（帧）：15Hz——get_image 是 GPU→CPU 同步停顿（48 档实测 8~10ms/次，
+## 隔 2 帧回读 ≈ 4ms/帧均摊），条动画最快成分是受击抖动 46Hz，30Hz 采样本就
+## 欠采；15Hz 观感无差、成本减半（P0 帧成本治理，2026-10-13）
+const READ_EVERY := 4
 ## UV 内缩边（px）：双线性采样不吃邻槽
 const UV_PAD := 4.0
 ## 面片朝相机微移（血条恒在身体之上）
@@ -221,9 +223,17 @@ func _process(_delta: float) -> void:
 	# 隔帧回读：镜像条画进共享视口 → 一张 ImageTexture 喂全部面片。
 	# 纹理对象**复用**（ImageTexture.update 同 RID 原地换数据）——旧实现每读
 	# 一次 create_from_image 新建纹理换绑材质，换绑间隙 + 分配churn 是血条
-	# 整图闪断的第二实底（与槽位轮转同批修，2026-10-13）
-	if _frame % READ_EVERY == 0:
+	# 整图闪断的第二实底（与槽位轮转同批修，2026-10-13）。
+	# 渲染+读回同节拍（P0 帧成本治理）：旧 UPDATE_ALWAYS 下视口每帧全量重渲
+	# （48 档 ~百面片镜像 ≈ 数百 draw + 15MP 光栅，分辨率无关的固定大头）但只
+	# 隔 READ_EVERY 帧读 = 3/4 渲染白费。改 UPDATE_ONCE 拍点：奇拍武装（本帧
+	# 末渲一次）、次拍读回（拿到刚渲好的帧）——视口渲染率 = 读回率 = 15Hz。
+	if _frame % READ_EVERY == 1:
+		_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	elif _frame % READ_EVERY == 2:
+		var _pt := StickProf.t0()
 		var img := _vp.get_texture().get_image()
+		StickProf.t1("血条回读", _pt)
 		if img != null and not img.is_empty():
 			if _tex == null:
 				_tex = ImageTexture.create_from_image(img)

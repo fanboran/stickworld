@@ -17,6 +17,7 @@ extends Node
 ## 透明混合，深度写保跨角色遮挡）。
 
 const BODY_SHADER := preload("res://modules/hd2d/shaders/char3d_body_opaque.gdshader")
+const StickProf := preload("res://core/services/stick_prof.gd")
 const WEAPON_SHADER := preload("res://modules/hd2d/shaders/char3d_weapon_atlas.gdshader")
 const JOINT_ATLAS_SCRIPT := preload("res://modules/hd2d/scripts/char_joint_atlas.gd")
 const BAR_ATLAS_SCRIPT := preload("res://modules/hd2d/scripts/char_bar_atlas.gd")
@@ -62,6 +63,14 @@ class RowBucket:
 	var cursor := 0            # 本帧已写行数
 	var high_water := 0        # 历史最大行数（instance_count 水位）
 	var _stamp := -1           # 帧戳（新帧自动复位游标）
+	## 色/UV 逐行缓存（P0 帧成本治理）：rig 宿主每帧重写的 color/custom 绝大多数
+	## 与上帧逐位相同（描边白×tint、填充色、UV 子矩形全是静态量）——值不变就
+	## 跳过 setter（MultiMesh 三通道调用是 rig 宿主 ~17ms/帧的大头之一）。
+	## 写前值比较：行易主（单位死亡后游标前移、后继单位行序前移）时新值≠旧值
+	## 照样落写，无陈旧缓存风险。变换通道每帧必写（动画位移动态），不缓存。
+	var _col_cache := PackedColorArray()
+	var _cus_cache := PackedColorArray()
+	const SENTINEL := Color(-1.0, 0.0, 0.0, 0.0)
 
 	func _setup(name: String, mesh: ArrayMesh, mat: Material, use_custom: bool) -> void:
 		set_name(name)
@@ -86,10 +95,17 @@ class RowBucket:
 		if cursor >= high_water:
 			high_water = cursor + 1
 			mm.instance_count = high_water
+			_col_cache.resize(high_water)
+			_cus_cache.resize(high_water)
+			_col_cache[high_water - 1] = SENTINEL
+			_cus_cache[high_water - 1] = SENTINEL
 		mm.set_instance_transform(cursor, xf)
-		mm.set_instance_color(cursor, col)
-		if custom != CUSTOM_SKIP:
+		if _col_cache[cursor] != col:
+			mm.set_instance_color(cursor, col)
+			_col_cache[cursor] = col
+		if custom != CUSTOM_SKIP and _cus_cache[cursor] != custom:
 			mm.set_instance_custom_data(cursor, custom)
+			_cus_cache[cursor] = custom
 		cursor += 1
 
 	## 尾部清隐（宿主全写完后调：本帧未写的旧行退化隐形——零面积三角形；
@@ -190,10 +206,12 @@ func _process(_delta: float) -> void:
 			var tex: Texture2D = joint_atlas.texture()
 			_body_mat.set_shader_parameter("atlas_tex", tex)
 			_stroke_mat.set_shader_parameter("atlas_tex", tex)
+	var _pt := StickProf.t0()
 	stroke.end_tick()
 	body.end_tick()
 	for path in _weapon_buckets:
 		(_weapon_buckets[path]["bucket"] as RowBucket).end_tick()
+	StickProf.t1("桶清尾", _pt)
 
 
 # ─────────────────────────── 宿主写行口（1100 内调用） ───────────────────────────

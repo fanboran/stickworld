@@ -1,5 +1,6 @@
 class_name StatusEffects
 extends Node
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 状态效果组件（SWL ApplyBurn/ApplySlow/ApplyFreeze + legend 81 个 Unit System 的
 ## 最小集直译，2026-08-31 全量直译批次）。
 ##
@@ -132,6 +133,12 @@ func get_speed_mult() -> float:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("状态效果", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	if _effects.is_empty() or _owner == null or not is_instance_valid(_owner):
 		return
 	var now: float = _now()

@@ -39,7 +39,8 @@ const SKILL_AIM_HOLD_MULT: Dictionary = {
 
 # ─────────────────────────────── 基线（人性基线，RWR default.ai 思路）────────────────────────────────
 ## 所有兵种共享的默认行为参数。字段说明：
-##   acquire_interval     目标扫视轮询间隔（s）——感知节奏
+##   acquire_interval     空闲选敌探测节奏（s，决策钟 combat 域）——目标本身
+##                        锁定到死（裁决#35 米拉奇口径），此键与换靶无关
 ##   leash_mult           追击放弃倍数（目标超出射程 × 此值即"追丢了"）
 ##   kite_range           保距开关（>0 = 启用卡极限射程风筝；实际保距线 =
 ##                        attack_range − KITE_MARGIN，见 behavior_attack）

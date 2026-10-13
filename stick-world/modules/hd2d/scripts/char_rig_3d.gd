@@ -42,6 +42,7 @@ extends Node3D
 ## 图片卡渐隐不再存在。
 
 const StickRigAPI := preload("res://modules/stick_rig/api.gd")
+const StickProf := preload("res://core/services/stick_prof.gd")
 const ANIMS := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 const SHADOW_SHADER := preload("res://modules/hd2d/shaders/char_shadow.gdshader")
 const RIG_SCENE_PATH: String = StickRigAPI.RIG_SCENE_PATH
@@ -75,9 +76,20 @@ class Part:
 	var length := 0.0              # 线段长（fill points 跨度，恒定）
 	var r_fill := 0.0              # 圆半径（构建期定格）
 	var col_fill := Color.WHITE
+	# 帧环静态量缓存（P0 帧成本治理）：描边键名/格位尺寸/UV 全是图集静态量，
+	# 图集版本变化时由 _refresh_part_statics 刷新——_write_body 每帧每部件
+	# 原要做的 1 次字符串拼接 + 4 次字典查找全部出环（102 单位 × ~19 部件 =
+	# 每帧 ~8k 次查找/拼接是 rig 行写 15ms/帧的可去部分）
+	var sk := ""                   # 描边格位键（name + "#s"）
+	var cs_s := Vector2.ZERO       # 描边格位尺寸
+	var uv_s := Rect2()            # 描边格位 UV
+	var cs := Vector2.ZERO         # 填充格位尺寸
+	var uv := Rect2()              # 填充格位 UV
 
 var _parts: Array = []              # Array[Part]
 var _joint_atlas: Node = null       # char_joint_atlas（build 时取引）
+## 部件静态量已刷版本（图集 publish 版本号；-1 = 未刷，首帧必刷）
+var _parts_statics_ver := -1
 ## 描边单侧宽当前档（rig px，0.5 量化——档变才重报图集规格；裁决#24）
 var _eff_q := -1.0
 ## 脚底接地垫（rig px）：FOOT_ANCHOR 量到脚**骨线**，但线肢圆头半径 + 描边
@@ -249,6 +261,17 @@ func _build_specs() -> Array:
 
 static func _stroke_key(name: String) -> String:
 	return name + "#s"
+
+
+## 部件帧环静态量刷新（图集重烘发布后格位表可能整表变化——版本比对失效）
+func _refresh_part_statics() -> void:
+	_parts_statics_ver = _joint_atlas.version()
+	for p in _parts:
+		p.sk = _stroke_key(p.cont.name)
+		p.cs_s = _joint_atlas.cell_size(p.sk)
+		p.uv_s = _joint_atlas.uv_rect(p.sk)
+		p.cs = _joint_atlas.cell_size(p.cont.name)
+		p.uv = _joint_atlas.uv_rect(p.cont.name)
 
 
 func _build_shadow() -> void:
@@ -577,12 +600,19 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	var _pt := StickProf.t0()
+	_process_inner(_delta)
+	StickProf.t1("rig宿主", _pt)
+
+
+func _process_inner(_delta: float) -> void:
 	if _pure_sim or _buckets == null or not is_instance_valid(_buckets) or _rig == null:
 		return
 	if _hidden:
 		_release_bar_slot()
 		return
 	# 先序累乘（batch_rig._write_transforms 同式：骨骼局部 → rig 局部）
+	var _pt1 := StickProf.t0()
 	for i in _bones.size():
 		var bone := _bones[i] as Bone2D
 		if bone == null:
@@ -596,10 +626,14 @@ func _process(_delta: float) -> void:
 	_f_s = S * _depth
 	_f_sfx = _f_s * (-1.0 if _flip else 1.0)
 	_f_p = _pos
-	_watch_stroke_eff()
+	StickProf.t1("rig骨骼", _pt1)
+	var _pt2 := StickProf.t0()
 	_write_body()
 	_write_weapons()
+	StickProf.t1("rig行写", _pt2)
+	var _pt3 := StickProf.t0()
 	_feed_bar()
+	StickProf.t1("rig喂条", _pt3)
 
 
 ## 描边宽档监视（裁决#24）：相机缩放改档（0.5 rig px 量化）时重报图集
@@ -643,18 +677,17 @@ func _write_body() -> void:
 	var alpha := _master_alpha
 	var buckets: Node = _buckets
 	var stroke_col := Color(tr.r, tr.g, tr.b, alpha)
+	# 静态量失效检查（每帧一次版本比对；重烘发布才真刷）
+	if _joint_atlas.version() != _parts_statics_ver:
+		_refresh_part_statics()
 	for p in _parts:
 		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
-		var name: String = p.cont.name
-		var sk := _stroke_key(name)
-		var cs_s: Vector2 = _joint_atlas.cell_size(sk)
-		buckets.stroke_row(_fold3d(xf * _sc2(cs_s.x, cs_s.y), ZB_STROKE),
-				stroke_col, _joint_atlas.uv_rect(sk))
-		var cs: Vector2 = _joint_atlas.cell_size(name)
-		buckets.body_row(_fold3d(xf * _sc2(cs.x, cs.y), 0.0),
+		buckets.stroke_row(_fold3d(xf * _sc2(p.cs_s.x, p.cs_s.y), ZB_STROKE),
+				stroke_col, p.uv_s)
+		buckets.body_row(_fold3d(xf * _sc2(p.cs.x, p.cs.y), 0.0),
 				Color(p.col_fill.r * tr.r, p.col_fill.g * tr.g,
 						p.col_fill.b * tr.b, p.col_fill.a * alpha),
-				_joint_atlas.uv_rect(name))
+				p.uv)
 
 
 ## 2D 部件变换折 3D（官方 Transform3D 构造，零手打包）：

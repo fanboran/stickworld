@@ -107,7 +107,8 @@ class RowBucket:
 # ─────────────────────────── 实例状态 ───────────────────────────
 
 ## 描边桶（几何两遍的底遍：加宽胶囊行、白色实例色、ZB_STROKE 垫后；
-## edge_cutoff=0.004 保留外缘软过渡）——行由宿主 _write_body 成对写
+## edge_cutoff=0.5 硬切＝环宽即几何意图宽，2026-10-13 创始人点正「描边太粗」
+## 后与填充同款收口——旧 0.004 软阈保留 mip 摊开的 alpha 裙边（实测 4~14px））
 var stroke: RowBucket = null
 var _stroke_mat: ShaderMaterial = null
 var body: RowBucket = null          # 身体填充桶（edge_cutoff=0.5 硬切边——内边界 crisp）
@@ -117,8 +118,11 @@ var _body_mat: ShaderMaterial = null
 ## RIG_SCREEN×zoom（char_rig_3d.RIG_SCALE 同源常数），描边屏幕宽恒 ≥1px、
 ## 特写不低于设计世界宽 2 rig px。宿主量化 0.5 步申报图集（格位 4px 量化
 ## 下重烘频次极低）。初值按默认观察档 zoom=0.75。
-const OUTLINE_WIDTH_RIG := 2.0
-const OUTLINE_SCREEN_PX := 1.0
+## 2026-10-13 创始人点正「描边太粗，之前那种一两个像素」——对齐画布校准口径
+##（stickman_skeleton：批次 2/3 验收观感 = 屏上 ~1px）：RIG 底 1.5 + 屏幕下限
+## 0.6 ⇒ zoom 1 处 eff≈1.68→量化 1.5 rig px/侧 ≈ 1.1px 全环
+const OUTLINE_WIDTH_RIG := 1.5
+const OUTLINE_SCREEN_PX := 0.6
 const RIG_SCREEN := 0.35625
 var outline_eff := maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * 0.75))
 ## 武器桶：纹理路径 → 桶（每纹理独立 MultiMesh，纹理=uniform；紧凑行制）
@@ -138,7 +142,7 @@ func _ready() -> void:
 		add_child(stroke_node)
 		_stroke_mat = ShaderMaterial.new()
 		_stroke_mat.shader = BODY_SHADER
-		_stroke_mat.set_shader_parameter("edge_cutoff", 0.004)
+		_stroke_mat.set_shader_parameter("edge_cutoff", 0.5)
 		stroke_node._setup("Char3DBodyStroke", get_quad3d(), _stroke_mat, true)
 		stroke = stroke_node
 		var body_node := RowBucket.new()
@@ -156,10 +160,8 @@ func _ready() -> void:
 		add_child(bar_atlas)
 
 
-## 相机缩放变化时刷新描边宽与采样 lod（hd2d_world.set_cam_zoom 调；宿主逐帧读
-## outline_eff，量化档变化才触发图集重烘）。lod 显式锁定的推导：1 rig px =
-## RIG_SCREEN×zoom 屏幕像素、1 texel = SUPERSAMPLE 分之一 rig px ⇒ 每
-## 屏幕像素的 texel 数 = SUPERSAMPLE/(RIG_SCREEN×zoom)，lod = log2(它)。
+## 相机缩放变化时刷新描边宽（hd2d_world.set_cam_zoom 调；宿主逐帧读
+## outline_eff，量化档变化才触发图集重烘）。
 func update_outline_eff(cam_zoom: float) -> void:
 	var next: float = maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * cam_zoom))
 	if absf(next - outline_eff) > 0.0001 \
@@ -167,12 +169,6 @@ func update_outline_eff(cam_zoom: float) -> void:
 		print("[EffTrace] f=%d zoom=%.4f eff=%.4f→%.4f" % [
 				Engine.get_process_frames(), cam_zoom, outline_eff, next])
 	outline_eff = next
-	# 采样 lod 随缩放锁定（闪烁根治，见 shader atlas_lod 注释）——两桶同刷
-	var lod: float = clampf(log(float(JOINT_ATLAS_SCRIPT.SUPERSAMPLE) / (RIG_SCREEN * cam_zoom)) / log(2.0), 0.0, 5.0)
-	if _stroke_mat != null:
-		_stroke_mat.set_shader_parameter("atlas_lod", lod)
-	if _body_mat != null:
-		_body_mat.set_shader_parameter("atlas_lod", lod)
 
 
 func _process(_delta: float) -> void:

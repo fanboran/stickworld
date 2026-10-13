@@ -9,12 +9,15 @@ shader_type spatial;
 // 出线」（画布描边 z=-1 / 填充 z=0 的 3D 等价物），跨角色/建筑照旧真深度。
 //
 // 两桶同款着色器、不同 edge_cutoff：
-//   · 描边桶 0.004——外缘保留 ~1px 软过渡（白对场景的抗锯齿）；
 //   · 填充桶 0.5——硬切边。填充边缘即描边的内边界：直通 alpha 的 mip
 //     软坡（图集对屏幕 ~5× 过采样，minification 恒吃 2~3 级 mip）叠在
 //     白描边上会显 2~3px 灰白镶边（#19 关节白线/「图集 mip 泛白」同源），
 //     切在 0.5 等覆盖率线上：内边界 crisp，存活像素的残余坡宽 ~1 屏幕
 //     像素＝恰到好处的 AA。
+//   · 描边桶 0.5（同款硬切，2026-10-13 创始人点正「描边太粗」后收口）：
+//     旧 0.004 软阈把 mip 摊开的整圈 alpha 裙边都留下（阈值 150 实测裙宽
+//     拖到 4~14px）——白环观感变粗变糊。0.5 切在等覆盖率线，环带宽度=
+//     几何意图宽（eff≈1 屏px/侧），mip 坡在带内的残余即 AA。
 // 实例色 = 真色（描边白/填充身体色，宿主已转线性域）× 光照 tint ×
 // 渐隐 alpha。cutoff 只作用于贴图 ramp（t.a）——尸体淡出压 COLOR.a 时
 // 形状不提前蒸发。
@@ -26,12 +29,6 @@ render_mode blend_mix, cull_disabled, depth_draw_always, unshaded;
 
 uniform sampler2D atlas_tex : filter_linear_mipmap, repeat_disable;
 uniform float edge_cutoff = 0.004;
-// 显式采样 lod（宿主按缩放写入）：minification 下导数选层随肢体旋转/帧间
-// 抖动 → 环带 alpha 在 mip 层间振荡 = 描边粗细/亮度逐帧闪烁（2026-10-12
-// 创始人实机点正，flickerprobe 实证：环像素亮度整帧跌 230→205、行照常写入）。
-// textureLod 锁定 lod 后环宽/亮度在给定缩放下完全确定，eff 量化档继续随
-// 缩放离散补偿。lod = log2(SUPERSAMPLE/(RIG_SCREEN×zoom))，由 buckets 统一算。
-uniform float atlas_lod = 2.5;
 
 varying vec4 slot_uv;
 
@@ -40,7 +37,7 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 t = textureLod(atlas_tex, slot_uv.xy + UV * slot_uv.zw, atlas_lod);
+	vec4 t = texture(atlas_tex, slot_uv.xy + UV * slot_uv.zw);
 	if (t.a <= edge_cutoff) {
 		discard;
 	}

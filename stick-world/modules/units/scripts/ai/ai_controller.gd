@@ -47,10 +47,6 @@ const TEAM_AI_STANCE_ROUT: int = 3
 ## 威胁判定距离（SWL Ai.IsUnderThreat：近身有活敌即被威胁；
 ## dump 无数值真值，待实测校准）
 const THREAT_RANGE: float = 140.0
-## 避战还击的"近战范围"上限（px，诊断 B2 带打带跑）：取最长近战兵种射程
-## 矛 200——敌人贴进此范围内，避战单位不再一味后撤而是就地还击；
-## 超出仍走避战脱离。待实测校准
-const COUNTER_RANGE: float = 200.0
 ## 打通态脱离距离（px）【提案/待定·待实测校准】：拦路者跑出此距离视为"已脱离"
 ##（不再构成拦路——风筝敌人越拉越远即放弃追打恢复赶路；再拦再触发）
 const BREACH_DROP_DIST: float = 320.0

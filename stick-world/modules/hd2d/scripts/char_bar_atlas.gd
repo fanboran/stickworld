@@ -26,8 +26,12 @@ const SLOT_NATIVE := Vector2(120.0, 36.0)
 const SLOT_CENTER := Vector2(60.0, 17.0)
 ## 槽位超采样倍率（镜像节点 scale = 本值：原生 px → 槽 px）
 const SUPERSAMPLE := 2
-const COLS := 12
-const ROWS := 8
+## 槽位网格：18×12 = 216 槽。96 槽（12×8）在 48 档（102 单位）就溢出——
+## 偷最旧槽的轮转每帧都在拆条重建（血条集体闪烁的实底，2026-10-13 创始人
+## 报障「血条不断闪烁甚至消失」连拍实锤 25 簇→7 簇→25 簇）；216 覆盖
+## 96 封存档（192+指挥护卫）+ 召唤余量，溢出仍回落偷槽兜底
+const COLS := 18
+const ROWS := 12
 ## 回读节拍（帧）：30Hz——条动画最快成分是受击抖动 46Hz，30Hz 采样与
 ## 烘焙路线近景档节拍（2 帧）同量级
 const READ_EVERY := 2
@@ -214,9 +218,15 @@ func _process(_delta: float) -> void:
 	for i in range(_cursor, _high_water):
 		_mm.set_instance_transform(i,
 				Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO))
-	# 隔帧回读：镜像条画进共享视口 → 一张 ImageTexture 喂全部面片
+	# 隔帧回读：镜像条画进共享视口 → 一张 ImageTexture 喂全部面片。
+	# 纹理对象**复用**（ImageTexture.update 同 RID 原地换数据）——旧实现每读
+	# 一次 create_from_image 新建纹理换绑材质，换绑间隙 + 分配churn 是血条
+	# 整图闪断的第二实底（与槽位轮转同批修，2026-10-13）
 	if _frame % READ_EVERY == 0:
 		var img := _vp.get_texture().get_image()
 		if img != null and not img.is_empty():
-			_tex = ImageTexture.create_from_image(img)
+			if _tex == null:
+				_tex = ImageTexture.create_from_image(img)
+			else:
+				_tex.update(img)
 			_mat.set_shader_parameter("atlas_tex", _tex)

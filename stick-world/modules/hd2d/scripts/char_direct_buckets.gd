@@ -99,6 +99,12 @@ class RowBucket:
 		if f != _stamp:
 			_stamp = f
 			cursor = 0
+		# 跳写塌陷打点（STICK_TRACE_WRITE=1）：>30% 行未写 = 有单位跳帧
+		#（行按调用序分配，跳写者之后的所有单位行序前移、尾部当帧消失——
+		# 「整个身体闪烁消失」候选机制的取证口）
+		if OS.get_environment("STICK_TRACE_WRITE") == "1" and cursor > 0 \
+				and cursor < high_water * 0.7:
+			print("[WriteTrace] %s f=%d cursor=%d high=%d 跳写塌陷" % [name, f, cursor, high_water])
 		for i in range(cursor, high_water):
 			mm.set_instance_transform(i, XF_HIDDEN)
 		# 水位不回缩（避免频繁 realloc；隐形行零渲染成本）

@@ -29,19 +29,16 @@ extends Node
 ##   出生列阵整体收进可视半宽（1080p@1.0 缩放 = ±960，出生最深 ±910 含
 ##   指挥官），可走边界 = 视野内收 40（map_left/right 收窄——实体层每帧
 ##   钳地图边界天然兜底，无运行时看门狗；相机对"图窄于视野"自动居中）。
-##   开战推进（裁决#28：运行期槽位追逐拔除）= 一次性推进令：每单位开局一条
-##   move 号令（目标=敌方阵线、沿途 engage_in_range 接敌即战、hold_on_arrive
-##   未接战到达则站定），此后位置只由接战行为＋分离推挤管——战线槽位令
-##   （battle_line 随线号令）、班组归槽（get_squad_dest/跟队）、战斗锚驻防
-##   （批5 combat_anchor）本场全部不启用；TeamAi 姿态号令抑制（观察场只看
-##   战斗不看宏观决策，TaskBoard 决策槽系统本身不动）。接战后个体 AI
-##   （索敌/攻击/风筝）+ FormationSystem 排长集火接管。
+##   开战推进 = 追最近敌（裁决#32 创始人口径）：不下号令，出生列阵后全军
+##   自主接战——目标选举选最近敌（裁决#31 SWL 锁定），接敌行为直奔目标
+##   远跑近走；战线槽位令（battle_line 随线号令）、班组归槽（get_squad_dest/
+##   跟队）、战斗锚驻防（批5 combat_anchor）本场全部不启用（裁决#28）；
+##   TeamAi 姿态号令抑制（观察场只看战斗不看宏观决策，TaskBoard 决策槽
+##   系统本身不动）。
 ##
 ## 开战推进（夺点模式已退役，CAPTURE_ENABLED 默认关——夺点/旗/占领圈是 AI 线
 ##   自立的开发态模拟非游戏机制，创始人裁决整体下线；战斗输赢 = 全面战争式
-##   全灭/撤离/超时，02 八-A）：裁决#28 拔运行期槽位追逐后，推进 = 每单位
-##   一次性 move 号令（engage_in_range 敌进射程即战——SWL Team.Attack 整线
-##   推进的槽位-free 等价）；此后接战行为 + 分离推挤接管位置。
+##   全灭/撤离/超时，02 八-A）。
 ##   夺点规划器（SquadIntentPlanner）与其号令粘性（保持期/未完成续期/事件节流）
 ##   作为资产保留在 tactics 模块，正式宏观意图源接入时复用。
 ##
@@ -273,10 +270,6 @@ var _arena_formation: Node = null
 var _arena_fireteams: Dictionary = {}
 ## 双方指挥官（faction -> 单位；HUD 阵亡提示用）
 var _arena_commanders: Dictionary = {}
-## 出生 lattice x 账本（iid → 出生 x）：推进令做**刚体平移**（目标 = 出生位 +
-## 统一位移向量）——全员同向同距同到，终点保持列阵间距（SWL MoveInFormation
-## 整线平移的槽位-free 等价；同点目标会让快慢列追尾压进碰撞箱）
-var _spawn_march_x: Dictionary = {}
 ## 相机跟随代理（camera_rig 居中模式目标；缓动到稳定锚——前线中点）
 var _cam_proxy: Marker2D = null
 ## 稳定锚目标（死区过滤后的双方前线中点；相机缓动终点）
@@ -352,10 +345,12 @@ func _spawn_and_start() -> void:
 		rig.set_vertical_lock(spawn_y)
 	if rig != null and rig.has_method("set_centered_mode"):
 		rig.set_centered_mode(true)
-		# 一屏战场（创始人两次定口径：地图 = 正常游玩缩放一屏大，双方视野各半
-		# ——全场即视野，不设全景档）：全程 1.0 游玩缩放
+		# 一屏战场（创始人两次定口径：地图 = 正常游玩缩放一屏大）→ 2026-10-13
+		# 修订：视角拉远 0.75（视野放宽 1/3）——满屏单位奔跑时速度观感过快，
+		# 视野放大后同速显得从容；战场边界仍按有效缩放推导（±1240，出生
+		# ±910 仍在界内），全场即视野口径不变
 		if rig.has_method("set_user_zoom"):
-			rig.set_user_zoom(1.0)
+			rig.set_user_zoom(0.75)
 		_cam_proxy = Marker2D.new()
 		_cam_proxy.name = "ArenaCamProxy"
 		add_child(_cam_proxy)
@@ -449,12 +444,10 @@ func _spawn_and_start() -> void:
 				if lt != null:
 					l_units.append(lt)
 					_attacker.append(lt)
-					_spawn_march_x[lt.get_instance_id()] = line_x0_l - depth
 				var rt := _spawn_unit(map, Vector2(line_x0_r + depth, y), int(row["weapon"]), fs, -1)
 				if rt != null:
 					r_units.append(rt)
 					_defender.append(rt)
-					_spawn_march_x[rt.get_instance_id()] = line_x0_r + depth
 				if ranged_grp:
 					ranged_idx += 1
 				else:
@@ -550,25 +543,13 @@ func _spawn_and_start() -> void:
 	if CAPTURE_ENABLED:
 		_setup_capture_mode(mid_x, spawn_y, map, fs, to, left_squad_ids, right_squad_ids)
 	else:
-		# 开战推进 = 一次性推进令（裁决#28：运行期槽位追逐拔除——战线槽位令
-		#〔battle_line 随线号令〕/班组归槽〔get_squad_dest/跟队〕/战斗锚驻防
-		#〔批5 combat_anchor〕本场全部不启用）：每单位一条 move 号令指向
-		# 敌方阵线（保各自出生 y 平行行进 = SWL 整线平移的槽位-free 等价），
-		# engage_in_range 沿途敌进射程即交还战斗行为，hold_on_arrive 未接战
-		# 到达则站定待敌。此后位置只由接战行为＋分离推挤管。
+		# 开战推进 = 追最近敌（裁决#32 创始人口径：推进的意思就是追最近敌）——
+		# 不下任何号令，出生列阵后交还自主战斗决策：目标选举选最近敌（裁决#31
+		# SWL 锁定），接敌行为直奔目标远跑近走（DetermineXRunPower）。运行期
+		# 槽位追逐三件套本场全部不启用（裁决#28：战线槽位令/班组归槽/战斗锚）。
 		if fs != null:
 			fs.set("combat_anchor_enabled", false)
-		# 刚体平移：目标 = 出生 lattice 位 + 统一位移（goal − 本方 line_x0）——
-		# 全员同向同距，终点保持列阵间距；同点目标会让快慢列追尾压进碰撞箱
-		var delta_l: float = (mid_x + TEAM_OFFSET_X) - line_x0_l
-		var delta_r: float = (mid_x - TEAM_OFFSET_X) - line_x0_r
-		var issued: int = 0
-		for u in _attacker:
-			issued += _issue_advance(u, delta_l)
-		for u in _defender:
-			issued += _issue_advance(u, delta_r)
-		print("[Arena] 开拔: 推进令 %d 单位（槽位追逐已拔除）蓝 Δ=%.0f / 红 Δ=%.0f"
-				% [issued, delta_l, delta_r])
+		print("[Arena] 开拔: 无号令——全军自主追最近敌（推进=追最近敌，裁决#32）")
 	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
 	# 观察场不看新手引导）
 	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
@@ -608,30 +589,6 @@ func _reveal() -> void:
 
 ## 创建小队并任命班长（班长 = 队列中间成员，rank 1 由 formation 侧写入）。
 ## 返回 squad_id（失败返回 ""）。
-## 守位单位判定（指挥官 rank 3 / 阵地护卫 guard_post）：留守后方不随推进
-func _holds_post(u: Node) -> bool:
-	return u.has_method("holds_post") and u.holds_post()
-
-
-## 一次性推进令（裁决#28）：刚体平移语义——目标 x = 出生 lattice x + delta_x
-##（全员同向同距），y 保出生位；engage_in_range 沿途敌进射程即交还战斗行为，
-## hold_on_arrive 到达未接战则站定待敌。守位者（指挥官/护卫）不下。
-## 返回 1=已下 / 0=跳过。
-func _issue_advance(u: Node, delta_x: float) -> int:
-	if u == null or not is_instance_valid(u) or _holds_post(u):
-		return 0
-	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
-	if ai == null or not ai.has_method("set_order"):
-		return 0
-	var iid: int = u.get_instance_id()
-	var base_x: float = _spawn_march_x.get(iid, (u as Node2D).global_position.x)
-	ai.set_order("move", {
-		"target": Vector2(base_x + delta_x, (u as Node2D).global_position.y),
-		"engage_in_range": true,
-		"run": false,
-		"hold_on_arrive": true,
-	})
-	return 1
 
 
 func _make_squad(fs: Node, units: Array, squad_name: String) -> String:

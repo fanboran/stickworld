@@ -5,7 +5,7 @@ signal test_done(code: int)
 ## 覆盖：班战斗锚（接战冻结/外生锚语义/脱战清除/危险重冻结）+ get_unit_combat_slot
 ## 槽位查询 + behavior_attack 射程内锚定驻防（走向槽位/死区站定/近身危险带不回槽/
 ## 无锚零回归/近战不锚定）。
-## 确定性：掷骰路径全隔离（hesitate_prob 档案置 0 + strafe 计时器拨远）；
+## 确定性：犹豫/微移步已随裁决#31-#32 退役，掷骰路径无随机走位；
 ## 不进场景树（_process 不触发，tick 直调 + 足量 delta）。
 
 @warning_ignore("shadowed_global_identifier")
@@ -478,11 +478,9 @@ class _BehaviorCtx extends RefCounted:
 	var slot: Vector2 = Vector2.INF
 
 	func _init(wtype: int) -> void:
-		# 掷骰隔离：hesitate_prob 置 0 + strafe 计时器拨远（RNG 种子随实例 id，
-		# 不隔离会有 3%/35% 概率在断言窗口内插入随机走位）
 		ScriptBehaviorProfiles._cache.clear()
 		var prof: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
-		prof["hesitate_prob"] = 0.0
+		prof["y_drift_interval"] = Vector2(1.0e9, 1.0e9)  # 漂移重掷永不触发（y 走位确定性）
 		fs = ScriptFormationSystem.new()
 		org = FakeOrgApi.new()
 		fs.setup(org)
@@ -504,7 +502,6 @@ class _BehaviorCtx extends RefCounted:
 		attack = ScriptBehaviorAttack.new()
 		attack.entity = entity
 		attack.enter("", {"battle": battle, "forced_target": enemy})
-		attack._strafe_timer = 10.0
 
 	func teardown() -> void:
 		attack.free()

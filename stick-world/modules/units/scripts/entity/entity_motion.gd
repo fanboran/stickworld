@@ -168,7 +168,8 @@ func _handle_deceleration(delta: float) -> void:
 
 ## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
 ## 移动方向叠加群体分离（防叠人/1字长蛇，行业 soft-body separation 简化版）
-## 与友军让路绕行（9k）。意图归零时清让路缓存（接近槽位/到位后绕行分量归零）。
+## 与友军让路绕行（9k，仅非战斗态——见 _yield_enabled）。意图归零时清让路缓存
+##（接近槽位/到位后绕行分量归零）。
 func _handle_ai_input(delta: float) -> void:
 	var dir: Vector2 = _entity._ai_move_dir
 	if dir != Vector2.ZERO:
@@ -177,6 +178,17 @@ func _handle_ai_input(delta: float) -> void:
 		_yield_cache = Vector2.ZERO
 	dir = _apply_cohesion(dir)
 	_apply_movement(delta, dir, _entity._ai_running, false)
+
+
+## 让路开关（裁决#32）：友军让路横织只属非战斗赶路（村民穿行/旅行）——
+## 战斗期接敌方向被友军挡住时靠分离椭圆对推开（SWL PushApart 语义：推挤
+## 穿过而非侧织绕行），横向织行在战场观感上就是"绕来绕去不打"。
+func _yield_enabled() -> bool:
+	if not _entity.has_method("get_battle_instance"):
+		return true
+	var bi: Node = _entity.get_battle_instance()
+	return bi == null or not is_instance_valid(bi) \
+			or not bi.has_method("is_active") or not bi.is_active()
 
 
 ## 椭圆分离归一距离（1.0=椭圆边界，<1 过近）：横向/纵深双轴口径——
@@ -228,7 +240,10 @@ func _apply_separation(dir: Vector2) -> Vector2:
 		if push_sim != Vector2.ZERO:
 			result = _sep_no_reverse(result + push_sim * SEPARATION_FORCE, dir_n)
 		# 让路扫描与 AI 决策同拍（相位错峰，免逐帧邻居查询分配）；帧间持有缓存向量
-		if _entity._ai_tick_counter % _entity._ai_rate_div == _entity._ai_phase % _entity._ai_rate_div:
+		#（战斗期让路关闸 = 缓存清零，见 _yield_enabled）
+		if not _yield_enabled():
+			_yield_cache = Vector2.ZERO
+		elif _entity._ai_tick_counter % _entity._ai_rate_div == _entity._ai_phase % _entity._ai_rate_div:
 			_yield_cache = _sim_ally_yield(dir_n)
 		if _yield_cache != Vector2.ZERO:
 			result = (result + _yield_cache).normalized()
@@ -243,6 +258,7 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	var push := Vector2.ZERO
 	var yield_side: float = 0.0
 	var yield_mag: float = 0.0
+	var yield_on: bool = _yield_enabled()
 	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS):
 		if e == _entity or not is_instance_valid(e):
 			continue
@@ -257,8 +273,8 @@ func _apply_separation(dir: Vector2) -> Vector2:
 			continue
 		# 越近推力越大（椭圆归一距离的 1-ed 线性权重）
 		push += offset.normalized() * (1.0 - ed)
-		# 9k 让路：仅友军计入"挡路"（同阵营 + 前向锥面内；权重随椭圆距离×前向点积衰减）
-		if "faction_id" in e and e.faction_id == _entity.faction_id:
+		# 9k 让路（非战斗态）：仅友军计入"挡路"（同阵营 + 前向锥面内；权重随椭圆距离×前向点积衰减）
+		if yield_on and "faction_id" in e and e.faction_id == _entity.faction_id:
 			var ahead: float = -offset.normalized().dot(dir_n)
 			if ahead > YIELD_AHEAD_DOT:
 				var w: float = (1.0 - ed) * ahead

@@ -251,10 +251,12 @@ func _is_squad_member() -> bool:
 ##      转入攻击拦路者（"打通"态：原号令挂起不清，击杀/脱离后自动续行赶路）。
 func _handle_path_block(block: Dictionary, dir: Vector2) -> void:
 	var nearest: Node = block.get("nearest")
-	# ③ 远程特例：射程内直接还击 → 边走边射，绕行分量照给（有隙绕着走）
+	# ③ 远程特例：射程内直接还击 → 边走边射。战斗推进令（engage_in_range）
+	# 不织绕行横分量——走射直穿（裁决#32：战场无绕行，敌挡路=接战）；赶路
+	# move（travel/村民）保留有隙绕行
 	if _ranged_walk_by_shot(nearest):
 		_detour_elapsed = 0.0
-		_detour_lateral = _detour_component_if_gap(block, dir)
+		_detour_lateral = Vector2.ZERO if _engage_in_range else _detour_component_if_gap(block, dir)
 		return
 	# ② 前置否决：敌已贴身（身体接触，绕行无物理空隙）或绕行超时限 → 不再绕。
 	# 战斗推进令（engage_in_range）整段跳过绕行：敌挡路＝接战——绕行是赶路

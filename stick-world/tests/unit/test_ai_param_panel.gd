@@ -1,11 +1,12 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：A9 个体 AI 参数面板（设计文档12号 §2.2 R1~R5，AI集大成）。
+## 单元测试：A9 个体 AI 参数面板（设计文档12号 §2.2，AI集大成）。
 ## 覆盖：R2 兵种人格覆盖档 BalanceConfig 装载与合并序（代码基线 ← SWL 直译
 ## 兵种覆盖 ← .tres 行覆盖，引用比对热失效）/ R1 决策间隔族（默认零回归、
-## 方差界内、下限钳制）/ R3 点射门禁与夜间判定 / R5 防扎堆治疗过滤与登记 /
-## R4 权威值评分与换班滞回。
+## 方差界内、下限钳制）/ R5 防扎堆治疗过滤与登记 / R4 权威值评分与换班滞回。
+## R3 点射/犹豫/夜间判定族已随裁决#31-#32 退役（SWL/SW3 dump 无此机制），
+## 仅保留退役键不复活断言。
 ## 不进场景树主流程（确定性：档案注入 + 时间戳拨针；BalanceConfig autoload
 ## 注入行后须还原，先例 test_team_ai_personality）。
 
@@ -13,7 +14,6 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 const ScriptAIController := preload("res://modules/units/scripts/ai/ai_controller.gd")
-const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
 const ScriptBehaviorHeal := preload("res://modules/units/scripts/ai/behavior_heal.gd")
 const ScriptTargetFinder := preload("res://modules/tactics/scripts/target_finder.gd")
 const ScriptFormationSystem := preload("res://modules/formation/scripts/formation_system.gd")
@@ -30,9 +30,7 @@ func _ready() -> void:
 	_runner.add_test("R2 缺载回退代码默认 + SWL 直译个性保留", _test_overlay_fallback_swl)
 	_runner.add_test("R1 决策间隔：默认档案 0.3 恒定（零回归）", _test_r1_default)
 	_runner.add_test("R1 决策间隔：方差界内 + 下限钳制", _test_r1_variance)
-	_runner.add_test("R3 点射门禁：关=恒真（零回归）", _test_r3_gate_off)
-	_runner.add_test("R3 点射门禁：计数到点插停顿、窗口过恢复", _test_r3_gate_cycle)
-	_runner.add_test("R3 夜间判定：无环境=白天（保守），假环境黑/白分界", _test_r3_is_night)
+	_runner.add_test("R2 退役键不复活：犹豫/点射/包抄/预判门族零残留", _test_retired_keys_gone)
 	_runner.add_test("R5 防扎堆：过滤被登记伤员、过期恢复", _test_r5_skip_being_healed)
 	_runner.add_test("R5 施放登记：HOT 时长 + 缓冲写入目标", _test_r5_mark)
 	_runner.add_test("R4 权威值：无班 -INF、评分组合", _test_r4_authority)
@@ -49,12 +47,10 @@ func _test_tres_loaded() -> void:
 			"baseline.decision_interval = 0.3（R1 镜像旧常量）")
 	_runner.assert_approx(BalanceConfig.get_value("ai.behavior_profiles.baseline.decision_variance"), 0.1, 0.001,
 			"baseline.decision_variance = 0.1（R1 方差开闸，RWR 比率 0.5 保守取值）")
-	_runner.assert_equal(int(BalanceConfig.get_value("ai.behavior_profiles.baseline.burst_shots")), 0,
-			"baseline.burst_shots = 0（R3 关）")
-	var wait: Variant = BalanceConfig.get_value("ai.behavior_profiles.baseline.burst_wait")
-	_runner.assert_true(wait is Vector2 and wait.is_equal_approx(Vector2(1.2, 1.8)), "baseline.burst_wait = 1.2~1.8")
 	_runner.assert_approx(BalanceConfig.get_value("ai.behavior_profiles.baseline.heal_buzz_distance"), 60.0, 0.001,
 			"baseline.heal_buzz_distance = 60px（R5）")
+	_runner.assert_true(BalanceConfig.get_value("ai.behavior_profiles.baseline.burst_shots") == null,
+			"baseline.burst_shots 键已随裁决#32 从 .tres 退役（get 缺键 = null）")
 
 
 func _inject_rows(rows: Array) -> void:
@@ -74,10 +70,10 @@ func _restore_rows() -> void:
 
 
 func _test_overlay_baseline() -> void:
-	_inject_rows([{"id": "baseline", "decision_interval": 0.45, "burst_shots": 3}])
+	_inject_rows([{"id": "baseline", "decision_interval": 0.45, "kite_range": 99.0}])
 	var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 	_runner.assert_approx(float(p.get("decision_interval", -1.0)), 0.45, 0.001, "baseline 行覆盖 decision_interval")
-	_runner.assert_equal(int(p.get("burst_shots", -1)), 3, "baseline 行覆盖 burst_shots")
+	_runner.assert_approx(float(p.get("kite_range", -1.0)), 99.0, 0.001, "baseline 行覆盖 kite_range")
 	_restore_rows()
 
 
@@ -112,14 +108,32 @@ func _test_overlay_fallback_swl() -> void:
 	_restore_rows()  # 无配置路径 → 代码默认
 	var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 	_runner.assert_approx(float(p.get("decision_interval", -1.0)), 0.3, 0.001, "缺载回落代码基线 0.3")
-	# SWL 直译个性不被覆盖链打掉（P6 批次 7c 语义：剑士冲脸/弓手风筝/矛兵持阵）
-	_runner.assert_approx(float(p.get("aggressive_push_prob", -1.0)), 0.0, 0.001, "擅自冲锋概率归零（裁决#31 SWL 无随机冲锋）")
+	# SWL 直译个性不被覆盖链打掉（剑士冲脸快/弓手风筝/矛兵持阵）
 	var bow: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
 	# 近身兜底风筝（SWL ShouldKite 真意）：kite_range = 近身危险线（贴脸才退），
 	# 远小于射程——弓手常态站射程线成排射击
 	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 180.0, 0.001, "弓手近身兜底线 180")
 	var spear: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SPEAR)
 	_runner.assert_true(bool(spear.get("formation_block", false)), "矛兵行军举盾直译保留")
+
+
+## 退役键不复活（裁决#31-#32）：犹豫/点射/包抄/滞回/驻留/夜间犹豫/冲锋族
+## 在代码基线、兵种覆盖与 .tres 行三层都不应再出现——防后续档案抄旧文复活
+func _test_retired_keys_gone() -> void:
+	_restore_rows()
+	const RETIRED: Array = ["hesitate_prob", "hesitate_time", "night_hesitate_mult",
+			"burst_shots", "burst_wait", "flank_enabled", "flank_y_offset",
+			"flank_side_strength", "aggressive_push_prob", "y_aim_tolerance",
+			"y_aim_grace", "target_switch_ratio", "target_dwell_min"]
+	for wt in [ScriptBehaviorProfiles.SWORD, ScriptBehaviorProfiles.SPEAR,
+			ScriptBehaviorProfiles.BOW, ScriptBehaviorProfiles.STAFF,
+			ScriptBehaviorProfiles.MERIC]:
+		var prof: Dictionary = ScriptBehaviorProfiles.get_profile(wt)
+		for key in RETIRED:
+			if prof.has(key):
+				_runner.assert_true(false, "兵种 %d 档案残留退役键 %s" % [wt, key])
+				return
+	_runner.assert_true(true, "全兵种档案退役键零残留")
 
 
 # ─────────────────────────────── R1 决策间隔族 ────────────────────────────────
@@ -158,74 +172,6 @@ func _test_r1_variance() -> void:
 	_runner.assert_true(true, "下限钳制 ≥ 0.05")
 	ai.free()
 	_restore_rows()
-
-
-# ─────────────────────────────── R3 点射节奏 ────────────────────────────────
-
-func _test_r3_gate_off() -> void:
-	var atk: BehaviorAttack = ScriptBehaviorAttack.new()
-	atk._profile = {"burst_shots": 0}
-	for i in 5:
-		atk._register_burst_shot()
-	_runner.assert_true(atk._burst_gate(), "burst_shots=0 门禁恒真（零回归）")
-	atk.free()
-
-
-func _test_r3_gate_cycle() -> void:
-	var atk: BehaviorAttack = ScriptBehaviorAttack.new()
-	atk._profile = {"burst_shots": 3, "burst_wait": Vector2(0.05, 0.1)}
-	# 连射 3 发内门禁恒真
-	for i in 3:
-		_runner.assert_true(atk._burst_gate(), "第 %d 发可出手" % (i + 1))
-		atk._register_burst_shot()
-	# 达 3 发 → 插停顿，门禁关
-	_runner.assert_true(not atk._burst_gate(), "达点数后停顿窗内禁射")
-	# 停顿窗过（拨针：burst 时基 = 行为累积钟 _clock，非墙钟——把钟拨过截止时刻）
-	# → 恢复，计数清零可再连 3 发
-	atk._clock = 5.0
-	atk._burst_wait_until = 4.0
-	_runner.assert_true(atk._burst_gate(), "停顿窗过恢复出手")
-	for i in 2:
-		atk._register_burst_shot()
-	_runner.assert_true(atk._burst_gate(), "计数已清零，未达点数仍可出手")
-	atk.free()
-
-
-func _test_r3_is_night() -> void:
-	var atk: BehaviorAttack = ScriptBehaviorAttack.new()
-	add_child(atk)
-	# entity 形类型桩（CharacterBody2D）：_is_night 只经它取树；无
-	# GameRoot/EnvironmentSystem 恒判白天。W1 修复：原 `atk.entity = self`
-	# （Node→CharacterBody2D 字段）在类缓存重建后暴露为解析错误。
-	var body := CharacterBody2D.new()
-	add_child(body)
-	atk.entity = body
-	# 查询不可用（无 GameRoot/EnvironmentSystem）→ 白天（保守零回归）
-	_runner.assert_true(not atk._is_night(), "无环境节点 = 白天")
-	# 假环境：黑色（夜）→ true；白色（昼）→ false
-	var game_root := Node.new()
-	game_root.name = "GameRoot"
-	var env := _FakeEnv.new()
-	env.name = "EnvironmentSystem"
-	game_root.add_child(env)
-	get_tree().root.add_child(game_root)
-	env.light = Color(0.01, 0.01, 0.02)  # 亮度 ≈ 0.01 < 0.55
-	_runner.assert_true(atk._is_night(), "暗环境 = 夜")
-	env.light = Color(1.0, 1.0, 1.0)
-	_runner.assert_true(not atk._is_night(), "亮环境 = 昼")
-	get_tree().root.remove_child(game_root)
-	game_root.free()
-	remove_child(atk)
-	atk.free()
-	remove_child(body)
-	body.free()
-
-
-class _FakeEnv extends Node:
-	var light: Color = Color.WHITE
-
-	func get_current_light_color() -> Color:
-		return light
 
 
 # ─────────────────────────────── R5 防扎堆治疗 ────────────────────────────────

@@ -190,7 +190,7 @@ func _test_breach_and_resume() -> void:
 	# P1 拆分：forced_target 状态迁 target_acquire（行为持 _acq）
 	_runner.assert_equal(ai.get_state_machine().get("_current_behavior").get("_acq").get("_forced_target"),
 			blocker, "攻击行为应锁定拦路者（forced_target）")
-	# 攻击拍：向拦路者出手（hesitate 掷骰有随机窗，循环推进到出手消抖）
+	# 攻击拍：向拦路者出手（犹豫已删无随机窗，循环吃掉首决策拍间隔）
 	var attacked: bool = false
 	for i in 40:
 		ai.get_state_machine().physics_update(0.1)

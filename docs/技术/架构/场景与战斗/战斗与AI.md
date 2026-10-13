@@ -139,7 +139,7 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 ├── behavior_work.gd                 ✅ 建造（build 动画驱动，受材料进度限制）
 ├── behavior_haul.gd                 ✅ 搬运（仓库↔工地往返）
 ├── behavior_suppress.gd             📋 火力压制（设计未实现）
-├── behavior_flank.gd                📋 侧翼包抄（设计未实现）
+├── behavior_flank.gd               ❌ 侧翼包抄（已取消立项——裁决#32：SWL/SW3 dump 无包抄机制，接敌走位仅 y 纵深对齐）
 ├── behavior_flee.gd                 📋 独立溃逃（已随裁决【删溃逃、立避战】取消立项——溃逃永久退役，避战由 retreat fallback 档承担）
 └── behavior_state_machine.gd        ✅ 状态机调度
 ```
@@ -282,22 +282,16 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 
 `StickmanState` 已有 `autonomy_level` 字段，AIController 读取它决定能否自主行动。
 
-> **实现状态**：决策优先级当前**确定性硬编码**（压制避战 > 命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；单位级强制溃逃链已随裁决【删溃逃、立避战】删除（避战行为态经 `AIController.is_disengaging()` 查询）；§7.4 概率钩子**已在役**（档案参数化，生效层开关表见 12-游戏AI系统.md §7.3）。
+> **实现状态**：决策优先级当前**确定性硬编码**（压制避战 > 命令覆盖 > 战斗 > 跟随 > work > idle），见 `ai_controller.gd _make_decision`，计划抽成 `.tres` 数据驱动；单位级强制溃逃链已随裁决【删溃逃、立避战】删除（避战行为态经 `AIController.is_disengaging()` 查询）；§7.4 概率钩子**已退役**（裁决#31-#32：SWL/SW3 无此机制，键位全清——见本节）。
 
-### 7.4 小兵步枪式灵动性 — 行为层概率钩子
+### 7.4 行为层概率钩子（已退役）
 
-每个战斗行为内置可配置概率：
-```gdscript
-# behavior_attack.gd 示意
-@export var prob_aggressive_push: float = 0.05  # 擅自冲锋概率
-@export var prob_hesitate: float = 0.03          # 犹豫概率
-
-func update(delta):
-    if _is_at_disadvantage() and randf() < prob_hesitate:
-        _enter_hesitate_substate()
-    elif _enemy_exposed() and randf() < prob_aggressive_push:
-        _push_forward()
-```
+概率钩子族（擅自冲锋/犹豫/规避小跳/包抄掷骰）已随裁决#31-#32 整体删除——
+SWL/SW3 dump 均无此类机制（legacy `Ai` 基类方法表逐项核对：真货 = 跑走切换
+DetermineXRunPower/风筝 ShouldKite/y 对齐 6 函数/持瞄 isAiming/脱靶容忍
+MissingArrowsTolerance；伪 = 犹豫/规避/包抄，RWR 血统自创）。随机站停/侧移
+是「接敌不打/绕行」观感的直接来源。现存随机性仅剩 SWL 真货族：拉弓高斯持瞄
+（`ArcherAi.GenerateNextShotRandomness`）、y 个性漂移带（`personalityControlledY`）。
 
 **卡死看门狗**：`ai_controller._watchdog_tick` O(1)（只记上次采样位置 + 计时，零扫描零分配）——有移动意图（>10px/s）但窗口 2s 内净位移 <12px 判卡死，处置 = 重进 attack（enter 清目标/持瞄，下一拍重选）+ 0.25s 随机方向分离推力；无移动意图自动清零豁免（站桩输出/压制/硬直/待命不误伤）。档案键 `stuck_watchdog_*` 五键（12-游戏AI系统.md §7.3）。
 
@@ -392,7 +386,6 @@ modules/combat/
 | `ORDER_RETREAT` | 有序后撤 | L1-L2 |
 | `ORDER_TAKE_COVER` | 就近找掩体 | L1 |
 | `ORDER_SUPPRESSING_FIRE` | 对指定区域压制射击 | L1 |
-| `ORDER_FLANK_LEFT/RIGHT` | 侧翼包抄 | L1-L2 |
 | `ORDER_RALLY` | 集结溃兵 | L2 |
 
 ### 8.5 指挥链延迟

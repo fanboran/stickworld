@@ -39,19 +39,15 @@ const SKILL_AIM_HOLD_MULT: Dictionary = {
 
 # ─────────────────────────────── 基线（人性基线，RWR default.ai 思路）────────────────────────────────
 ## 所有兵种共享的默认行为参数。字段说明：
-##   acquire_interval     目标扫视轮询间隔（s）——感知节奏，RWR 1s 扫视、本作决策 0.3s
-##   hesitate_prob        犹豫概率（每次检查）——反应迟疑，RWR 反应延迟 0.3~1.1s 随机
-##   hesitate_time        犹豫时长范围 Vector2(min, max)（s）
-##   aggressive_push_prob 擅自冲锋概率（每次接近时）
+##   acquire_interval     目标扫视轮询间隔（s）——感知节奏
 ##   leash_mult           追击放弃倍数（目标超出射程 × 此值即"追丢了"）
 ##   kite_range           保距开关（>0 = 启用卡极限射程风筝；实际保距线 =
 ##                        attack_range − KITE_MARGIN，见 behavior_attack）
 ##   kite_run             后撤时是否奔跑
+## 犹豫/连射点射/包抄/擅自冲锋/换靶滞回/驻留门槛键已随裁决#31-#32 退役
+##（SWL/SW3 dump 均无此机制；残留消费者为零）
 const BASELINE: Dictionary = {
 	"acquire_interval": 0.5,
-	"hesitate_prob": 0.03,
-	"hesitate_time": Vector2(0.3, 0.8),
-	"aggressive_push_prob": 0.0,
 	"leash_mult": 4.0,
 	"kite_range": 0.0,
 	"kite_run": false,
@@ -65,7 +61,6 @@ const BASELINE: Dictionary = {
 	"y_align_x_range": 300.0,               ## 调 y 门槛：|Δx| 小于此才对齐目标 y（SWL IsCloseEnoughToAdjustYTowardsTarget；无 dump 真值，待实测校准）
 	"y_align_early": false,                 ## 提前对齐（SWL adjustYEarly 参数：远程兵种接敌全程调 y，近战只在近处）
 	"y_align_strength": 0.22,               ## y 对齐走位分量强度（0~1 叠加到移动方向）
-	"y_aim_tolerance": 0.0,                 ## 9p：射程内 |Δy| 超此值先 y 走位不出手（px；0=关。SWL ShouldAim/CanAttack 的 y 门槛近似，待实测校准）
 	"missing_arrows_tolerance": 0.0,        ## 11d 弓手脱靶容忍（dump ArcherAi.MissingArrowsTolerance）：目标在飞箭伤害估计超出"击杀所需+此值"即不出手（HP 点；0=关）
 	"move_mult": 1.0,                       ## 移速倍率（SWL 兵种机动性：Swordwrath 轻快、Spearton 沉稳）
 	"block_after_attack": 0.0,              ## 攻击后举盾时长（s，SWL Ai.cooldownAfterAttackForBlock；0=关）
@@ -89,9 +84,6 @@ const BASELINE: Dictionary = {
 	"retreat_keep_block": false,            ## 保持招架（behavior_retreat：持盾兵种避战全程举盾）
 	"rout_strafe_enabled": false,           ## 避战横向游走（behavior_retreat：脱离叠加垂直横向分量，不走直线）
 	"rout_strafe_strength": 0.35,           ## 横向分量强度（0~1 叠加到脱离方向）
-	"flank_enabled": false,                 ## 包抄走位（behavior_attack：侧翼单位接近叠加侧向分量）
-	"flank_y_offset": 120.0,                ## 侧翼判定：相对本方质心 y 偏移绝对值阈值（px）
-	"flank_side_strength": 0.40,            ## 包抄侧向分量强度（0~1）
 	# ── P7 批次 7b 治疗档案族（祭司 Meric；全部默认"关闭/零"，非祭司无消费路径 = 零回归）──
 	# dump MericAi 全部 3 行为函数与 Meric 实体层治疗方法（CastHeal/CanCastHeal/IsCastingHeal）
 	# 均无方法体：healAmount/healCooldown 字段名真值存在，数值全部语义推断（待实测校准）。
@@ -104,13 +96,11 @@ const BASELINE: Dictionary = {
 	"rear_line": false,                     ## 后排站位（FormationSystem 尾列取向；duck 查询不跨模块 preload）
 	# ── A9 · R1/R3/R5 个体 AI 参数面板（RWR interval/burst 族直译，AI集大成；
 	#    全部语义推断初值待实测校准；消费点见 ai_controller/behavior_attack/behavior_heal）──
-	"decision_interval": 0.3,               ## R1 主决策间隔（s，RWR choose_enemy_time 族；镜像旧 DECISION_INTERVAL 常量 = 零回归）
-	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，RWR wait_time 1.2±0.6 方差比 0.5 同构——逐拍重掷去同步；0 = 旧固定节拍。
+	"decision_interval": 0.3,               ## R1 主决策间隔（s；镜像旧 DECISION_INTERVAL 常量 = 零回归）
+	"decision_variance": 0.0,               ## R1 间隔 ± 方差半宽（s，逐拍重掷去同步；0 = 旧固定节拍。
 	                                        ##   开闸走 .tres 生效层（RWR 方差比 0.5×节拍 0.3 → 保守可取 0.1，待实测校准）：
 	                                        ##   代码基线被 test_ai_spawn_jitter「缺载兜底 0.3」与 test_ai_param_panel
 	                                        ##   「baseline.decision_variance = 0（零回归）」双锁锁定，基线翻非零必挂测试）
-	"target_switch_ratio": 0.6,             ## 换靶滞回（SW3 RestoreBestTarget hysteresis 直译，P1）：同层新目标距离 < 当前 × 此值才换靶（集火号令与自主寻敌同门）；<=0 = 关滞回回旧"始终换"语义（待实测校准）
-	"target_dwell_min": 2.0,                ## 目标驻留时长门槛（s，SW3 NotBeenOnTargetForEnoughTime 直译，P1）：当前目标未驻留满此时长不做选举性换靶——号令粘性/决策承诺感（02 一-A.5"最短保持期"）；<0.05 = 关（换靶只受滞回约束，待实测校准）
 	# ── 9h 卡死看门狗（消费点 ai_controller._watchdog_tick，O(1) 无扫描；
 	#    默认开——对齐"有移动意图却钉死不动"的观察场主诉，关 = 既有无看门狗语义）──
 	"stuck_watchdog_enabled": true,         ## 卡死看门狗总开关
@@ -118,11 +108,6 @@ const BASELINE: Dictionary = {
 	"stuck_watchdog_intent_speed": 10.0,    ## 移动意图阈值（px/s：实体速度低于此视为合法静止，不计窗）
 	"stuck_watchdog_min_drift": 12.0,       ## 窗口内最小净位移（px，低于此判卡死；与分离抖动同量级，待实测校准）
 	"stuck_watchdog_log": true,             ## 触发调试日志开关（每触发一条，低频）
-	# ── 9u 开火放行（消费点 behavior_attack；持瞄对拍/y 门槛永久禁射修正）──
-	"y_aim_grace": 1.5,                     ## |Δy| 连续超容忍超过此时长必放行开火（s；抛物线弹道解算吸收 y 差，放行防"弓手站桩不放箭"，待实测校准）
-	"burst_shots": 0,                       ## R3 连射点数（发：连发此数后插 wait 停顿再射，RWR burst_time 族；0=关零回归；远程与近战均按档案开关）
-	"burst_wait": Vector2(1.2, 1.8),        ## R3 点射间停顿时长区间（s，RWR wait 1.2±0.6 直译）
-	"night_hesitate_mult": 1.0,             ## R3 夜间犹豫时长倍率（RWR 昼 0.3~0.6/夜 0.8~1.1 ≈ ×1.8~2.7；1.0 = 零回归；夜间判定见 behavior_attack._is_night）
 	"heal_buzz_distance": 60.0,             ## R5 防扎堆治疗（px：候选伤员被登记"治疗中"未过期时跳过，RWR consider_someone_already_healing_wounded_distance 10m 同构；0=关）
 	# ── A3 · C6 概率调制避战（AI集大成；CoH personality retreat_* 真值见逆向笔记 §3.4；
 	#    数值为语义映射初值待实测校准；总开关默认关 = 零回归。
@@ -157,29 +142,23 @@ const BASELINE: Dictionary = {
 
 # ─────────────────────────────── 兵种差异（RWR 职业文件：只写不同项）────────────────────────────────
 ## 对照 legacy 逐兵种 Ai 个性（审计 §四）：
-##   剑士 = SwordwrathAi 冲脸：高冲锋、几乎不犹豫、追得远、**轻量移速快**（1.3×）
-##   矛兵 = SpeartonAi 持阵：绝不擅自脱线、守位（LEASH 收紧防脱阵）、**移速慢盾长**（0.85×）
+##   剑士 = Swordwrath 冲脸：追得远、**轻量移速快**（1.3×）
+##   矛兵 = Spearton 持阵：绝不擅自脱线、守位（LEASH 收紧防脱阵）、**移速慢盾长**（0.85×）
 ##   弓手 = ArcherAi 保持距离：被近身就后撤（风筝），站桩输出节奏稳
-##   镐  = MinerAi 避敌：胆小犹豫（战斗中罕见，多为工人）
-##   杖  = MagikillAi 脆皮法师：保持距离 + 施法前摇长（犹豫=吟唱节奏）
+##   镐  = MinerAi 避敌（战斗中罕见，多为工人）
+##   杖  = MagikillAi 脆皮法师：保持距离 + 召唤护卫
+##（犹豫/冲锋/包抄个性键已随裁决#31-#32 退役——dump 无此机制）
 const CLASS_PROFILES: Dictionary = {
 	SWORD: {
-		"aggressive_push_prob": 0.0,
-		"hesitate_prob": 0.01,
 		"leash_mult": 6.0,
 		"acquire_interval": 0.4,
 		"y_drift_band": 40.0,
 		"move_mult": 1.3,
-		# Demo P5 灵动化：剑兵侧翼包抄（兵种级覆盖；基线默认关是零回归闸门）
-		"flank_enabled": true,
 		# S1b：剑士攻击池（Swordwrath-Attack1/2 双式随机，SWL 剑士两段挥剑）
 		"attack_pool": ["attack", "attack_2"],
 	},
 	SPEAR: {
-		"aggressive_push_prob": 0.0,
-		"hesitate_prob": 0.0,
 		"leash_mult": 3.0,
-		"flank_enabled": true,
 		"arrow_threat_block": true,
 		"y_drift_band": 15.0,
 		"move_mult": 0.85,
@@ -198,8 +177,6 @@ const CLASS_PROFILES: Dictionary = {
 	BOW: {
 		# 近身兜底线（ShouldKite 真意）：敌贴到 180 内才背撤，撤出即站定成排射
 		"kite_range": 180.0,
-		"aggressive_push_prob": 0.0,
-		"hesitate_prob": 0.02,
 		"leash_mult": 5.0,
 		"acquire_interval": 0.4,
 		"aim_hold": Vector2(0.25, 0.9),
@@ -210,21 +187,15 @@ const CLASS_PROFILES: Dictionary = {
 		# 44 < 50 → 只在真挤到 44 内才推。待实测校准
 		"push_apart": 44.0,
 		# y 对齐（SWL ArcherAi.IsCloseEnoughToAdjustYTowardsTarget override：收紧调 y 门槛
-		# + adjustYEarly 提前对齐；9p 首个消费者：|Δy| 超容忍先走位不出手。阈值待实测校准）
+		# + adjustYEarly 提前对齐——接敌途中的纵深铺开，射程内不再拦射）
 		"y_align_early": true,
 		"y_align_x_range": 240.0,
-		"y_aim_tolerance": 48.0,
 		# 11d 弓手脱靶容忍（MissingArrowsTolerance 直译：对将死目标浪费箭的阈值）。
 		# 半箭伤害（基础 10 的 1 倍）起步，无 dump 真值 → 待实测校准
 		"missing_arrows_tolerance": 10.0,
 	},
-	PICKAXE: {
-		"hesitate_prob": 0.08,
-	},
 	STAFF: {
 		"kite_range": 200.0,            ## 近身兜底线（同弓手语义：贴脸才退，正常站定施法）
-		"hesitate_prob": 0.06,
-		"hesitate_time": Vector2(0.5, 1.1),
 		"leash_mult": 5.0,
 		"y_drift_band": 15.0,
 		"move_mult": 0.9,
@@ -247,7 +218,6 @@ const CLASS_PROFILES: Dictionary = {
 		"kite_run": true,             ## 撤离奔跑
 		"rear_line": true,            ## 后排站位（FormationSystem 尾列取向）
 		"move_mult": 0.7,             ## 脆皮辅助移速（< 法师 0.9，待实测校准）
-		"hesitate_prob": 0.05,        ## 犹豫概率（辅助个性）
 		"y_drift_band": 15.0,         ## y 纵深漂移半径（同法师）
 	},
 }

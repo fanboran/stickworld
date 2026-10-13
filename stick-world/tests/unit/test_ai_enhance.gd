@@ -266,8 +266,8 @@ func _test_hit_stun() -> void:
 	_runner.assert_true(attacker.stop_calls > 0, "硬直中应调 ai_stop 停止")
 	_runner.assert_true(beh._target == null, "硬直中不应推进目标获取")
 	attacker.stun = false
-	# 硬直瞬间 30% 概率触发规避小跳（_evade_hold 0.35s，期间不获取目标）——
-	# 推进到规避窗口耗尽再断言，消除随机路径的偶发红
+	# 受击规避小跳已删（裁决#32：RWR 血统，SWL 无此机制）——硬直结束即恢复
+	# 决策，循环只为吃掉剩余硬直拍（零随机路径）
 	for i in 40:
 		beh.update(0.01)
 		if beh._target != null:

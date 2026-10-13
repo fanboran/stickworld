@@ -37,6 +37,11 @@ const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
 const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
 ## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
 const MAX_SEPARATION_CORRECTION: float = 3.0
+## 驻株权重（同 entity_motion._apply_static_separation）：站定单位（无意图无击退
+## ——站桩攻击/待命/守位）只吃小份位置修正，被移动方顶上时基本原地不动，
+## 重叠由移动方自己的修正解开——旧版对称推＝站定者以移动方推进速度被搬运
+##（2026-10-12 创始人点正「跑动方把站立方顶飞」）
+const SEPARATION_PLANTED_FACTOR: float = 0.25
 ## 击退衰减（与 stickman_entity.KNOCKBACK_DECAY 成对同值，2026-10-05 统一为
 ## sim 链标定值 700；批1 双链契约测试落地后退役成对常量）
 const KNOCKBACK_DECAY: float = 700.0
@@ -444,15 +449,22 @@ func _tick_separation() -> void:
 				total_y *= inv
 			_sep_px_x[sid] = total_x
 			_sep_px_y[sid] = total_y
-	# 应用修正（边界 clamp 在 _tick_motion 统一做）
+	# 应用修正（边界 clamp 在 _tick_motion 统一做）；驻株单位按权重缩水
+	#（无意图无击退 = 站定，见 SEPARATION_PLANTED_FACTOR 注释）
 	for sid in n:
 		if not _sid_alive(sid):
 			continue
 		var mx: float = _sep_px_x[sid]
 		if mx == 0.0:
 			continue
-		pos_x[sid] += mx
-		pos_y[sid] += _sep_px_y[sid]
+		var ivx: float = intent_x[sid] + kb_x[sid]
+		var ivy: float = intent_y[sid] + kb_y[sid]
+		if ivx * ivx + ivy * ivy < 400.0:
+			pos_x[sid] += mx * SEPARATION_PLANTED_FACTOR
+			pos_y[sid] += _sep_px_y[sid] * SEPARATION_PLANTED_FACTOR
+		else:
+			pos_x[sid] += mx
+			pos_y[sid] += _sep_px_y[sid]
 
 
 var _sep_px_x := PackedFloat32Array()

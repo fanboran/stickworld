@@ -256,11 +256,14 @@ func _handle_path_block(block: Dictionary, dir: Vector2) -> void:
 		_detour_elapsed = 0.0
 		_detour_lateral = _detour_component_if_gap(block, dir)
 		return
-	# ② 前置否决：敌已贴身（身体接触，绕行无物理空隙）或绕行超时限 → 不再绕
+	# ② 前置否决：敌已贴身（身体接触，绕行无物理空隙）或绕行超时限 → 不再绕。
+	# 战斗推进令（engage_in_range）整段跳过绕行：敌挡路＝接战——绕行是赶路
+	#（travel/村民）语义，两军对进时互相绕＝永不贴身永不接敌，表现就是
+	#「一群人互相不攻击跑步顶」（创始人 2026-10-12 实机点正）
 	var contact: bool = float(block.get("nearest_dist", INF)) <= BLOCKER_CONTACT_DIST
 	var expired: bool = _detour_elapsed >= DETOUR_GIVE_UP_TIME
 	var gap_side: float = 0.0
-	if not contact and not expired:
+	if not _engage_in_range and not contact and not expired:
 		gap_side = _probe_detour_gap(dir, float(block.get("side", 0.0)))
 	if gap_side != 0.0:
 		# ① 局部绕行（空隙侧横分量偏航；累计时长供"绕行超阈值"兜底转攻击）

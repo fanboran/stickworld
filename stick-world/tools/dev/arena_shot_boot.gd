@@ -19,6 +19,7 @@ const P4PROBE_DRIVER := preload("res://tools/dev/arena_p4probe.gd")
 const SLOTPROBE_DRIVER := preload("res://tools/dev/arena_slotprobe.gd")
 const FACINGPROBE_DRIVER := preload("res://tools/dev/arena_facingprobe.gd")
 const OVERLAPPROBE_DRIVER := preload("res://tools/dev/arena_overlapprobe.gd")
+const FLICKERPROBE_DRIVER := preload("res://tools/dev/arena_flickerprobe.gd")
 
 var _preset := 1
 var _secs := 20
@@ -34,6 +35,7 @@ var _p4probe := false
 var _slotprobe := false
 var _facingprobe := false
 var _overlapprobe := false
+var _flickerprobe := false
 var _lineup := false
 
 
@@ -74,6 +76,8 @@ func _ready() -> void:
 				_facingprobe = true; i += 1
 			"--overlapprobe":
 				_overlapprobe = true; i += 1
+			"--flickerprobe":
+				_flickerprobe = true; i += 1
 			"--lineup":
 				_lineup = true; i += 1
 			_:
@@ -89,7 +93,9 @@ func _start() -> void:
 	var driver := Node.new()
 	var script: GDScript = DRIVER_SCRIPT
 	var driver_name := "ArenaShotDriver"
-	if _overlapprobe:
+	if _flickerprobe:
+		script = FLICKERPROBE_DRIVER; driver_name = "ArenaFlickerProbeDriver"
+	elif _overlapprobe:
 		script = OVERLAPPROBE_DRIVER; driver_name = "ArenaOverlapProbeDriver"
 	elif _facingprobe:
 		script = FACINGPROBE_DRIVER; driver_name = "ArenaFacingProbeDriver"

@@ -156,10 +156,23 @@ func _ready() -> void:
 		add_child(bar_atlas)
 
 
-## 相机缩放变化时刷新描边宽（hd2d_world.set_cam_zoom 调；宿主逐帧读
-## outline_eff，量化档变化才触发图集重烘）
+## 相机缩放变化时刷新描边宽与采样 lod（hd2d_world.set_cam_zoom 调；宿主逐帧读
+## outline_eff，量化档变化才触发图集重烘）。lod 显式锁定的推导：1 rig px =
+## RIG_SCREEN×zoom 屏幕像素、1 texel = SUPERSAMPLE 分之一 rig px ⇒ 每
+## 屏幕像素的 texel 数 = SUPERSAMPLE/(RIG_SCREEN×zoom)，lod = log2(它)。
 func update_outline_eff(cam_zoom: float) -> void:
-	outline_eff = maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * cam_zoom))
+	var next: float = maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * cam_zoom))
+	if absf(next - outline_eff) > 0.0001 \
+			and OS.get_environment("STICK_TRACE_ATLAS") == "1":
+		print("[EffTrace] f=%d zoom=%.4f eff=%.4f→%.4f" % [
+				Engine.get_process_frames(), cam_zoom, outline_eff, next])
+	outline_eff = next
+	# 采样 lod 随缩放锁定（闪烁根治，见 shader atlas_lod 注释）——两桶同刷
+	var lod: float = clampf(log(float(JOINT_ATLAS_SCRIPT.SUPERSAMPLE) / (RIG_SCREEN * cam_zoom)) / log(2.0), 0.0, 5.0)
+	if _stroke_mat != null:
+		_stroke_mat.set_shader_parameter("atlas_lod", lod)
+	if _body_mat != null:
+		_body_mat.set_shader_parameter("atlas_lod", lod)
 
 
 func _process(_delta: float) -> void:

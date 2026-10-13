@@ -26,6 +26,12 @@ render_mode blend_mix, cull_disabled, depth_draw_always, unshaded;
 
 uniform sampler2D atlas_tex : filter_linear_mipmap, repeat_disable;
 uniform float edge_cutoff = 0.004;
+// 显式采样 lod（宿主按缩放写入）：minification 下导数选层随肢体旋转/帧间
+// 抖动 → 环带 alpha 在 mip 层间振荡 = 描边粗细/亮度逐帧闪烁（2026-10-12
+// 创始人实机点正，flickerprobe 实证：环像素亮度整帧跌 230→205、行照常写入）。
+// textureLod 锁定 lod 后环宽/亮度在给定缩放下完全确定，eff 量化档继续随
+// 缩放离散补偿。lod = log2(SUPERSAMPLE/(RIG_SCREEN×zoom))，由 buckets 统一算。
+uniform float atlas_lod = 2.5;
 
 varying vec4 slot_uv;
 
@@ -34,7 +40,7 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 t = texture(atlas_tex, slot_uv.xy + UV * slot_uv.zw);
+	vec4 t = textureLod(atlas_tex, slot_uv.xy + UV * slot_uv.zw, atlas_lod);
 	if (t.a <= edge_cutoff) {
 		discard;
 	}

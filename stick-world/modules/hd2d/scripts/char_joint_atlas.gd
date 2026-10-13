@@ -57,6 +57,9 @@ func ensure(specs: Array) -> void:
 	var fp := fingerprint(specs)
 	if fp == _fp and not _baking:
 		return
+	if OS.get_environment("STICK_TRACE_ATLAS") == "1":
+		print("[AtlasTrace] f=%d 重烘 specs=%d 旧指纹=%s 新指纹=%.40s…" % [
+				Engine.get_process_frames(), specs.size(), _fp.left(40), fp])
 	_pending_specs = specs
 	if _baking:
 		return   # 烘焙中：留最新规格，完成后自动续烘

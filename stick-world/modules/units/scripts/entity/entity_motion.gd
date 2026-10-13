@@ -55,6 +55,9 @@ const COHESION_STEER_FORCE: float = 0.8
 const SEPARATION_FORCE: float = 1.6
 ## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）
 const MAX_SEPARATION_CORRECTION: float = 3.0
+## 驻株权重（battle_sim.SEPARATION_PLANTED_FACTOR 同语义同值）：站定单位
+##（无移动意图且近静止）只吃小份静态分离修正——被移动方顶上时基本原地不动
+const SEPARATION_PLANTED_FACTOR: float = 0.25
 ## 让路触发门槛：友军相对移动意图方向的前向点积 ≥ 此值才算"挡在去路上"（9k）。
 ## 身旁/身后的友军走常规分离不算挡路；收拢末段友军偏出锥面，绕行权重随点积衰减归零
 const YIELD_AHEAD_DOT: float = 0.35
@@ -353,6 +356,17 @@ func _apply_static_separation() -> void:
 		return
 	if total_push.length() > MAX_SEPARATION_CORRECTION:
 		total_push = total_push.normalized() * MAX_SEPARATION_CORRECTION
+	# 驻株权重（2026-10-12 创始人点正「跑动方把站立方顶飞」）：站定单位（无移动
+	# 意图且近静止——站桩攻击/待命/守位）只吃小份修正——被移动方顶上时基本
+	# 原地不动，重叠由移动方自己的修正解开（它被推回去＝在接触处刹停）；
+	# 旧版对称半推＝站定者以移动方的推进速度被持续搬运。sim 链同语义
+	#（battle_sim._tick_separation）
+	var vx: float = _entity.velocity.x
+	var vy: float = _entity.velocity.y
+	var planted: bool = vx * vx + vy * vy < 400.0 \
+			and _entity._ai_move_dir.length_squared() < 0.01
+	if planted:
+		total_push *= SEPARATION_PLANTED_FACTOR
 	_entity.global_position += total_push
 
 

@@ -94,11 +94,17 @@ class RowBucket:
 			cursor = 0
 		if cursor >= high_water:
 			high_water = cursor + 1
+			# MultiMesh instance_count 赋值 = 实例缓冲区**重新分配并全零**
+			#（颜色/自定义通道归零透明）——缓存必须全量失效，否则跳写通道
+			# 停在零值 = 整批身体隐形（2026-10-13 r35 连拍实锤：血条/箭矢/影
+			# 在、身体全没；写入侧游标正常）。水位只增不减 → 失效只在扩容
+			# 帧发生，稳态零开销
 			mm.instance_count = high_water
 			_col_cache.resize(high_water)
 			_cus_cache.resize(high_water)
-			_col_cache[high_water - 1] = SENTINEL
-			_cus_cache[high_water - 1] = SENTINEL
+			for i in high_water:
+				_col_cache[i] = SENTINEL
+				_cus_cache[i] = SENTINEL
 		mm.set_instance_transform(cursor, xf)
 		if _col_cache[cursor] != col:
 			mm.set_instance_color(cursor, col)

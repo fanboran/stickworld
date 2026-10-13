@@ -680,6 +680,14 @@ func _write_body() -> void:
 	# 静态量失效检查（每帧一次版本比对；重烘发布才真刷）
 	if _joint_atlas.version() != _parts_statics_ver:
 		_refresh_part_statics()
+	if OS.get_environment("STICK_TRACE_PARTS") == "1" and Engine.get_process_frames() % 60 == 0:
+		var p0: Part = _parts[0] if _parts.size() > 0 else null
+		print("[PartsTrace] iid=%d f=%d atlas_ver=%s statics_ver=%d parts=%d p0.cs=%s p0.uv=%s bucket游标 s:%s/%s b:%s/%s" % [
+				get_instance_id(), Engine.get_process_frames(), _joint_atlas.version(),
+				_parts_statics_ver, _parts.size(),
+				p0.cs if p0 != null else Vector2.ZERO, p0.uv if p0 != null else Rect2(),
+				_buckets.stroke.get("cursor"), _buckets.stroke.get("high_water"),
+				_buckets.body.get("cursor"), _buckets.body.get("high_water")])
 	for p in _parts:
 		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
 		buckets.stroke_row(_fold3d(xf * _sc2(p.cs_s.x, p.cs_s.y), ZB_STROKE),

@@ -450,13 +450,11 @@ func _spawn_and_start() -> void:
 					l_units.append(lt)
 					_attacker.append(lt)
 					_spawn_march_x[lt.get_instance_id()] = line_x0_l - depth
-					_hold_at_spawn(lt)
 				var rt := _spawn_unit(map, Vector2(line_x0_r + depth, y), int(row["weapon"]), fs, -1)
 				if rt != null:
 					r_units.append(rt)
 					_defender.append(rt)
 					_spawn_march_x[rt.get_instance_id()] = line_x0_r + depth
-					_hold_at_spawn(rt)
 				if ranged_grp:
 					ranged_idx += 1
 				else:
@@ -515,14 +513,6 @@ func _spawn_and_start() -> void:
 	# true 会把全局时间置 PAUSED）：观察场要直接开演，自动恢复 X1；空格仍可手动暂停
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(TimeManager.Speed.X1)
-	# 列阵站定令：出生同帧即全员 idle 钉在出生位（号令压制自主决策——否则出生
-	# 到开拔的窗口里自主漫步把 lattice 间距走散，「初始状态碰撞箱零重叠」的窗口
-	# 就不存在了）。主循环里逐单位即时下发（_hold_at_spawn），此处只补指挥官/
-	# 护卫（守位者的号令守卫对 idle 放行——留守语义兼容）。
-	for u in _attacker + _defender:
-		if u == null or not is_instance_valid(u):
-			continue
-		_hold_at_spawn(u)
 	# 编队注入（审计 P1-1）：每方按预设建班（fp_combat_squad 预设）+ 任命班长——
 	# 班长 rank 1，阵亡经组织侧补位免费无缝轮转
 	var left_squad_ids: Array = []
@@ -566,12 +556,8 @@ func _spawn_and_start() -> void:
 		# 敌方阵线（保各自出生 y 平行行进 = SWL 整线平移的槽位-free 等价），
 		# engage_in_range 沿途敌进射程即交还战斗行为，hold_on_arrive 未接战
 		# 到达则站定待敌。此后位置只由接战行为＋分离推挤管。
-		# 先站定成阵再开拔（0.6s）：出生 lattice 是零重叠的（#27 规格），但
-		# 出生即开拔会让前沿先行、列距瞬时压进碰撞箱（起步斜坡有先后）——
-		# 「初始状态碰撞箱零重合」的验收窗口必须是静止成阵的一刻。
 		if fs != null:
 			fs.set("combat_anchor_enabled", false)
-		await get_tree().create_timer(0.6).timeout
 		# 刚体平移：目标 = 出生 lattice 位 + 统一位移（goal − 本方 line_x0）——
 		# 全员同向同距，终点保持列阵间距；同点目标会让快慢列追尾压进碰撞箱
 		var delta_l: float = (mid_x + TEAM_OFFSET_X) - line_x0_l
@@ -625,17 +611,6 @@ func _reveal() -> void:
 ## 守位单位判定（指挥官 rank 3 / 阵地护卫 guard_post）：留守后方不随推进
 func _holds_post(u: Node) -> bool:
 	return u.has_method("holds_post") and u.holds_post()
-
-
-## 出生即钉位（idle 号令，同帧下发）：压制自主漫步，保住「初始状态碰撞箱零
-## 重叠」的静止成阵窗口；开拔时推进令覆盖。守位者（指挥官/护卫）的号令守卫
-## 对 idle 放行（留守语义兼容）。
-func _hold_at_spawn(u: Node) -> void:
-	if u == null or not is_instance_valid(u):
-		return
-	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
-	if ai != null and ai.has_method("set_order"):
-		ai.set_order("idle", {})
 
 
 ## 一次性推进令（裁决#28）：刚体平移语义——目标 x = 出生 lattice x + delta_x

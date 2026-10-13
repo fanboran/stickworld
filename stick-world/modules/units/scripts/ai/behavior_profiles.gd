@@ -51,7 +51,7 @@ const BASELINE: Dictionary = {
 	"acquire_interval": 0.5,
 	"hesitate_prob": 0.03,
 	"hesitate_time": Vector2(0.3, 0.8),
-	"aggressive_push_prob": 0.05,
+	"aggressive_push_prob": 0.0,
 	"leash_mult": 4.0,
 	"kite_range": 0.0,
 	"kite_run": false,
@@ -164,7 +164,7 @@ const BASELINE: Dictionary = {
 ##   杖  = MagikillAi 脆皮法师：保持距离 + 施法前摇长（犹豫=吟唱节奏）
 const CLASS_PROFILES: Dictionary = {
 	SWORD: {
-		"aggressive_push_prob": 0.25,
+		"aggressive_push_prob": 0.0,
 		"hesitate_prob": 0.01,
 		"leash_mult": 6.0,
 		"acquire_interval": 0.4,

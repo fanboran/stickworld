@@ -234,11 +234,11 @@ func _test_leash_far() -> void:
 	# P1 拆分：追击判定本体在 target_acquire（tier_of 分层），直测 helper
 	var acq: ScriptTargetAcquire = ScriptTargetAcquire.new()
 	acq.setup(w["attacker"], w["battle"], {})
-	# 目标在 500px 外（attack_range 默认 100 × 4 = 400）→ 超 leash
+	# 裁决#31 起无距离门（追击最近敌不设上限）——观测面恒不追丢
 	var far := FakeUnit.new()
 	far.position = Vector2(500, 0)
 	acq._target = far
-	_runner.assert_true(acq.is_beyond_leash(), "目标超攻击范围×4 应判追丢")
+	_runner.assert_false(acq.is_beyond_leash(), "无距离门：远目标不判追丢（裁决#31）")
 
 
 func _test_leash_near() -> void:

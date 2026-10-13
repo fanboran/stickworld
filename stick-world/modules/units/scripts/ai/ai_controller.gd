@@ -44,11 +44,8 @@ const TEAM_AI_STANCE_DEFEND: int = 1
 const TEAM_AI_STANCE_ATTACK: int = 2
 const TEAM_AI_STANCE_ROUT: int = 3
 
-## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
-## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
-const SURROUND_RANGE: float = 120.0
 ## 威胁判定距离（SWL Ai.IsUnderThreat：近身有活敌即被威胁；
-## dump 无数值真值，取被围半径同量级，待实测校准）
+## dump 无数值真值，待实测校准）
 const THREAT_RANGE: float = 140.0
 ## 避战还击的"近战范围"上限（px，诊断 B2 带打带跑）：取最长近战兵种射程
 ## 矛 200——敌人贴进此范围内，避战单位不再一味后撤而是就地还击；
@@ -57,12 +54,7 @@ const COUNTER_RANGE: float = 200.0
 ## 打通态脱离距离（px）【提案/待定·待实测校准】：拦路者跑出此距离视为"已脱离"
 ##（不再构成拦路——风筝敌人越拉越远即放弃追打恢复赶路；再拦再触发）
 const BREACH_DROP_DIST: float = 320.0
-## 被围所需敌对单位数
-const SURROUND_MIN: int = 2
-## 背墙判定：身后此距离内有掩体视为背墙
-const WALL_LOOKBACK: float = 80.0
-## 低血狂暴判定阈值（hp_ratio 低于此值视为低血）
-const RAGE_LOW_HP: float = 0.3
+## 被围/背墙/低血狂暴常量已删（裁决#31——低血狂暴整体退役）
 ## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）
 const WorkTypeCombat := "WORK_COMBAT"
 const WorkTypeBuild := "WORK_BUILD"
@@ -365,21 +357,8 @@ func _try_combat() -> bool:
 		if not _state_machine.is_current_finished():
 			return true
 	var bi_param: Dictionary = {"battle": bi}
-	var health: Node = _entity.get_health() if _entity.has_method("get_health") else null
-	# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
-	var mods: Dictionary = _compute_state_modifiers(bi, health)
-	if _should_rage(mods):
-		var rage_param: Dictionary = bi_param.duplicate()
-		rage_param["rage"] = true
-		_state_machine.travel("attack", rage_param)
-		return true
-	# HP 低且附近有掩体 -> seek_cover
-	if health != null and health.has_method("get_hp_ratio") and health.get_hp_ratio() < 0.4:
-		var cover = bi.get_cover() if bi.has_method("get_cover") else null
-		if cover != null and cover.has_method("has_covers") and cover.has_covers():
-			_state_machine.travel("seek_cover", bi_param)
-			return true
-	# 默认 -> attack（MERIC 祭司路由到 heal，P7 批次 7b）
+	# 默认 -> attack（MERIC 祭司路由到 heal，P7 批次 7b）。
+	# 低血狂暴 / 低血找掩体已删（创始人 2026-10-13 裁决#31：两者此前已令删）
 	if _is_meric():
 		_state_machine.travel("heal", bi_param)
 	else:
@@ -546,47 +525,6 @@ func _query_team_stance(bi: Node) -> int:
 	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_stance"):
 		return TEAM_AI_STANCE_DEFEND
 	return int(tai.get_stance())
-
-
-## 状态调制检测（反编译参考实装 E）：低血 / 避战 / 被围 / 背墙。
-## 返回 {"low_hp", "disengaging", "surrounded", "backed_to_wall"} 布尔集。
-func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
-	var mods := {
-		"low_hp": false,
-		"disengaging": false,
-		"surrounded": false,
-		"backed_to_wall": false,
-	}
-	if health != null:
-		mods["low_hp"] = health.has_method("get_hp_ratio") and health.get_hp_ratio() < RAGE_LOW_HP
-	# 避战中（裁决：溃逃退役后的行为态）不狂暴——脱离接火的单位不背水一战
-	mods["disengaging"] = _disengaging
-	# 被围：SURROUND_RANGE 内敌对单位数 >= SURROUND_MIN（空间网格邻域查询）
-	if bi != null:
-		mods["surrounded"] = _count_enemies_near(
-				_entity.global_position, SURROUND_RANGE, bi) >= SURROUND_MIN
-	# 背墙：身后（朝向反方向）WALL_LOOKBACK 距离内有掩体
-	if bi != null and bi.has_method("get_cover"):
-		# CoverSystem 是 RefCounted（纯逻辑），注解用 Variant 防类型不匹配报错
-		var cover = bi.get_cover()
-		if cover != null and cover.has_method("is_in_cover"):
-			var facing: int = _entity.get_facing() if _entity.has_method("get_facing") else 1
-			var back_pos: Vector2 = _entity.global_position - Vector2(facing, 0) * WALL_LOOKBACK
-			mods["backed_to_wall"] = cover.is_in_cover(back_pos)
-	return mods
-
-
-## 狂暴判定（反编译参考实装 E，参考传奇 RageSystem/DesperationTriggered）：
-##   - 避战中 -> 不狂暴（脱离接火的单位不背水一战）
-##   - 被围 + 背墙 -> 背水一战，强制狂暴
-##   - 低血 -> 狂暴反击
-##   - 其余 -> 不狂暴（走现有 seek_cover / attack 决策）
-func _should_rage(mods: Dictionary) -> bool:
-	if mods.get("disengaging", false):
-		return false
-	if mods.get("surrounded", false) and mods.get("backed_to_wall", false):
-		return true
-	return mods.get("low_hp", false)
 
 
 ## 尝试 job 域探测组（W2 域级节流出口）：派工探测失败再试采集探测，两者皆空才

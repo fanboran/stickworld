@@ -28,7 +28,6 @@ const ScriptAnims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 ## 犹豫检查间隔（秒）
 const HESITATE_CHECK_INTERVAL: float = 0.5
 ## 低 HP 阈值（低于此值且附近有掩体触发找掩体）
-const LOW_HP_THRESHOLD: float = 0.3
 ## 掩体查询范围（附近多少像素内有掩体算"附近"）
 const COVER_NEARBY_RANGE: float = 200.0
 ## y 对齐死区（px，dump 无真值 → 待实测校准）：|Δy| 小于此值视为已对齐不再走位
@@ -37,12 +36,8 @@ const Y_ALIGN_DY_THRESHOLD: float = 16.0
 const REALLY_CLOSE_MULT: float = 0.5
 
 # ─────────────────────────────── @export（概率钩子，§7.4）────────────────────────────────
-## 擅自冲锋概率（每次接近时）
-@export var prob_aggressive_push: float = 0.05
-## 犹豫概率（每次检查时）
+## 擅自冲锋概率与狂暴族已删（裁决#31——SWL 无此机制；犹豫概率保留 SWL 直译族）
 @export var prob_hesitate: float = 0.03
-## 狂暴冲锋概率（反编译参考实装 E：狂暴时替代 prob_aggressive_push）
-const RAGE_PUSH_PROB: float = 0.35
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
@@ -68,7 +63,6 @@ var _hesitate_check_timer: float = 0.0
 var _hesitate_timer: float = 0.0
 ## 狂暴标记（反编译参考实装 E）：低血狂暴/被围背墙时由 AIController 传入。
 ## 狂暴时跳过"低血找掩体"、冲锋概率提升、不轻易收手。
-var _rage: bool = false
 ## 兵种行为档案（RWR 式基线+覆盖）：enter 时按武器类型解析，
 ## 覆盖冲锋/犹豫/追击/保距等参数——兵种个性 = 参数差（见 behavior_profiles.gd）。
 var _profile: Dictionary = {}
@@ -86,11 +80,6 @@ var _y_misalign_time: float = 0.0
 ## 攻击后举盾截止时刻（s；SWL Ai.cooldownAfterAttackForBlock 直译——
 ## 矛兵攻击完举盾瞬间防反打，"盾墙"手感来源）
 var _post_block_until: float = 0.0
-# ── 灵动化（RWR 士兵的"不安分"，Demo P5）──
-## 战斗微移步：射程内站桩输出时的随机小步（横移计时/方向/持续时间）
-var _strafe_timer: float = 0.0
-var _strafe_dir: float = 0.0
-var _strafe_hold: float = 0.0
 ## 受击规避：被打醒后小概率侧移一小步（边沿检测只在第一帧掷骰）
 var _in_stun_prev: bool = false
 var _evade_hold: float = 0.0
@@ -141,7 +130,6 @@ func enter(previous: String, params: Dictionary) -> void:
 	_battle = params.get("battle", null)
 	if _battle == null and entity != null and entity.has_method("get_battle_instance"):
 		_battle = entity.get_battle_instance()
-	_rage = params.get("rage", false)
 	# 兵种档案解析（按主手武器类型；取不到武器回落空档案 = 全基线）
 	_profile = {}
 	if entity != null and is_instance_valid(entity) and entity.has_method("get_weapon"):
@@ -225,12 +213,7 @@ func update(delta: float) -> void:
 	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
 	# 旧 is_routed finish 自检随溃逃退役——被打单位保持还击，去留由
 	# ai_controller 的 C6 概率调制裁决，避免逐拍 finish→重 travel 抖动）
-	var health: Node = entity.get_health() if _cap_get_health else null
-	if health != null:
-		# 狂暴时跳过"低血找掩体"（反编译参考实装 E）：背水一战不撤退
-		if not _rage and health.has_method("get_hp_ratio") and health.get_hp_ratio() < LOW_HP_THRESHOLD and _has_cover_nearby():
-			finish()
-			return
+	# 低血找掩体/低血狂暴自检已删（裁决#31：两者此前已令删——被打单位保持还击）
 
 	# 犹豫概率钩子（§7.4 第一层；A9 · R3：夜间反应更慢——犹豫时长 × 档案
 	# night_hesitate_mult，RWR day/night reaction_time 分段同构）
@@ -319,7 +302,6 @@ func update(delta: float) -> void:
 		# 弓/杖弹道解算自带移动预判不拦）：预测点出了射程就不浪费这次出手，
 		# 交回外层接近逻辑追近后再打
 		if not _is_ranged_weapon(weapon) and not _strike_will_land(_target, attack_range):
-			_strafe_timer -= delta
 			return
 		if _burst_gate() and _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") \
 				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
@@ -332,19 +314,6 @@ func update(delta: float) -> void:
 			# 攻击命中帧触发攻击动画（反编译参考实装 C）：播完由 rig.animation_finished 回切
 			if _cap_play_attack:
 				entity.play_attack()
-		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉。
-		# 槽位锚定单位跳过（随机游走会把方阵打散——成排齐射优先于"不安分"）
-		if not anchored:
-			_strafe_timer -= delta
-			if _strafe_timer <= 0.0:
-				_strafe_timer = _roll_range(1.5, 3.5)
-				if _roll() < 0.35:
-					_strafe_dir = 1.0 if _roll() < 0.5 else -1.0
-					_strafe_hold = 0.30
-			if _strafe_hold > 0.0:
-				_strafe_hold -= delta
-				if _cap_ai_move:
-					entity.ai_move(Vector2(0.0, _strafe_dir), false)
 		# 射手容错间距（SWL PushApartTolerance）：站桩输出时与友军保持间距
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)
@@ -375,7 +344,7 @@ func update(delta: float) -> void:
 		dir = _apply_flank(dir)
 		# DetermineXRunPower（SWL 直译）：远跑近走；近身爆发交给冲锋掷骰
 		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
-		if not run and _roll() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
+		if not run and _roll() < _p("aggressive_push_prob", 0.0):
 			run = true
 		if _cap_ai_move:
 			entity.ai_move(dir, run)
@@ -890,32 +859,6 @@ func _determine_x_run_power(desired_pos: Vector2, attack_range: float) -> float:
 	return clampf(dx / maxf(attack_range * 1.5, 1.0), 0.0, 1.0)
 
 
-## 队伍级共享攻击目标（反编译参考实装 D-B）：本兵所属小队的排长决策目标。
-## 无 formation / 无小队 / 无共享目标时返回 null（回退各自寻敌）。
-## 近战扎堆闸（2026-10-11）：共享目标已被 ≥3 个攻击者咬住时近战不再领同一个
-## 目标（回退各自前向寻敌——接战密度交给分离碰撞自然摊开，创始人裁决方向；
-## 3 = SWL MeleeAttack.NumberOfUnitsThatCanHit 量级）。远程不受限——齐射集火
-## 正是远程的特化收益（01-组织 §2.2），且远程站槽互不挤。
-func _get_squad_target() -> Node:
-	if entity == null or not entity.has_method("get_formation_system"):
-		return null
-	var fs: Node = entity.get_formation_system()
-	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_squad"):
-		return null
-	var squad_id: String = fs.get_unit_squad(entity)
-	if squad_id.is_empty() or not fs.has_method("get_squad_target"):
-		return null
-	var t: Node = fs.get_squad_target(squad_id)
-	if t == null:
-		return null
-	if not _is_ranged_weapon(entity.get_weapon() if entity.has_method("get_weapon") else null) \
-			and _battle != null and is_instance_valid(_battle) \
-			and _battle.has_method("get_attacker_count") \
-			and _battle.get_attacker_count(t) >= SQUAD_TARGET_MAX_MELEE:
-		return null
-	return t
-
-
 ## 近战共享目标扎堆上限（SWL MeleeAttack.NumberOfUnitsThatCanHit 量级）
 const SQUAD_TARGET_MAX_MELEE: int = 3
 
@@ -975,27 +918,6 @@ func _hit_frame_seconds() -> float:
 	return 0.0
 
 
-## 追击范围检查（行业最佳实践）：当前目标是否已超出攻击范围 × 追击倍数
-## （兵种档案 leash_mult）。判定本体在 _acq（tier_of 分层），此处为测试/调试
-## 观测转发
-func _is_beyond_leash() -> bool:
-	return _acq != null and _acq.is_beyond_leash()
-
-## 检查附近是否有掩体（用于"重伤找掩体"决策）
-func _has_cover_nearby() -> bool:
-	if _battle == null or not _battle.has_method("get_cover"):
-		return false
-	var cover = _battle.get_cover()
-	if cover == null or not cover.has_method("has_covers") or not cover.has_covers():
-		return false
-	if cover.has_method("is_in_cover") and cover.is_in_cover(entity.global_position):
-		return true
-	if cover.has_method("find_nearest_cover"):
-		var nearest: Vector2 = cover.find_nearest_cover(entity.global_position)
-		return entity.global_position.distance_to(nearest) < COVER_NEARBY_RANGE
-	return false
-
-
 ## 获取当前目标（供测试/调试；目标状态权威在 _acq）
 func get_target() -> Node:
 	return _acq.get_target() if _acq != null else _target
@@ -1008,8 +930,7 @@ func _ensure_acq() -> void:
 	if _acq == null:
 		_acq = ScriptTargetAcquire.new()
 	_acq.setup(entity, _battle, _profile)
-	if not _acq.squad_target_fn.is_valid():
-		_acq.squad_target_fn = Callable(self, "_get_squad_target")
+	# 班级集火接线已删（裁决#31：排长不指定具体目标——个体各自最近敌）
 
 
 ## 物理帧钟（s）：Engine.get_physics_frames / ticks_per_second——跨模块共享账本

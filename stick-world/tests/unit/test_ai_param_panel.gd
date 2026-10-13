@@ -113,7 +113,7 @@ func _test_overlay_fallback_swl() -> void:
 	var p: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SWORD)
 	_runner.assert_approx(float(p.get("decision_interval", -1.0)), 0.3, 0.001, "缺载回落代码基线 0.3")
 	# SWL 直译个性不被覆盖链打掉（P6 批次 7c 语义：剑士冲脸/弓手风筝/矛兵持阵）
-	_runner.assert_approx(float(p.get("aggressive_push_prob", -1.0)), 0.25, 0.001, "剑士冲脸概率直译保留")
+	_runner.assert_approx(float(p.get("aggressive_push_prob", -1.0)), 0.0, 0.001, "擅自冲锋概率归零（裁决#31 SWL 无随机冲锋）")
 	var bow: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
 	# 近身兜底风筝（SWL ShouldKite 真意）：kite_range = 近身危险线（贴脸才退），
 	# 远小于射程——弓手常态站射程线成排射击

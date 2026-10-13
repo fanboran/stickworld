@@ -1,71 +1,52 @@
 extends RefCounted
-## 找目标系统（SW3 FindTargetAiSystem 直译，确定性模拟核心蓝图 P1）。
+## 找目标系统——SWL Ai 锁定规则直译（裁决#31 重写：创始人点正「个体锁定规则
+## 为什么这么混乱，就隔壁火柴人战争的锁定规则就可以了」）。
 ##
-## 从 behavior_attack 刷新段拆出的独立系统（单职责化，审计 §五：P1 拆分时机）。
-## SW3 dump 签名实录（external/il2cppdumper out_saga；行为语义为直译推断）：
-##   - ImproveTargetIncremental：每感知拍扫最优候选"增量改进"当前目标，
-##     而非"锁定到失效才重扫"（旧 sticky pass）；
-##   - RestoreBestTarget(..., FP hysteresis, ...)：换靶滞回——新目标须显著
-##     更优（距离 < 当前 × target_switch_ratio）才换，消换靶振荡；
-##   - NotBeenOnTargetForEnoughTime：目标驻留时长门槛——当前目标未驻留满
-##     target_dwell_min 不做选举性换靶。设计靶心 = 号令粘性/决策承诺感
-##     （02-战斗 一-A.5「最短保持期+事件触发换令」/ 二-A.4「选定目标决斗到死」）；
-##   - 分层阈值 OutOfFireRangeTier / UnreachableTier：候选按 射程内(0) →
-##     追击带内(1) → 超追击带(2) 分层，层提升立即换（质变），同层走滞回+
-##     驻留（量变）——追丢的猎物让位给够得着的新敌，不等驻留时钟。
+## SWL 真相（docs/技术/参考/SWL-单位行为完整翻译.md §6.4）：
+##   - `Ai.target` + `UpdateTarget()`：当前目标 + 周期刷新；
+##   - 距离度量 `AiDistance` + 仇恨半径 `AGRO_RANGE`：候选须在仇恨半径内；
+##   - 前向过滤 `OnlyTargetsUnitsForward()` / `IsValidForForwardOnlyTarget`：
+##     只打身前目标（防回头送）；
+##   - 无滞回/无驻留/无分层——旧 SW3 系增量改进+滞回+驻留+分层机器已随本批拆除。
 ##
-## 优先级序（高到低）：
-##   强制目标（打通态拦路者，号令插叙）> 小队共享目标（排长集火，SW3
-##   TargetPriority 含编队上下文的等价通道）> 自主寻敌（TargetFinder 公共核心）。
-## 小队目标存在时不落到自主寻敌（保持旧语义：集火号令期间队员不自选）。
+## 本作口径（创始人 2026-10-13「优先追击最近的敌人」）：
+##   - 选举 = 前向半平面内最近存活敌；身前无敌回退全域（SWL 单位会转身使
+##     半平面旋转，我方面向跟随目标——回退层兜住等价语义，防站立挨打死锁）；
+##   - **无距离门**——最近敌直接追（裁决#31 首版保留射程×4 仇恨半径被集成
+##     夹具实锤拦死跨距接战：两军对峙无伤亡；#21c 的回头问题由前向过滤兜住）；
+##   - 目标死亡/失效 → 立即重选；
+##   - 强制目标（打通态拦路者）最高优先；
+##   - 守位者守卫：目标须在仇恨半径内（跨半场冲锋 = 留守失效）。
 ##
-## 即时换靶（不受滞回/驻留约束）：当前目标死亡/失效/超追击带；新候选层更低；
-## 强制目标有效。守位者守卫（指挥官/护卫）：自主接战目标必须在 leash 内。
-##
-## 参数经兵种档案（behavior_profiles）注入；本文件回退值与 BASELINE 同值。
-## 消费点：behavior_attack（attack 行为每物理帧 advance）。
+## 参数经兵种档案（behavior_profiles）注入。消费点：behavior_attack（每物理帧
+## advance）。
 
 ## 目标选择器（tactics 对外公共类型；显式 preload 防 headless class_name 未注册）
 const ScriptFinder := preload("res://modules/tactics/api.gd").Finder
 
-# ─────────────────────────────── 常量（回退值，与 behavior_profiles.BASELINE 同值）────────────────────────────────
+# ─────────────────────── 常量（回退值，与 behavior_profiles.BASELINE 同值）────────────────────────────────
 ## 目标扫视轮询间隔（s）
 const ACQUIRE_INTERVAL: float = 0.5
-## 换靶滞回比例（新目标距离 < 当前 × 此值才换；<=0 = 关滞回）
-const TARGET_SWITCH_RATIO: float = 0.6
-## 目标驻留时长门槛（s；<0.05 视为关——换靶只受滞回约束）
-const TARGET_DWELL_MIN: float = 2.0
-## 追击放弃倍数（目标超出射程 × 此值即"追丢"）
-const LEASH_MULT: float = 4.0
+## 仇恨半径倍数（候选/当前目标距本单位不得超过 武器射程×此值——SWL AGRO_RANGE
+## 的数值等价：够得着才追，半个战场外不锁）
+const AGRO_MULT: float = 4.0
 
-# ─────────────────────────────── 分层阈值（SW3 Tier 语义）────────────────────────────────
-## 候选分层：数值越低越优；LOST 表示当前目标已死亡/失效（立即重选）。
-enum TargetTier {
-	IN_FIRE_RANGE = 0,     ## 射程内（可立即出手）
-	OUT_OF_FIRE_RANGE = 1, ## 射程外但追击带内（够得着）
-	UNREACHABLE = 2,       ## 超追击带（追丢）
-	LOST = 3,              ## 死亡/失效（不构成保留理由）
-}
-
-# ─────────────────────────────── 宿主注入 ────────────────────────────────
-## 决策单位（StickmanEntity；读位置/武器/指挥官位，全部 duck）
+# ─────────────────────── 宿主注入 ────────────────────────
+## 决策单位（StickmanEntity；读位置/武器/守位，全部 duck）
 var entity: Node = null
 ## 所属战斗实例（候选枚举）
 var battle: Node = null
 ## 兵种行为档案引用（宿主 enter 时注入；参数缺省回退上方常量）
 var profile: Dictionary = {}
-## 小队共享目标提供者 () -> Node（排长集火号令；无小队返回 null。
-## behavior_attack._get_squad_target 的 Callable，选举拍才调用）
-var squad_target_fn: Callable = Callable()
 
-# ─────────────────────────────── 目标状态 ────────────────────────────────
+# ─────────────────────── 目标状态 ────────────────────────
 ## 当前目标（null = 无目标可打，调用方 finish）
 var _target: Node = null
-## 强制目标（打通态"打通"拦路者：params 注入；死亡/失效/超追击带即清除回落）
+## 强制目标（打通态"打通"拦路者：params 注入；死亡/失效/超仇恨半径即清除回落）
 var _forced_target: Node = null
-## 下次选举倒计时（s；到 0 触发增量改进检查）
+## 下次选举倒计时（s）
 var _acquire_timer: float = 0.0
-## 当前目标已驻留时长（s；换靶即清零——NotBeenOnTargetForEnoughTime 的计时源）
+## 目标已驻留时长（s；换靶清零——纯观测面保留）
 var _dwell: float = 0.0
 
 
@@ -91,93 +72,56 @@ func get_dwell() -> float:
 	return _dwell
 
 
-## 每物理帧推进：计时 → 到期/失效则选举。返回当前目标（null = 无目标可打）。
-## 追丢（UNREACHABLE）同失效处理：不等扫视节拍立即选举（旧"超 leash 重选"语义）。
+## 每物理帧推进：计时 → 目标失效即时重选，到期例行刷新。返回当前目标
+## （null = 无目标可打）。
 func advance(delta: float) -> Node:
 	_acquire_timer -= delta
 	_dwell += delta
-	if _acquire_timer > 0.0 and _tier_safe(_target) <= TargetTier.OUT_OF_FIRE_RANGE:
+	if _acquire_timer > 0.0 and _target_ok(_target):
 		return _target
 	_elect()
 	return _target
 
 
-## 当前目标是否超追击带（behavior_attack._is_beyond_leash 转发；测试观测面）
+## 当前目标是否超仇恨半径（观测面保留；裁决#31 起无距离门，恒 false——
+## 守位者守卫仍用 _in_agro 判定）
 func is_beyond_leash() -> bool:
-	return _tier_safe(_target) >= TargetTier.UNREACHABLE
+	return false
 
 
-# ─────────────────────────────── 选举（感知拍）────────────────────────────────
+# ─────────────────────── 选举（感知拍）────────────────────────────────
 
-## 选举一拍：强制目标 → 小队共享目标 → 自主寻敌，逐层接受/滞回/驻留判定。
-## 小队目标存在时在本层消化后返回（集火号令期间队员不自选——号令粘性）。
+## 选举一拍（SWL UpdateTarget）：强制目标 → 前向最近 → 全域最近（都须在
+## 仇恨半径内）。无滞回无驻留——最近者得。
 func _elect() -> void:
 	_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
-	# 1. 强制目标（打通态拦路者）：有效且未超追击范围 → 最高优先锁定
+	# 1. 强制目标（打通态拦路者）：有效且未超仇恨半径 → 最高优先锁定
 	var forced: Node = _valid_forced()
 	if forced != null:
 		_accept(forced)
 		_post_guard()
 		return
-	# 2. 小队共享目标（排长集火号令）：存在则在此层消化（队员不自选）
-	var squad: Node = _squad_target()
-	if squad != null:
-		if _should_switch_to(squad):
-			_accept(squad)
-		_post_guard()
-		return
-	# 3. 自主寻敌（SWL OnlyTargetsUnitsForward 直译——只打身前目标防回头送，
-	#    前向配对让接触沿正面自然分布）；身前无敌（被抄后/残局）回退全域寻敌，
-	#    防站立挨打死锁（SWL 单位会转身使半平面旋转，我方面向跟随目标——
-	#    回退层兜住等价语义）
-	var best: Node = ScriptFinder.find_target(entity, {
-		"battle": battle,
-		"ignore_current_attackers": true,
-		"prefer_large": _p("prefer_large", 0.0),
-		"only_forward": true,
-	})
+	# 2. 前向半平面最近存活敌（SWL OnlyTargetsUnitsForward 直译——只打身前
+	#    目标防回头送；前向配对让接触沿正面自然分布）
+	var best: Node = _find_best(true)
+	# 3. 身前无敌（被抄后/残局）回退全域——防站立挨打死锁（SWL 单位会转身使
+	#    半平面旋转，我方面向跟随目标——回退层兜住等价语义）。无距离门——
+	#    最近敌直接追（创始人裁决#31）
 	if best == null:
-		var anywhere: Node = ScriptFinder.find_target(entity, {
-			"battle": battle,
-			"ignore_current_attackers": true,
-			"prefer_large": _p("prefer_large", 0.0),
-			"only_forward": false,
-		})
-		# 全域回退门控（裁决#21c）：回退是为"被近身 / 被抄后"解死锁——候选须在
-		# 追击带内（够得着）才采纳，否则身后半个战场外的敌人也会被锁定 ⇒ 开局
-		# 第一拍就 180° 回头（创始人点正的"开局橘色转身看后面"即此路）。
-		if anywhere != null and _tier_safe(anywhere) <= TargetTier.OUT_OF_FIRE_RANGE:
-			best = anywhere
-	if best != null and _should_switch_to(best):
+		best = _find_best(false)
+	if best != null:
 		_accept(best)
 	_post_guard()
 
 
-## 换靶判定（滞回 + 驻留 + 分层阈值）：
-##   - 当前 LOST（死亡/失效）或 UNREACHABLE（追丢）→ 立即换（事件触发边，
-##     决斗到死的"死"边 + 旧"超 leash 重选"语义，任何有效候选接管）
-##   - 候选层更低（射程内 < 追击带 < 追丢）→ 立即换（质变不走滞回）
-##   - 候选层更高 → 不换
-##   - 同层 → 驻留满 dwell_min 且 距离 < 当前 × ratio 才换（量变双门）
-##   - ratio <= 0 = 关滞回（回旧"始终换"语义）；dwell_min < 0.05 = 关驻留
-func _should_switch_to(candidate: Node) -> bool:
-	if candidate == null or not is_instance_valid(candidate):
-		return false
-	var cur_tier: int = _tier_safe(_target)
-	if cur_tier >= TargetTier.UNREACHABLE:
-		return true
-	var cand_tier: int = _tier_safe(candidate)
-	if cand_tier < cur_tier:
-		return true
-	if cand_tier > cur_tier:
-		return false
-	var ratio: float = _p("target_switch_ratio", TARGET_SWITCH_RATIO)
-	if ratio <= 0.0:
-		return true
-	if _dwell < _p("target_dwell_min", TARGET_DWELL_MIN):
-		return false
-	return entity.global_position.distance_to(candidate.global_position) \
-			< entity.global_position.distance_to(_target.global_position) * ratio
+## 最近有效敌（前向过滤可配；候选须在仇恨半径内）
+func _find_best(forward_only: bool) -> Node:
+	return ScriptFinder.find_target(entity, {
+		"battle": battle,
+		"ignore_current_attackers": true,
+		"prefer_large": _p("prefer_large", 0.0),
+		"only_forward": forward_only,
+	})
 
 
 ## 接受目标（换靶清零驻留时钟；同目标续驻留）
@@ -188,67 +132,24 @@ func _accept(t: Node) -> void:
 	_dwell = 0.0
 
 
-## 强制目标有效性维护：有效 → 返回目标；死亡/失效/超追击带 → 清除返回 null
-func _valid_forced() -> Node:
-	if _forced_target == null:
-		return null
-	var ok: bool = is_instance_valid(_forced_target) \
-			and not (_forced_target.has_method("is_dead") and _forced_target.is_dead())
-	if ok and _tier_safe(_forced_target) >= TargetTier.UNREACHABLE:
-		ok = false
-	if not ok:
-		_forced_target = null
-		return null
-	return _forced_target
-
-
-## 小队共享目标（排长集火）：经宿主 Callable 查询（duck 链在 behavior_attack）
-func _squad_target() -> Node:
-	if not squad_target_fn.is_valid():
-		return null
-	var t: Node = squad_target_fn.call()
+## 目标当前是否有效（活着）
+func _target_ok(t: Node) -> bool:
 	if t == null or not is_instance_valid(t):
-		return null
-	return t
-
-
-## 守位者守卫（指挥官/阵地护卫）：自主接战目标必须在追击带内——无此门无班的
-## 守位者会跨半个战场冲锋（留守失效）。超带不选不追 → 待命，敌近身后自然选中
-## 自卫。
-func _post_guard() -> void:
-	if _target == null or entity == null or not is_instance_valid(entity):
-		return
-	if entity.has_method("holds_post") and entity.holds_post() \
-			and _tier_safe(_target) >= TargetTier.UNREACHABLE:
-		_target = null
-
-
-# ─────────────────────────────── 内部 ────────────────────────────────
-
-## _tier_of 的安全入口：已释放对象过类型化参数（t: Node）在调用边界即报错
-## （函数体内的 is_instance_valid 根本进不去）——先在此验活再传。
-func _tier_safe(t: Node) -> int:
-	if t == null or not is_instance_valid(t):
-		return TargetTier.LOST
-	return _tier_of(t)
-
-
-## 目标分层：死亡/失效 = LOST；距离带三档（射程/追击带/追丢）
-func _tier_of(t: Node) -> int:
-	if t == null or not is_instance_valid(t) or entity == null:
-		return TargetTier.LOST
+		return false
 	if t.has_method("is_dead") and t.is_dead():
-		return TargetTier.LOST
+		return false
+	return true
+
+
+## 距离是否在仇恨半径内（武器射程 × AGRO_MULT；无武器回退 100 旧口径）
+func _in_agro(t: Node) -> bool:
+	if t == null or not is_instance_valid(t) or entity == null or not is_instance_valid(entity):
+		return false
 	var dist: float = entity.global_position.distance_to(t.global_position)
-	var range: float = _attack_range()
-	if dist <= range:
-		return TargetTier.IN_FIRE_RANGE
-	if dist <= range * _p("leash_mult", LEASH_MULT):
-		return TargetTier.OUT_OF_FIRE_RANGE
-	return TargetTier.UNREACHABLE
+	return dist <= _attack_range() * _p("agro_mult", AGRO_MULT)
 
 
-## 攻击射程（duck 读武器；无武器回落 100 = behavior_attack 旧口径）
+## 攻击射程（duck 读武器；无武器回落 100 = 旧口径）
 func _attack_range() -> float:
 	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_weapon"):
 		return 100.0
@@ -258,6 +159,27 @@ func _attack_range() -> float:
 	return 100.0
 
 
-## 档案参数读取（float；缺省回退本文件常量 = BASELINE 同值）
+## 强制目标有效性维护：有效 → 返回目标；死亡/失效/超仇恨半径 → 清除返回 null
+func _valid_forced() -> Node:
+	if _forced_target == null:
+		return null
+	if not _target_ok(_forced_target):
+		_forced_target = null
+		return null
+	return _forced_target
+
+
+## 守位者守卫（指挥官/阵地护卫）：目标超仇恨半径 → 放弃（不跨半场冲锋）
+func _post_guard() -> void:
+	if _target == null or entity == null or not is_instance_valid(entity):
+		return
+	if entity.has_method("holds_post") and entity.holds_post() \
+			and not _in_agro(_target):
+		_target = null
+
+
+## 档案参数读取（缺省回退常量）
 func _p(key: String, fallback: float) -> float:
-	return float(profile.get(key, fallback))
+	if profile == null or not profile.has(key):
+		return fallback
+	return float(profile[key])

@@ -35,7 +35,6 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_squad_decision.gd",
 	"res://tests/unit/test_squad_follow.gd",
 	"res://tests/unit/test_formation_slots.gd",
-	"res://tests/unit/test_state_modifiers.gd",
 	"res://tests/unit/test_ai_enhance.gd",
 	"res://tests/unit/test_target_acquire.gd",
 	"res://tests/unit/test_squad_intent_planner.gd",

@@ -141,14 +141,9 @@ var faction_id: int = 0
 ##   0 = 士兵（大头兵，默认）
 ##   1 = 班长（战术轮转层：阵亡免费无缝继任，军衔点跟职务走）
 ##   2 = 排长（指挥链层：阵亡无法现场补员 = 持续指挥链缺口）
-##   3 = 指挥官（战场最高，连长级兼任）
-## 消费方：AIController 号令守卫与避战豁免 /
-## 血条军衔点渲染（set_rank 已做转发挂点，渲染侧未接线时静默跳过）。
+##   2 = 排长（编制最高现役层；旧 rank 3 战场指挥官随摆场件根除，2026-10-14）
+## 消费方：血条军衔点渲染（set_rank 已做转发挂点，渲染侧未接线时静默跳过）。
 var rank: int = 0
-## 守位职责（阵地护卫，02 一-A.4：指挥官前方阵地配 0~3 名护卫）：守位行为面
-## 与指挥官同款（留守+LEASH 内迎击+号令拦截），但**不判任何全局胜负**——守位
-## 判定口见 holds_post()。
-var guard_post: bool = false
 ## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
 ## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
 ## 实体保留不销毁（溃兵视觉）；BattleInstance add_unit/_end 复位。
@@ -1486,10 +1481,10 @@ func set_faction(fid: int) -> void:
 		_health_bar.set_faction(fid)
 
 
-## 设置军衔（0=士兵 / 1=班长 / 2=排长 / 3=指挥官，口径见 rank 字段注释）。
+## 设置军衔（0=士兵 / 1=班长 / 2=排长，口径见 rank 字段注释）。
 ## 同步转发头顶血条（军衔点渲染挂点；血条侧未接线时 has_method 静默跳过）。
 func set_rank(r: int) -> void:
-	rank = clampi(r, 0, 3)
+	rank = clampi(r, 0, 2)
 	if _health_bar != null and is_instance_valid(_health_bar) \
 			and _health_bar.has_method("set_rank"):
 		_health_bar.set_rank(rank)
@@ -1498,21 +1493,6 @@ func set_rank(r: int) -> void:
 ## 获取军衔。
 func get_rank() -> int:
 	return rank
-
-
-## 是否指挥官（rank 3，战场最高——将领语义：留守后方+贴身卫队+不被号令拉走；
-## 阵亡是纪律线打击因子不是败因，01-组织系统 §3.1）。
-## 消费方：AIController 号令守卫（不接推进/撤离类号令）与避战豁免（永不脱离接火）。
-func is_commander() -> bool:
-	return rank >= 3
-
-
-## 是否守位者（留守行为面的语义判定口：指挥官与阵地护卫共用）。守位 = 留守
-## 本方阵地、只做被近身自卫（LEASH 内迎击），任何来路的推进/撤离号令都拉不走。
-## 消费方：AIController 号令守卫/压制豁免/避战豁免、TargetAcquire 追击带门。
-## 指挥官身份判定**不走此口**（护卫只是守位者，无将领语义）。
-func holds_post() -> bool:
-	return rank >= 3 or guard_post
 
 
 ## 获取阵营 ID

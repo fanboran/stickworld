@@ -3,8 +3,8 @@ extends Node
 signal test_done(code: int)
 ## 单元测试：找目标系统（米拉奇锁定到死口径，裁决#35；选举/过滤 SWL 直译）。
 ## 覆盖：最近敌选举 / 锁定到死（更近者出现不换靶）/ 目标死亡即换 /
-## 无距离门（远敌也锁）/ 强制目标（打通态）生命周期 /
-## 守位者守卫（指挥官与阵地护卫共口）。
+## 无距离门（远敌也锁）/ 强制目标（打通态）生命周期。
+## （守位者守卫用例随摆场指挥官/护卫根除一并退役，2026-10-14）
 ## 不进场景树，确定性（无 RNG 依赖路径——掷骰不在本系统）。
 
 @warning_ignore("shadowed_global_identifier")
@@ -23,8 +23,6 @@ class FakeUnit:
 	extends Node2D
 	var faction_id: int = 1
 	var weapon: FakeWeapon = FakeWeapon.new()
-	var _commander: bool = false
-	var _guard_post: bool = false
 
 	func get_weapon() -> FakeWeapon:
 		return weapon
@@ -34,13 +32,6 @@ class FakeUnit:
 
 	func is_dead() -> bool:
 		return false
-
-	func is_commander() -> bool:
-		return _commander
-
-	## 守位判定口（真身 StickmanEntity.holds_post：rank>=3 or guard_post）
-	func holds_post() -> bool:
-		return _commander or _guard_post
 
 
 class FakeEnemy:
@@ -68,8 +59,6 @@ func _ready() -> void:
 	_runner.add_test("锁定到死: 目标走远仍追（无距离门）", _test_lock_keeps_on_far)
 	_runner.add_test("强制目标: 注入即锁 失效回落", _test_forced_target)
 	_runner.add_test("强制目标: 存活即锁（距离由打通态脱离距离管）", _test_forced_beyond_keeps)
-	_runner.add_test("守位者守卫: 超半径拒选 带内自卫", _test_post_guard)
-	_runner.add_test("阵地护卫: 非指挥官守位同享半径门", _test_guard_post_unit)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -178,31 +167,3 @@ func _test_forced_beyond_keeps() -> void:
 	forced.position = Vector2(450.0, 0)
 	var t: Node = acq.advance(0.1)
 	_runner.assert_equal(t, forced, "强制目标走远仍锁（脱离交给打通态距离门）")
-
-
-func _test_post_guard() -> void:
-	# 指挥官自主目标必须在仇恨半径内：唯一候选超半径 → 拒选（finish 待命自卫）
-	var w := _make_acq([500.0])
-	var acq: ScriptTargetAcquire = w["acq"]
-	(w["entity"] as FakeUnit)._commander = true
-	var t: Node = acq.advance(0.1)
-	_runner.assert_true(t == null, "指挥官对超半径候选拒选（留守不冲锋）")
-	# 半径内候选正常接敌（被近身自卫语义）
-	var near := _add_enemy(w["battle"], 150.0)
-	t = acq.advance(0.1)
-	_runner.assert_equal(t, near, "指挥官对半径内目标正常自卫接敌")
-
-
-func _test_guard_post_unit() -> void:
-	# 阵地护卫（02 一-A.4）：非指挥官守位者（guard_post）同享半径门——
-	# 留守阵地不冲锋，敌近身才自卫；且不触发斩首语义（is_commander 恒 false）
-	var w := _make_acq([500.0])
-	var acq: ScriptTargetAcquire = w["acq"]
-	var unit := w["entity"] as FakeUnit
-	unit._guard_post = true
-	_runner.assert_false(unit.is_commander(), "护卫非指挥官（斩首登记不收）")
-	var t: Node = acq.advance(0.1)
-	_runner.assert_true(t == null, "护卫对超半径候选拒选（守阵地不冲锋）")
-	var near := _add_enemy(w["battle"], 150.0)
-	t = acq.advance(0.1)
-	_runner.assert_equal(t, near, "护卫对半径内目标正常自卫接敌")

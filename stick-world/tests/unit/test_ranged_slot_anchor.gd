@@ -228,12 +228,21 @@ func _test_behavior_approach_via_slot() -> void:
 
 
 func _test_behavior_regression() -> void:
-	# 无锚（清锚）→ 原站桩语义
+	# 无锚（清锚）→ 二线停步语义（2026-10-14：停步线 = 0.45×射程 ≈ 292，
+	# 线内站桩驻射，线外带走射推进——旧"射程内即站桩"口径已退役）
 	var ctx := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
 	ctx.fs._squads[ctx.sid].erase("combat_anchor")
+	# 二线外（dist 400 > 292）→ 接近（不发 ai_stop）
 	ctx.entity.stopped = false
 	ctx.attack.update(0.016)
-	_runner.assert_true(ctx.entity.stopped, "无锚远程单位照旧站桩（零回归）")
+	_runner.assert_true(ctx.entity.last_move.length_squared() > 0.001,
+			"无锚远程二线外继续接近（二线停步语义）")
+	# 二线内（dist 200 < 292）→ 站桩驻射
+	ctx.enemy.global_position = Vector2(700.0, 240.0)
+	ctx.entity.stopped = false
+	ctx.entity.last_move = Vector2.ZERO
+	ctx.attack.update(0.016)
+	_runner.assert_true(ctx.entity.stopped, "无锚远程二线内站桩驻射")
 	ctx.teardown()
 	# 近战（SWORD）：有锚也不锚定（槽位锚定只属远程）
 	var ctx2 := _make_behavior_ctx(ScriptBehaviorProfiles.SWORD)

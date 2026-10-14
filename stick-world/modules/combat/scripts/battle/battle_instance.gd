@@ -81,9 +81,8 @@ var duration_limit: float = 0.0
 ## 收束原因（"annihilation" / "rout" / "mutual" / "timeout"；
 ## 结算摘要与测试用）：annihilation=全灭（含撤离离场）、rout=有效战力溃散归零
 ## （9k 溃逃收敛，已退役）、mutual=双方同时归零、timeout=相持超时。
-## 输赢口径 = 全面战争式打到一方失去作战能力（全灭/撤离/超时兵力判）——
-## 指挥官阵亡是纪律线打击因子（01-组织系统 §3.1 纪律线，后续批次实装），
-## 不是败因（旧"斩首即败"为 AI 线自立开发态规则，已整体退役）
+## 输赢口径 = 全面战争式打到一方失去作战能力（全灭/撤离/超时兵力判；
+## 旧"斩首即败"为 AI 线自立开发态规则，已整体退役）
 var _end_reason: String = ""
 ## 收束瞬间双方存活数（_end 清空列表前快照，供结算摘要；监听方不必回查已释放实例）
 var _final_alive_attacker: int = 0
@@ -530,7 +529,7 @@ func _check_victory() -> void:
 	_final_alive_attacker = a_alive
 	_final_alive_defender = b_alive
 	# 收束 = 全灭（含撤离离场）/ 同归 / 相持超时兵力判——全面战争式打到一方
-	# 失去作战能力；指挥官阵亡不是败因（纪律线因子，后续批次接部队自主避战）
+	# 失去作战能力（纪律线因子后续批次接部队自主避战，非收束判据）
 	if a_alive == 0 and b_alive == 0:
 		_end(State.DRAW, "mutual")
 	elif a_alive == 0:

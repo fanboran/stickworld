@@ -1060,7 +1060,7 @@ func _check_platoon_leader_death(u: Node) -> void:
 
 
 # ─────────────────────────────── 军衔联动 ────────────────────────────────
-## stickman_entity 已立 rank 字段（0 兵/1 班长/2 排长/3 指挥官）与 set_rank 挂点
+## stickman_entity 已立 rank 字段（0 兵/1 班长/2 排长）与 set_rank 挂点
 ## （联动血条军衔点渲染）：实体有 set_rank 走方法、有 rank 字段走属性，
 ## 桩/无字段（单测 Node2D）走 set_meta("rank", n) 兜底。
 

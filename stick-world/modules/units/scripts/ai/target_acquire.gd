@@ -10,8 +10,9 @@ extends RefCounted
 ##     刷新是「变心」抖动源（两等距敌间反复横跳、出手半途掉头），本版整删；
 ##   - 选举 = 前向半平面内最近存活敌；身前无敌回退全域（防站立挨打死锁）；
 ##   - **无距离门**——最近敌直接追（裁决#31 创始人口径）；
-##   - 强制目标（打通态拦路者）即时接管，最高优先；
-##   - 守位者守卫：目标超仇恨半径即放弃（跨半场冲锋 = 留守失效）。
+##   - 强制目标（打通态拦路者）即时接管，最高优先。
+##   （旧守位者守卫随摆场指挥官/护卫根除，2026-10-14——此前守位者目标超
+##   仇恨半径即放弃）
 ##
 ## 参数经兵种档案（behavior_profiles）注入。消费点：behavior_attack（每物理帧
 ## advance）。acquire_interval 档案键保留但只供决策钟 combat 域探测节奏
@@ -19,11 +20,6 @@ extends RefCounted
 
 ## 目标选择器（tactics 对外公共类型；显式 preload 防 headless class_name 未注册）
 const ScriptFinder := preload("res://modules/tactics/api.gd").Finder
-
-# ─────────────────────── 常量（回退值，与 behavior_profiles.BASELINE 同值）────────────────────────────────
-## 仇恨半径倍数（候选/当前目标距本单位不得超过 武器射程×此值——SWL AGRO_RANGE
-## 的数值等价：够得着才追，半个战场外不锁；仅守位者守卫消费）
-const AGRO_MULT: float = 4.0
 
 # ─────────────────────── 宿主注入 ────────────────────────
 ## 决策单位（StickmanEntity；读位置/武器/守位，全部 duck）
@@ -65,12 +61,11 @@ func get_dwell() -> float:
 
 
 ## 每物理帧推进（米拉奇锁定到死）：目标活着原样奉还（零例行刷新——换靶只
-## 发生在 死亡/失效/守位出界）；强制目标即时接管；无目标才选举。返回当前目标
+## 发生在 死亡/失效）；强制目标即时接管；无目标才选举。返回当前目标
 ## （null = 无目标可打）。
 func advance(delta: float) -> Node:
 	_dwell += delta
 	if _target_ok(_target):
-		_post_guard()
 		if _target != null:
 			return _target
 	var forced: Node = _valid_forced()
@@ -81,8 +76,7 @@ func advance(delta: float) -> Node:
 	return _target
 
 
-## 当前目标是否超仇恨半径（观测面保留；裁决#31 起无距离门，恒 false——
-## 守位者守卫仍用 _in_agro 判定）
+## 当前目标是否超仇恨半径（观测面保留；裁决#31 起无距离门，恒 false）
 func is_beyond_leash() -> bool:
 	return false
 
@@ -92,11 +86,10 @@ func is_beyond_leash() -> bool:
 ## 选举一拍（仅初始/目标死亡后到达此处）：强制目标 → 前向最近 → 全域最近。
 ## 无滞回无驻留无刷新——最近者得，得即锁定到死。
 func _elect() -> void:
-	# 1. 强制目标（打通态拦路者）：有效且未超仇恨半径 → 最高优先锁定
+	# 1. 强制目标（打通态拦路者）：有效 → 最高优先锁定
 	var forced: Node = _valid_forced()
 	if forced != null:
 		_accept(forced)
-		_post_guard()
 		return
 	# 2. 前向半平面最近存活敌（SWL OnlyTargetsUnitsForward 直译——只打身前
 	#    目标防回头送；前向配对让接触沿正面自然分布）
@@ -108,7 +101,6 @@ func _elect() -> void:
 		best = _find_best(false)
 	if best != null:
 		_accept(best)
-	_post_guard()
 
 
 ## 最近有效敌（前向过滤可配；候选须在仇恨半径内）
@@ -138,25 +130,7 @@ func _target_ok(t: Node) -> bool:
 	return true
 
 
-## 距离是否在仇恨半径内（武器射程 × AGRO_MULT；无武器回退 100 旧口径）
-func _in_agro(t: Node) -> bool:
-	if t == null or not is_instance_valid(t) or entity == null or not is_instance_valid(entity):
-		return false
-	var dist: float = entity.global_position.distance_to(t.global_position)
-	return dist <= _attack_range() * _p("agro_mult", AGRO_MULT)
-
-
-## 攻击射程（duck 读武器；无武器回落 100 = 旧口径）
-func _attack_range() -> float:
-	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_weapon"):
-		return 100.0
-	var w: Node = entity.get_weapon()
-	if w != null and "attack_range" in w:
-		return float(w.attack_range)
-	return 100.0
-
-
-## 强制目标有效性维护：有效 → 返回目标；死亡/失效/超仇恨半径 → 清除返回 null
+## 强制目标有效性维护：有效 → 返回目标；死亡/失效 → 清除返回 null
 func _valid_forced() -> Node:
 	if _forced_target == null:
 		return null
@@ -164,15 +138,6 @@ func _valid_forced() -> Node:
 		_forced_target = null
 		return null
 	return _forced_target
-
-
-## 守位者守卫（指挥官/阵地护卫）：目标超仇恨半径 → 放弃（不跨半场冲锋）
-func _post_guard() -> void:
-	if _target == null or entity == null or not is_instance_valid(entity):
-		return
-	if entity.has_method("holds_post") and entity.holds_post() \
-			and not _in_agro(_target):
-		_target = null
 
 
 ## 档案参数读取（缺省回退常量）

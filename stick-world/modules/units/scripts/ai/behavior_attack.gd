@@ -31,6 +31,13 @@ const ScriptTargetAcquire := preload("res://modules/units/scripts/ai/target_acqu
 const Y_ALIGN_DY_THRESHOLD: float = 16.0
 ## IsTargetReallyClose 阈值倍数（半射程近似，dump 无真值 → 待实测校准）
 const REALLY_CLOSE_MULT: float = 0.5
+## 远程二线停步线（射程分数）：远程不在最大射程缘逐目标散停——650 射程缘
+## 停步 = 吊在己方前线后方半场开外各自为战（2026-10-14 创始人点正「弓箭手
+## 的距离和位置都怪」）。SWL 语义 = 随军推进、停在前线后方二线驻射
+## （attackRangeSecondLine / ArcherAi.GetRange 编队偏移，翻译档 §射程体系），
+## 开火门槛照旧吃全射程——二线到接触线的实际弹程短，命中反馈即时。
+## 0.45 × 650 ≈ 292 ≈ 前线后 1~1.5 身位（SWL 实机比例标定）
+const RANGED_SECOND_LINE_FRAC: float = 0.45
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
@@ -194,6 +201,12 @@ func update(delta: float) -> void:
 	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
 	var dist: float = entity.global_position.distance_to(_target.global_position)
+	# 远程二线停步线（见 RANGED_SECOND_LINE_FRAC 注）：停步/驻射阈值收进二线，
+	# 开火门槛（本函数内各 fire 分支的 dist <= attack_range）照旧全射程
+	var ranged: bool = _is_ranged_weapon(weapon)
+	var hold_range: float = attack_range
+	if ranged:
+		hold_range = minf(attack_range, maxf(attack_range * RANGED_SECOND_LINE_FRAC, 40.0))
 	# 拉弓瞄准俯仰（SWL Archer.UpdateAim：弓手逐拍把弹道仰角推给表现层；
 	# 非弓/无武器自然归零——风筝/锚定/接近各分支同享这一次推送）
 	if entity.has_method("set_aim_pitch"):
@@ -245,14 +258,14 @@ func update(delta: float) -> void:
 			_face_target()  # 回头面向目标开火（否则背身拉弓）
 			weapon.perform_attack(_target)
 			_aiming = false
-	elif dist <= attack_range:
-		# 在射程内：站定出手。SWL 出手链 = 冷却好即打，命中帧自检射程（SW3
+	elif dist <= hold_range:
+		# 二线线内：站定出手。SWL 出手链 = 冷却好即打，命中帧自检射程（SW3
 		# MeleeAttackSystem.HitUpdate→InRangeForHit），出手端无任何预判门——
 		# 近战预判门/连射点射/y 对齐拦射已随裁决#32 删（射程内站桩不打的三道闸）。
 		# 远程先落槽位锚定驻防（批5 产线语义：远程组接战后按槽位原地成排齐射；
 		# 观察场 combat_anchor 关 = 无锚回落站桩，测试桩/未编队单位零回归）。
 		var anchored: bool = false
-		if _is_ranged_weapon(weapon):
+		if ranged:
 			anchored = _hold_formation_slot(dist, kite_range)
 		if not anchored and _cap_ai_stop:
 			entity.ai_stop()
@@ -265,7 +278,7 @@ func update(delta: float) -> void:
 			weapon.perform_attack(_target)
 			_aiming = false
 			# 近战挥砍锁足（米拉奇口径）：本剑挥完前不追不挪；远程边撤边射不锁
-			if not _is_ranged_weapon(weapon):
+			if not ranged:
 				_melee_swing_lock = true
 				_melee_lock_until = _clock + _swing_lock_duration(weapon)
 			# 攻击后举盾（cooldownAfterAttackForBlock）：矛兵攻击完一拍盾防反打
@@ -285,8 +298,9 @@ func update(delta: float) -> void:
 		if _approach_via_slot():
 			return
 		var to_target: Vector2 = _target.global_position - entity.global_position
-		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈，直接压上
-		var really_close: bool = _is_target_really_close(dist, attack_range)
+		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈，直接压上——
+		# 近战专属语义；远程压上=脱离二线钻进人堆，停步线由 hold_range 承担
+		var really_close: bool = not ranged and _is_target_really_close(dist, attack_range)
 		# 攻击槽位（SWL GetTargetAttackSpot）：停在射程内缘的攻击位
 		var attack_radius: float = maxf(attack_range * 0.85, 24.0)
 		var desired_pos: Vector2 = _target.global_position if really_close \
@@ -299,6 +313,14 @@ func update(delta: float) -> void:
 		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
 		if _cap_ai_move:
 			entity.ai_move(dir, run)
+		# 远程走射（SWL 弓手推进中照常放箭——二线停步线之外、射程之内的余量
+		# 不是白给的）：冷却好即停步线边走边放，不停步不压上（移动闸=停步线）
+		if ranged and dist <= attack_range and weapon != null \
+				and weapon.has_method("can_attack") and weapon.can_attack() \
+				and not _arrows_wasted(_target, weapon) and _update_aim_rhythm(delta):
+			_face_target()
+			weapon.perform_attack(_target)
+			_aiming = false
 
 
 func exit(next: String) -> void:

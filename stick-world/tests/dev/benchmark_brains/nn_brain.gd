@@ -146,11 +146,8 @@ func setup() -> void:
 			_drives_settlement = _my_faction == 1
 	if arena != null and "_capture_points" in arena:
 		_points = arena.get("_capture_points")
-	# 指挥官（观察 [123..124] 用）：直读 arena 登记表
-	if arena != null and "_arena_commanders" in arena:
-		var cmds: Dictionary = arena.get("_arena_commanders")
-		if cmds != null:
-			_commanders = cmds
+	# （旧指挥官登记表 _arena_commanders 随摆场指挥官/护卫根除，2026-10-14——
+	# 观察 [123..124] 槽位保留（对拍协议冻结），无源恒 0 = 无指挥官语义）
 	_resolve_squads()
 
 

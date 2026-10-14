@@ -732,11 +732,8 @@ func set_order(behavior_name: String, params: Dictionary = {}) -> void:
 		print("[OrderTrace] iid=%d %s target=%s follow=%s f=%d"
 				% [get_instance_id() % 10000, behavior_name, tgt,
 						params.get("follow_order", false), Engine.get_process_frames()])
-	# 守位者号令守卫（指挥官/阵地护卫）：守位者不接推进/撤离类号令——留守本方
-	# 阵地，只做被近身自卫（行为层 LEASH 内迎击），任何来路的号令都拉不走。
-	# idle（HOLD_POSITION）放行——留守语义兼容。
-	if _holds_post() and behavior_name in ["move", "retreat", "seek_cover"]:
-		return
+	# （旧守位者号令守卫随摆场指挥官/护卫根除，2026-10-14——此前守位者在此
+	# 拒绝推进/撤离类号令留守阵地）
 	_ordered_behavior = behavior_name
 	_ordered_params = params
 	_breach_target = null  # 新号令显式接管：打通插叙作废（粘性只保原号令）
@@ -775,13 +772,6 @@ func has_order() -> bool:
 
 
 # ─────────────────────────────── 压制禁令（纯行为禁令：不追不打，永不脱战）────────────────────────────────
-
-## 是否守位者（守位行为面 duck；多个消费点共用：压制豁免/C6 豁免/号令守卫）。
-## 指挥官（rank>=3）与阵地护卫（guard_post）同款：留守+被近身自卫，不脱位。
-func _holds_post() -> bool:
-	return _entity != null and is_instance_valid(_entity) \
-			and _entity.has_method("holds_post") and _entity.holds_post()
-
 
 ## 是否被压制：查询状态效果组件 SUPPRESSED 态（duck；组件缺失/压制未启用
 ## 返回 false = 零回归）。

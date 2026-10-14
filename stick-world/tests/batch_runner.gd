@@ -86,7 +86,6 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_requisition_exclusion.gd",
 	"res://tests/unit/test_townlife_save_persistence.gd",
 	"res://tests/unit/test_keymap_registry.gd",
-	"res://tests/unit/test_commander_rules.gd",
 	"res://tests/unit/test_formation_platoon.gd",
 	"res://tests/unit/test_formation_fireteam.gd",
 	"res://tests/unit/test_squad_cohesion.gd",

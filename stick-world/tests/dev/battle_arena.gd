@@ -17,17 +17,16 @@ extends Node
 ##   失去集火号令，到战斗结束无法补员（班长轮转不受影响）。
 ##   兵种结构落到班级：矛兵班（先锋，射程 120 卡线）→ 剑士班（中坚）→
 ##   火力班（杖+弓，射程 300 压制）。三档编成（"platoons" = 班下标分组建排）：
-##     遭遇战·16 = 指挥官直统 2 班（矛兵班 8 + 中坚火力班 8；Tier0 小档不设
-##       排长层，02 一-A.1）+ 阵地护卫 0 名（9v9 档口径）——设计观感标定主档
+##     遭遇战·16 = 2 班（矛兵班 8 + 中坚火力班 8；Tier0 小档不设
+##       排长层，02 一-A.1）——设计观感标定主档
 ##     密度压力·48 = 2 排 ×2 班（矛 12 + 矛剑混编 12 ｜ 剑 12 + 火 12，4 班 ×12 人）
-##       + 阵地护卫 2 名
-##     极端压力·96 = 4 排 ×2 班（矛×2 ｜ 混编+剑 ｜ 剑×2 ｜ 火×2，8 班 ×12 人）
-##       + 阵地护卫 3 名（96 档封存，仅作极端压力对照）
+##     极端压力·96 = 4 排 ×2 班（矛×2 ｜ 混编+剑 ｜ 剑×2 ｜ 火×2，8 班 ×12 人；
+##       96 档封存，仅作极端压力对照）
 ##   （观感验收默认档 = 16 = 设计口径「每侧最多十几二十几」；48/96 为密度/极端
 ##   压力档——高于设计标定 2~3 倍，观感问题可能被密度放大，验收对号入座）
 ##   一屏战场（创始人：战场大小=视野，测试场景的摆场设定而非运行时机制）：
-##   出生列阵整体收进可视半宽（1080p@1.0 缩放 = ±960，出生最深 ±910 含
-##   指挥官），可走边界 = 视野内收 40（map_left/right 收窄——实体层每帧
+##   出生列阵整体收进可视半宽（1080p@1.0 缩放 = ±960，出生最深 ±840），
+##   可走边界 = 视野内收 40（map_left/right 收窄——实体层每帧
 ##   钳地图边界天然兜底，无运行时看门狗；相机对"图窄于视野"自动居中）。
 ##   开战推进 = 追最近敌（裁决#32 创始人口径）：不下号令，出生列阵后全军
 ##   自主接战——目标选举选最近敌（裁决#31 SWL 锁定），接敌行为直奔目标
@@ -88,9 +87,8 @@ const PRESETS: Array = [
 				],
 			},
 		],
-		# Tier0 主档（02 二-A.1 小档不设排长层）：2 班编不足一排的规模由
-		# 指挥官直接统班，不另设排长；阵地护卫 0 名（9v9 档口径）
-		"guards": 0,
+	# Tier0 主档（02 二-A.1 小档不设排长层）：2 班编不足一排的规模由
+	# 指挥官直接统班，不另设排长
 	},
 	{
 		"name": "密度压力·48",
@@ -112,8 +110,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
-		# 2 排 ×2 班（每班 12 人 = 48）；阵地护卫 2 名（人数多时两三个）
-		"guards": 2,
+		# 2 排 ×2 班（每班 12 人 = 48）
 		"platoons": [[0, 1], [2, 3]],
 	},
 	{
@@ -152,9 +149,7 @@ const PRESETS: Array = [
 				"rows": [{ "weapon": W_STAFF, "count": 4 }, { "weapon": W_BOW, "count": 8 }],
 			},
 		],
-		# 4 排 ×2 班（每班 12 人 = 96）：矛排 ｜ 混编+剑排 ｜ 剑排 ｜ 火排；
-		# 阵地护卫 3 名（设计上限口径）
-		"guards": 3,
+		# 4 排 ×2 班（每班 12 人 = 96）：矛排 ｜ 混编+剑排 ｜ 剑排 ｜ 火排
 		"platoons": [[0, 1], [2, 3], [4, 5], [6, 7]],
 	},
 ]
@@ -164,7 +159,7 @@ const PRESETS: Array = [
 static var _preset_idx: int = 0
 ## 左右两团出生线 x 相对地图中线的偏移。视野预算（创始人 2026-10-12 裁决：
 ## 出生范围要在视野范围内列阵）：1.0 缩放可视半宽 960，纵深链（48 档最坏）
-## = 阵线偏移 330 + 近战块 290 + 组隙 130 + 远程块 90 + 指挥条 70 = 910 ≤
+## = 阵线偏移 330 + 近战块 290 + 组隙 130 + 远程块 90 = 840 ≤
 ## 可走边界 920。前线间距 = 2×(330−150) = 360：矛追击带 480 内（开局可索敌
 ## 推进）、弓射程 300 外（不出生即对射）。
 const TEAM_OFFSET_X: float = 330.0
@@ -206,32 +201,10 @@ const CAPTURE_Y_MARGIN: float = 100.0
 ## 旗点状态行用方位标签（与布点顺序一一对应：中线/蓝阵/红阵/蓝后排/红后排）
 const CAPTURE_POINT_LABELS: Array = ["中线", "蓝阵", "红阵", "蓝后排", "红后排"]
 
-## ── 战场指挥官（将领+卫队，全战式编制）：双方后方各 1 名留守 ──
-const COMMANDER_ENABLED: bool = true
-## 指挥官出生在远程块后缘再后退的纵深（px）。视野预算压缩（裁决#28）：
-## 70 + 与远程末列的横向错开共同保证不与远程块碰撞箱相交
-##（x 差 70<83 由 y 错开兜底，见 COMMANDER_STRIP_Y）
-const COMMANDER_REAR_OFFSET: float = 70.0
-## 指挥条带 y（相对带中心，px）：远程组横展上限（±336）之外的带内空带——
-## 指挥官/护卫整组站此条带，与远程块（横展铺满带心区）在 y 上天然分离，
-## x 深度可与远程块重叠不碰撞；带下缘（+456）留 45px 余量不出行动带
-const COMMANDER_STRIP_Y: float = 408.0
-## 远程组列高上限：横展不铺满行动带（±336），给指挥条带留空带
+## ── 远程组列高上限：横展不铺满行动带（±336），带缘留净空 ──
+##（旧"指挥条带"随摆场指挥官/护卫一并根除，2026-10-14 裁决；上限数值保留
+## ——远程横展收窄的构图口径不变）
 const RANGED_UPC_CAP: int = 7
-## 指挥官武器（佩剑；持旗视觉后议，机制先行）
-const COMMANDER_WEAPON: int = W_SWORD
-
-## ── 阵地护卫（02 一-A.4：指挥前方阵地配 0~3 名，各档人数见 PRESETS guards）──
-## 护卫守位行为面与指挥官同款（guard_post 职责：留守+LEASH 迎击+号令拦截），
-## 不判任何全局胜负（rank 0 士兵）——守位判定口 StickmanEntity.holds_post()。
-## 护卫相对指挥官的前向偏移（px，朝主力方向 = 指挥前方"阵地"；
-## 与远程末列 x 差 20<83，靠 y 条带分离保证不碰撞）
-const GUARD_FORWARD_OFFSET: float = 90.0
-## 多名护卫间纵向错开（px；指挥条带内 45px 錯开——条带内无他人，≥24 碰撞
-## 箱深即不叠，同时全部落在远程横展（±336）外 24px 的净空里）
-const GUARD_Y_STAGGER: float = 45.0
-## 护卫武器（剑：近身自卫）
-const GUARD_WEAPON: int = W_SWORD
 
 ## ── 相机稳定锚（批2，02 二-B #11：质心代理死亡/换令即跳变 → 稳定锚）──
 ## 锚 = 双方「前线」的中点。前线取修剪均值（朝敌方最前分位的存活单位均值）：
@@ -268,8 +241,6 @@ var _planners: Dictionary = {}
 var _arena_formation: Node = null
 ## 火力组 id 登记（faction -> ft_id 数组；HUD 火力组计数用）
 var _arena_fireteams: Dictionary = {}
-## 双方指挥官（faction -> 单位；HUD 阵亡提示用）
-var _arena_commanders: Dictionary = {}
 ## 相机跟随代理（camera_rig 居中模式目标；缓动到稳定锚——前线中点）
 var _cam_proxy: Marker2D = null
 ## 稳定锚目标（死区过滤后的双方前线中点；相机缓动终点）
@@ -348,7 +319,7 @@ func _spawn_and_start() -> void:
 		# 一屏战场（创始人两次定口径：地图 = 正常游玩缩放一屏大）→ 2026-10-13
 		# 修订：视角拉远 0.75（视野放宽 1/3）——满屏单位奔跑时速度观感过快，
 		# 视野放大后同速显得从容；战场边界仍按有效缩放推导（±1240，出生
-		# ±910 仍在界内），全场即视野口径不变
+		# ±840 仍在界内），全场即视野口径不变
 		if rig.has_method("set_user_zoom"):
 			rig.set_user_zoom(0.75)
 		_cam_proxy = Marker2D.new()
@@ -395,8 +366,8 @@ func _spawn_and_start() -> void:
 	# - 横距 112 = 视野预算压缩（140 装不进 1.0 一屏；不变式链全过：
 	#   83 < 分离X 48 < 分离Y 110 ≤ 112、90 ≤ 112、容差 170 ∈ [112, 224)、
 	#   死区 40 < 112——分离半径不动，横距对碰撞箱深 24 仍有 88px 余量）；
-	# - RESERVE 110 / GROUP 130 = 纵深链压缩（48 档最坏 290+130+90+70 = 580，
-	#   阵线偏移 330 → 出生最深 910 ≤ 可走边界 920）。
+	# - RESERVE 110 / GROUP 130 = 纵深链压缩（48 档最坏 290+130+90 = 510，
+	#   阵线偏移 330 → 出生最深 840 ≤ 可走边界 920）。
 	# 均为观察场覆写（BattleLine 静态与 FormationSpacing 默认是产线口径）。
 	fs.ROW_GAP = 90.0
 	fs.SPREAD_SPACING = 112.0
@@ -412,7 +383,7 @@ func _spawn_and_start() -> void:
 				melee_total += int(row["count"])
 	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
 	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带——±(cap-1)/2×112 = ±336，
-	# 给指挥条带（COMMANDER_STRIP_Y 408 起）留净空
+	# 带缘留净空（旧"指挥条带"随摆场指挥官/护卫根除，口径保留）
 	var upc_r: int = mini(BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING),
 			RANGED_UPC_CAP)
 	# 远程组出生基线 = 近战组全纵深 + GROUP_GAP（与 ranged_line_x 同式：开局
@@ -455,40 +426,6 @@ func _spawn_and_start() -> void:
 		squads_left.append(l_units)
 		squads_right.append(r_units)
 		await get_tree().process_frame
-	# 战场指挥官（将领，全战式编制）：双方后方各 1 名——留守后方，不编班不下
-	# 推进令，被近身自卫反击（行为层 LEASH 内迎击 + 避战豁免）。阵亡不判负
-	#（旧"斩首即败"已退役）：他是纪律线打击因子（01-组织系统 §3.1，纪律线
-	# 后续批次实装），战斗仍打到全灭/撤离/超时收束。
-	# 站位 = 远程块后缘再退 COMMANDER_REAR_OFFSET、y 落指挥条带（COMMANDER_STRIP_Y
-	# ——远程横展外的带内空带）：x 差 70<83 的碰撞由 y 错开（≥72）兜底。
-	if COMMANDER_ENABLED:
-		var rear_off: float = ranged_base_off + ranged_depth + COMMANDER_REAR_OFFSET
-		var cmd_y: float = spawn_y + COMMANDER_STRIP_Y
-		var l_cmd := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X - rear_off, cmd_y), COMMANDER_WEAPON, fs, 1)
-		var r_cmd := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X + rear_off, cmd_y), COMMANDER_WEAPON, fs, -1)
-		if l_cmd != null:
-			l_cmd.set_rank(3)
-			_attacker.append(l_cmd)
-			_arena_commanders[1] = l_cmd
-		if r_cmd != null:
-			r_cmd.set_rank(3)
-			_defender.append(r_cmd)
-			_arena_commanders[2] = r_cmd
-		# 阵地护卫（02 一-A.4）：指挥官前方（阵地）配 0~3 名——守位行为面同指挥官
-		#（guard_post：留守+LEASH 迎击+号令拦截），不判任何全局胜负（rank 0 士兵）。
-		# 站位 = 指挥官前向 GUARD_FORWARD_OFFSET（朝主力 = 指挥前方"阵地"），
-		# 条带内 GUARD_Y_STAGGER 错开（条带在远程横展外，x 穿远程块纵深也不碰）。
-		var guards_n: int = int(PRESETS[_preset_idx].get("guards", 0))
-		for gi in guards_n:
-			var g_y: float = cmd_y + (float(gi) - float(guards_n - 1) * 0.5) * GUARD_Y_STAGGER
-			var l_guard := _spawn_unit(map, Vector2(mid_x - TEAM_OFFSET_X - rear_off + GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs, 1)
-			var r_guard := _spawn_unit(map, Vector2(mid_x + TEAM_OFFSET_X + rear_off - GUARD_FORWARD_OFFSET, g_y), GUARD_WEAPON, fs, -1)
-			if l_guard != null:
-				l_guard.set("guard_post", true)
-				_attacker.append(l_guard)
-			if r_guard != null:
-				r_guard.set("guard_post", true)
-				_defender.append(r_guard)
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
 	# 出生域视野自检（裁决#28 硬验收「出生范围在视野范围内列阵」）：主档/密度档
 	# 须整体入画；96 封存档密度几何装不进一屏，预期超界（打印告示不阻断）。
@@ -1058,28 +995,8 @@ func _update_hud() -> void:
 	_right_alive_label.text = "红方（守）存活 %d / %d" % [ra, _defender.size()]
 	if la == 0 or ra == 0:
 		_hint_label.text = "战斗结束：%s 获胜 —— R 重开 / 换预设" % ("蓝方" if ra == 0 else "红方")
-	elif _commander_down_text() != "":
-		# 指挥官阵亡战况提示（不判负——战斗照常收束，纪律线因子）
-		_hint_label.text = _commander_down_text()
 	else:
 		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
-
-
-## 指挥官阵亡提示文案（不判负——纪律线因子，战斗继续；只做战况提示）。
-func _commander_down_text() -> String:
-	if not COMMANDER_ENABLED or _arena_commanders.is_empty():
-		return ""
-	if _is_unit_down(_arena_commanders.get(1)):
-		return "蓝方指挥官阵亡（军心动摇）"
-	if _is_unit_down(_arena_commanders.get(2)):
-		return "红方指挥官阵亡（军心动摇）"
-	return ""
-
-
-## 单位是否已阵亡（null/失效/死亡都算——指挥官不会凭空消失）。
-func _is_unit_down(u) -> bool:
-	return u == null or not is_instance_valid(u) \
-			or (u.has_method("is_dead") and u.is_dead())
 
 
 func _count_alive(units: Array) -> int:

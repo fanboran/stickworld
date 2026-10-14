@@ -10,7 +10,7 @@ const SHOT_DIR := "user://shots"
 const COVER_WAIT_FRAMES := 4200  # ~70s @60fps：boot 30s + 战场装配余量
 
 
-func run(tag: String, preset: int, secs: int, every: int) -> void:
+func run(tag: String, preset: int, secs: int, every: float) -> void:
 	DirAccess.make_dir_recursive_absolute(SHOT_DIR)
 	# 等揭幕：ArenaCover 撤除 = _reveal 已跑。等不到也继续（截到什么诊断什么）。
 	var waited := false
@@ -27,16 +27,20 @@ func run(tag: String, preset: int, secs: int, every: int) -> void:
 	for i in 12:
 		await get_tree().process_frame
 	var t0 := Time.get_ticks_msec() / 1000.0
-	for t in range(0, secs + 1, maxi(every, 1)):
-		var target := t0 + float(t)
+	# 亚秒间隔支持（every=0.2 → 5fps 连续帧，GIF 动图装配用）；下限 0.05s
+	var step := maxf(every, 0.05)
+	var t := 0.0
+	while t <= float(secs) + 0.0001:
+		var target := t0 + t
 		while Time.get_ticks_msec() / 1000.0 < target:
 			await get_tree().process_frame
 		# 一屏战场（创始人口径）：地图 = 游玩缩放一屏，全程 1.0 无视角切换
 		await get_tree().process_frame   # 当帧渲染完成后再采（diag 同口径）
 		var img := get_viewport().get_texture().get_image()
-		var name := "%s_p%d_第%d秒" % [tag, preset, t]
+		var name := "%s_p%d_第%.1f秒" % [tag, preset, t]
 		img.save_png("%s/%s.png" % [SHOT_DIR, name])
 		print("[ArenaWorkbench] shot %s/%s.png" % [SHOT_DIR, name])
+		t += step
 	while Time.get_ticks_msec() / 1000.0 < t0 + float(secs):
 		await get_tree().process_frame
 	print("[ArenaWorkbench] done preset=%d secs=%d" % [preset, secs])

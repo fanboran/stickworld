@@ -24,7 +24,7 @@ const BURSTCAPTURE_DRIVER := preload("res://tools/dev/arena_burstcapture.gd")
 
 var _preset := 1
 var _secs := 20
-var _every := 5
+var _every := 5.0   # 截图间隔秒（支持亚秒：0.2 = 5fps 连续帧，GIF 装配用）
 var _tag := "workbench"
 var _metrics := false
 var _renderperf := false
@@ -51,7 +51,7 @@ func _ready() -> void:
 			"--secs":
 				_secs = int(args[i + 1]); i += 2
 			"--every":
-				_every = int(args[i + 1]); i += 2
+				_every = float(args[i + 1]); i += 2
 			"--tag":
 				_tag = args[i + 1]; i += 2
 			"--metrics":

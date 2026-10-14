@@ -99,6 +99,14 @@ var _eff_q := -1.0
 ## 描边行同吃此垫（环外底贴地）。随 eff 档重算；不动 FOOT_ANCHOR 跨文件
 ## 契约（hd2d_map_base 50.23 同步值/test_hd2d_projection 断言不受影响）。
 var _foot_pad_rig := 0.0
+## 部件链路探针一次性哨兵（首写/早退各打一行）
+var _probed_once := false
+## 停写/恢复迁移探针：最后一次真写帧（-1=未写过）
+var _last_written_frame := -1
+## 停写段已打点标记（同一停写段只打一行，值=该段最后一次真写帧）
+var _stop_logged := -1
+## rig 可见性探针：上次采样值
+var _last_rig_visible := true
 
 # ─────────────────────────── 装配 ───────────────────────────
 
@@ -611,6 +619,12 @@ func _process(_delta: float) -> void:
 func _process_inner(_delta: float) -> void:
 	if _pure_sim or _buckets == null or not is_instance_valid(_buckets) or _rig == null:
 		return
+	# rig 可见性边沿探针（无条件）：LOD 导演 T2 档会翻 rig.visible——vanish 类
+	# 报障与此的相关性一眼可判（每个宿主每次翻转一行）
+	if _rig.visible != _last_rig_visible:
+		_last_rig_visible = _rig.visible
+		print("[RigVisProbe] f=%d iid=%d rig.visible=%s" % [
+				Engine.get_process_frames(), get_instance_id(), _rig.visible])
 	if _hidden:
 		_release_bar_slot()
 		return
@@ -675,8 +689,25 @@ func _release_bar_slot() -> void:
 ## 跨角色走真深度（前角色连描边整体压后角色＝画布 y-sort 等价）。
 ## quad 尺寸 = 图集格位尺寸（量化恒定），实际宽度承运在贴图像素里。
 func _write_body() -> void:
+	# 停写/恢复迁移探针（无条件边沿打点，vanish 类报障取证口）：
+	# 本宿主 >10 帧没写过行 = 一次停写段；停写边沿与恢复边沿各打一行
+	var fr := Engine.get_process_frames()
 	if _joint_atlas == null or _buckets.body == null:
+		if _last_written_frame > 0 and fr - _last_written_frame > 10 \
+				and _stop_logged != _last_written_frame:
+			_stop_logged = _last_written_frame
+			print("[PartsProbe] f=%d iid=%d 停写中 gap>=%d帧 atlas=%s body桶=%s" % [
+					fr, get_instance_id(), fr - _last_written_frame,
+					_joint_atlas != null, _buckets != null and _buckets.body != null])
 		return
+	if _last_written_frame > 0 and fr - _last_written_frame > 10:
+		print("[PartsProbe] f=%d iid=%d 恢复 gap=%d帧" % [
+				fr, get_instance_id(), fr - _last_written_frame])
+	_last_written_frame = fr
+	if not _probed_once:
+		_probed_once = true
+		print("[PartsProbe] f=%d iid=%d 首写 parts=%d" % [
+				fr, get_instance_id(), _parts.size()])
 	var tr := _tint
 	var alpha := _master_alpha
 	var buckets: Node = _buckets

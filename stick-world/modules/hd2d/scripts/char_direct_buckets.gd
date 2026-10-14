@@ -71,6 +71,10 @@ class RowBucket:
 	var _col_cache := PackedColorArray()
 	var _cus_cache := PackedColorArray()
 	const SENTINEL := Color(-1.0, 0.0, 0.0, 0.0)
+	## 塌陷探针：上一帧游标（-1=未记）
+	var _last_cursor := -1
+	## 行 0 数据探针去重缓存
+	var _last_row0_probe := ""
 
 	func _setup(name: String, mesh: ArrayMesh, mat: Material, use_custom: bool) -> void:
 		set_name(name)
@@ -121,6 +125,39 @@ class RowBucket:
 		if f != _stamp:
 			_stamp = f
 			cursor = 0
+		# 整帧零写/塌陷边沿探针（无条件，vanish 类报障取证口）：
+		# 高水位 >50 行时游标跌 0 = 整桶本帧零写入（全部身体隐形）；
+		# 游标较上帧掉幅 >30% 水位 = 大批单位停写（跳写塌陷级）
+		if high_water > 50:
+			if cursor == 0 and _last_cursor > 0:
+				print("[RowProbe] %s f=%d 整帧零写 high=%d" % [name, f, high_water])
+			elif _last_cursor > 0 and cursor < _last_cursor * 0.7:
+				print("[RowProbe] %s f=%d 塌陷 %d→%d high=%d" % [
+						name, f, _last_cursor, cursor, high_water])
+		_last_cursor = cursor
+		# 行 0 数据变更探针（无条件低频采样）：custom=UV 子矩形、color=实例色
+		# 都是行内容静态量——跳变 = 缓冲与缓存失同步/行内容被改写（vanish 类
+		# "行在但隐形"的 GPU 侧取证口）
+		if high_water > 50 and f % 15 == 0 and mm.has_method("get_instance_custom_data"):
+			var c0: Color = mm.get_instance_custom_data(0)
+			var col0: Color = mm.get_instance_color(0)
+			var key := "%s|%s" % [c0, col0]
+			if key != _last_row0_probe:
+				_last_row0_probe = key
+				print("[RowProbe] %s f=%d 行0 custom=%s color=%s" % [name, f, c0, col0])
+		# 行退化探针（无条件低频采样）：均匀抽 4 行查变换基长度，接近零 =
+		# 零面积三角形（写入侧给的是退化变换 → 隐形的直接证据）
+		if high_water > 50 and f % 15 == 0:
+			for k in 4:
+				var idx := int(high_water * float(k) / 4.0)
+				if idx >= high_water:
+					idx = high_water - 1
+				var xf0 := mm.get_instance_transform(idx)
+				var bl := xf0.basis.x.length() + xf0.basis.y.length() \
+						+ xf0.basis.z.length()
+				if bl < 0.01:
+					print("[RowProbe] %s f=%d 行%d 退化 basis_len=%.5f" % [
+							name, f, idx, bl])
 		# 跳写塌陷打点（STICK_TRACE_WRITE=1）：>30% 行未写 = 有单位跳帧
 		#（行按调用序分配，跳写者之后的所有单位行序前移、尾部当帧消失——
 		# 「整个身体闪烁消失」候选机制的取证口）
@@ -161,6 +198,8 @@ var joint_atlas: Node = null
 var _joint_tex_version := -1
 ## 血条图集（headless 跳过装配）
 var bar_atlas: Node = null
+## 渲染状态探针去重缓存
+var _last_render_state := ""
 
 
 func _ready() -> void:
@@ -213,12 +252,26 @@ func _process(_delta: float) -> void:
 			var tex: Texture2D = joint_atlas.texture()
 			_body_mat.set_shader_parameter("atlas_tex", tex)
 			_stroke_mat.set_shader_parameter("atlas_tex", tex)
+	_render_probe()
 	var _pt := StickProf.t0()
 	stroke.end_tick()
 	body.end_tick()
 	for path in _weapon_buckets:
 		(_weapon_buckets[path]["bucket"] as RowBucket).end_tick()
 	StickProf.t1("桶清尾", _pt)
+
+
+## 身体两桶渲染状态变更探针（无条件、变更才打一行；vanish 类"行在但隐形"
+## 报障的取证口：贴图槽尺寸/实例数/可见层/材质优先级任何一项跳变即现形）
+func _render_probe() -> void:
+	var tex: Texture2D = _body_mat.get_shader_parameter("atlas_tex")
+	var tex_key := "null" if tex == null else str(tex.get_size())
+	var state := "%s ic=%d/%d vis=%s pri=%d/%d" % [
+			tex_key, stroke.mm.instance_count, body.mm.instance_count,
+			stroke.get_child(0).visible, _stroke_mat.render_priority, _body_mat.render_priority]
+	if state != _last_render_state:
+		_last_render_state = state
+		print("[BucketsProbe] f=%d %s" % [Engine.get_process_frames(), state])
 
 
 # ─────────────────────────── 宿主写行口（1100 内调用） ───────────────────────────

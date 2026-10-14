@@ -111,6 +111,9 @@ static func _quant(v: float) -> float:
 ## 会用新 UV 采旧贴图＝闪一帧乱线）。
 func _bake(specs: Array) -> void:
 	_baking = true
+	var t0 := Time.get_ticks_msec()
+	if OS.get_environment("STICK_TRACE_ATLAS") == "1":
+		print("[AtlasBake] f=%d 开始 specs=%d" % [Engine.get_process_frames(), specs.size()])
 	_layout(specs)
 	_rebuild_children(specs)
 	# 等视口渲出这一版再回读；视口未就绪（空图）时有限重试（同 char_bar_atlas
@@ -125,6 +128,9 @@ func _bake(specs: Array) -> void:
 	if img != null:
 		_whiten_rgb(img)         # 先白化再生成 mip（见函数注释），否则部件外缘发暗
 		img.generate_mipmaps()   # 远档缩小的平滑由 mip 链承担（同烘焙卡）
+		if OS.get_environment("STICK_TRACE_ATLAS") == "1":
+			print("[AtlasBake] f=%d 完成 耗时=%dms（含白化+mip 同步段）尺寸=%s" % [
+					Engine.get_process_frames(), Time.get_ticks_msec() - t0, img.get_size()])
 		if OS.get_environment("STICK_DUMP_ATLAS") == "1":
 			var dump := "user://atlas_dump_%d.png" % Engine.get_process_frames()
 			img.save_png(dump)

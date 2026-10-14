@@ -36,6 +36,7 @@ extends Node3D
 ##
 ## 血条：原版 health_bar_indicator 的驱动镜像画进共享图集视口
 ##（char_bar_atlas，原版 HealthBarIndicator 同一 apply_bar_state 协议），3D 面片贴头顶锚点。
+## 血条/劳作条均为单位 HUD 层语义：免深度测试恒浮于单位件之上（char_bar_atlas 头注）。
 ##
 ## 尸体：死亡动画由 rig 播完停尾帧（状态机 dead 态），实体淡出期
 ## set_master_alpha<1 把部件段迁入渐隐桶逐帧压 alpha——rig 姿态 + 插箭，
@@ -483,6 +484,8 @@ func _make_flat_quad(size: Vector2, color: Color, priority: int) -> MeshInstance
 	m.albedo_color = color
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# HUD 语义（与血条面片同批裁定）：免深度测试，浮于单位身体之上
+	m.no_depth_test = true
 	m.render_priority = priority
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -628,6 +631,7 @@ func _process_inner(_delta: float) -> void:
 	_f_p = _pos
 	StickProf.t1("rig骨骼", _pt1)
 	var _pt2 := StickProf.t0()
+	_watch_stroke_eff()   # 描边宽档监视（审计 A4 恢复：缩放换档→重报图集）
 	_write_body()
 	_write_weapons()
 	StickProf.t1("rig行写", _pt2)
@@ -682,12 +686,13 @@ func _write_body() -> void:
 		_refresh_part_statics()
 	if OS.get_environment("STICK_TRACE_PARTS") == "1" and Engine.get_process_frames() % 60 == 0:
 		var p0: Part = _parts[0] if _parts.size() > 0 else null
-		print("[PartsTrace] iid=%d f=%d atlas_ver=%s statics_ver=%d parts=%d p0.cs=%s p0.uv=%s bucket游标 s:%s/%s b:%s/%s" % [
+		print("[PartsTrace] iid=%d f=%d atlas_ver=%s statics_ver=%d parts=%d p0.cs=%s p0.uv=%s bucket游标 s:%s/%s b:%s/%s stroke_col=%s tint=%s" % [
 				get_instance_id(), Engine.get_process_frames(), _joint_atlas.version(),
 				_parts_statics_ver, _parts.size(),
 				p0.cs if p0 != null else Vector2.ZERO, p0.uv if p0 != null else Rect2(),
 				_buckets.stroke.get("cursor"), _buckets.stroke.get("high_water"),
-				_buckets.body.get("cursor"), _buckets.body.get("high_water")])
+				_buckets.body.get("cursor"), _buckets.body.get("high_water"),
+				stroke_col, tr])
 	for p in _parts:
 		var xf: Transform2D = _acc[p.pidx] * p.cont.transform
 		buckets.stroke_row(_fold3d(xf * _sc2(p.cs_s.x, p.cs_s.y), ZB_STROKE),

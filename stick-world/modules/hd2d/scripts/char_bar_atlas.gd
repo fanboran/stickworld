@@ -5,8 +5,10 @@ extends Node
 ## **驱动镜像**节点——与烘焙路线同一协议（宿主逐帧 apply_bar_state(
 ## get_bar_state())，同一套 _draw 画手绘血条，画法/常量/抖动逻辑一行不改）。
 ## 视口隔帧回读成一张 ImageTexture，3D 侧以 26° 取景平面面片（UV 子矩形 =
-## 槽位）贴在角色头顶锚点：保留 3D 深度遮挡（血条不穿墙、近大远小），
-## 零屏幕空间数学（面片与身体部件同一折算平面）。
+## 槽位）贴在角色头顶锚点：血条＝单位 HUD 层语义（创始人 2026-10-14 点正
+## 「血条会被单位身体阻挡」）——面片免深度测试 + 材质 render_priority 10
+## 压过身体/武器桶，恒浮于一切单位件之上；条与条之间仍按 3D 深度排序
+## （前排条盖后排条）。零屏幕空间数学（面片与身体部件同一折算平面）。
 ##
 ## 尺寸契约（沿自整卡烘焙镜像条的历史口径，比例锚见 char_rig_3d 类头）：
 ##   条原生 px → 世界 = PX/1.2（烘焙镜像条视口内 scale=px_scale/1.2、
@@ -37,10 +39,13 @@ const ROWS := 12
 ## 隔 2 帧回读 ≈ 4ms/帧均摊），条动画最快成分是受击抖动 46Hz，30Hz 采样本就
 ## 欠采；15Hz 观感无差、成本减半（P0 帧成本治理，2026-10-13）
 const READ_EVERY := 4
-## UV 内缩边（px）：双线性采样不吃邻槽
-const UV_PAD := 4.0
-## 面片朝相机微移（血条恒在身体之上）
+## UV 内缩边（px）：双线性+mip 低级都不吃邻槽（LOD2 足迹 4px，垫 8 留倍余量）
+const UV_PAD := 8.0
+## 面片沿法线朝相机微移（历史几何保留；HUD 免深度测试后不再承担遮挡职责）
 const ZB_BAR := 0.03
+## HUD 层透明排序优先级：压过身体/武器/描边桶（默认 0）与劳作条（6/7），
+## 与 depth_test_disabled 配合保证血条恒画在一切单位件之后
+const BAR_PRIORITY := 10
 
 var _vp: SubViewport = null
 var _mat: ShaderMaterial = null
@@ -73,6 +78,7 @@ func _ready() -> void:
 	mmi.name = "Char3DBars"
 	_mat = ShaderMaterial.new()
 	_mat.shader = BAR_SHADER
+	_mat.render_priority = BAR_PRIORITY
 	_mat.set_shader_parameter("atlas_tex", _placeholder_tex())
 	mmi.material_override = _mat
 	_mm = MultiMesh.new()
@@ -235,6 +241,9 @@ func _process(_delta: float) -> void:
 		var img := _vp.get_texture().get_image()
 		StickProf.t1("血条回读", _pt)
 		if img != null and not img.is_empty():
+			# 屏上 minification ~3×（槽位 2× 超采样 ÷ 屏 0.6px/原生px）：无 mip
+			# 双线性采样 = 细横条闪断/爬行。CPU 生成 mip 链随回读一次（15Hz）
+			img.generate_mipmaps()
 			if _tex == null:
 				_tex = ImageTexture.create_from_image(img)
 			else:

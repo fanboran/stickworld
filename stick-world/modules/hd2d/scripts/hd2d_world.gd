@@ -350,7 +350,8 @@ func _ready() -> void:
 	if str(_opts["shots"]) == "none":
 		# 静默常驻（游戏内地图模式）：白天全效档点亮场景即返回，不截屏不退出
 		_apply_light("day")
-		_apply_stage("c")
+		# 渲染链二分诊断口：STICK_HD2D_STAGE=a/b 跳过后处理/辉光/DOF（默认 c 全效）
+		_apply_stage(OS.get_environment("STICK_HD2D_STAGE") if OS.get_environment("STICK_HD2D_STAGE") != "" else "c")
 		_update_px_size()
 		return
 	else:

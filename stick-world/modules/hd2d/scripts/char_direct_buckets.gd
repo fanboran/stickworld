@@ -143,14 +143,15 @@ var body: RowBucket = null          # 身体填充桶（edge_cutoff=0.5 硬切�
 var _body_mat: ShaderMaterial = null
 ## 描边单侧宽（rig px）——画布同款「屏幕像素下限」补偿（裁决#24 照抄
 ## stickman_skeleton.outline_world_width 语义）：屏上 1 rig px =
-## RIG_SCREEN×zoom（char_rig_3d.RIG_SCALE 同源常数），描边屏幕宽恒 ≥1px、
-## 特写不低于设计世界宽 2 rig px。宿主量化 0.5 步申报图集（格位 4px 量化
-## 下重烘频次极低）。初值按默认观察档 zoom=0.75。
-## 2026-10-13 创始人点正「描边太粗，之前那种一两个像素」——对齐画布校准口径
-##（stickman_skeleton：批次 2/3 验收观感 = 屏上 ~1px）：RIG 底 1.5 + 屏幕下限
-## 0.6 ⇒ zoom 1 处 eff≈1.68→量化 1.5 rig px/侧 ≈ 1.1px 全环
+## RIG_SCREEN×zoom（char_rig_3d.RIG_SCALE 同源常数）。宿主量化 0.5 步申报
+## 图集（格位 4px 量化下重烘频次极低）。初值按默认观察档 zoom=0.75。
+## 2026-10-14 创始人点正「描边加粗」：全环 ≈ 2×OUTLINE_SCREEN_PX 屏 px
+##（zoom 0.75 实测 ~1.9px）——战场档图集对屏幕 minification ~4×，1px 级
+## 环带经 mip 均值后 alpha 低于 edge_cutoff 会碎裂发虚（抗锯齿分析见
+## docs/技术/架构/场景与战斗/HD2D角色渲染与抗锯齿.md），环带加粗才吃得住
+## 深度缩小。特写档 RIG 底 1.5 不变（特写世界宽锚）。
 const OUTLINE_WIDTH_RIG := 1.5
-const OUTLINE_SCREEN_PX := 0.6
+const OUTLINE_SCREEN_PX := 1.0
 const RIG_SCREEN := 0.35625
 var outline_eff := maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * 0.75))
 ## 武器桶：纹理路径 → 桶（每纹理独立 MultiMesh，纹理=uniform；紧凑行制）

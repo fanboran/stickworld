@@ -125,6 +125,11 @@ func _bake(specs: Array) -> void:
 	if img != null:
 		_whiten_rgb(img)         # 先白化再生成 mip（见函数注释），否则部件外缘发暗
 		img.generate_mipmaps()   # 远档缩小的平滑由 mip 链承担（同烘焙卡）
+		if OS.get_environment("STICK_DUMP_ATLAS") == "1":
+			var dump := "user://atlas_dump_%d.png" % Engine.get_process_frames()
+			img.save_png(dump)
+			print("[AtlasDump] ", ProjectSettings.globalize_path(dump),
+					" size=", img.get_size())
 		_pending_tex = ImageTexture.create_from_image(img)
 		_ready = true            # 待 buckets publish()（首烘前占位贴图顶班）
 	else:

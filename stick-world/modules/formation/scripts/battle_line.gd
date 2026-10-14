@@ -243,10 +243,10 @@ func ranged_count() -> int:
 func _tick_y_drift(delta: float) -> void:
 	if delta <= 0.0 or _y_drift.is_empty():
 		return
-	# 幅值上限：比例值与「椭圆余量半宽」取小——相向漂移最坏不出分离椭圆
-	#（战线是战斗构造 → 用战斗域超级大纵轴，2026-10-14）
-	var limit: float = minf(_spread * DRIFT_MAX_RATIO,
-			(_spread - _Spacing.SEPARATION_RADIUS_Y_BATTLE) * 0.5)
+	# 幅值上限：比例值与「椭圆余量半宽」取小，负值（椭球纵半径超出摆放间距，
+	# 2026-10-14 起为常态：440 > 150）取 0——碰撞椭球接管排面松紧，个性漂移退场
+	var limit: float = maxf(0.0, minf(_spread * DRIFT_MAX_RATIO,
+			(_spread - _Spacing.SEPARATION_RADIUS_Y_BATTLE) * 0.5))
 	for iid in _y_drift.keys():
 		var wait: float = float(_y_next_shift[iid]) - delta
 		if wait <= 0.0:

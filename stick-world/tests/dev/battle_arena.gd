@@ -172,7 +172,7 @@ const VIEW_INSET: float = 40.0
 ## 2026-10-12 底部空带治理（创始人点正「画面最底下的一片范围没有利用上」）：
 ## 360px 档实测（1080p/缩放 0.75）单位只占到地面 63%、底部空 200px——
 ## 半宽扩到 456px（19 格），配合带心下移，近排脚线落屏底 8% 余量内。
-const ACTION_BAND_HALF_PX: float = 456.0
+const ACTION_BAND_HALF_PX: float = 800.0
 ## ── 一屏战场竖直构图（02 二-A.2「半屏高」直给参数，z 从草远端 BF_HORIZON_Z 起算）──
 ## 地面占屏幕比例：0.5 = 地面占屏下 1/2、天空占上 1/2
 const BF_GROUND_RATIO: float = 0.5
@@ -363,17 +363,17 @@ func _spawn_and_start() -> void:
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
-	# 战场间距档（2026-10-14 碰撞箱横纵翻倍批：分离战斗域 112/440 联动全链）：
-	# - 横距 460 ≥ 战斗域分离纵半径 440（不变式：分离Y ≤ 横距，漂移幅值钳非负）；
-	# - 列距 120 > 战斗域分离横半径 112（前后排 x 轴独立出椭圆）；
-	# - RESERVE 120 > 112（二线驻位与前排 x 独立出椭圆）/ GROUP 130 沿用；
-	# - 纵深链：48 档 upc 4 → 9 排 ×120 = 960，阵线偏移 330 → 出生最深 1390
-	#   > 可走边界 920——**密度档装不进一屏加剧**，开战告示照打不阻断；
-	#   16 主档 3 排 ×120 = 240，最深 820 ✓ 零重叠。
+	# 战场间距档（2026-10-14 裁决#40b：碰撞椭球 112/440 与摆放解耦——摆放
+	# 紧凑不随椭球联动，超椭球接近对由分离力自然展开）：
+	# - 横距 230/列距 100 = #37 验收摆放口径再收紧（创始人：230 太稀疏）；
+	# - 行动带 800（was 456）：前排展宽铺满可视纵深（创始人：垂直空间利用彻底），
+	#   upc = floor(1600/150)+1 = 11 → 48 档 5 排 ×100 = 500 纵深、前排 1500 ✓；
+	# - RESERVE 110 / GROUP 130 沿用（纵深链：48 档 5 排 ×100 + 130 + 远程排
+	#   ≈ 830 ≤ 可走边界 920 ✓；16 档 2 排 ×100 最深 530 ✓）。
 	# 均为观察场覆写（BattleLine 静态与 FormationSpacing 默认是产线口径）。
-	fs.ROW_GAP = 120.0
-	fs.SPREAD_SPACING = 460.0
-	BattleLine.RESERVE_GAP = 120.0
+	fs.ROW_GAP = 100.0
+	fs.SPREAD_SPACING = 150.0
+	BattleLine.RESERVE_GAP = 110.0
 	BattleLine.GROUP_GAP = 130.0
 	var melee_total: int = 0
 	var ranged_total: int = 0
@@ -384,8 +384,8 @@ func _spawn_and_start() -> void:
 			else:
 				melee_total += int(row["count"])
 	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
-	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带——±(cap-1)/2×460 = ±690，
-	# 带缘留净空（旧"指挥条带"随摆场指挥官/护卫根除，口径保留）
+	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带（旧"指挥条带"随摆场
+	# 指挥官/护卫根除，口径保留）
 	var upc_r: int = mini(BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING),
 			RANGED_UPC_CAP)
 	# 远程组出生基线 = 近战组全纵深 + GROUP_GAP（与 ranged_line_x 同式：开局

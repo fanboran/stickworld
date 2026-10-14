@@ -261,11 +261,11 @@ variables = {
 		{
 			"id": "var_spread_spacing",
 			"category": "formation",
-			"value": 460,
+			"value": 150,
 			"min": 8,
-			"max": 920,
+			"max": 400,
 			"step": 1,
-			"description": "散开编队间距（px）——同排邻位距；须 ≥ 战斗域分离纵半径 440（漂移幅值钳非负前提）且 > 战斗域分离横半径 112（2026-10-14 碰撞箱横纵翻倍批联动）"
+			"description": "散开编队间距（px）——同排邻位出生距（紧凑摆放口径；战斗期同排松紧由战斗域分离椭球 112/440 自然展开，与间距解耦——2026-10-14 裁决#40b）"
 		},
 		{
 			"id": "var_follow_default_gap",
@@ -279,11 +279,11 @@ variables = {
 		{
 			"id": "var_row_gap",
 			"category": "formation",
-			"value": 120,
+			"value": 80,
 			"min": 16,
 			"max": 200,
 			"step": 1,
-			"description": "编队列间距（px；> 战斗域分离横半径 112（x 轴独立出椭圆）且 ≤ 射程预算 1/3，战斗锚按最前列−纵深落位保末列入射程）"
+			"description": "编队列间距（px；> 分离横半径 48（x 轴独立出椭圆）且 ≤ 射程预算 1/3，战斗锚按最前列−纵深落位保末列入射程）"
 		},
 		{
 			"id": "var_catchup_run_dist",

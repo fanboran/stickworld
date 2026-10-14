@@ -229,14 +229,14 @@ func _test_y_drift() -> void:
 	# 长局漂移有界（±spread×0.25，同列最坏间距不触分离半径）；同种子两条线
 	# 漂移序列逐成员一致（确定性：字典按入线序迭代，掷骰序确定）。
 	var w1 := _make_world(8, 0)
-	# 漂移限 = (spread − 战斗域纵半径 220)/2 → 夹具钉 260（3 列，限 20px 为正）
-	w1["fs"].SPREAD_SPACING = 260.0
+	# 漂移限 = (spread − 战斗域纵半径 440)/2 → 夹具钉 480（2 列，限 20px 为正）
+	w1["fs"].SPREAD_SPACING = 480.0
 	var line_a: RefCounted = w1["fs"].create_battle_line(1, 1, 100000.0, 0.0, 500.0, 360.0)
 	line_a.seed_drift(424242)
 	for u in w1["units"]:
 		line_a.add_unit(u)
 	var w2 := _make_world(8, 0)
-	w2["fs"].SPREAD_SPACING = 260.0
+	w2["fs"].SPREAD_SPACING = 480.0
 	var line_b: RefCounted = w2["fs"].create_battle_line(1, 1, 100000.0, 0.0, 500.0, 360.0)
 	line_b.seed_drift(424242)
 	for u in w2["units"]:
@@ -248,8 +248,8 @@ func _test_y_drift() -> void:
 		line_b.tick(0.5)
 	var upc: int = BattleLine.group_upc(8, 360.0, w1["fs"].SPREAD_SPACING)
 	var s0: Vector2 = line_a.get_unit_slot(w1["units"][0])
-	_runner.assert_approx(s0.y, 500.0 - 1.0 * w1["fs"].SPREAD_SPACING, 0.5,
-			"首漂前槽位 y = 格点（漂移零，3 列居中）")
+	_runner.assert_approx(s0.y, 500.0 - 0.5 * w1["fs"].SPREAD_SPACING, 0.5,
+			"首漂前槽位 y = 格点（漂移零，2 列居中）")
 	# 长局：20s 漂移激活——有界 + 同种子孪生线逐成员一致
 	for i in 35:
 		line_a.tick(0.5)

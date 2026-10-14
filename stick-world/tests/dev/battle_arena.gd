@@ -363,16 +363,17 @@ func _spawn_and_start() -> void:
 	var squads_left: Array = []
 	var squads_right: Array = []
 	var fs: Node = _game_root.get_formation_system()
-	# 战场间距档（2026-10-14 战场垂直碰撞超级大批：分离战斗域 56/220 联动全链）：
-	# - 横距 230 ≥ 战斗域分离纵半径 220 + 漂移余量（不变式：分离Y ≤ 横距）；
-	# - 列距 100 > 战斗域分离横半径 56（前后排 x 轴独立出椭圆）；
-	# - RESERVE 110 / GROUP 130 沿用（纵深链：48 档 upc 4 → 9 排 ×100 = 800，
-	#   阵线偏移 330 → 出生最深 1230 > 可走边界 920——**密度档装不进一屏**，
-	#   开战告示照打不阻断；16 主档 3 排 ×100 = 200，最深 660 ✓ 零重叠）。
+	# 战场间距档（2026-10-14 碰撞箱横纵翻倍批：分离战斗域 112/440 联动全链）：
+	# - 横距 460 ≥ 战斗域分离纵半径 440（不变式：分离Y ≤ 横距，漂移幅值钳非负）；
+	# - 列距 120 > 战斗域分离横半径 112（前后排 x 轴独立出椭圆）；
+	# - RESERVE 120 > 112（二线驻位与前排 x 独立出椭圆）/ GROUP 130 沿用；
+	# - 纵深链：48 档 upc 4 → 9 排 ×120 = 960，阵线偏移 330 → 出生最深 1390
+	#   > 可走边界 920——**密度档装不进一屏加剧**，开战告示照打不阻断；
+	#   16 主档 3 排 ×120 = 240，最深 820 ✓ 零重叠。
 	# 均为观察场覆写（BattleLine 静态与 FormationSpacing 默认是产线口径）。
-	fs.ROW_GAP = 100.0
-	fs.SPREAD_SPACING = 230.0
-	BattleLine.RESERVE_GAP = 110.0
+	fs.ROW_GAP = 120.0
+	fs.SPREAD_SPACING = 460.0
+	BattleLine.RESERVE_GAP = 120.0
 	BattleLine.GROUP_GAP = 130.0
 	var melee_total: int = 0
 	var ranged_total: int = 0
@@ -383,7 +384,7 @@ func _spawn_and_start() -> void:
 			else:
 				melee_total += int(row["count"])
 	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
-	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带——±(cap-1)/2×230 = ±345，
+	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带——±(cap-1)/2×460 = ±690，
 	# 带缘留净空（旧"指挥条带"随摆场指挥官/护卫根除，口径保留）
 	var upc_r: int = mini(BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING),
 			RANGED_UPC_CAP)

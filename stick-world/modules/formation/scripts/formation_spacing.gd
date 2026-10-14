@@ -39,30 +39,31 @@ const SEPARATION_RADIUS_X: float = 48.0
 ## 改本值必须联动出生几何/间距全链（椭圆判别压穿 = 分离力常驻 + 位置伺服
 ## 极限环，实测 vx 翻转 8.67 次/s 全员蛇形抽动）
 const SEPARATION_RADIUS_Y: float = 110.0
-## ── 战斗域分离半径（战场单位专用，2026-10-14 创始人裁决「碰撞体积再大一圈，
-## 尤其垂直开到超级大」）──
+## ── 战斗域分离半径（战场单位专用，2026-10-14 创始人裁决两连：
+## 「碰撞体积再大一圈，尤其垂直开到超级大」→「横纵都翻一倍」）──
 ## 城镇维持上方基础值（劳作工位间距 96 < 超级大纵轴，全镇互推乱套）；
 ## 战斗域（battle_sim / entity_motion 战斗活跃期 / battle_line 漂移钳）取本组。
-## Y 220 = 立绘视觉足印（屏高 ~97px / 26° 投影压缩 0.44 ≈ 220）——单位在屏上
-## 纵向不再叠影，球阵被物理摊成宽浅横列（反「坍缩成一坨」的结构性杠杆）。
-## 联动纪律同上：椭圆判别压穿 = 蛇形抽动——横向间距/到位容差必须 ≥ 本值
-## （SPREAD 默认与 balance var_spread_spacing、squad_phase_plan arrive_tolerance
-## 已同步 230/240）。
-const SEPARATION_RADIUS_X_BATTLE: float = 56.0
-const SEPARATION_RADIUS_Y_BATTLE: float = 220.0
+## X 112 = 碰撞体宽 31 的 3.6 倍（近战接敌不受影响：sim 链分离只推同阵营，
+## Node 链推力只弯折意图，碰撞体 62 先于推力失速点 42 挡住，攻击射程 100 够得着）；
+## Y 440 = 2× 立绘视觉足印（屏高 ~97px / 26° 投影压缩 0.44 ≈ 220 的两倍）——
+## 单位在屏上纵向彻底不叠影。联动纪律同上：椭圆判别压穿 = 蛇形抽动——
+## 横向间距/到位容差必须 ≥ 本组（SPREAD 默认与 balance var_spread_spacing、
+## squad_phase_plan arrive_tolerance 已同步 460/480）。
+const SEPARATION_RADIUS_X_BATTLE: float = 112.0
+const SEPARATION_RADIUS_Y_BATTLE: float = 440.0
 ## 兼容别名（= 横向轴）：消费方（entity_motion/battle_sim）未改椭圆判定前
 ## 自动跟随横向口径（行为 = 圆半径 48）
 const SEPARATION_RADIUS: float = SEPARATION_RADIUS_X
 ## 横向间距默认值（px，调参表 var_spread_spacing 覆盖）：排面密度主旋钮——
-## 同排邻位距；须 > 半径Y + 2×漂移幅值（相向漂移最坏不出椭圆）且投影后
-## 读得出「排」（26° 压缩 ~0.44 → 140 投影后 ~62px 屏距）；运行时真值 =
+## 同排邻位距；须 ≥ 半径Y_BATTLE（漂移幅值钳 (间距−半径Y)/2 非负的前提）且
+## > 半径X_BATTLE（同排邻位 x 距单独出椭圆）；运行时真值 =
 ## BalanceConfig 覆盖值（改默认值必须同步 config/balance/variables.tres）
-const SPREAD_SPACING_DEFAULT: float = 230.0
+const SPREAD_SPACING_DEFAULT: float = 460.0
 ## 列间距默认值（px，调参表 var_row_gap 覆盖）：纵深主旋钮——前列到后列退距。
-## SWL 方阵纵深观感 = 紧凑（列距远小于射程）；> 半径X 使前后排在 x 轴独立
-## 出椭圆（任意纵距不触发分离），同时 ≤ 射程预算的 1/3（战斗锚按「最前列 −
+## SWL 方阵纵深观感 = 紧凑（列距远小于射程）；> 半径X_BATTLE 使前后排在 x 轴
+## 独立出椭圆（任意纵距不触发分离），同时 ≤ 射程预算的 1/3（战斗锚按「最前列 −
 ## 方阵纵深」落位，末列才贴射程线）；同步规则同上
-const ROW_GAP_DEFAULT: float = 80.0
+const ROW_GAP_DEFAULT: float = 120.0
 ## 每列人数基准档（SWL Formation.UNITS_PER_COLUMN 直译；8~12 人小班口径取 4，
 ## 各班现役列高按班人数 4~6 自适应，见 formation_geometry.squad_units_per_column）
 const UNITS_PER_COLUMN: int = 4
@@ -70,7 +71,7 @@ const UNITS_PER_COLUMN: int = 4
 const FOLLOW_DEADZONE: float = 40.0
 ## 小队相位计划到位容差默认值（px，config/ai/squad_phase_plan.tres 覆盖）
 ##（夹在横向间距与 2×横向间距之间：波次完成门槛吸收锚向抖动，见头部不变式）
-const ARRIVE_TOLERANCE: float = 240.0
+const ARRIVE_TOLERANCE: float = 480.0
 
 
 ## 不变式自检（间距链改值后必跑；formation_system 启动时调用，违例打 error）：
@@ -98,4 +99,11 @@ static func check_invariants(spread_spacing: float, row_gap: float,
 	if not (FOLLOW_DEADZONE < spread_spacing):
 		bad.append("跟队死区(%d)必须 < 横向间距(%d)——站错一格被判落定" % [
 				FOLLOW_DEADZONE, spread_spacing])
+	# 战斗域超级大椭球（战场是间距的紧约束侧：半径比基础值大一倍以上）
+	if not (SEPARATION_RADIUS_X_BATTLE < row_gap):
+		bad.append("战斗域分离半径X(%d)必须 < 列间距(%d)——前后排压进战斗椭圆" % [
+				SEPARATION_RADIUS_X_BATTLE, row_gap])
+	if not (SEPARATION_RADIUS_Y_BATTLE <= spread_spacing):
+		bad.append("战斗域分离半径Y(%d)必须 ≤ 横向间距(%d)——battle_line 漂移幅值钳 (间距−半径Y)/2 非负的前提" % [
+				SEPARATION_RADIUS_Y_BATTLE, spread_spacing])
 	return bad

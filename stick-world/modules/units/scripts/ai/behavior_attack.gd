@@ -38,7 +38,9 @@ const REALLY_CLOSE_MULT: float = 0.5
 ## 停步 = 坍缩进前排）。横线阵下 25 分位≈贴近战排后，球阵下自然探出球后缘，
 ## 两种阵形都读成"跟在自己部队身后"（attackRangeSecondLine / GetRange
 ## 编队偏移语义，翻译档 §射程体系）。近战全灭 → 无参照：射程内原地驻射。
-const RANGED_SECOND_LINE_GAP: float = 120.0
+## 160 = 战斗域分离横半径 112 的 1.43 倍（2026-10-14 碰撞箱翻倍联动：同 x
+## 弓手-近战对 dy≈0 时椭圆判别只看 x 距，须压在半径外留余量防推挤抖动）。
+const RANGED_SECOND_LINE_GAP: float = 160.0
 ## 二线停驻死区（px）：距线 ≤ 此值站定（防贴线抖动）
 const RANGED_LINE_DEADZONE: float = 40.0
 

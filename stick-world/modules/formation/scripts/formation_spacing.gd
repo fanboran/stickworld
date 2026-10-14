@@ -39,6 +39,17 @@ const SEPARATION_RADIUS_X: float = 48.0
 ## 改本值必须联动出生几何/间距全链（椭圆判别压穿 = 分离力常驻 + 位置伺服
 ## 极限环，实测 vx 翻转 8.67 次/s 全员蛇形抽动）
 const SEPARATION_RADIUS_Y: float = 110.0
+## ── 战斗域分离半径（战场单位专用，2026-10-14 创始人裁决「碰撞体积再大一圈，
+## 尤其垂直开到超级大」）──
+## 城镇维持上方基础值（劳作工位间距 96 < 超级大纵轴，全镇互推乱套）；
+## 战斗域（battle_sim / entity_motion 战斗活跃期 / battle_line 漂移钳）取本组。
+## Y 220 = 立绘视觉足印（屏高 ~97px / 26° 投影压缩 0.44 ≈ 220）——单位在屏上
+## 纵向不再叠影，球阵被物理摊成宽浅横列（反「坍缩成一坨」的结构性杠杆）。
+## 联动纪律同上：椭圆判别压穿 = 蛇形抽动——横向间距/到位容差必须 ≥ 本值
+## （SPREAD 默认与 balance var_spread_spacing、squad_phase_plan arrive_tolerance
+## 已同步 230/240）。
+const SEPARATION_RADIUS_X_BATTLE: float = 56.0
+const SEPARATION_RADIUS_Y_BATTLE: float = 220.0
 ## 兼容别名（= 横向轴）：消费方（entity_motion/battle_sim）未改椭圆判定前
 ## 自动跟随横向口径（行为 = 圆半径 48）
 const SEPARATION_RADIUS: float = SEPARATION_RADIUS_X
@@ -46,7 +57,7 @@ const SEPARATION_RADIUS: float = SEPARATION_RADIUS_X
 ## 同排邻位距；须 > 半径Y + 2×漂移幅值（相向漂移最坏不出椭圆）且投影后
 ## 读得出「排」（26° 压缩 ~0.44 → 140 投影后 ~62px 屏距）；运行时真值 =
 ## BalanceConfig 覆盖值（改默认值必须同步 config/balance/variables.tres）
-const SPREAD_SPACING_DEFAULT: float = 140.0
+const SPREAD_SPACING_DEFAULT: float = 230.0
 ## 列间距默认值（px，调参表 var_row_gap 覆盖）：纵深主旋钮——前列到后列退距。
 ## SWL 方阵纵深观感 = 紧凑（列距远小于射程）；> 半径X 使前后排在 x 轴独立
 ## 出椭圆（任意纵距不触发分离），同时 ≤ 射程预算的 1/3（战斗锚按「最前列 −
@@ -59,7 +70,7 @@ const UNITS_PER_COLUMN: int = 4
 const FOLLOW_DEADZONE: float = 40.0
 ## 小队相位计划到位容差默认值（px，config/ai/squad_phase_plan.tres 覆盖）
 ##（夹在横向间距与 2×横向间距之间：波次完成门槛吸收锚向抖动，见头部不变式）
-const ARRIVE_TOLERANCE: float = 170.0
+const ARRIVE_TOLERANCE: float = 240.0
 
 
 ## 不变式自检（间距链改值后必跑；formation_system 启动时调用，违例打 error）：

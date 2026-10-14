@@ -193,10 +193,24 @@ func _yield_enabled() -> bool:
 
 ## 椭圆分离归一距离（1.0=椭圆边界，<1 过近）：横向/纵深双轴口径——
 ## 与旧圆形 (1-dist/r) 权重语义同构，直接替换比较基准
-func _sep_ellipse_d(offset: Vector2) -> float:
-	var ex: float = offset.x / SEPARATION_RADIUS_X
-	var ey: float = offset.y / SEPARATION_RADIUS_Y
+func _sep_ellipse_d(offset: Vector2, rx: float, ry: float) -> float:
+	var ex: float = offset.x / rx
+	var ey: float = offset.y / ry
 	return sqrt(ex * ex + ey * ey)
+
+
+## 分离半径解析（战斗域超级大档，2026-10-14 创始人裁决「碰撞体积再大一圈、
+## 尤其垂直开到超级大」）：战斗活跃期用战斗域 56/220（Y = 立绘视觉足印
+## ≈屏高 97/投影压缩 0.44，球阵被物理摊成宽浅横列），城镇/劳作维持基础值
+## 48/110——工位间距 96 < 超级大纵轴，全局放大 = 全镇互推乱套
+func _sep_radii() -> Vector2:
+	if _entity.has_method("get_battle_instance"):
+		var bi: Node = _entity.get_battle_instance()
+		if bi != null and is_instance_valid(bi) \
+				and bi.has_method("is_active") and bi.is_active():
+			return Vector2(_FormationAPI.SEPARATION_RADIUS_X_BATTLE,
+					_FormationAPI.SEPARATION_RADIUS_Y_BATTLE)
+	return Vector2(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
 
 
 ## 分离不反转意图（批3 治"分离推挤换边"）：SWL PushApart 推的是刚体位置、
@@ -259,7 +273,9 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	var yield_side: float = 0.0
 	var yield_mag: float = 0.0
 	var yield_on: bool = _yield_enabled()
-	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS):
+	var radii: Vector2 = _sep_radii()
+	var scan: float = maxf(radii.x, radii.y)
+	for e in map_ref.query_neighbors(_entity.global_position, scan):
 		if e == _entity or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -268,7 +284,7 @@ func _apply_separation(dir: Vector2) -> Vector2:
 			continue
 		var offset: Vector2 = _entity.global_position - e.global_position
 		var dist: float = offset.length()
-		var ed: float = _sep_ellipse_d(offset)
+		var ed: float = _sep_ellipse_d(offset, radii.x, radii.y)
 		if ed >= 1.0 or dist <= 0.001:
 			continue
 		# 越近推力越大（椭圆归一距离的 1-ed 线性权重）
@@ -300,12 +316,13 @@ func _sim_ally_yield(dir_n: Vector2) -> Vector2:
 	var my_faction: int = _entity.faction_id
 	var side: float = 0.0
 	var mag: float = 0.0
-	for oid in sim.query_neighbor_ids(my_pos, SEPARATION_SCAN_RADIUS):
+	var radii: Vector2 = _sep_radii()
+	for oid in sim.query_neighbor_ids(my_pos, maxf(radii.x, radii.y)):
 		if sim.get_faction(oid) != my_faction:
 			continue
 		var to: Vector2 = sim.get_pos(oid) - my_pos
 		var dist: float = to.length()
-		var ed: float = _sep_ellipse_d(to)
+		var ed: float = _sep_ellipse_d(to, radii.x, radii.y)
 		if dist <= 0.001 or ed >= 1.0:
 			continue
 		var ahead: float = to.dot(dir_n) / dist
@@ -348,8 +365,9 @@ func _apply_static_separation() -> void:
 	if map_ref == null or not is_instance_valid(map_ref) or not _entity._map_has_query:
 		return
 	var total_push := Vector2.ZERO
+	var radii: Vector2 = _sep_radii()
 	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
-	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS + 8.0):
+	for e in map_ref.query_neighbors(_entity.global_position, maxf(radii.x, radii.y) + 8.0):
 		if e == _entity or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -358,7 +376,7 @@ func _apply_static_separation() -> void:
 			continue
 		var offset: Vector2 = _entity.global_position - e.global_position
 		var dist: float = offset.length()
-		var ed: float = _sep_ellipse_d(offset)
+		var ed: float = _sep_ellipse_d(offset, radii.x, radii.y)
 		if ed >= 1.0:
 			continue
 		if dist <= 0.001:
@@ -367,7 +385,7 @@ func _apply_static_separation() -> void:
 			ed = 0.0
 		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）；
 		# 深度按椭圆归一折算（纵深轴为名义尺度）
-		total_push += offset.normalized() * ((1.0 - ed) * SEPARATION_RADIUS_Y * 0.5)
+		total_push += offset.normalized() * ((1.0 - ed) * radii.y * 0.5)
 	if total_push == Vector2.ZERO:
 		return
 	if total_push.length() > MAX_SEPARATION_CORRECTION:

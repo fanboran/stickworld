@@ -261,11 +261,11 @@ variables = {
 		{
 			"id": "var_spread_spacing",
 			"category": "formation",
-			"value": 140,
+			"value": 230,
 			"min": 8,
-			"max": 180,
+			"max": 400,
 			"step": 1,
-			"description": "散开编队间距（px）——同排邻位距；须 > 分离纵半径 110+漂移余量且 26°投影后仍读得出排"
+			"description": "散开编队间距（px）——同排邻位距；须 > 战斗域分离纵半径 220+漂移余量且 26°投影后仍读得出排（2026-10-14 战场垂直碰撞超级大批联动）"
 		},
 		{
 			"id": "var_follow_default_gap",

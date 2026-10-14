@@ -253,7 +253,9 @@ func _test_phase_cycle() -> void:
 	var units: Array = w["units"]
 	var sid: String = w["sid"]
 	_enable(fs)
-	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
+	# 终点 1400：首轮步长 420 → 剩余 780，次轮步长 273 > 容差 240——
+	# 循环步长必须跑赢到位容差（容差内即判到位，循环会空转成等待）
+	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1400, 500))
 	var plan: Variant = fs._squad_phase_plans[sid]
 	# 第一拍：核心组（u0,u1 核心 + u2 侦察）跃进，两翼不动
 	fs._tick_phase_plans(0.5)
@@ -285,10 +287,10 @@ func _test_phase_cycle() -> void:
 	_runner.assert_equal(plan.get_phase_name(), "flank_wait", "两翼到位后应进跟进等待")
 	var before: int = units[0].ai.orders_for("move")
 	_beat(fs, 12)
-	_runner.assert_equal(plan.get_phase_name(), "core_leap", "跟进等待耗尽应进下一轮核心跃进")
+	_runner.assert_equal(plan.get_phase_name(), "core_leap", "跟进等待耗尽应进下一轮核心跃进（timer=%.2f/%.2f phase=%s active=%s）" % [plan._phase_timer, plan._wait_duration, plan.get_phase_name(), plan.is_active()])
 	var line_x: float = plan.get_leap_line().x
-	_runner.assert_gt(line_x, 480.0, "跃进线应越过首轮位置（交替推进）")
-	_runner.assert_lt(line_x, 1000.0, "跃进线不应越过终点")
+	_runner.assert_gt(line_x, 620.0, "跃进线应越过首轮位置（交替推进）")
+	_runner.assert_lt(line_x, 1400.0, "跃进线不应越过终点")
 	# 新循环核心组应收到推进后的新跃进号令（剩余路程 > arrive_tolerance）
 	_beat(fs)
 	_runner.assert_gt(units[0].ai.orders_for("move"), before, "新循环核心组应收到推进后的新跃进号令")

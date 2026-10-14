@@ -229,11 +229,14 @@ func _test_y_drift() -> void:
 	# 长局漂移有界（±spread×0.25，同列最坏间距不触分离半径）；同种子两条线
 	# 漂移序列逐成员一致（确定性：字典按入线序迭代，掷骰序确定）。
 	var w1 := _make_world(8, 0)
+	# 漂移限 = (spread − 战斗域纵半径 220)/2 → 夹具钉 260（3 列，限 20px 为正）
+	w1["fs"].SPREAD_SPACING = 260.0
 	var line_a: RefCounted = w1["fs"].create_battle_line(1, 1, 100000.0, 0.0, 500.0, 360.0)
 	line_a.seed_drift(424242)
 	for u in w1["units"]:
 		line_a.add_unit(u)
 	var w2 := _make_world(8, 0)
+	w2["fs"].SPREAD_SPACING = 260.0
 	var line_b: RefCounted = w2["fs"].create_battle_line(1, 1, 100000.0, 0.0, 500.0, 360.0)
 	line_b.seed_drift(424242)
 	for u in w2["units"]:
@@ -245,15 +248,15 @@ func _test_y_drift() -> void:
 		line_b.tick(0.5)
 	var upc: int = BattleLine.group_upc(8, 360.0, w1["fs"].SPREAD_SPACING)
 	var s0: Vector2 = line_a.get_unit_slot(w1["units"][0])
-	_runner.assert_approx(s0.y, 500.0 - 2.5 * w1["fs"].SPREAD_SPACING, 0.5,
-			"首漂前槽位 y = 格点（漂移零，6 列居中）")
+	_runner.assert_approx(s0.y, 500.0 - 1.0 * w1["fs"].SPREAD_SPACING, 0.5,
+			"首漂前槽位 y = 格点（漂移零，3 列居中）")
 	# 长局：20s 漂移激活——有界 + 同种子孪生线逐成员一致
 	for i in 35:
 		line_a.tick(0.5)
 		line_b.tick(0.5)
 	# 漂移上限 = min(比例值, 椭圆余量半宽)——同 battle_line._tick_y_drift 口径
 	var limit: float = minf(w1["fs"].SPREAD_SPACING * 0.25,
-			(w1["fs"].SPREAD_SPACING - _Spacing.SEPARATION_RADIUS_Y) * 0.5) + 0.01
+			(w1["fs"].SPREAD_SPACING - _Spacing.SEPARATION_RADIUS_Y_BATTLE) * 0.5) + 0.01
 	for i in w1["units"].size():
 		var ya: float = line_a.get_unit_slot(w1["units"][i]).y
 		var yb: float = line_b.get_unit_slot(w2["units"][i]).y
@@ -390,6 +393,9 @@ class _World extends RefCounted:
 		fs = ScriptFormationSystem.new()
 		org = FakeOrgApi.new()
 		fs.setup(org)
+		# 钉夹具几何（本套件测战线几何数学本身；生产默认随战场垂直碰撞超级大批
+		# 改 230，与本套件既有断言无关——夹具沿用写断言时的 140 口径）
+		fs.SPREAD_SPACING = 140.0
 		battle = FakeBattle.new()
 		enemy = FakeEnemy.new()
 		enemy.global_position = Vector2(9000.0, 500.0)

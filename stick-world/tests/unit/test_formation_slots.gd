@@ -58,6 +58,8 @@ func _make_formation(n: int, same_point: bool = true) -> Array:
 	var fs: Node = ScriptFormationSystem.new()
 	var org: Node = FakeOrgApi.new()
 	fs.setup(org)
+	# 钉夹具几何（生产默认随战场垂直碰撞超级大批改 230；本套件断言按 140 写）
+	fs.SPREAD_SPACING = 140.0
 	var units: Array = []
 	for i in n:
 		var u := Node2D.new()

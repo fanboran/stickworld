@@ -29,11 +29,13 @@ extends RefCounted
 
 ## 分离检测半径：与实体链同源（formation 模块单一真相源——批模拟不再抄副本）
 ## 椭圆双轴口径（创始人 2026-09-30 观感裁决）：横向 X / 纵深 Y（竖长卡纵深加大），
-## 判定已椭圆化；网格扫描用外接圆半径（两轴取大）不漏人
+## 判定已椭圆化；网格扫描用外接圆半径（两轴取大）不漏人。
+## 批模拟只在战斗里跑 → 直接取**战斗域超级大档**（2026-10-14 创始人裁决
+## 「垂直碰撞开到超级大」，口径见 formation_spacing.gd 战斗域段）
 const _FormationAPI := preload("res://modules/formation/api.gd")
-const SEPARATION_RADIUS: float = _FormationAPI.SEPARATION_RADIUS
-const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X
-const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
+const SEPARATION_RADIUS: float = _FormationAPI.SEPARATION_RADIUS_X_BATTLE
+const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X_BATTLE
+const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y_BATTLE
 const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
 ## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
 const MAX_SEPARATION_CORRECTION: float = 3.0

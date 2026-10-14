@@ -70,6 +70,10 @@ const SEPARATION_RADIUS_X: float = _Spacing.SEPARATION_RADIUS_X
 const SEPARATION_RADIUS_Y: float = _Spacing.SEPARATION_RADIUS_Y
 ## 分离半径兼容别名（= 横向轴 X）：消费方未改椭圆判定前自动跟随横向口径
 const SEPARATION_RADIUS: float = _Spacing.SEPARATION_RADIUS
+## 战斗域分离半径（战场单位专用超级大档，2026-10-14 创始人裁决；城镇用基础值，
+## 判据见 scripts/formation_spacing.gd 战斗域段）
+const SEPARATION_RADIUS_X_BATTLE: float = _Spacing.SEPARATION_RADIUS_X_BATTLE
+const SEPARATION_RADIUS_Y_BATTLE: float = _Spacing.SEPARATION_RADIUS_Y_BATTLE
 
 ## ── 在役 FormationSystem 宿主注册（units 侧消费聚拢转向建议的合规通道）──
 ## FormationSystem._enter_tree/_exit_tree 登记注销（单战场单实例，后进先出）；

@@ -228,21 +228,23 @@ func _test_behavior_approach_via_slot() -> void:
 
 
 func _test_behavior_regression() -> void:
-	# 无锚（清锚）→ 二线停步语义（2026-10-14：停步线 = 0.45×射程 ≈ 292，
-	# 线内站桩驻射，线外带走射推进——旧"射程内即站桩"口径已退役）
+	# 无锚（清锚）→ 二线停驻语义（2026-10-14 裁决#36 二轮：停驻线参照己方
+	# 前线；夹具无友军 = 自己就是一线 → 射程内原地驻射、射程外常态接近）
 	var ctx := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
 	ctx.fs._squads[ctx.sid].erase("combat_anchor")
-	# 二线外（dist 400 > 292）→ 接近（不发 ai_stop）
+	# 射程内（dist 400 < 650）→ 站桩驻射
 	ctx.entity.stopped = false
 	ctx.attack.update(0.016)
-	_runner.assert_true(ctx.entity.last_move.length_squared() > 0.001,
-			"无锚远程二线外继续接近（二线停步语义）")
-	# 二线内（dist 200 < 292）→ 站桩驻射
-	ctx.enemy.global_position = Vector2(700.0, 240.0)
+	_runner.assert_true(ctx.entity.stopped, "无锚远程射程内原地驻射（自己即一线）")
+	# 射程外（dist 900 > 650）→ 常态接近（压向目标攻击环）
+	ctx.enemy.global_position = Vector2(1400.0, 240.0)
 	ctx.entity.stopped = false
 	ctx.entity.last_move = Vector2.ZERO
 	ctx.attack.update(0.016)
-	_runner.assert_true(ctx.entity.stopped, "无锚远程二线内站桩驻射")
+	var to_enemy: Vector2 = (ctx.enemy.global_position - ctx.entity.global_position).normalized()
+	_runner.assert_true(ctx.entity.last_move.length_squared() > 0.001, "射程外常态接近（发 move）")
+	_runner.assert_approx(ctx.entity.last_move.normalized().dot(to_enemy), 1.0, 0.05,
+			"接近方向 = 指向目标")
 	ctx.teardown()
 	# 近战（SWORD）：有锚也不锚定（槽位锚定只属远程）
 	var ctx2 := _make_behavior_ctx(ScriptBehaviorProfiles.SWORD)
@@ -493,6 +495,9 @@ class _BehaviorCtx extends RefCounted:
 		fs = ScriptFormationSystem.new()
 		org = FakeOrgApi.new()
 		fs.setup(org)
+		# 钉夹具几何（旧观察场覆写口径；生产默认 230 与本套件槽位断言无关）
+		fs.ROW_GAP = 90.0
+		fs.SPREAD_SPACING = 112.0
 		battle = FakeBattle.new()
 		enemy = FakeEnemy.new()
 		enemy.global_position = Vector2(900.0, 240.0)

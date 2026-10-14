@@ -244,8 +244,9 @@ func _tick_y_drift(delta: float) -> void:
 	if delta <= 0.0 or _y_drift.is_empty():
 		return
 	# 幅值上限：比例值与「椭圆余量半宽」取小——相向漂移最坏不出分离椭圆
+	#（战线是战斗构造 → 用战斗域超级大纵轴，2026-10-14）
 	var limit: float = minf(_spread * DRIFT_MAX_RATIO,
-			(_spread - _Spacing.SEPARATION_RADIUS_Y) * 0.5)
+			(_spread - _Spacing.SEPARATION_RADIUS_Y_BATTLE) * 0.5)
 	for iid in _y_drift.keys():
 		var wait: float = float(_y_next_shift[iid]) - delta
 		if wait <= 0.0:

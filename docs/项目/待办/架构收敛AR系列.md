@@ -1,0 +1,8 @@
+# 架构收敛 AR 系列（2026-09-11 立项）
+
+> 实测数据与证据：[`架构审计_2026-09-11.md`](../审计/架构审计_2026-09-11.md)（临时审计快照，AR 全部完成后删除）。方案标注【提案/待定】；架构深化单开分支专项讨论（见末条），届时定文档形态与排期。
+
+- [ ] **AR-1 装配下沉（大，长期增量）**：装配器已拆分至 `modules/world/scripts/setup/`（`system_setup.gd` + system_setup_core_systems.gd 等域助手），装配器跨模块 preload（到内部文件，非 api.gd）合计 41 处，audit_deps 按 composition root 豁免；另有非装配器跨模块越界未豁免合计 4 处 = preload 2 + 裸字符串 2（demo_quest.gd 的 4 处 preload 已随演示目标链根除消失；裸字符串为 debug_gui/dev_scene_escape.gd 占 2 处（ui_global 模板目录扫描、main_menu.tscn），低危下行）。hd2d 侧越界已清偿（渲染骨架抽出 stick_rig，L1 直连，不走豁免）。world 持 ConstructionManager/ResourceManager/OrganizationManager 强引用等装配根余项（原 C2 剩余）随本项收敛。方向【提案】：各模块自建 `setup.gd::assemble()` 自持实例化、system_setup 收缩为纯编排；新模块必走新规、存量随改随迁、越界总数（preload+裸字符串）只降不升
+- [ ] **AR-4 信号与探针卫生（小）**：PerfProbe 已退出 project.godot autoload（实测 autoload 共 11 个；PerfProbe 保留为 dev 场景工具）✅；待做：死信号处置——settlement_updated（有订阅零 emit，保留占位）、heal_cast（生产零订阅，仅测试订阅）、chunk_loaded / chunk_unloaded（本地+EventBus 双发零订户，生产消费方按设计连 scene_loader 本地信号）；region_owner_changed 已有订阅端 = world_map api 归属染色链（发射方 = 世界模型政权归属，待世界模型整合 M3 接入，接入前测试可代发驱动）、unlock_granted 已有消费端 = 建筑可建集门禁（BuildMenu 随信号重刷，发射方待世界模型接入），两者不再属死信号；新信号须在 EventBus 参数表登记发射方与首个消费方
+- [ ] **AR-6 装配守护（小，部分完成）**：已接线——audit_deps.py 棘轮红线：环基线（KNOWN_CYCLES 3 环：organization⇄world / town_life⇄units / world⇄world_map）与越界基线（preload 6 / 裸字符串 2，随 AR-1/AR-2 清偿收缩），新环或超基线即 exit 1，存量债务只减不增。待做——system_setup 深路径 preload 红线（等 AR-1 首批迁移后接线）；preload 越界已降至 2/6，基线可择机收缩（工具实跑提示）
+- [ ] **架构深化单开分支讨论**（创始人指示：AR 执行排期届时定；文档形态讨论时以下为既定事实——架构目录已有 README 地图页、总纲形态文档已试写并撤销（与既有文档定位重复），增量已并入 AGENTS 原则第 4 条/本文件/模块依赖关系.md）

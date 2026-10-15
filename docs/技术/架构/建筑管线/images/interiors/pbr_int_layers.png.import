@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dbjgv4ui7th2c"
-path="res://.godot/imported/pbr_int_layers.png-19b802f9f818466a3714f3d22d537770.ctex"
+path="res://.godot/imported/pbr_int_layers.png-2e8e2a590aa1d99a62c472447c8c9118.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/技术/架构/建筑管线/图/interiors/pbr_int_layers.png"
-dest_files=["res://.godot/imported/pbr_int_layers.png-19b802f9f818466a3714f3d22d537770.ctex"]
+source_file="res://docs/技术/架构/建筑管线/images/interiors/pbr_int_layers.png"
+dest_files=["res://.godot/imported/pbr_int_layers.png-2e8e2a590aa1d99a62c472447c8c9118.ctex"]
 
 [params]
 

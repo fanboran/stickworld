@@ -590,6 +590,44 @@ y 轴是假纵深（`PsuedoZAxisFixedUpdate` + `z/dz` 字段）：跳跃/击飞�
 **规模换算**（SWL 世界单位 → 本仓 rig px，按立绘身高比 144px/2.75u ≈ 52）：近战 1.5u ≈ 78px、
 Spearton 二线 2.5u ≈ 130px、弓 range 15u ≈ 780px、Giant 4u ≈ 208px、Magikill 7u ≈ 364px。
 
+### 7.1.2 方法体真值：移动 / 碰撞 / 推挤 / 攻击距离【事实】（2026-10-15 Ghidra 反编译）
+
+> 来源：`libil2cpp.so`（legacy ARM64）方法体反编译。工程链：Il2CppDumper（script.json 地址表）
+> → Ghidra 12.1.4 headless（`external/assetripper/ghidra_scripts/SwlDecompileAll.java`，
+> 基址 0x100000 + 文件偏移，68 个方法伪代码落 `temp/ghidra_work/out/`）。工具链从 REA
+> （rea-agents 6.5.0，`C:/Users/fanbo/AppData/Roaming/npm/node_modules/rea-agents`）接入——
+> 其 Windows Ghidra P0 准入只收 PE，ELF/ARM64 超出边界，故由 REA 同款引擎 Ghidra 直跑
+> （安装位 `F:/VSCode/杂活/tools/ghidra_12.1.4_PUBLIC`，便携 Node 22.22 供 REA 运行）。
+> 数据常量（DAT_*）直接从 .so 按地址读浮点原值。凡本节数值与 §7.1.1 序列化值同源处不重复。
+
+**单位间推挤（PushApart）——SWL 没有软推挤**：
+- `Unit.PushApart` 基类 = **空方法**（`return` 直出）——近战全员（Minion/Swordwrath/Spearton/Giant）无任何单位间推挤逻辑。
+- 唯一 override = `Archer.PushApart`：从附近单位列表**随机取一人**，同编队组、存活、距离 < 0.25u 时**只挪自己**（沿两位置反向 × 0.25u 位移，写自身 pushAway 偏移字段），记 lastPushApartTime。
+- `ArcherAi.PushApartTolerance` = 被推后 1s 内返回 **0.35**（世界单位），否则 0——弓手被挤后的"退让步幅"，不是常驻分离力。
+- 结论：**任何单位从不被其他单位位移**——"单位=固体、移动方自行绕开/停步"是 SWL 本体语义。
+
+**移动模型（刚体 + 阻力状态机）**：
+- `Ai.RunToPosition` → `DetermineGoalX(AdjustXSoWeDontRunToBehindWall)` + `DetermineYComponentWhenRunningToTarget` + `DetermineXRunPower` → `Unit.Run(forceX, forceY, running)`（虚）→ `BaseRun`：力 = 方向 × **runPower**（序列化 48~64，Giant 360）× 速度修饰（runModifier / USER_CONTROLLED_SPEED / 控制档位），写刚体 → Unity 2D 物理积分。
+- `DetermineXRunPower`：|dx| ≥ 1u → 方向符号 ×runPower（全速）；< 1u → 线性收敛到 0（自然到位减速）。
+- `Unit.UpdateDrag` 刚体阻力状态机：**runningDrag**（常态 10~20）/ **stoppingDrag**（刚出手 1s 内，5）/ **staticDrag**（久站，10~30）/ **blockingDrag**（举盾且非 0，0~2）。终端速度 ≈ runPower ÷ runningDrag：Swordwrath/Archer/Spearton 64/14~15.5 ≈ 4.1~4.6 u/s、Minion 51/13 ≈ 3.9、Miner 30/10 = 3.0、Magikill 48/20 = 2.4。
+- `RunToPosition` 到位死区 = **0.3u**（|goalX − selfX| < 0.3u 即站定 + 面向归位）。
+
+**攻击距离体系（全部纯 |Δx| 门，y 不参与任何判定）**：
+- 停步点 `Ai.GetTargetAttackSpot` = **预测目标位置**（PredictedPosition：目标位置 + 目标刚体速度外推）± `AttackFromRange`；若自身已比槽位更接近目标则直接用目标位置（不过冲到背后）。`RestrictTargetSpotWhenBehindWall` 后处理。
+- `Ai.AttackFromRange` = **0.7 × attackRange × attackRangeMultiplier**（全局系数 0.7 直读 .so 数据段）——接近停步 = 序列化射程的 7 折。
+- 出手门 `Ai.CanAttack`：range = (**colInFormation == 1 ? attackRangeSecondLine : attackRange**) × mult；目标静止（刚体 |vx| ≤ 1）：|Δx| < **0.8 × range**；追击中目标在动：|Δx| < **0.5 × range**。**二线开关 = 编队列位**：编队第 1 列（前排后一列）的矛兵用 2.5u 长距隔排出手。
+- 贴身判定 `Ai.IsTargetReallyClose` = **|Δx| < 2.5u**（真值；非"半射程"近似）——绕开槽位直接压上。
+- 感知/选敌 `Ai.AiDistance` = 原始距离 ×（近战 ×3 / 远程 ×1 / Giant 类 ×15）——只影响选敌优先级不画出手门； reinforcement 标记目标 +200000（永不选）。
+- 静态：`AGRO_RANGE = 5u`、`FIGHTING_RANGE = 12u`（Ai.cctor 直读）。
+
+**编队几何**（Formation.cctor）：`UNITS_PER_COLUMN = 4`、**`ROW_GAP = 0.9u`（≈47px）**、`BOTTOM_X_OFFSET = 2.0`、`BOTTOM_X_OFFSET_CASTLE_ARCHER = 1.0`、formationOrder 8 组。注意 ROW_GAP 0.9u 只比身体箱宽 0.75u 大 0.15u——SWL 队列间距即"几乎贴着"。
+
+**碰撞箱与受击**（序列化，§7.1.1 工具直读补充）：
+- 身体箱（boxCollider2d）全员 ≈ 0.675~0.747u 宽 × 3.53~4.63u 高（offset y ≈ 半高），Miner 1.18u 宽；爆头圆 r = 0.4u。身体箱覆盖全身（供箭矢命中），**不承担单位间阻挡**——单位间不重叠由编队几何 + 停步距离维持（PushApart 空兵种在物理上也互不位移，穿插靠 AI 停步避免）。
+- `pushAwayFactor` 全员 = 1（Archer.PushApart 的自挪位移系数）；`attackPushPower`（2~150，Statue 5000）= **命中击退**推力（打人时给目标的冲量），不是单位间推挤。
+
+**换算速查**（×52 px/u）：AttackFromRange 停步：Minion 0.7u→**36px**、Swordwrath/Archer/Spearton 1.05u→**55px**、Spearton 二线 1.75u→**91px**、Giant 2.8u→**146px**、Magikill 施法 4.9u→**255px**、弓 range 15u→**780px**；出手门 0.8×range：近战 62px / Spearton 二线 **104px**；贴身 2.5u→**130px**；ROW_GAP 0.9u→**47px**。
+
 ### 7.2 弹道与射程【事实+推断】
 
 - 出射：`Archer.ArrowSpawnPosition()`（出生点）→ `ArrowLaunchDirection(isForShot)` / `ArrowLaunchVector()`（方向/向量）→ `Arrow.Init(arrowVector, drawPower, inflictor)`；`projectileSpeed` + `launchY`；`AimAngle` 的 `v=15` = 解算用的垂直初速参数。`Update()` 里 `UpdateRotation()` 让贴图随速度矢量转向。`trail` 拖尾延迟启用。

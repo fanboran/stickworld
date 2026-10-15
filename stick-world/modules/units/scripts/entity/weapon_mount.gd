@@ -95,18 +95,23 @@ var BLOCK_DAMAGE_FACTOR: float = 0.15
 var BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
 var BLOCK_FRONT_DOT: float = 0.25
-## 各武器攻击射程（像素，含手臂长度）——取整十口径，数值源 =
-## 观察场编制设计（矛 120 卡线 / 剑 80 贴身），远程族对齐 SWL 观感
-##（创始人裁决：弓手法师站后排覆盖战场中线、卡极限射程风筝——弓 650 ≈
-## 战场视宽 1/3（SWL 观感：远程站己方后排即覆盖敌阵前沿），杖 550 次之；旧 300/280 是观察场小尺度下的收缩值，
-## 远程班与近战线挤成一团的主因）。
+## 各武器攻击射程（px）——SWL 序列化真值直译（翻译档 §7.1.1：attackRange
+## 世界单位 × 52px/u，取整十）：剑/矛/镐 attackRange 1.5u≈78→80，杖（Magikill
+## 施法距离）7u≈364→360，弓 range 15u≈780。接近停步/出手门按 SWL 方法体系数
+## 折算（0.7/0.8，见 behavior_attack），本表只存序列化原值口径。
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
-	WeaponType.SPEAR: 120.0,
-	WeaponType.BOW: 650.0,
-	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 550.0,
+	WeaponType.SPEAR: 80.0,
+	WeaponType.BOW: 780.0,
+	WeaponType.PICKAXE: 80.0,
+	WeaponType.STAFF: 360.0,
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
+}
+## 二线射程（px，SWL attackRangeSecondLine 直译）：矛兵在编队第二列（前排后有
+## 友军遮挡）时用 2.5u≈130 隔排刺击（SWL colInFormation==1 语义；其余兵种
+## secondLine==attackRange 无行为差异，不设）。0 = 无二线。
+const WEAPON_RANGE_SECOND_LINE: Dictionary = {
+	WeaponType.SPEAR: 130.0,
 }
 ## HitStop 参数（命中顿帧）
 var HITSTOP_TIME_SCALE: float = 0.05
@@ -157,6 +162,9 @@ const USER_CONTROLLED_SPLASH_MODIFIER: float = 0.2
 @export var damage: float = 15.0
 ## 攻击射程（像素），按武器类型初始化（WEAPON_RANGE）
 @export var attack_range: float = 80.0
+## 二线射程（像素，SWL attackRangeSecondLine 直译；按武器类型初始化
+## WEAPON_RANGE_SECOND_LINE，0 = 无二线——行为层"前排有友军遮挡时隔排刺击"）
+@export var attack_range_second_line: float = 0.0
 ## 攻击冷却（秒）。对齐解包 Spine 攻击动画时长（Swordwrath-Attack1 = 1.33s）：
 ## 冷却 ≥ 动画时长才能完整播完挥剑（否则下次攻击打断未播完的动画）。
 @export var cooldown: float = 1.35
@@ -286,6 +294,7 @@ func _mount_weapons() -> void:
 	if owner_entity.get("rig") == null:
 		attack_range = 0.0 if weapon_type == WeaponType.NONE \
 				else float(WEAPON_RANGE.get(weapon_type, attack_range))
+		attack_range_second_line = float(WEAPON_RANGE_SECOND_LINE.get(weapon_type, 0.0))
 		# 盾实例对 billboard 图放行（修"矛兵盾 100% 缺失→格挡从未发生"）：
 		# is_shield_blocking 第一重判定只认 _shield 实例存在，此前本分支早退
 		# 使 blockChance 0.35 在观察场从未掷出。2D 骨架未建 → 盾以隐藏逻辑
@@ -301,6 +310,7 @@ func _mount_weapons() -> void:
 	# NONE = 徒手（背包装备系统卸空主手）：不挂武器模型，射程归零不可攻击
 	if weapon_type == WeaponType.NONE:
 		attack_range = 0.0
+		attack_range_second_line = 0.0
 	else:
 		var scene_path: String = WEAPON_SCENE_PATHS.get(weapon_type, "")
 		if scene_path.is_empty():
@@ -312,6 +322,7 @@ func _mount_weapons() -> void:
 			return
 		_weapon = _mount_one(scene, hand, "Weapon")
 		attack_range = WEAPON_RANGE.get(weapon_type, attack_range)
+		attack_range_second_line = float(WEAPON_RANGE_SECOND_LINE.get(weapon_type, 0.0))
 	# 副手盾牌（**绑定矛兵**：原版也只有 Spearton 持盾，其余兵种无盾——
 	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版；
 	# equipped_shield = 玩家背包副手装备盾，任意武器可配）

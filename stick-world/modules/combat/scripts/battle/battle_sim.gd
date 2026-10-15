@@ -6,10 +6,11 @@ extends RefCounted
 ## 详见 docs/项目/交接/战斗规模化30fps.md §十（整体迁移版设计）。
 ##
 ## 迁移范围（96v96 每刻的绝对大头）：
-##   - 移动积分 + 边界 clamp（替代 move_and_slide：单位层互不碰撞——旧链单位间
-##     的物理互撞正是 bodies-ghost 实验证明的实体物理链大头；站位由分离修正维持）
-##   - 群体分离（替代逐单位 query_neighbors Dictionary 分配风暴：每刻一次网格
-##     重建 + 内联邻域循环，普通 Array 引用语义——PackedArray 存容器是值拷贝）
+##   - 移动积分 + 固体阻挡 + 边界 clamp（替代 move_and_slide：逐轴 AABB 钳边，
+##     单位=固体互不位移——SWL 同款语义，翻译档 §7.1.2；转向力椭球只弯折
+##     意图不挪位置）
+##   - 群体分离转向力（separation_push_ellipse：每刻一次网格重建 + 内联邻域
+##     循环，普通 Array 引用语义——PackedArray 存容器是值拷贝）
 ##   - 击退冲量衰减
 ##   - 武器冷却推进 + 命中帧（strike）计时 + 远程放箭计时（替代 192 个
 ##     WeaponMount._physics_process 与 rig 动画位置轮询——sim 是时序权威，
@@ -37,20 +38,21 @@ const SEPARATION_RADIUS: float = _FormationAPI.SEPARATION_RADIUS_X_BATTLE
 const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X_BATTLE
 const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y_BATTLE
 const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
-## 静态分离单刻位置修正上限（与 MAX_SEPARATION_CORRECTION 同值）
-const MAX_SEPARATION_CORRECTION: float = 3.0
-## 驻株权重（同 entity_motion._apply_static_separation）：站定单位（无意图无击退
-## ——站桩攻击/待命/守位）只吃小份位置修正，被移动方顶上时基本原地不动，
-## 重叠由移动方自己的修正解开——旧版对称推＝站定者以移动方推进速度被搬运
-##（2026-10-12 创始人点正「跑动方把站立方顶飞」）
-const SEPARATION_PLANTED_FACTOR: float = 0.25
+## 固体碰撞箱半宽/半深（px，SWL 真值直译，翻译档 §7.1.2）：x 半宽 20 = 身体箱
+## 0.75u×52/2（序列化 boxCollider2d 宽 0.675~0.747u，取整十）；y 半深 24 = 机动
+## 间隙口径——SWL 战斗本质一维（x 接敌纵深，ROW_GAP 0.9u 是行间 x 距），y 无
+## 真值语义；本仓 y = 战线纵深轴，半深取 SWL 行距换算量级（0.9u×52/2≈23），
+## 相邻行 100px 列距下出生零重叠、|Δy|>48 可相互穿过（不掉进 1D 拥堵）。
+## 语义（裁决#40b）：单位=固体，任何单位不被其他单位位移——SWL PushApart 基类
+## 本就是空方法（唯一 override 只有弓手"被挤后自己退 0.35u"），移动方撞他人
+## 箱体贴边停/滑动（逐轴钳到箱边界，y 轴独立 = 天然滑动）。
+const SOLID_HALF_W: float = 20.0
+const SOLID_HALF_H: float = 24.0
 ## 击退衰减（与 stickman_entity.KNOCKBACK_DECAY 成对同值，2026-10-05 统一为
 ## sim 链标定值 700；批1 双链契约测试落地后退役成对常量）
 const KNOCKBACK_DECAY: float = 700.0
 ## 空间网格 cell（与 map_base.GRID_CELL 同值）
 const GRID_CELL: float = 64.0
-## 分离分频（与实体侧 _sep_rate_div=2 同频：30Hz 物理下 15Hz 分离）
-const SEP_RATE_DIV: int = 2
 
 # ─────────────────────────────── SoA 数据 ────────────────────────────────
 ## 位置（权威；每刻积分后写回实体）
@@ -90,8 +92,6 @@ var map_left: float = 0.0
 var map_right: float = 8192.0
 var ground_y: float = 450.0
 var ground_bottom: float = 882.0
-## 分离节拍计数（隔刻跑分离）
-var _sep_counter: int = 0
 ## 是否启用（A/B 开关；BattleInstance 构造时决定，运行期不变）
 var enabled: bool = true
 
@@ -352,30 +352,25 @@ func _alloc_slot() -> int:
 ## 系统顺序契约（确定性模拟核心 P0，docs/技术/架构/场景与战斗/确定性模拟核心.md）：
 ## 顺序是确定性的一部分——同类事件同一刻的结算顺序改变，回放/复现即漂移。
 ## 新系统只允许**追加到既有系统之间有明确语义理由的位置**并同步更新本表。
-## 现表：①分离修正(节流 SEP_RATE_DIV) → ②移动积分+击退+边界 → ③武器冷却/strike
-## → ④写回渲染代理。P1 找目标/命中事件、P3 编队将插入：目标 → 分离 → 编队 →
-## 积分 → 命中结算 → 写回（对齐 SW3 FindTargetAi → Movement/Formation →
-## MeleeAttack 的系统序）
+## 现表：①网格重建（固体阻挡+转向力共用） → ②移动积分（固体阻挡+击退+边界）
+## → ③武器冷却/strike → ④写回渲染代理。P1 找目标/命中事件、P3 编队将插入：
+## 目标 → 编队 → 积分 → 命中结算 → 写回（对齐 SW3 FindTargetAi → Movement/Formation
+## → MeleeAttack 的系统序）。旧①「分离互推」随固体碰撞语义退役（裁决#40b：
+## 任何单位不被其他单位位移——SWL PushApart 基类本为空方法，翻译档 §7.1.2）。
 ## 每物理刻推进（BattleInstance._physics_process 开头调用）。
 func tick(delta: float) -> void:
 	var n: int = entities.size()
 	if n == 0:
 		return
-	_sep_counter += 1
-	if _sep_counter % SEP_RATE_DIV == 0:
-		_tick_separation()
+	_rebuild_grid()
 	_tick_motion(delta)
 	_tick_weapon(delta)
 	_write_back(n)
 
 
-## 分离：网格重建 + 内联邻域修正（soft-body 位置修正，与旧链
-## _apply_static_separation 同语义：重叠一半互推、先累加再限幅、死者除外）。
-func _tick_separation() -> void:
-	## 配对半交替错峰（批3）：每个重叠对偶轮由低 sid 侧吃全额修正、奇轮高
-	## sid 侧——全场不再同刻同拍双侧弹开（15Hz 齐步脉冲=波浪抽动源）；两轮
-	## 合计仍推完整重叠量，成对解开速率不变。sid 比较确定性，回放不漂移。
-	var pair_round_low: bool = ((_sep_counter / SEP_RATE_DIV) % 2) == 0
+## 空间网格重建（每刻，O(n) 分桶）：固体阻挡与 separation_push_ellipse 转向力
+## 共用同一快照——同刻内位置一致，回放确定性不受遍历序影响（桶内 sid 升序）。
+func _rebuild_grid() -> void:
 	_grid.clear()
 	var n: int = entities.size()
 	for sid in n:
@@ -387,93 +382,55 @@ func _tick_separation() -> void:
 			cell = []
 			_grid[key] = cell
 		cell.append(sid)
-	# 修正量累积到修正数组（写回在循环外，避免同刻先后读污染）
-	var n_active: int = n
-	if _sep_px_x.size() < n_active:
-		_sep_px_x.resize(n_active)
-		_sep_px_y.resize(n_active)
-	var radius: float = SEPARATION_SCAN_RADIUS
-	var inv_rx: float = 1.0 / SEPARATION_RADIUS_X
-	var inv_ry: float = 1.0 / SEPARATION_RADIUS_Y
-	for sid in n:
-		if not _sid_alive(sid):
-			continue
-		var px: float = pos_x[sid]
-		var py: float = pos_y[sid]
-		_sep_px_x[sid] = 0.0
-		_sep_px_y[sid] = 0.0
-		var total_x: float = 0.0
-		var total_y: float = 0.0
-		var min_cx := floori((px - radius) / GRID_CELL)
-		var max_cx := floori((px + radius) / GRID_CELL)
-		var min_cy := floori((py - radius) / GRID_CELL)
-		var max_cy := floori((py + radius) / GRID_CELL)
-		for cy in range(min_cy, max_cy + 1):
-			for cx in range(min_cx, max_cx + 1):
-				var cell: Variant = _grid.get(Vector2i(cx, cy))
-				if cell == null:
+
+
+## 固体阻挡（裁决#40b，SWL 真值语义翻译档 §7.1.2）：移动方 x 轴试走后查网格
+## 邻居，与任一存活邻居的固体箱重叠即钳回箱边界（贴边停）；y 轴独立同法——
+## 两轴分别钳 = 沿箱边自然滑动。被挡者零位移（没有对称互推：SWL PushApart
+## 基类为空，站定单位从不被他人搬运）。网格快照是本刻重建值，帧内位移由
+## 扫描半径 ±2 cell 覆盖（箱 40×48 ≪ GRID_CELL 64）。
+func _clip_axis(sid: int, is_x: bool, delta: float, vx: float, vy: float) -> void:
+	var move: float = (vx if is_x else vy) * delta
+	if move == 0.0:
+		return
+	var px: float = pos_x[sid]
+	var py: float = pos_y[sid]
+	var nx: float = px + (move if is_x else 0.0)
+	var ny: float = py + (0.0 if is_x else move)
+	var min_cx := floori((nx - SOLID_HALF_W * 2.0) / GRID_CELL)
+	var max_cx := floori((nx + SOLID_HALF_W * 2.0) / GRID_CELL)
+	var min_cy := floori((ny - SOLID_HALF_H * 2.0) / GRID_CELL)
+	var max_cy := floori((ny + SOLID_HALF_H * 2.0) / GRID_CELL)
+	for cy in range(min_cy, max_cy + 1):
+		for cx in range(min_cx, max_cx + 1):
+			var cell: Variant = _grid.get(Vector2i(cx, cy))
+			if cell == null:
+				continue
+			for oid_v: int in cell:
+				var oid: int = oid_v
+				if oid == sid or not _sid_alive(oid):
 					continue
-				for sid_v: int in cell:
-					var oid: int = sid_v
-					if oid == sid:
-						continue
-					# 本轮该 oid→sid 方向吃修正吗（配对半交替，见函数头）
-					if (oid > sid) != pair_round_low:
-						continue
-					var ox: float = pos_x[oid]
-					var oy: float = pos_y[oid]
-					var dx: float = px - ox
-					var dy: float = py - oy
-					var d_sq: float = dx * dx + dy * dy
-					if d_sq <= 0.0:
-						continue
-					var ex: float = dx * inv_rx
-					var ey: float = dy * inv_ry
-					var e_sq: float = ex * ex + ey * ey
-					if e_sq >= 1.0:
-						continue
-					var dist: float = sqrt(d_sq)
-					if dist <= 0.001:
-						# 完全重叠：固定向上推开（旧链同语义；纵深轴为名义尺度）；
-						# 本侧吃全额（对面本轮不动）
-						total_y -= SEPARATION_RADIUS_Y
-						continue
-					# 本侧吃整个重叠量（对面本轮不动，两轮合计=旧链双侧各半×两轮）；
-					# 深度按椭圆归一折算（纵深轴名义尺度）
-					var w: float = (1.0 - sqrt(e_sq)) * SEPARATION_RADIUS_Y / dist
-					total_x += dx * w
-					total_y += dy * w
-		if total_x != 0.0 or total_y != 0.0:
-			var len_sq: float = total_x * total_x + total_y * total_y
-			if len_sq > MAX_SEPARATION_CORRECTION * MAX_SEPARATION_CORRECTION:
-				var inv: float = MAX_SEPARATION_CORRECTION / sqrt(len_sq)
-				total_x *= inv
-				total_y *= inv
-			_sep_px_x[sid] = total_x
-			_sep_px_y[sid] = total_y
-	# 应用修正（边界 clamp 在 _tick_motion 统一做）；驻株单位按权重缩水
-	#（无意图无击退 = 站定，见 SEPARATION_PLANTED_FACTOR 注释）
-	for sid in n:
-		if not _sid_alive(sid):
-			continue
-		var mx: float = _sep_px_x[sid]
-		if mx == 0.0:
-			continue
-		var ivx: float = intent_x[sid] + kb_x[sid]
-		var ivy: float = intent_y[sid] + kb_y[sid]
-		if ivx * ivx + ivy * ivy < 400.0:
-			pos_x[sid] += mx * SEPARATION_PLANTED_FACTOR
-			pos_y[sid] += _sep_px_y[sid] * SEPARATION_PLANTED_FACTOR
-		else:
-			pos_x[sid] += mx
-			pos_y[sid] += _sep_px_y[sid]
+				var ox: float = pos_x[oid]
+				var oy: float = pos_y[oid]
+				# AABB 对 AABB（全员同尺寸箱，半和 = 2×半宽/半深）
+				if absf(nx - ox) >= SOLID_HALF_W * 2.0 or absf(ny - oy) >= SOLID_HALF_H * 2.0:
+					continue
+				if is_x:
+					# 钳到对方箱边界（贴边停）；已在边界内侧时零位移防抖动
+					if move > 0.0:
+						nx = minf(nx, ox - SOLID_HALF_W * 2.0)
+					else:
+						nx = maxf(nx, ox + SOLID_HALF_W * 2.0)
+				else:
+					if move > 0.0:
+						ny = minf(ny, oy - SOLID_HALF_H * 2.0)
+					else:
+						ny = maxf(ny, oy + SOLID_HALF_H * 2.0)
+	pos_x[sid] = nx
+	pos_y[sid] = ny
 
 
-var _sep_px_x := PackedFloat32Array()
-var _sep_px_y := PackedFloat32Array()
-
-
-## 运动：意图+击退积分、击退衰减、边界 clamp。
+## 运动：意图+击退积分（逐轴固体阻挡）、击退衰减、边界 clamp。
 func _tick_motion(delta: float) -> void:
 	var n: int = entities.size()
 	var decay: float = KNOCKBACK_DECAY * delta
@@ -484,10 +441,8 @@ func _tick_motion(delta: float) -> void:
 			continue
 		var vx: float = intent_x[sid] + kb_x[sid]
 		var vy: float = intent_y[sid] + kb_y[sid]
-		if vx != 0.0:
-			pos_x[sid] += vx * delta
-		if vy != 0.0:
-			pos_y[sid] += vy * delta
+		_clip_axis(sid, true, delta, vx, vy)
+		_clip_axis(sid, false, delta, vx, vy)
 		# 击退衰减（线性，旧链同语义）
 		var kbx: float = kb_x[sid]
 		var kby: float = kb_y[sid]

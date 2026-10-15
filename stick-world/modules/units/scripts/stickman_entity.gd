@@ -150,6 +150,8 @@ var rank: int = 0
 var departed: bool = false
 ## 所属战斗实例引用（null=未参战）
 var _battle_instance: Node = null
+## 固体互撞层脏标记（set_battle_instance 时强制下一拍重算一次）
+var _solid_mask_dirty: bool = true
 ## 最后一次被敌方箭矢瞄准的时刻（s，Time.get_ticks_msec 换算；-999=无威胁）。
 ## 由 WeaponMount._fire_arrow 出弓瞬间写入**目标**实体，供矛兵举盾感知
 ## （SWL SpeartonAi.IsAnyArrowThreat / _lastArrowThreatTime 直译）。
@@ -568,14 +570,12 @@ func _physics_tick(delta: float) -> void:
 				and _ai_tick_counter % _ai_rate_div == _ai_phase % _ai_rate_div:
 			_ai_controller.physics_update(delta * float(_ai_rate_div))
 		_handle_ai_input(delta)
-		# 静态分离：停住的单位也互相推开（移动方向修正只在移动时生效，
-		# 双方都停在射程边缘时会黏住——soft-body 位置修正解决）。
-		# 帧率优化：邻域扫描隔物理帧跑（60Hz 物理=30Hz 分离；30Hz 物理=15Hz 分离）
-		# sim 模式由 BattleSim._tick_separation 批处理（网格重建+内联修正），此处跳过
+		# 静态分离（soft-body 位置互推）已随固体碰撞语义退役（裁决#40b：
+		# 任何单位不被其他单位位移）。非 sim 战斗的"不穿人"由本体的单位层
+		# 物理互撞承担（_update_solid_collision_mask：battle 期 mask 开单位层，
+		# move_and_slide 贴边停/滑动；村庄期关闭保持原软分离观感）。
 		if not _sim_active():
-			_sep_frame_counter += 1
-			if _sep_frame_counter % _sep_rate_div == _sep_phase:
-				_motion._apply_static_separation()
+			_update_solid_collision_mask()
 
 	if _sim_active():
 		# sim 模式：移动/分离/边界/击退衰减/z_index 全由 BattleSim 批处理；
@@ -1554,6 +1554,22 @@ func _apply_perf_tier(rig_visible: bool, anim_hz: float, bar_hz: float, bar_visi
 ## 设置所属战斗实例
 func set_battle_instance(bi: Node) -> void:
 	_battle_instance = bi
+	_solid_mask_dirty = true
+
+
+## 固体互撞层切换（裁决#40b 非 sim 战斗链；sim 链由 battle_sim._clip_axis 承担）：
+## 战斗活跃期 collision_mask 开单位层（2）——move_and_slide 对其他单位 CharacterBody2D
+## 贴边停/滑动，站定单位是 kinematic 不被推动 = 任何单位不被他人位移（SWL 同款
+## 语义，翻译档 §7.1.2：Unit.PushApart 基类为空）；村庄期关闭（mask 回 1 只撞
+## 地形），劳作穿行保持原软分离观感。状态变化才 set（免每帧触发引擎重排）。
+func _update_solid_collision_mask() -> void:
+	var active: bool = _battle_instance != null and is_instance_valid(_battle_instance) \
+			and (not _battle_instance.has_method("is_active") or _battle_instance.is_active())
+	var want: int = 1 | (2 if active else 0)
+	if want == collision_mask and not _solid_mask_dirty:
+		return
+	_solid_mask_dirty = false
+	collision_mask = want
 
 
 ## 获取所属战斗实例（可能为 null）

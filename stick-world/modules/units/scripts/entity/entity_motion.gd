@@ -4,7 +4,9 @@ extends RefCounted
 ## 职责：
 ## - 地形/持盾移速倍率查询（_terrain_speed_mult / _blocking_speed_mult）
 ## - 加速/减速与移动动画公式（_handle_acceleration / _handle_deceleration）
-## - AI 驱动移动与群体分离（_handle_ai_input / _apply_separation / _apply_static_separation）
+## - AI 驱动移动与群体分离转向力（_handle_ai_input / _apply_separation；
+##   位置互推已退役——固体碰撞语义见 battle_sim._clip_axis 与非 sim 链
+##   stickman_entity._update_solid_collision_mask）
 ## - 群体让路（9k，RTS 式：友军挡路给横向绕行分量，_sim_ally_yield / _ally_yield_lateral）
 ## - 统一移动处理（_apply_movement：方向 → 朝向/加速/奔跑 → velocity，sim 分支逐行保留）
 ##
@@ -53,11 +55,6 @@ const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIU
 const COHESION_STEER_FORCE: float = 0.8
 ## 分离推力系数（叠加到 AI 移动方向）
 const SEPARATION_FORCE: float = 1.6
-## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）
-const MAX_SEPARATION_CORRECTION: float = 3.0
-## 驻株权重（battle_sim.SEPARATION_PLANTED_FACTOR 同语义同值）：站定单位
-##（无移动意图且近静止）只吃小份静态分离修正——被移动方顶上时基本原地不动
-const SEPARATION_PLANTED_FACTOR: float = 0.25
 ## 让路触发门槛：友军相对移动意图方向的前向点积 ≥ 此值才算"挡在去路上"（9k）。
 ## 身旁/身后的友军走常规分离不算挡路；收拢末段友军偏出锥面，绕行权重随点积衰减归零
 const YIELD_AHEAD_DOT: float = 0.35
@@ -354,54 +351,11 @@ func _ally_yield_lateral(dir_n: Vector2, side: float, mag: float) -> Vector2:
 	return perp * (minf(mag, 1.0) * YIELD_LATERAL_FORCE)
 
 
-## 静态分离（soft-body 位置修正）：对过近邻居直接推位置（重叠量各半，双向）。
-## 与 _apply_separation 的区别：后者只在移动时生效；停住的单位（射程边缘
-## 互停的敌我）靠本方法持续分开，解决"黏住"bug。参考 RtsGame.resolveSoftCollisions。
-## 2026-08-31 审计 P0-3：所有邻居的推力**先累加再限幅**——原实现对每路推力
-## 直接写坐标线性叠加（被 N 人围住 = N 路叠加无上限，一帧几十上百 px = 肉眼瞬移），
-## 现在单帧总修正 ≤ MAX_SEPARATION_CORRECTION。
-func _apply_static_separation() -> void:
-	var map_ref: Node2D = _entity._map_ref
-	if map_ref == null or not is_instance_valid(map_ref) or not _entity._map_has_query:
-		return
-	var total_push := Vector2.ZERO
-	var radii: Vector2 = _sep_radii()
-	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
-	for e in map_ref.query_neighbors(_entity.global_position, maxf(radii.x, radii.y) + 8.0):
-		if e == _entity or not is_instance_valid(e):
-			continue
-		if not (e is CharacterBody2D):
-			continue
-		if e.has_method("is_dead") and e.is_dead():
-			continue
-		var offset: Vector2 = _entity.global_position - e.global_position
-		var dist: float = offset.length()
-		var ed: float = _sep_ellipse_d(offset, radii.x, radii.y)
-		if ed >= 1.0:
-			continue
-		if dist <= 0.001:
-			# 完全重叠：退化为固定方向（向上），否则无法计算推开方向
-			offset = Vector2.UP
-			ed = 0.0
-		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）；
-		# 深度按椭圆归一折算（纵深轴为名义尺度）
-		total_push += offset.normalized() * ((1.0 - ed) * radii.y * 0.5)
-	if total_push == Vector2.ZERO:
-		return
-	if total_push.length() > MAX_SEPARATION_CORRECTION:
-		total_push = total_push.normalized() * MAX_SEPARATION_CORRECTION
-	# 驻株权重（2026-10-12 创始人点正「跑动方把站立方顶飞」）：站定单位（无移动
-	# 意图且近静止——站桩攻击/待命/守位）只吃小份修正——被移动方顶上时基本
-	# 原地不动，重叠由移动方自己的修正解开（它被推回去＝在接触处刹停）；
-	# 旧版对称半推＝站定者以移动方的推进速度被持续搬运。sim 链同语义
-	#（battle_sim._tick_separation）
-	var vx: float = _entity.velocity.x
-	var vy: float = _entity.velocity.y
-	var planted: bool = vx * vx + vy * vy < 400.0 \
-			and _entity._ai_move_dir.length_squared() < 0.01
-	if planted:
-		total_push *= SEPARATION_PLANTED_FACTOR
-	_entity.global_position += total_push
+## 静态分离（soft-body 位置修正）已随固体碰撞语义退役（裁决#40b：任何单位
+## 不被其他单位位移——SWL Unit.PushApart 基类为空方法，翻译档 §7.1.2）。
+## 站位不再由互推维持：sim 链逐轴固体阻挡（battle_sim._clip_axis）/Node 链
+## 单位层物理互撞（battle 期 collision_mask 开单位层，move_and_slide 贴边滑动）
+## 接管"不穿人"；本类的 _apply_separation 转向力保留（只弯折移动方向，不挪人）。
 
 
 ## 统一移动处理（玩家与 AI 共用）：方向 → 朝向/加速/奔跑 → velocity。

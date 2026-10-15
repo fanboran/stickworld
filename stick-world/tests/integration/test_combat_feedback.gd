@@ -38,7 +38,7 @@ func _register_tests() -> void:
 	_tests.append({"name": "分离: 不反转意图纯函数（零速顶住/前向偏航）", "fn": Callable(self, "_test_sep_no_reverse_fn")})
 	_tests.append({"name": "分离: 对顶不倒走", "fn": Callable(self, "_test_separation_pushes"), "async": true})
 	_tests.append({"name": "分离: 远处无影响", "fn": Callable(self, "_test_separation_far"), "async": true})
-	_tests.append({"name": "分离: 停住的单位被推开（防黏住）", "fn": Callable(self, "_test_static_separation"), "async": true})
+	_tests.append({"name": "固体: 移动方贴边停 站定方零位移", "fn": Callable(self, "_test_static_separation"), "async": true})
 	_tests.append({"name": "血条: 满血圆点/掉血展开横条/比例正确", "fn": Callable(self, "_test_bar_visibility"), "async": true})
 	_tests.append({"name": "血条: 死亡隐藏", "fn": Callable(self, "_test_bar_on_death"), "async": true})
 
@@ -254,30 +254,43 @@ func _test_separation_far() -> void:
 	a.ai_stop()
 
 
-## 静态分离：两个停住的单位贴近放置（模拟射程边缘互停黏住），数帧后应被推开
+## 固体碰撞契约（裁决#40b，取代旧"静态分离防黏住"）：移动方撞站定方
+## 贴边停（不穿人、不推人），站定方**零位移**——SWL 同款语义
+##（Unit.PushApart 基类为空方法，翻译档 §7.1.2）。
 func _test_static_separation() -> void:
 	var a: Node = _helper.units[0]
 	var b: Node = _helper.units[1]
 	if a == null or b == null:
 		_runner.assert_true(false, "单位缺失")
 		return
-	# 贴近放置（相距 10px，碰撞体约 40px 宽，即"黏住"状态）
+	# a 站定；b 在 200px 外直线逼近（固体箱 40×48，贴边停于 40px 中心距）。
+	# 夹具单位默认无战斗实例（固体互撞层只在战斗期开启）——挂裸 Node 假战斗
+	# （无 is_active 方法即视为活跃）走真实的层切换路径。
+	var fake_battle := Node.new()
+	add_child(fake_battle)
+	a.set_battle_instance(fake_battle)
+	b.set_battle_instance(fake_battle)
 	_place_x(a, 1200.0)
-	_place_x(b, a.global_position.x + 10.0)
-	# 双方都不移动（静止）
-	if a.has_method("ai_stop"):
-		a.ai_stop()
-	if b.has_method("ai_stop"):
-		b.ai_stop()
-	await get_tree().process_frame
-	# 放置后第一帧内物理去重叠 + 静态分离就可能已把两者弹到接近分离半径
-	# （实测 before 采样时已 41.6/42），相对位移断言对时序敏感。
-	# 防黏住的本质：停住单位不会被永久卡在重叠状态 → 断言"达到分离半径"。
-	var dist_after: float = a.global_position.distance_to(b.global_position)
-	for i in range(40):
-		await get_tree().create_timer(0.05).timeout
-		dist_after = a.global_position.distance_to(b.global_position)
-		if dist_after >= 40.0:
-			break
-	_runner.assert_true(dist_after >= 40.0,
-		"贴近停住的单位应被推开到分离半径（~42），最终间距=%.1f" % dist_after)
+	_place_x(b, a.global_position.x + 200.0)
+	# 清上一用例残余速度（否则 a 带速滑行污染"零位移"采样），落定后再快照
+	_helper.reset_units([a, b])
+	for i in 3:
+		await get_tree().physics_frame
+	var a_pos_before: Vector2 = a.global_position
+	if not b.has_method("ai_move"):
+		_runner.assert_true(false, "实体缺 ai_move")
+		return
+	b.ai_move(Vector2(-1, 0), false)
+	# 40 物理帧：b 加速逼近并撞上 a 的固体箱
+	for i in 40:
+		await get_tree().physics_frame
+	var a_delta: float = a.global_position.distance_to(a_pos_before)
+	_runner.assert_true(a_delta < 2.0,
+			"站定单位不被移动方位移（固体语义），位移=%.1f" % a_delta)
+	var gap: float = absf(b.global_position.x - a.global_position.x)
+	_runner.assert_true(gap >= 36.0 and gap <= 60.0,
+			"移动方应贴固体箱边界停（半和 40px），间距=%.1f" % gap)
+	b.ai_stop()
+	a.set_battle_instance(null)
+	b.set_battle_instance(null)
+	fake_battle.queue_free()

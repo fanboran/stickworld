@@ -7,7 +7,7 @@ extends Node
 ## 采样三点：出生完成即刻（分离推挤未起）/ +1s / +2s（分离是否自解）。
 ## headless 可跑。判定标准（创始人 2026-10-12）：初始状态碰撞箱零重合。
 
-const BOX := Vector2(83.0, 24.0)   # stickman_entity.tscn Collider 尺寸（x=83 宽）
+const BOX := Vector2(40.0, 48.0)   # stickman_entity.tscn Collider 尺寸（固体箱 SWL 真值 0.75u×52）
 const BOX_OFF := Vector2(8.5, 130.0)
 
 
@@ -23,12 +23,14 @@ func run(_tag: String, _preset: int, _secs: int, _every: int) -> void:
 		print("[OverlapProbe] 观察场未就绪，退出")
 		get_tree().quit()
 		return
-	# 等出生收敛：指挥官/护卫链完成（开战前一刻）即首采，再看号令把谁挪到哪
+	# 等出生收敛：两军单位全部落地且战斗刚登记（开战前一刻）即首采。
+	#（旧等 "_arena_commanders" 指挥官链——该链已随裁决#36 根除，改等
+	#   _defender 非空 = 双军到齐）
 	for i in 3600:
 		await get_tree().process_frame
-		var cmd: Dictionary = arena.get("_arena_commanders")
-		if cmd != null and not cmd.is_empty() \
-				and cmd.values().all(func(c): return c != null and is_instance_valid(c)):
+		var atk: Array = arena.get("_attacker") if arena.get("_attacker") is Array else []
+		var def_: Array = arena.get("_defender") if arena.get("_defender") is Array else []
+		if not atk.is_empty() and not def_.is_empty():
 			break
 	_sample(arena, "出生完成（开战前一刻） f=%d" % Engine.get_process_frames())
 	# 逐帧盯梢：瞬移帧定位（速度大=积分爆炸 / 速度零=直改坐标）

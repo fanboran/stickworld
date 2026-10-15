@@ -29,8 +29,16 @@ const ScriptTargetAcquire := preload("res://modules/units/scripts/ai/target_acqu
 
 ## y 对齐死区（px，dump 无真值 → 待实测校准）：|Δy| 小于此值视为已对齐不再走位
 const Y_ALIGN_DY_THRESHOLD: float = 16.0
-## IsTargetReallyClose 阈值倍数（半射程近似，dump 无真值 → 待实测校准）
-const REALLY_CLOSE_MULT: float = 0.5
+## 攻击槽位系数（SWL AttackFromRange 直译，翻译档 §7.1.2）：接近停步点 =
+## 预测目标位置 ± 0.7 × attackRange（全局系数 0.7 直读 .so 数据段）
+const ATTACK_SLOT_FRAC: float = 0.7
+## 出手门系数（SWL Ai.CanAttack 直译）：目标静止时 |Δx| < 0.8 × range 才可出手
+##（追击中目标在动为 0.5×range——本仓出手锁足后目标动时走槽位接近路径，
+## 不复刻 0.5 档）
+const ATTACK_GATE_FRAC: float = 0.8
+## 贴身判定阈值（SWL IsTargetReallyClose 直译）：|Δx| < 2.5u × 52 ≈ 130px——
+## 绕开攻击槽位直接压上（旧"半射程"近似作废）
+const REALLY_CLOSE_DX: float = 130.0
 ## 远程二线停驻间距（px，SWL 实机观感：弓手成排在**自己部队身后**越射）：
 ## 停驻线 = 己方近战体（非远程存活友军）推进度的 25 分位（=部队体的后缘）
 ## 后方此间距。参照部队体而非前线尖端/目标——尖端在纵深球里会把弓手吸进
@@ -225,8 +233,8 @@ func update(delta: float) -> void:
 				and not entity.is_attack_anim_active()):
 			_melee_swing_lock = false
 		else:
-			# 站桩中可打断窗开了且目标仍在射程 → 原地出手（不挪步）
-			if dist <= attack_range and weapon != null 					and weapon.has_method("can_attack") and weapon.can_attack() 					and not _arrows_wasted(_target, weapon):
+			# 站桩中可打断窗开了且目标仍在出手门内 → 原地出手（不挪步）
+			if dist <= _melee_gate_dist(weapon) and weapon != null 					and weapon.has_method("can_attack") and weapon.can_attack() 					and not _arrows_wasted(_target, weapon):
 				weapon.perform_attack(_target)
 				_melee_lock_until = _clock + _swing_lock_duration(weapon)
 				if _cap_play_attack:
@@ -258,10 +266,12 @@ func update(delta: float) -> void:
 	elif _is_ranged_weapon(weapon):
 		# 远程二线驻射（SWL 停驻语义）：停驻线/槽位锚定/开火全在此分支
 		_ranged_update(dist, delta, weapon, attack_range, kite_range)
-	elif dist <= attack_range:
-		# 近战射程内：站定出手。SWL 出手链 = 冷却好即打，命中帧自检射程（SW3
-		# MeleeAttackSystem.HitUpdate→InRangeForHit），出手端无任何预判门——
-		# 近战预判门/连射点射/y 对齐拦射已随裁决#32 删（射程内站桩不打的三道闸）。
+	elif dist <= _melee_gate_dist(weapon):
+		# 近战出手门内（SWL CanAttack：0.8×range，矛兵前排有友军遮挡时放宽到
+		# 0.8×二线 130=104 隔排刺击）：站定出手。SWL 出手链 = 冷却好即打，命中帧
+		# 自检射程（SW3 MeleeAttackSystem.HitUpdate→InRangeForHit），出手端无任何
+		# 预判门——近战预判门/连射点射/y 对齐拦射已随裁决#32 删（射程内站桩不打的
+		# 三道闸）。
 		if _cap_ai_stop:
 			entity.ai_stop()
 		_face_target()  # 开火面向目标（走位/漂移后可能侧身）
@@ -292,10 +302,12 @@ func update(delta: float) -> void:
 		if _approach_via_slot():
 			return
 		var to_target: Vector2 = _target.global_position - entity.global_position
-		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈，直接压上
-		var really_close: bool = _is_target_really_close(dist, attack_range)
-		# 攻击槽位（SWL GetTargetAttackSpot）：停在射程内缘的攻击位
-		var attack_radius: float = maxf(attack_range * 0.85, 24.0)
+		# IsTargetReallyClose（SWL 直译，翻译档 §7.1.2）：|Δx| < 2.5u（130px）——
+		# 贴身目标绕开攻击槽位外圈，直接压上
+		var really_close: bool = _is_target_really_close()
+		# 攻击槽位（SWL GetTargetAttackSpot）：停在 0.7×射程的攻击位
+		#（AttackFromRange = 0.7 × attackRange 全局系数直译）
+		var attack_radius: float = maxf(attack_range * ATTACK_SLOT_FRAC, 24.0)
 		var desired_pos: Vector2 = _target.global_position if really_close \
 				else _target.global_position + to_target.normalized() * attack_radius
 		var dir: Vector2 = (desired_pos - entity.global_position).normalized()
@@ -390,7 +402,7 @@ func _faction_second_line_x(to_t: float) -> float:
 ## 远程精简版（远程免 IsTargetReallyClose 压上：压上 = 脱离二线钻人堆）
 func _approach_target(delta: float, attack_range: float) -> void:
 	var to_target: Vector2 = _target.global_position - entity.global_position
-	var attack_radius: float = maxf(attack_range * 0.85, 24.0)
+	var attack_radius: float = maxf(attack_range * ATTACK_SLOT_FRAC, 24.0)
 	var desired_pos: Vector2 = _target.global_position + to_target.normalized() * attack_radius
 	var dir: Vector2 = _apply_y_walk((desired_pos - entity.global_position).normalized(), delta)
 	if _cap_ai_move:
@@ -797,10 +809,52 @@ func _face_target() -> void:
 	face_target(_target)
 
 
-## IsTargetReallyClose（SWL Ai 直译）：目标贴身（≈半射程内）——绕开攻击槽位
-## 外圈等位直接压上。
-func _is_target_really_close(dist: float, attack_range: float) -> bool:
-	return dist <= maxf(attack_range * REALLY_CLOSE_MULT, 40.0)
+## IsTargetReallyClose（SWL 直译，翻译档 §7.1.2）：目标贴身 = **|Δx| < 2.5u**
+## （130px 真值；非"半射程"近似）——绕开攻击槽位外圈等位直接压上。
+func _is_target_really_close() -> bool:
+	return absf(_target.global_position.x - entity.global_position.x) <= REALLY_CLOSE_DX
+
+
+## 近战出手门（SWL Ai.CanAttack 直译）：默认 0.8 × attackRange（目标静止档；
+## 追击动目标 SWL 收 0.5——本仓锁足后目标动时走槽位接近，不复刻该档）。
+## 矛兵（有二线射程）且**前排有友军遮挡**时放宽到 0.8 × attackRangeSecondLine
+## = 104px 隔排刺击——SWL colInFormation==1 用 2.5u 的编队列位语义在无战线
+## 场景下的等价物：自己与目标 x 之间（同纵深带 |Δy| < 48）有存活友军。
+func _melee_gate_dist(weapon: Node) -> float:
+	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
+	var gate: float = attack_range * ATTACK_GATE_FRAC
+	var second_line: float = float(weapon.attack_range_second_line) if weapon != null and "attack_range_second_line" in weapon else 0.0
+	if second_line > 0.0 and _ally_blocks_front():
+		gate = maxf(gate, second_line * ATTACK_GATE_FRAC)
+	return gate
+
+
+## 前排遮挡判定（二线刺击前提）：任一同阵营存活友军落在我与目标的 x 区间内、
+## 且纵深带相近（|Δy| < 48 = 固体箱深，同排语义）。
+func _ally_blocks_front() -> bool:
+	if not _cap_get_faction or not _cap_get_battle:
+		return false
+	var bi: Node = entity.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
+		return false
+	var sx: float = entity.global_position.x
+	var sy: float = entity.global_position.y
+	var tx: float = _target.global_position.x
+	var toward: float = signf(tx - sx)
+	if toward == 0.0:
+		return false
+	for a in bi.get_allies_of(entity.get_faction()):
+		if a == null or not is_instance_valid(a) or a == entity:
+			continue
+		if a.has_method("is_dead") and a.is_dead():
+			continue
+		var ax: float = (a as Node2D).global_position.x
+		# 友军在我方与目标之间（同向且不越过目标）
+		if signf(ax - sx) != toward or absf(ax - tx) < 1.0:
+			continue
+		if absf((a as Node2D).global_position.y - sy) < 48.0:
+			return true
+	return false
 
 
 ## DetermineXRunPower（SWL Ai 直译）：水平推进强度 0~1——远处全速逼近（run），

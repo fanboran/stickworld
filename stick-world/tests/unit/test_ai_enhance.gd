@@ -68,7 +68,7 @@ class FakeUnit:
 
 class FakeWeapon:
 	extends Node
-	var attack_range: float = 120.0
+	var attack_range: float = 140.0  # 出手门 = 0.8×140=112（目标 100 落门内）
 	var armed: bool = true
 	var attack_calls: int = 0
 
@@ -324,7 +324,7 @@ func _test_swing_lock() -> void:
 	var w: Dictionary = _make_battle()
 	var attacker: FakeUnit = w["attacker"]
 	var e1: FakeUnit = w["e1"]
-	e1.position = Vector2(100, 0)  # 射程内（fake 武器射程 120）
+	e1.position = Vector2(100, 0)  # 出手门内（0.8×140=112）
 	var beh: Node = ScriptBehaviorAttack.new()
 	beh.entity = attacker
 	var weap := FakeWeapon.new()

@@ -176,8 +176,9 @@ const CLASS_PROFILES: Dictionary = {
 		"stand_pool": ["idle_spear_v2", "idle_spear_v3"],
 	},
 	BOW: {
-		# 近身兜底线（ShouldKite 真意）：敌贴到 180 内才背撤，撤出即站定成排射
-		"kite_range": 180.0,
+		# SWL 真值：AI 弓手不风筝（ShouldKite 门在 Pro 玩家操控，翻译档 §7.1.2）
+		# ——被贴脸由站位 spot 的 3u 保距线应对，kite_range 归零
+		"kite_range": 0.0,
 		"leash_mult": 5.0,
 		"acquire_interval": 0.4,
 		"aim_hold": Vector2(0.25, 0.9),
@@ -196,7 +197,7 @@ const CLASS_PROFILES: Dictionary = {
 		"missing_arrows_tolerance": 10.0,
 	},
 	STAFF: {
-		"kite_range": 200.0,            ## 近身兜底线（同弓手语义：贴脸才退，正常站定施法）
+		"kite_range": 0.0,              ## SWL 真值：AI 不风筝（同弓手，被贴脸靠召唤护卫+保距站位）
 		"leash_mult": 5.0,
 		"y_drift_band": 15.0,
 		"move_mult": 0.9,
@@ -215,8 +216,8 @@ const CLASS_PROFILES: Dictionary = {
 		"heal_range": 400.0,          ## 治疗射程（px，语义推断待实测校准）
 		"heal_duration": 3.0,         ## HOT 持续（s，总量均分 per_tick = amount × TICK / duration）
 		"heal_scan_interval": 0.5,    ## 目标扫视周期（s）
-		"kite_range": 260.0,          ## 被近身保距撤离（决策点 4：撤而不打；置 0 无损切换为站定）
-		"kite_run": true,             ## 撤离奔跑
+		"kite_range": 0.0,            ## SWL 真值：AI 不风筝（祭司站后排治疗，被贴脸靠战线掩护）
+		"kite_run": false,
 		"rear_line": true,            ## 后排站位（FormationSystem 尾列取向）
 		"move_mult": 0.7,             ## 脆皮辅助移速（< 法师 0.9，待实测校准）
 		"y_drift_band": 15.0,         ## y 纵深漂移半径（同法师）

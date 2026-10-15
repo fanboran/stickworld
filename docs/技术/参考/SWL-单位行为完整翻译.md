@@ -626,7 +626,15 @@ Spearton 二线 2.5u ≈ 130px、弓 range 15u ≈ 780px、Giant 4u ≈ 208px、
 - 身体箱（boxCollider2d）全员 ≈ 0.675~0.747u 宽 × 3.53~4.63u 高（offset y ≈ 半高），Miner 1.18u 宽；爆头圆 r = 0.4u。身体箱覆盖全身（供箭矢命中），**不承担单位间阻挡**——单位间不重叠由编队几何 + 停步距离维持（PushApart 空兵种在物理上也互不位移，穿插靠 AI 停步避免）。
 - `pushAwayFactor` 全员 = 1（Archer.PushApart 的自挪位移系数）；`attackPushPower`（2~150，Statue 5000）= **命中击退**推力（打人时给目标的冲量），不是单位间推挤。
 
-**换算速查**（×52 px/u）：AttackFromRange 停步：Minion 0.7u→**36px**、Swordwrath/Archer/Spearton 1.05u→**55px**、Spearton 二线 1.75u→**91px**、Giant 2.8u→**146px**、Magikill 施法 4.9u→**255px**、弓 range 15u→**780px**；出手门 0.8×range：近战 62px / Spearton 二线 **104px**；贴身 2.5u→**130px**；ROW_GAP 0.9u→**47px**。
+**弓手专属（ArcherAi 族，2026-10-16 补齐）**：
+- 开火门 `ArcherAi.CanAttack`：**0.8u < |Δx| < GetRange() + 宽容**（下限 0.8u=DAT_015c1cb8 直读——贴脸不射；宽容 = 被推 0.35（PushApartTolerance）+ MissingArrowsTolerance + 动目标 0.5 之类抖动项）；纯 |Δx|，y 不参与。城墙弓手（isCastleArcher）另有 |spot.x − self.x| < 0.2 的紧门。
+- 射程 `ArcherAi.GetRange` = **isCastleArcher ? castleArcherRange : range**（0x454/0x464/0x46C 字段直读；includeOffset 参数在此 build 无效）。
+- 站位 `ArcherAi.GetTargetAttackSpot`：**射程外走向距目标 0.9×range 处**（DAT_016c55a4=0.9 直读；range 15u → 13.5u ≈ 己方半场深处——"站在自己部队身后"的真值来源）；**射程内 spot = 目标 ±3u**（保距线：被贴脸退开到 3u，非风筝）；候选命中墙判定走 IsXBehindWall 微调（无墙场景无效）。纯相对目标，无编队参照体。
+- **AI 弓手不风筝**：`ShouldKite` 整段门在 `IsBeingUserControlledByPro`——风筝是 Pro 玩家操控专属（敌近 4u 时后撤），普通 AI 弓手常态 = 保距带内站桩成排射。
+- 瞄准链：lead = |Δx| ÷ 15（箭速 v=15u/s）× 目标 vx（Update 内联外推）→ `AimAngle(distance, v=15, out isAbleToHit, target, self, randomness)` 解俯仰 → 写 `unit.aimAngle(0x434)` + directionFacing；`DrawBowGradually(1.0)` 拉满；`ShouldAim` 提供换靶后 2s 内保持持瞄的节拍。
+
+**换算速查**（×52 px/u）：AttackFromRange 停步：Minion 0.7u→**36px**、Swordwrath/Archer/Spearton 1.05u→**55px**、Spearton 二线 1.75u→**91px**、Giant 2.8u→**146px**、Magikill 施法 4.9u→**255px**、弓 range 15u→**780px**；出手门 0.8×range：近战 62px / Spearton 二线 **104px**；贴身 2.5u→**130px**；ROW_GAP 0.9u→**47px**；弓手停步线 0.9×range→**702px**、保距 3u→**156px**、开火下限 0.8u→**42px**。
+
 
 ### 7.2 弹道与射程【事实+推断】
 

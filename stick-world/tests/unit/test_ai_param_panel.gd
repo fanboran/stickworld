@@ -110,9 +110,9 @@ func _test_overlay_fallback_swl() -> void:
 	_runner.assert_approx(float(p.get("decision_interval", -1.0)), 0.3, 0.001, "缺载回落代码基线 0.3")
 	# SWL 直译个性不被覆盖链打掉（剑士冲脸快/弓手风筝/矛兵持阵）
 	var bow: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.BOW)
-	# 近身兜底风筝（SWL ShouldKite 真意）：kite_range = 近身危险线（贴脸才退），
+	# 风筝退役（SWL 真值：AI 弓手不风筝，ShouldKite 门在 Pro 操控——翻译档 §7.1.2）：
 	# 远小于射程——弓手常态站射程线成排射击
-	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 180.0, 0.001, "弓手近身兜底线 180")
+	_runner.assert_approx(float(bow.get("kite_range", -1.0)), 0.0, 0.001, "弓手风筝归零（AI 不风筝真值）")
 	var spear: Dictionary = ScriptBehaviorProfiles.get_profile(ScriptBehaviorProfiles.SPEAR)
 	_runner.assert_true(bool(spear.get("formation_block", false)), "矛兵行军举盾直译保留")
 

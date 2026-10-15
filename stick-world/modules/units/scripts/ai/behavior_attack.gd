@@ -39,15 +39,17 @@ const ATTACK_GATE_FRAC: float = 0.8
 ## 贴身判定阈值（SWL IsTargetReallyClose 直译）：|Δx| < 2.5u × 52 ≈ 130px——
 ## 绕开攻击槽位直接压上（旧"半射程"近似作废）
 const REALLY_CLOSE_DX: float = 130.0
-## 远程二线停驻间距（px，SWL 实机观感：弓手成排在**自己部队身后**越射）：
-## 停驻线 = 己方近战体（非远程存活友军）推进度的 25 分位（=部队体的后缘）
-## 后方此间距。参照部队体而非前线尖端/目标——尖端在纵深球里会把弓手吸进
-## 人堆（2026-10-14 两轮点正：650 射程缘散停 = 吊大后方；0.45×射程距目标
-## 停步 = 坍缩进前排）。横线阵下 25 分位≈贴近战排后，球阵下自然探出球后缘，
-## 两种阵形都读成"跟在自己部队身后"（attackRangeSecondLine / GetRange
-## 编队偏移语义，翻译档 §射程体系）。近战全灭 → 无参照：射程内原地驻射。
-const RANGED_SECOND_LINE_GAP: float = 120.0
-## 二线停驻死区（px）：距线 ≤ 此值站定（防贴线抖动）
+## 弓手开火下限（SWL ArcherAi.CanAttack 直译）：|Δx| ≤ 0.8u(42px，DAT_015c1cb8
+## 直读) 不开火——贴脸弓切近战 attackRange 语义
+const ARCHER_MIN_FIRE_DX: float = 42.0
+## 弓手保距线（SWL GetTargetAttackSpot 直译）：射程内站桩最小间距 = 目标 ±3u
+## ≈156px——被贴脸退到此线（spot 保持距离语义，非风筝：AI 弓手不风筝，
+## ShouldKite 是 Pro 玩家操控专属）
+const ARCHER_HOLD_DIST: float = 156.0
+## 弓手停步线系数（SWL GetTargetAttackSpot 射程外分支直读 DAT_016c55a4）：
+## 射程外走向距目标 0.9×range 处（range 15u → 13.5u ≈ 702px，天然落在己方半场）
+const ARCHER_RANGE_FRAC: float = 0.9
+## 远程走位死区（px）：距停步/保距线 ≤ 此值不挪步（防贴线抖动）
 const RANGED_LINE_DEADZONE: float = 40.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
@@ -246,10 +248,10 @@ func update(delta: float) -> void:
 			if _p("push_apart", 0.0) > 0.0:
 				_apply_push_apart(_p("push_apart", 0.0), delta)
 			return
-	# 风筝 = 近身兜底（ArcherAi.ShouldKite 真意：敌贴脸才撤）：档案 kite_range
-	# 即"近身危险线"——敌进此线（远小于射程）背向短撤，撤出即站定继续射。
-	# **不与射程绑定**（曾误设射程−40：敌进射程内缘就撤 → 弓手全程乱跑，
-	# 站位散乱——SWL 弓手常态是站在射程线原地成排射击）
+	# 风筝分支（机制保留、数据全关）：SWL 真值——**AI 弓手不风筝**，
+	# ShouldKite 整段门在 IsBeingUserControlledByPro（Pro 玩家操控专属，
+	# 翻译档 §7.1.2）；AI 弓手被贴脸由站位 spot 的 3u 保距线应对（见
+	# _ranged_update）。三档兵种 kite_range 已归零，本分支为死路兜底。
 	var kite_range: float = _p("kite_range", 0.0)
 	if kite_range > 0.0 and dist < kite_range:
 		var away: Vector2 = (entity.global_position - _target.global_position).normalized()
@@ -265,7 +267,7 @@ func update(delta: float) -> void:
 			_aiming = false
 	elif _is_ranged_weapon(weapon):
 		# 远程二线驻射（SWL 停驻语义）：停驻线/槽位锚定/开火全在此分支
-		_ranged_update(dist, delta, weapon, attack_range, kite_range)
+		_ranged_update(dist, delta, weapon, attack_range)
 	elif dist <= _melee_gate_dist(weapon):
 		# 近战出手门内（SWL CanAttack：0.8×range，矛兵前排有友军遮挡时放宽到
 		# 0.8×二线 130=104 隔排刺击）：站定出手。SWL 出手链 = 冷却好即打，命中帧
@@ -320,50 +322,60 @@ func update(delta: float) -> void:
 			entity.ai_move(dir, run)
 
 
-# ─────────────────────────────── 远程二线驻射（SWL 停驻语义）────────────────────────────────
+# ─────────────────────────────── 远程站位与开火（SWL 真值）────────────────────────────────
 
-## 远程每拍推进：槽位锚定优先（产线批5 语义），无锚回落二线停驻——
-## 停驻线 = 己方近战体后缘（见 RANGED_SECOND_LINE_GAP）后方 GAP 处；
-## 无近战友军（近战全灭/全弓军）时：射程内原地驻射、射程外常态接近。
-## 开火门槛与站位解耦（dist <= attack_range 即射，走射/驻射同权）。
-func _ranged_update(dist: float, delta: float, weapon: Node, attack_range: float,
-		kite_range: float) -> void:
+## 远程站位与开火（SWL ArcherAi.GetTargetAttackSpot/CanAttack 真值直译，翻译档
+## §7.1.2）：站位只相对**目标**——射程外走向距目标 0.9×range 处（停步线），
+## 射程内保持 ≥3u（156px）站桩射（被贴脸自然退开到 3u，非风筝）；开火门 =
+## 0.8u(42px) < |Δx| < 全射程（贴脸不射——近战 attackRange 1.5 语义的弓手版），
+## y 不参与任何判定。AI 弓手**不风筝**（ShouldKite 是 Pro 玩家操控专属）。
+## 槽位锚定优先（产线战线班槽齐射），无锚回落本真值站位。
+func _ranged_update(dist: float, delta: float, weapon: Node, attack_range: float) -> void:
 	# 槽位锚定优先（产线：接战后按班槽原地成排齐射 / 射程外走槽不压敌）
-	if _hold_formation_slot(dist, kite_range) or _approach_via_slot():
-		_ranged_fire(dist, delta, weapon, attack_range)
+	if _hold_formation_slot(dist) or _approach_via_slot():
+		_ranged_fire(delta, weapon, attack_range)
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)
 		return
-	var to_t: float = signf(_target.global_position.x - entity.global_position.x)
-	if to_t == 0.0:
-		to_t = 1.0
-	var line_x: float = _faction_second_line_x(to_t)
+	var dx: float = absf(_target.global_position.x - entity.global_position.x)
 	var moved: bool = false
-	if is_finite(line_x):
-		# 守部队体后缘后 GAP 的二线（死区内站定，远则奔跑归线；越线即收回）
-		var hold_x: float = line_x - to_t * RANGED_SECOND_LINE_GAP
-		var dx: float = hold_x - entity.global_position.x
-		if absf(dx) > RANGED_LINE_DEADZONE:
-			var dir: Vector2 = _apply_y_walk(Vector2(signf(dx), 0.0), delta)
+	if dx >= attack_range:
+		# 射程外：奔向距目标 0.9×range 的停步线（GetTargetAttackSpot 射程外分支
+		# DAT_016c55a4=0.9 直读）
+		var to_t: float = signf(_target.global_position.x - entity.global_position.x)
+		if to_t == 0.0:
+			to_t = 1.0
+		var hold_x: float = _target.global_position.x - to_t * attack_range * ARCHER_RANGE_FRAC
+		var step: float = hold_x - entity.global_position.x
+		if absf(step) > RANGED_LINE_DEADZONE:
+			var dir: Vector2 = _apply_y_walk(Vector2(signf(step), 0.0), delta)
 			if _cap_ai_move:
-				entity.ai_move(dir, absf(dx) > SLOT_RUN_DIST)
+				entity.ai_move(dir, absf(step) > SLOT_RUN_DIST)
 			moved = true
+	elif dx < ARCHER_HOLD_DIST:
+		# 射程内但贴太近（<3u）：退开到保距线（spot 的 target±3u 语义，非风筝）
+		var away: float = signf(entity.global_position.x - _target.global_position.x)
+		if away == 0.0:
+			away = 1.0
+		if _cap_ai_move:
+			entity.ai_move(Vector2(away, 0.0), false)
+		moved = true
 	if not moved:
+		# 保距带内（3u ≤ dx < 射程）：站桩成排射（SWL 弓手常态）
 		if _cap_ai_stop:
 			entity.ai_stop()
-		# 无近战体可依（近战全灭/全弓军）：射程外常态接近（射程内已站定驻射）
-		if not is_finite(line_x) and dist > attack_range:
-			_approach_target(delta, attack_range)
-	_ranged_fire(dist, delta, weapon, attack_range)
+	_ranged_fire(delta, weapon, attack_range)
 	if _p("push_apart", 0.0) > 0.0:
 		_apply_push_apart(_p("push_apart", 0.0), delta)
 
 
-## 远程开火（门槛 = 全射程；持瞄节奏/脱靶容忍与 2D 出手链同构，无挥砍锁足——
-## 边撤边射是 SWL 弓手真行为）
-func _ranged_fire(dist: float, delta: float, weapon: Node, attack_range: float) -> void:
-	if dist > attack_range or weapon == null or not weapon.has_method("can_attack") \
-			or not weapon.can_attack() or _arrows_wasted(_target, weapon):
+## 远程开火门（ArcherAi.CanAttack 真值直译）：**|Δx|** < 全射程 且 |Δx| > 0.8u
+## （42px，DAT_015c1cb8 直读——贴脸不射）；持瞄节奏/脱靶容忍同构，无挥砍锁足。
+func _ranged_fire(delta: float, weapon: Node, attack_range: float) -> void:
+	var dx: float = absf(_target.global_position.x - entity.global_position.x)
+	if dx > attack_range or dx <= ARCHER_MIN_FIRE_DX or weapon == null \
+			or not weapon.has_method("can_attack") or not weapon.can_attack() \
+			or _arrows_wasted(_target, weapon):
 		return
 	if not _update_aim_rhythm(delta):
 		return
@@ -372,30 +384,8 @@ func _ranged_fire(dist: float, delta: float, weapon: Node, attack_range: float) 
 	_aiming = false
 
 
-## 己方近战体后缘 x：非远程存活友军推进度的 25 分位（to_t = 朝敌符号）。
-## 低分位 = 部队体靠后一侧——横线阵 ≈ 贴前排后、纵深球 ≈ 球体后缘。
-## 无近战友军（全灭/全弓军）→ INF（弓手自持：驻射/接近）。O(N log N) 小队规模。
-func _faction_second_line_x(to_t: float) -> float:
-	if not _cap_get_faction or not _cap_get_battle:
-		return INF
-	var bi: Node = entity.get_battle_instance()
-	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
-		return INF
-	var advs: Array = []
-	for a in bi.get_allies_of(entity.get_faction()):
-		if a == null or not is_instance_valid(a) or a == entity:
-			continue
-		if a.has_method("is_dead") and a.is_dead():
-			continue
-		# 只认近战体：远程友军的停驻线由本机制自身决定，互为参照会级联后移
-		var w: Node = a.get_weapon() if a.has_method("get_weapon") else null
-		if _is_ranged_weapon(w):
-			continue
-		advs.append((a as Node2D).global_position.x * to_t)
-	if advs.is_empty():
-		return INF
-	advs.sort()
-	return advs[int(advs.size() * 0.25)] * to_t
+## 己方近战体后缘参照（二线驻射 v2）已随 SWL 真值站位退役：弓手站位只相对
+## 目标（射程外 0.9×range 停步线），无自创参照体（翻译档 §7.1.2）。
 
 
 ## 无线可守时的常态接近（压向目标攻击环，y 对齐照旧）——近战 approach 的
@@ -431,9 +421,6 @@ func exit(next: String) -> void:
 
 ## 槽位锚定死区（px）：距槽位 ≤ 此值站定不追（SWL FormationPositionIsStable 防抖同源）
 const SLOT_HOLD_DEADZONE: float = 48.0
-## 近身危险带倍数：敌 < kite_range × 此值时不向槽位走——槽位若在敌向前方，
-## 回槽=迎着贴脸敌走；此带内站定还击，再近由风筝分支接管
-const SLOT_DANGER_MULT: float = 1.5
 ## 距槽位超此值转奔跑归位（方阵重排/危险重冻结后的整队追赶）
 const SLOT_RUN_DIST: float = 240.0
 
@@ -442,7 +429,7 @@ const SLOT_RUN_DIST: float = 240.0
 ## （边走边射——本分支后续开火逻辑照常执行，战斗朝向锁保证倒退归位不翻面）；
 ## 死区内站定。锚定期间 y 对齐游走/随机微移步由调用方跳过（槽位是 y 权威）。
 ## 返回是否处于锚定态（无班/无锚/无编队系统 = false，回落原站桩语义零回归）。
-func _hold_formation_slot(dist: float, kite_range: float) -> bool:
+func _hold_formation_slot(dist: float) -> bool:
 	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_formation_system"):
 		return false
 	var fs: Node = entity.get_formation_system()
@@ -451,10 +438,11 @@ func _hold_formation_slot(dist: float, kite_range: float) -> bool:
 	var slot: Vector2 = fs.get_unit_combat_slot(entity)
 	if is_inf(slot.x):
 		return false
-	# 近身危险带：槽位在敌远侧（后撤归位）才走——迎着贴脸敌的回槽禁止，
-	# 站定还击，再近由风筝分支接管（危险重冻结会把锚整体后移，后撤方向的
-	# 槽位永远合法 → 方阵整体有序后撤）
-	if kite_range > 0.0 and dist < kite_range * SLOT_DANGER_MULT:
+	# 保距带（SWL 真值口径，翻译档 §7.1.2）：敌进 3u（ARCHER_HOLD_DIST）内不
+	# 迎敌回槽——槽位在敌远侧（后撤归位）才走（危险重冻结会把锚整体后移，
+	# 后撤方向的槽位永远合法 → 方阵整体有序后撤）；保距带内站定还击。
+	#（旧 kite×1.5 危险带随风筝退役——AI 弓手不风筝，保距线就是 spot 的 3u）
+	if dist < ARCHER_HOLD_DIST:
 		var slot_farther: bool = _target.global_position.distance_to(slot) > dist + 20.0
 		if not slot_farther:
 			if _cap_ai_stop:

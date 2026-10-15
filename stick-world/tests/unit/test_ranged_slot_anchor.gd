@@ -169,33 +169,28 @@ func _test_behavior_hold_at_slot() -> void:
 
 
 func _test_behavior_danger_band() -> void:
-	# 敌近侧槽（锚注到实体与敌之间，槽落在敌近侧）：危险带内（250 <
-	# kite 180×1.5=270，未到风筝线）禁走（迎着贴脸敌回槽），站定
+	# 保距带（SWL 真值 3u=156px，翻译档 §7.1.2；旧 kite×1.5 危险带随风筝退役）：
+	# 敌 250px（> 保距带）槽位照常归位——SWL 弓手常态就是 156px 站桩射
+	# （锚 (700,380) → 槽 (700,212)，槽在敌近侧：归位 = 迎敌方向也放行）
 	var ctx := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
-	ctx.fs._squads[ctx.sid]["combat_anchor"] = {"pos": Vector2(700.0, 240.0), "facing": Vector2.RIGHT}
+	ctx.fs._squads[ctx.sid]["combat_anchor"] = {"pos": Vector2(700.0, 380.0), "facing": Vector2.RIGHT}
 	ctx.slot = ctx.fs.get_unit_combat_slot(ctx.entity)
 	ctx.enemy.global_position = ctx.entity.global_position + Vector2(250.0, 0.0)
 	ctx.entity.stopped = false
 	ctx.entity.last_move = Vector2.ZERO
 	ctx.attack.update(0.016)
-	_runner.assert_true(ctx.entity.stopped, "敌近侧槽：危险带内站定不回槽")
-	_runner.assert_true(ctx.entity.last_move.length_squared() < 0.001, "敌近侧槽：不发 ai_move")
+	var moved: bool = ctx.entity.last_move.length_squared() > 0.001
+	_runner.assert_true(moved, "敌 250px（保距带外）照常归位（SWL 常态 156px 站桩射）")
 	ctx.teardown()
-	# 敌远侧槽（槽背向敌）：后撤归位永远合法——危险重冻结后方阵整体后撤的
-	# 走位来源（槽位到敌距离 > 自身到敌距离 + 20）
+	# 敌进保距带（120px < 156，槽在敌近侧）：不迎敌回槽，站定
 	var ctx2 := _make_behavior_ctx(ScriptBehaviorProfiles.BOW)
-	ctx2.fs._squads[ctx2.sid]["combat_anchor"] = {"pos": Vector2(400.0, 300.0), "facing": Vector2.RIGHT}
+	ctx2.fs._squads[ctx2.sid]["combat_anchor"] = {"pos": Vector2(660.0, 380.0), "facing": Vector2.RIGHT}
 	ctx2.slot = ctx2.fs.get_unit_combat_slot(ctx2.entity)
-	ctx2.enemy.global_position = ctx2.entity.global_position + Vector2(250.0, 0.0)
+	ctx2.enemy.global_position = ctx2.entity.global_position + Vector2(120.0, 0.0)
 	ctx2.entity.stopped = false
 	ctx2.entity.last_move = Vector2.ZERO
 	ctx2.attack.update(0.016)
-	var moved2: bool = ctx2.entity.last_move.length_squared() > 0.001
-	_runner.assert_true(moved2, "敌远侧槽：危险带内仍归位（后撤方向合法）")
-	if moved2:
-		var want2: Vector2 = (ctx2.slot - ctx2.entity.global_position).normalized()
-		_runner.assert_approx(ctx2.entity.last_move.normalized().dot(want2), 1.0, 0.01,
-				"归位方向 = 指向自身槽位")
+	_runner.assert_true(ctx2.entity.stopped, "敌进保距带（3u 内）：站定不迎敌回槽")
 	ctx2.teardown()
 
 

@@ -564,6 +564,32 @@ y 轴是假纵深（`PsuedoZAxisFixedUpdate` + `z/dz` 字段）：跳跃/击飞�
 6. **命中概率与散布在发射端**，不在箭上：`ArcherAi.AimAngle(distance, ref isAbleToHitTarget, v=15, target, source, currentShotRandomness=0.5)` 抛物线解算 + `NextGaussian(mean, sd, min, max)` 身体随机偏移（`currentShotBodyRandomness`）——**射失=物理上射偏了飞过去**（落点在别处），不是掷骰判定未命中【推断】置信度高。
 7. **AOE 不存在**：Arrow 无 radius/splash 字段；全项目 AOE 只有三处——手控近战溅射（§3.2）、Giant/Zombie 地震（FindTargetsToHit）、法术（ArrowVolley 箭雨是"随机落箭"不是弹道 AOE：`arrowSpawnChancePerFixedUpdate` 每物理帧概率刷箭）。
 
+### 7.1.1 序列化数值真值【事实】（2026-10-14 prefab 直读）
+
+> 来源：APK 内 Unity 序列化资源直读（il2cpp stripped build，字段布局由 Il2CppDumper
+> DummyDll 重建）。工具：`F:/VSCode/game-2/external/assetripper/SwlDumper`（AssetsTools.NET
+> + Mono.Cecil 自建模板；本仓外置资产，不入库）。原始 JSON：
+> `F:/VSCode/game-2/external/assetripper/out/`。数值 = prefab 序列化值（= SWL 实机口径），
+> 单位 = SWL 世界单位（一条火柴人立绘高约 2.5~3 世界单位）。
+
+| 单位 | attackRange | attackRangeSecondLine | range(弓) | health | attackDamage | cost | population |
+|---|---|---|---|---|---|---|---|
+| Minion | 1 | 1 | — | 35(满70) | 14 | 0 | 0 |
+| Swordwrath | 1.5 | 1.5 | — | 80~200 | 12~20 | 125 | 1 |
+| Archidon(Archer) | 1.5(近战) | 1.5 | **15** | 70~315 | 10~22(近战) | 300 | 1 |
+| Spearton | 1.5 | **2.5** | — | 300~1100 | 15~35 | 500 | 2 |
+| Magikill | 7(施法距离) | 7 | — | 144 | 5 | 1200 | 5 |
+| Giant | 4 | 4 | — | 1000~5000 | 25~50 | 1500 | 4 |
+| Miner | 1.5 | 1.5 | — | 100 | 5 | 150 | 1 |
+| Zombie 族 | 1.5~30(投掷) | 同左 | — | 30~4000 | 6~75 | 100~800 | 1~6 |
+
+要点：① 近战一线攻击距离 = 1~1.5 世界单位 ≈ 0.5× 身高（贴身量级）；② **二线更长**
+（Spearton 2.5 = 1.67× 一线，后排穿透语义）；③ 弓手 `range`=15 ≈ 5~6× 身高，同时
+保留 attackRange 1.5 的近战贴身距离（被近身切近战）；④ 全员 `attackRangeMultiplier`=1、
+`healthPercentageToSkirmishUntil`=0.8、`healthBarHeadOffset` 0.08~0.6（随体型）。
+**规模换算**（SWL 世界单位 → 本仓 rig px，按立绘身高比 144px/2.75u ≈ 52）：近战 1.5u ≈ 78px、
+Spearton 二线 2.5u ≈ 130px、弓 range 15u ≈ 780px、Giant 4u ≈ 208px、Magikill 7u ≈ 364px。
+
 ### 7.2 弹道与射程【事实+推断】
 
 - 出射：`Archer.ArrowSpawnPosition()`（出生点）→ `ArrowLaunchDirection(isForShot)` / `ArrowLaunchVector()`（方向/向量）→ `Arrow.Init(arrowVector, drawPower, inflictor)`；`projectileSpeed` + `launchY`；`AimAngle` 的 `v=15` = 解算用的垂直初速参数。`Update()` 里 `UpdateRotation()` 让贴图随速度矢量转向。`trail` 拖尾延迟启用。

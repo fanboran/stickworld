@@ -110,7 +110,7 @@ modules/ui_global/           # 全局 UI 层：容器 + 通用控件
 
 modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
 ├── combat/ui/               # battle_panel.gd（战斗面板）/ formation_panel.gd（编制窗口）
-├── construction/ui/         # build_menu.gd（建造菜单；控件经 StickKit/Sketch 组件出口创建）
+├── construction/ui/         # build_menu.gd（建造菜单入口/选址）/ build_list_window.gd（建筑列表 DOCK 窗）
 ├── player_control/ui/       # possess_panel.gd（附身面板）
 └── world_map/ui/            # 战略图面板/提示等
 ```

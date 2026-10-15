@@ -2,7 +2,7 @@
 
 > 本目录是 stick-world **UI 实现侧**文档：组件库、主题系统、模态栈、设置、
 > 布局铁律、图标管线与界面接线方案——UI 怎么搭、怎么摆、怎么换肤。
-> **设计意图**（设计语言/界面框架/各屏规划）在 [`docs/设计/UI/`](../../设计/UI/README.md)；
+> **设计意图**（设计语言/界面框架/各屏规划）在 [`docs/设计/UI/`](../../设计/UI/01-设计语言.md)；
 > 场景图 UI 运行时分层（GlobalHUD/槽位路由）在
 > [`docs/技术/架构/场景与战斗/UI.md`](../架构/场景与战斗/UI.md)。
 
@@ -39,6 +39,19 @@
 | `stick_style.gd`（StickStyle） | StyleBox 构造器：窗体/按钮族/标签页/进度条/分隔线 |
 | `stick_theme.gd`（StickTheme） | 打包成可挂根节点的 Theme（`theme = StickTheme.create()`） |
 | `stick_kit.gd`（StickKit） | 组件装配器：label/button/section/toast/confirm |
+
+## 面板迁移现状（弹窗行为模板收编总账）
+
+| 面板 | 模板 |
+|------|------|
+| InventoryScreen / ContainerScreen / BuildingMenuScreen / SavePanel / PauseMenu / SettingsMenu | `StickScreen`（MODAL） |
+| FormationPanel / DebugToolsPanel | `StickWindow`（FLOATING） |
+| BuildMenu 列表窗（BuildListWindow，首个 DOCK 业务面板） | `StickWindow`（DOCK，右下停靠+安全矩形） |
+| world_map 三件（travel_dialog / settlement_tooltip / map_legend） | 挂 StickTheme |
+| BattlePanel / PossessPanel | HUD 底栏部件标准（PanelContainer + window_panel_light，槽容器承载） |
+| ContextPanel / ModePanel | 结构合规（.tscn 槽容器，经 UIRoot 挂 StickTheme，无代码建控件） |
+
+POPOVER 行为已实现、暂无业务面板（接首个下拉/选择器时验证）。
 
 ## 与现有代码的关系
 

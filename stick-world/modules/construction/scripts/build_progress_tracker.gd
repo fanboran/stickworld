@@ -13,6 +13,8 @@ extends RefCounted
 
 const ScriptBuildProgressIndicator := preload("res://modules/construction/scripts/build_progress_indicator.gd")
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
+## 放置度量常量库（基线取值静态函数）
+const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
 
 # ─────────────────────────────── 字段 ────────────────────────────────
 
@@ -66,15 +68,10 @@ func _create_indicator(project: ScriptConstructionProject) -> void:
 	if mask_layer == null:
 		return
 	var indicator: Node2D = ScriptBuildProgressIndicator.new()
-	# 悬挂线 = 建筑基线（项目自带点击深度优先；否则 HD-2D 逐格邻居楼线；旧图 duck 回退）
-	var baseline: float
-	if project.baseline_y > 0.0:
-		baseline = project.baseline_y
-	elif _map.has_method("get_building_baseline_at"):
-		baseline = float(_map.call("get_building_baseline_at", project.cell_x, project.width))
-	else:
-		baseline = float(_map.get("ground_y") if "ground_y" in _map else 810.0) \
-				+ float(_map.get("building_baseline_offset") if "building_baseline_offset" in _map else 96.0)
+	# 悬挂线 = 建筑基线（取值逻辑收敛在 placement_metrics.baseline_at：
+	# 项目自带点击深度优先 → HD-2D 逐格邻居楼线 → 旧图 duck 回退）
+	var baseline: float = ScriptPlacementMetrics.baseline_at(
+			_map, project.cell_x, project.width, project.baseline_y)
 	indicator.setup(project.cell_x, project.width, baseline)
 	mask_layer.add_child(indicator)
 	_indicators[project.project_id] = indicator

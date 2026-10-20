@@ -36,9 +36,13 @@ const _BuildingPersistenceScript: GDScript = preload("res://modules/construction
 ## plan 物化的管线 def → 运行时 def 映射查它（INT-4 单源）
 const _BuildingGenAPI: GDScript = preload("res://modules/building_gen/api.gd")
 
-## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（world 模块 L3，construction
-## 不得 preload 反向依赖，换轨时两处同步——同 build_menu/behavior_work 口径）
-const CELL_PX: float = 24.0
+## 放置度量常量库（模块内单一真相源：条带宽/基线回退/阻挡纵深，L2 禁反向
+## preload world——权威 PlacementGrid.CELL_SIZE 的换轨同步锚在 metrics 头注释）
+const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
+
+## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨
+## 只动彼处——同 build_menu/behavior_work 口径）
+const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
 
 # ─────────────────────────────── 字段 ────────────────────────────────
 
@@ -619,30 +623,25 @@ func get_all_project_ids() -> Array:
 
 # ─────────────────────────────── 拆除 ────────────────────────────────
 
-## 落位基线（px，画布域）：地图支持逐格墙脚线（HD-2D，get_building_baseline_at）
-## 则按格子范围取邻居楼线，否则 ground_y + building_baseline_offset（旧图回退）。
+## 落位基线（px，画布域）：取值逻辑收敛在 placement_metrics.baseline_at
+##（HD-2D 逐格墙脚线 → 旧图 ground_y + building_baseline_offset 回退）。
 func _baseline_at(cell_x: int, width: int, baseline_y: float = -1.0) -> float:
-	if baseline_y > 0.0:
-		return baseline_y
-	if _map != null and _map.has_method("get_building_baseline_at"):
-		return float(_map.call("get_building_baseline_at", cell_x, width))
-	var ground_y: float = float(_map.get("ground_y") if _map != null and "ground_y" in _map else 810.0)
-	var off: float = float(_map.get("building_baseline_offset") if _map != null and "building_baseline_offset" in _map else 96.0)
-	return ground_y + off
+	return ScriptPlacementMetrics.baseline_at(_map, cell_x, width, baseline_y)
 
 
 ## 选址范围内是否有实体（玩家/NPC）阻挡放置。
-## 判定：实体脚部（Collider）位于建筑体 Y 范围（约 [baseline-390, baseline]）内且 X 在选址范围，
-## 防止放置后玩家被罩在建筑内；站在建筑脚下空地（Y 更大）不算妨碍。
+## 判定：实体脚部（Collider）位于建筑体 Y 范围（约 [baseline-BLOCK_BODY_DEPTH, baseline]，
+## 常量见 placement_metrics）内且 X 在选址范围，防止放置后玩家被罩在建筑内；
+## 站在建筑脚下空地（Y 更大）不算妨碍。
 func _entity_blocking(cell_x: int, width: int, baseline_y: float = -1.0) -> bool:
 	if _map == null or not _map.has_method("get_entities"):
 		return false
 	var left_x: float = float(cell_x) * CELL_PX
 	var right_x: float = left_x + float(width) * CELL_PX
-	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-390, baseline]，不含脚下空地）
-	# 基线与实际落位同源（点击深度优先；旧图 duck 回退 ground_y+offset）
+	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-BLOCK_BODY_DEPTH, baseline]，
+	# 不含脚下空地）；基线与实际落位同源（点击深度优先；旧图 duck 回退 ground_y+offset）
 	var baseline: float = _baseline_at(cell_x, width, baseline_y)
-	var body_top: float = baseline - 390.0
+	var body_top: float = baseline - ScriptPlacementMetrics.BLOCK_BODY_DEPTH
 	var body_bottom: float = baseline
 	for e in _map.get_entities():
 		if e == null or not is_instance_valid(e):
@@ -653,7 +652,8 @@ func _entity_blocking(cell_x: int, width: int, baseline_y: float = -1.0) -> bool
 		if center_y + half_h < body_top or center_y - half_h > body_bottom:
 			continue  # 脚部在建筑体区域外（脚下空地）→ 不挡
 		var x: float = e.global_position.x
-		if x >= left_x - 20.0 and x <= right_x + 20.0:
+		var x_margin: float = ScriptPlacementMetrics.BLOCK_X_MARGIN
+		if x >= left_x - x_margin and x <= right_x + x_margin:
 			return true
 	return false
 

@@ -132,6 +132,9 @@ func _process(delta: float) -> void:
 
 ## 显示加载覆盖（阶段文字；ratio 0~1 同时亮主进度条，<0 隐藏只留文字；
 ## sub_ratio 为当前阶段内部细分进度，<0 = 该阶段无细分进度）
+## 同时并入模态栈 WORLD_LOAD 强模态层（屏蔽 ESC——加载期不可退栈、不落暂停
+## 菜单）；游戏内（有 UIRoot）才入栈，主菜单跳板期无栈环境跳过。
+## 淡出完成 visible=false 经栈的可见性同步自动退栈。
 func show_loading(message: String, ratio: float = -1.0, sub_ratio: float = -1.0) -> void:
 	_label.text = message
 	set_progress(ratio)
@@ -139,6 +142,9 @@ func show_loading(message: String, ratio: float = -1.0, sub_ratio: float = -1.0)
 	visible = true
 	modulate.a = 1.0
 	_shown = true
+	var stack := UIModalStack.find(self)
+	if stack != null and not stack.is_open(UIModalStack.Layer.WORLD_LOAD):
+		stack.push(self, UIModalStack.Layer.WORLD_LOAD)
 
 
 ## 更新主进度条（钳 0~1；<0 隐藏整组进度条只留文字）

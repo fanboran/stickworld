@@ -68,7 +68,7 @@ func _install_root_overlay() -> void:
 	if layer == null:
 		layer = CanvasLayer.new()
 		layer.name = "BootLoadingLayer"
-		layer.layer = 100  # 压过一切场景内 UI（含 game_root 的 WorldLoadingLayer）
+		layer.layer = LayerOrder.BOOT_LOADING  # 压过一切场景内 UI（含 game_root 的 WorldLoadingLayer）
 		root.add_child.call_deferred(layer)
 		await get_tree().process_frame
 	if not is_instance_valid(layer):

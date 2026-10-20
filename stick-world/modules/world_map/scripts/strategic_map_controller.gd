@@ -94,6 +94,10 @@ func _ready() -> void:
 	var canvas := get_parent() as CanvasLayer
 	if canvas != null:
 		canvas.layer = LayerOrder.STRATEGIC_L1
+	# 并入统一模态栈（活层 STRATEGIC_MAP：ESC 退栈序统一、开图不冻结模拟）——
+	# 可见即入栈（open/open_l1/下钻回显等全部显身路径都走 visible 翻转），
+	# 隐藏经栈的可见性同步自动退栈。
+	visibility_changed.connect(_on_modal_visibility_changed)
 	if api != null and api.has_method("setup"):
 		api.setup(self, map_renderer, map_camera)
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
@@ -171,6 +175,16 @@ func _input(event: InputEvent) -> void:
 		if key.keycode == KEY_ESCAPE:
 			handle_escape()
 			get_viewport().set_input_as_handled()
+
+
+## 可见即并入模态栈 STRATEGIC_MAP 层（三视图互斥同键：先隐藏者先经可见性同步退栈）。
+## 本控制器自带 handle_escape 下钻语义，栈的 ESC 分发会委托到它。
+func _on_modal_visibility_changed() -> void:
+	if not visible:
+		return
+	var stack := UIModalStack.find(self)
+	if stack != null and not stack.is_open(UIModalStack.Layer.STRATEGIC_MAP):
+		stack.push(self, UIModalStack.Layer.STRATEGIC_MAP)
 
 
 ## ESC 语义（由 GameRoot._handle_escape 统一分发，战略图打开时优先于暂停菜单）：

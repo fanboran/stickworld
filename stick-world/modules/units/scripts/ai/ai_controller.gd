@@ -50,10 +50,6 @@ const SURROUND_RANGE: float = 120.0
 ## 威胁判定距离（SWL Ai.IsUnderThreat：近身有活敌即被威胁；
 ## dump 无数值真值，取被围半径同量级，待实测校准）
 const THREAT_RANGE: float = 140.0
-## 避战还击的"近战范围"上限（px，诊断 B2 带打带跑）：取最长近战兵种射程
-## 矛 200——敌人贴进此范围内，避战单位不再一味后撤而是就地还击；
-## 超出仍走避战脱离。待实测校准
-const COUNTER_RANGE: float = 200.0
 ## 打通态脱离距离（px）【提案/待定·待实测校准】：拦路者跑出此距离视为"已脱离"
 ##（不再构成拦路——风筝敌人越拉越远即放弃追打恢复赶路；再拦再触发）
 const BREACH_DROP_DIST: float = 320.0
@@ -136,11 +132,6 @@ var _wd_nudge_dir: Vector2 = Vector2.ZERO
 ## 避战行为态（裁决【删溃逃、立避战】：由 behavior_retreat enter/exit 置位清位，
 ## 非士气阈值推导——"谁执行谁置位"单一真相源；is_disengaging() 对外查询）
 var _disengaging: bool = false
-## 避战还击窗口（诊断 B2 带打带跑）：决策拍评估"避战态 + 近身有敌"后置位——
-## 窗口期内压制不再强制脱离，attack 行为的压制兜底停滞段同步放行（is_counter_
-## attack_window 查询）。带闩：压制期内敌不出 COUNTER_RANGE 不收回，防逐拍
-## 避战↔还击 travel 抖动；敌脱离/阵亡或压制结束收窗。
-var _counter_window: bool = false
 ## 遇阻接战"打通"态（创始人口径：任务路上被敌拦住且无法简单绕过 → 攻击路径上
 ## 的敌人）：由 behavior_move 请求置位（request_breach_engagement），拦路者作为
 ## 临时战斗目标。**原号令不清空不降级**——本态是号令的临时插叙，拦路者死亡/
@@ -226,28 +217,12 @@ func physics_update(delta: float) -> void:
 ## P0 决策：命令覆盖 > 战斗（参战时）> work（有派工）> idle/wander 循环。
 ## 命令覆盖：tactical_orders 下达的号令优先于自主决策。
 ## 职责过滤：编队中的单位只能做队伍职责范围内的行为（见 _can_work / _can_combat）。
-## 优先级（裁决【删溃逃、立避战】落定）：压制避战 > 命令覆盖 > 自主决策。
-##   - 被压制 → 强制避战（RA 压制式脱离：脱离接火优先于一切，含号令——但号令
-##     **挂起不清除**，压制结束自动续行，玩家意图保留）；
-##   - 单位级"士气崩溃强制溃逃"链已删除（溃逃退役）：低士气降级为避战打分输入
-##     （C6 三因子概率调制），被压/劣势时脱离接火是战术行为不是失控逃跑。
+## 优先级（裁决【删溃逃、立避战】落定）：命令覆盖 > 自主决策；单位级"士气崩溃
+## 强制溃逃"链已删除（溃逃退役），低士气降级为避战打分输入（C6 三因子概率
+## 调制），劣势时脱离接火是战术行为不是失控逃跑。
 func _make_decision() -> void:
-	# 压制避战（RA 压制式脱离）：被压制 → 立即脱离接火（优先找掩体，无掩体走
-	# fallback 短距后撤）；号令挂起不清除，压制结束由命令覆盖段自动续行
-	if _is_suppressed():
-		# 指挥官豁免（斩首规则，诊断 B4）：守位自卫逻辑已有（leash 内迎击 + C6
-		# 既有豁免），压制→避战链对其豁免——不被矛投掷连击压出守位斩杀；
-		# 压制期维持当前行为（在途攻击由行为层兜底停滞 = 守位冻结，免的是驱赶）
-		if _is_commander():
-			return
-		# 避战还击（诊断 B2 带打带跑）：避战态被敌人贴进近战范围 → 开还击窗就地
-		# 迎击，不再一味后撤停战（停战螺旋治理）；窗未开走强制避战
-		if not _counterattack_tick():
-			_suppressed_disengage()
-		return
-	_counter_window = false
 	# 0. 遇阻接战维护（打通态）：拦路者仍有效 → 持续锁定攻击（号令挂起不清不降级；
-	# 被打断后经此重入，如压制解除）。击杀/脱离 → 清态，落回下方正常决策
+	# 被打断后经此重入）。击杀/脱离 → 清态，落回下方正常决策
 	#（有号令走命令覆盖自动续行原 move，恢复目标 = 原号令目标）
 	if _breach_tick():
 		return
@@ -368,7 +343,6 @@ func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
 		print("[AIController] 卡死看门狗触发: pos=%v 行为=%s 换目标+分离推力" % [pos, behavior])
 
 
-
 ## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。
 ## 决策优先级：低士气脱战 -> 不接敌待命；C6 劣势掷骰 -> 避战；重伤且附近有掩体 -> seek_cover；默认 -> attack。
 ## 职责过滤：队伍职责不含 WORK_COMBAT 的单位不进入战斗决策（如建造队/工人队）。
@@ -440,11 +414,6 @@ func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bo
 	# 指挥官避战豁免（斩首规则）：永不脱离接火——is_disengaging 恒 false，
 	# 指挥官跑不了，被近身就地还击（_seek_cover 低血分支保留：就近掩体仍属还击）。
 	if _is_commander():
-		return false
-	# 压制与 C6 互斥（诊断 B1，同拍不叠加）：被压期走强制避战通道（_make_decision
-	# 首位拦截），C6 掷骰不评估——近失压制近 1:1 转避战再叠 0.30 掷骰 = 双通道
-	# 脱离连环发动，战线被钉死在后方（停战螺旋放大器）
-	if _is_suppressed():
 		return false
 	var profile: Dictionary = _get_behavior_profile()
 	if not bool(profile.get("retreat_mod_enabled", false)):
@@ -1030,79 +999,16 @@ func has_order() -> bool:
 #   避战行为态走 is_disengaging()——由 behavior_retreat 置位，非士气阈值推导）
 
 
-# ─────────────────────────────── 压制避战（裁决【删溃逃、立避战】：RA 压制式脱离）────────────────────────────────
-
-## 是否指挥官（斩首规则，duck；多个消费点共用：压制豁免/C6 豁免/号令守卫）
+## 是否指挥官（斩首规则，duck；多个消费点共用：C6 避战豁免/号令守卫）
 func _is_commander() -> bool:
 	return _entity != null and is_instance_valid(_entity) \
 			and _entity.has_method("is_commander") and _entity.is_commander()
 
 
-## 是否被压制：查询状态效果组件 SUPPRESSED 态（duck；组件缺失/压制未启用
-## 返回 false = 零回归）。
-func _is_suppressed() -> bool:
-	var se: Node = _status_effects_of()
-	return se != null and se.has_method("has_suppressed") and bool(se.has_suppressed())
-
-
-## 压制期强制避战（RA 压制式脱离，替代旧 A6 强制停滞）：被压就脱离接火——
-## 已在避战行为（retreat/seek_cover 进行中）则保持，否则切入避战统一出口。
-## 号令挂起不清除（玩家意图保留），压制结束由命令覆盖段检测 cur != ordered
-## 自动续行；避战行为的自身收束条件（安全距离/士气回升/时限）交还决策。
-func _suppressed_disengage() -> void:
-	var cur: String = _state_machine.get_current_behavior_name() \
-			if _state_machine != null else ""
-	if cur in ["retreat", "seek_cover"] and not _state_machine.is_current_finished():
-		return  # 已在避战中，保持（每拍重申无意义）
-	var bi: Node = _entity.get_battle_instance() \
-			if _entity.has_method("get_battle_instance") else null
-	_travel_disengage(bi)
-
-
-## 避战还击门（诊断 B2 带打带跑，决策拍评估）：避战态（is_disengaging）且
-## 敌人贴进近战范围（COUNTER_RANGE）→ 开还击窗并从避战行为切回 attack 就地
-## 迎击——"被压先脱离，被贴脸了还手"，不是一味后撤停战。窗口带闩：压制期内
-## 敌不出近战范围不收回（travel attack 会清 is_disengaging，靠闩防逐拍
-## 避战↔还击抖动）；敌脱离/阵亡或压制结束收窗（_make_decision 未压分支清位）。
-## 非战斗职责单位（工人）不开窗，维持避战。命令路径撤离豁免：retreat 的
-## evacuate/withdraw 档（C3 撤仗/可下令撤退）不受还击窗打断——带打带跑只
-## 作用于自主避战（fallback 语义），命令撤离一路撤到边缘/锚点。
-## 返回当前窗口态。
-func _counterattack_tick() -> bool:
-	var beh: Node = _state_machine.get("_current_behavior") \
-			if _state_machine != null else null
-	if beh != null and is_instance_valid(beh) \
-			and (beh.get("_evacuate") == true or beh.get("_withdraw") == true):
-		_counter_window = false
-		return false
-	var bi: Node = _entity.get_battle_instance() \
-			if _entity.has_method("get_battle_instance") else null
-	var enemy_near: bool = bi != null and is_instance_valid(bi) \
-			and _count_enemies_near(_entity.global_position, COUNTER_RANGE, bi) > 0
-	if _counter_window:
-		if not enemy_near:
-			_counter_window = false
-		return _counter_window
-	if not _disengaging or not enemy_near:
-		return false
-	if not _can_work(WorkTypeCombat):
-		return false
-	_counter_window = true
-	var params: Dictionary = {"battle": bi} if bi != null and is_instance_valid(bi) else {}
-	_state_machine.travel("attack", params)
-	return true
-
-
-## 避战还击窗口查询（behavior_attack 压制兜底停滞段消费：开窗期放行正常攻击
-## 流程，否则还击行为会被兜底段立即按停）。纯查询零副作用。
-func is_counter_attack_window() -> bool:
-	return _counter_window
-
-
 ## 避战统一出口（裁决【删溃逃、立避战】）：优先 seek_cover（有掩体先就掩——
 ## behavior_seek_cover 内建"掩体中还击"，即"避战期不主动接敌但被打还手"的就掩
 ## 半边）；无掩体走 fallback 短距后撤（SAFE_DISTANCE 内脱离，behavior_retreat
-## 既有语义，绝不走向地图边缘）。压制强制避战与 C6 概率调制共用。
+## 既有语义，绝不走向地图边缘）。C6 概率调制调用。
 func _travel_disengage(bi: Node) -> void:
 	var bi_param: Dictionary = {"battle": bi} if bi != null and is_instance_valid(bi) else {}
 	var cover = bi.get_cover() if bi != null and is_instance_valid(bi) \
@@ -1177,13 +1083,3 @@ func request_breach_engagement(blocker: Node) -> bool:
 	return true
 
 
-## 所属实体状态效果组件（duck；缺失返回 null——测试桩/未装配环境零回归）。
-func _status_effects_of() -> Node:
-	if _entity == null or not is_instance_valid(_entity):
-		return null
-	if not _entity.has_method("get_status_effects"):
-		return null
-	var se: Node = _entity.get_status_effects()
-	if se == null or not is_instance_valid(se):
-		return null
-	return se

@@ -242,7 +242,6 @@ const DEV_SCENE_NAMES: Dictionary = {
 	"res://tests/dev/verify_battle.tscn": "功能验证：战斗",
 	"res://tests/dev/verify_build.tscn": "功能验证：建造",
 	"res://tests/dev/verify_harvest.tscn": "功能验证：采集",
-	"res://tests/dev/verify_quest.tscn": "功能验证：任务",
 }
 
 ## 界面模板陈列（modules/ui_global 场景，游戏内不可达）

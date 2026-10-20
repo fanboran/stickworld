@@ -68,7 +68,6 @@ class FakeUnit:
 	var battle: Node = null
 	var ai: Node = null
 	var possessed: bool = false
-	var suppressed: bool = false
 	var attack_range: float = 100.0
 	var role: String = ""
 	var _dead: bool = false
@@ -94,8 +93,6 @@ class FakeUnit:
 	func get_status_effects() -> Node:
 		return self
 
-	func has_suppressed() -> bool:
-		return suppressed
 
 	func set_role(r: String) -> void:
 		role = r
@@ -182,7 +179,6 @@ func _ready() -> void:
 	_runner.add_test("约束5 守卫: 组织在册指挥官本人不被抽走", _test_guard_commander)
 	_runner.add_test("约束5 守卫: 玩家附身单位（玩家本体）不被搬动", _test_guard_possessed)
 	_runner.add_test("约束5 守卫: 溃逃/找掩体（士气行为）中不换班", _test_guard_morale_behavior)
-	_runner.add_test("约束5 守卫: 真实压制态中不换班", _test_guard_suppressed)
 	_runner.add_test("约束5 守卫: 接战中（射程内有敌）不换班", _test_guard_engaged)
 	_runner.add_test("约束5 守卫: 玩家手动号令保护期内不换班（复用 TeamAi 查询）", _test_guard_manual_order)
 	_runner.add_test("约束5 限流: 单拍单来源班只放行名额内人数", _test_per_squad_flow_cap)
@@ -434,13 +430,6 @@ func _test_guard_morale_behavior() -> void:
 	w2["subject"].ai.force_behavior("seek_cover")
 	_tick(w2["fs"])
 	_assert_guard(w2, "找掩体中单位不应换班")
-
-
-func _test_guard_suppressed() -> void:
-	var w := _guard_world()
-	w["subject"].suppressed = true
-	_tick(w["fs"])
-	_assert_guard(w, "被压制单位不应换班")
 
 
 func _test_guard_engaged() -> void:

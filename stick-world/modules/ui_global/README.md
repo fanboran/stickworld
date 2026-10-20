@@ -75,7 +75,7 @@ modules/ui_global/
 │   │   └── menu_birds.gd               #   主菜单手绘飞鸟
 │   ├── overlays/                       # 全屏覆盖层
 │   │   ├── world_loading_overlay.gd    #   世界加载覆盖层（分段真实进度，game_root 经 group 认领）
-│   │   ├── battle_banner.gd / victory_overlay.gd / opening_hint_overlay.gd / map_transition_overlay.gd
+│   │   ├── battle_banner.gd / map_transition_overlay.gd
 │   ├── indicators/                     # 游玩指示器（依赖由 SystemSetup 装配注入，不自行查找）
 │   │   ├── hover_indicator.gd          #   悬停四角呼吸方框（画与命中判定共用同一矩形）
 │   │   └── middle_scroll_overlay.gd    #   中键滚动方向图标

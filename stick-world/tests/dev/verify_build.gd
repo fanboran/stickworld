@@ -1,8 +1,7 @@
 extends Node
-## 玩家建造路径真系统验证（dev 层）——走完整链路验证 Demo 目标 2 可达成：
-## BuildMenu 放置的底层 = ConstructionApi.start_construction_at → 材料扣减 →
-## 施工推进（模拟玩家 E 敲击的 add_build_progress）→ building_completed 信号 →
-## DemoQuest 目标推进。不 emit 假信号，全真系统。
+## 玩家建造路径真系统验证（dev 层）：BuildMenu 放置的底层 =
+## ConstructionApi.start_construction_at → 材料扣减 → 施工推进（模拟玩家 E
+## 敲击的 add_build_progress）→ building_completed 信号。不 emit 假信号，全真系统。
 
 const GameRootScene := preload("res://modules/world/scenes/game_root.tscn")
 
@@ -31,15 +30,10 @@ func _run() -> void:
 	if c_api == null:
 		_fail("ConstructionManager 未就绪")
 		return
-	var quest: Node = _game_root.get_node_or_null("DemoQuest")
 	var res_api: Node = get_tree().current_scene.find_child("ResourcesApi", true, false)
-	if quest == null or res_api == null:
-		_fail("DemoQuest/ResourcesApi 未就绪")
+	if res_api == null:
+		_fail("ResourcesApi 未就绪")
 		return
-
-	# 先把 DemoQuest 推到建造目标（给采集目标补足进度：走真 produce 路径）
-	res_api.produce("res_wood", 60.0, "test_region", "验证采集")
-	await get_tree().process_frame
 
 	# 1) 找一个可建造的 def（跳过仓库与占位）
 	var def_ids: Array = []
@@ -50,7 +44,7 @@ func _run() -> void:
 		return
 	var target_def: String = ""
 	for d in def_ids:
-		# 优先兵营（Demo 目标语义建筑）；跳过仓库/占位/城墙（城墙 8 格材料贵）
+		# 优先兵营；跳过仓库/占位/城墙（城墙 8 格材料贵）
 		if str(d) == "barracks":
 			target_def = str(d)
 			break
@@ -75,9 +69,7 @@ func _run() -> void:
 		return
 	_pass("工地创建成功（cell=120）")
 
-	# 4) 敲击交付/完工链与 DemoQuest 推进由集成测试覆盖：
-	# tests/integration/test_construction_cycle.gd（32 套件之一，全绿）+
-	# tests/dev/verify_quest.gd（building_completed 真信号驱动目标链）
+	# 4) 敲击交付/完工链由集成测试覆盖：tests/integration/test_construction_cycle.gd
 	_pass("材料交付/完工链交由 test_construction_cycle 覆盖")
 
 	# 5) 建造菜单缺口引导：库存清空 → 条目出现红字"缺 …"；补足 → 恢复可点
@@ -91,7 +83,7 @@ func _run() -> void:
 		build_menu._refresh_list()
 		await get_tree().process_frame
 		var miss_text: String = _collect_list_text(build_menu)
-		if miss_text.contains("缺") and miss_text.contains("按 E 采集"):
+		if miss_text.contains("缺") and miss_text.contains("按 F 采集"):
 			_pass("材料不足红字引导出现（%s）" % _first_missing(miss_text))
 		else:
 			_fail("缺口提示未出现，列表文本: %s" % miss_text.substr(0, 120))
@@ -106,10 +98,6 @@ func _run() -> void:
 			_fail("补足后缺口提示未消失")
 	else:
 		_fail("BuildMenu 未找到")
-
-
-	# 6) DemoQuest 推进验证
-	_pass("DemoQuest 目标链验证见 verify_quest（7/7）")
 
 
 ## 找 BuildMenu 节点（GameRoot 装配，按特征方法找）

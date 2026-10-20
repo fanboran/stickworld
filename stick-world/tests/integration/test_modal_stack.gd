@@ -145,7 +145,7 @@ func _test_confirm_escape_cancel() -> void:
 	_runner.assert_false(pm.visible, "确认框应盖住暂停菜单")
 	# 遮罩应铺满视口（根 FULL_RECT，防 0 尺寸静默不可见回归）
 	await get_tree().process_frame
-	var dialog_root: Control = stack.top()
+	var dialog_root: Control = stack.top() as Control  # 栈收 CanvasItem，此处取回 Control 断言遮罩尺寸
 	_runner.assert_not_null(dialog_root, "确认框应为栈顶")
 	if dialog_root != null:
 		_runner.assert_gt(dialog_root.size.x, 1000.0, "确认框根应铺满视口（遮罩可见）")

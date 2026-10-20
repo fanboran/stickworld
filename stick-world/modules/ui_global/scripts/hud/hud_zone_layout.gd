@@ -53,7 +53,7 @@ const ZONES: Dictionary = {
 		"mode": "stack",
 		"stack_h": "begin",
 		"gap": 8.0,
-		"desc": "左上顺序堆叠：资源条→任务卡（→未来多任务线列表）",
+		"desc": "左上顺序堆叠：资源条（任务卡复用时挂此区）",
 	},
 	&"top_center": {
 		"anchors": [0.5, 0.0, 0.5, 0.0],

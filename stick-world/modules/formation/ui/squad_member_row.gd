@@ -14,13 +14,11 @@ extends SketchButton
 ## 判定事实由卡片注入（卡片负责 duck 取数与降级），本行只做事实→文案的呈现映射
 ## ——取数口径不在此重复，卡片改口径不必动行。
 const STATE_DISENGAGING := "避战"
-const STATE_SUPPRESSED := "被压制"
 const STATE_STUNNED := "眩晕"
 const STATE_HEALING := "治疗中"
 
 ## 状态事实键（卡片注入 flags 字典的约定键）
 const FLAG_DISENGAGING := "disengaging"
-const FLAG_SUPPRESSED := "suppressed"
 const FLAG_STUNNED := "stunned"
 const FLAG_HEALING := "healing"
 
@@ -92,8 +90,6 @@ func _report_role(role: String) -> void:
 func _state_text(flags: Dictionary) -> String:
 	if bool(flags.get(FLAG_DISENGAGING, false)):
 		return STATE_DISENGAGING
-	if bool(flags.get(FLAG_SUPPRESSED, false)):
-		return STATE_SUPPRESSED
 	if bool(flags.get(FLAG_STUNNED, false)):
 		return STATE_STUNNED
 	if bool(flags.get(FLAG_HEALING, false)):
@@ -113,8 +109,6 @@ func _state_color(state: String) -> Color:
 	match state:
 		STATE_DISENGAGING:
 			return StickTokens.DANGER
-		STATE_SUPPRESSED:
-			return StickTokens.WARN
 		STATE_HEALING:
 			return StickTokens.SUCCESS
 		STATE_STUNNED:

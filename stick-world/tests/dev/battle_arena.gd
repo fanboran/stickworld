@@ -443,11 +443,6 @@ func _spawn_and_start() -> void:
 					continue
 				fs.set_squad_follow_squad(left_squad_ids[si], left_squad_ids[si - 1], gap)
 				fs.set_squad_follow_squad(right_squad_ids[si], right_squad_ids[si - 1], gap)
-	# 收掉开局引导大卡（demo_quest 每次新装配都弹，屏幕正中挡观察 6 秒；
-	# 观察场不看新手引导）
-	var opening_hint: Node = get_tree().root.find_child("OpeningHint", true, false)
-	if opening_hint != null:
-		opening_hint.queue_free()
 	_camera_following = true
 	_reveal()
 

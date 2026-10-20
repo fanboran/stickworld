@@ -47,7 +47,7 @@ func _run() -> void:
 	_was_debug_visible = DebugApi.is_visible()
 	DebugApi.set_overlay_visible(true)
 
-	# 等 HUD 装配稳定（demo_quest deferred、资源注入、容器首轮布局）
+	# 等 HUD 装配稳定（deferred 装配、资源注入、容器首轮布局）
 	var quest: Control = null
 	for i in BOOT_TIMEOUT_FRAMES:
 		quest = _game_root.ui_root.get_node_or_null("HudOverlay/QuestPanel")

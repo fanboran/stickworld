@@ -13,7 +13,7 @@ var _drag_offset: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
-	size = get_viewport_rect().size
+	# 根布局走 UIKit.full_rect 的 FULL_RECT 锚（装配侧设置），本脚本不自管 size
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_ui()
 	if DebugApi:
@@ -26,7 +26,6 @@ func _process(_delta: float) -> void:
 	# F3 关闭后可见，但 _process 仍在全实体扫描+重建文本——隐藏即整帧跳过
 	if not visible:
 		return
-	size = get_viewport_rect().size
 	_update_hovered()
 	_update_text()
 

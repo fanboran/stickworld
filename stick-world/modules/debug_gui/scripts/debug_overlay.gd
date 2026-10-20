@@ -31,24 +31,18 @@ var _tools_panel: Control = null
 func _ready() -> void:
 	# 独立调试层（高于 UIRoot=1；战略图 100/101/102 全屏打开时被盖，合理）
 	layer = LayerOrder.DEBUG_OVERLAY
-	# 创建绘制控件
-	_draw_control = Control.new()
-	_draw_control.name = "DebugDrawControl"
-	_draw_control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 创建绘制控件（UIKit.full_rect 合规出口：FULL_RECT + 双向 grow）
+	_draw_control = UIKit.full_rect(load("res://modules/debug_gui/scripts/debug_draw_control.gd"), "DebugDrawControl")
 	_draw_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_draw_control.set_script(load("res://modules/debug_gui/scripts/debug_draw_control.gd"))
 	add_child(_draw_control)
 	# 创建可拖动调试面板（UIKit.full_rect 合规出口；根面 IGNORE——全屏命中面
 	# 会遮住下层 CanvasLayer 的 UI，子控件命中优先不受影响）
 	_debug_panel = UIKit.full_rect(load("res://modules/debug_gui/scripts/debug_panel.gd"), "DebugPanel")
 	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_debug_panel)
-	# 创建实体信息文本框（脚本自管 size=视口 + IGNORE，不依赖锚点布局——
-	# 显式 TOP_LEFT 与原行为一致；强设 FULL_RECT 会与其手动 size 赋值打架报警）
-	_entity_info_panel = Control.new()
-	_entity_info_panel.name = "DebugInfoPanel"
-	_entity_info_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_entity_info_panel.set_script(load("res://modules/debug_gui/scripts/debug_info_panel.gd"))
+	# 创建实体信息文本框（UIKit.full_rect 合规出口；脚本不自管 size——内部
+	# 子面板绝对定位，视口尺寸取自 get_viewport_rect()，根锚定交给装配出口）
+	_entity_info_panel = UIKit.full_rect(load("res://modules/debug_gui/scripts/debug_info_panel.gd"), "DebugInfoPanel")
 	add_child(_entity_info_panel)
 	# 创建交互式调试工具面板（F4：特效试放/市场/环境/建筑）
 	_tools_panel = UIKit.full_rect(load("res://modules/debug_gui/scripts/debug_tools_panel.gd"), "DebugToolsPanel")

@@ -182,9 +182,8 @@ func prune_registry() -> void:
 ##      语义（班长权威高于阈值才肯放人）：本班权威值高于 authority_leader_release_threshold
 ##      者视为骨干，不被抽走
 ##   3. 士气行为中（retreat / seek_cover = 溃逃 / 找掩体）：不打断士气驱动行为
-##   4. 真实压制态（StatusEffects.SUPPRESSED duck 查询，与相位计划同口径）
-##   5. 接战中（主手射程内有敌）：交还战斗行为，不当场换班
-##   6. 玩家手动号令保护期内（复用 TeamAi 既有保护期状态）
+##   4. 接战中（主手射程内有敌）：交还战斗行为，不当场换班
+##   5. 玩家手动号令保护期内（复用 TeamAi 既有保护期状态）
 func may_switch(u: Node, squad_id: String) -> bool:
 	if u.has_method("is_possessed") and u.is_possessed():
 		return false
@@ -193,8 +192,6 @@ func may_switch(u: Node, squad_id: String) -> bool:
 	var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
 	if ai != null and is_instance_valid(ai) and ai.has_method("get_current_behavior") \
 			and ai.get_current_behavior() in ["retreat", "seek_cover"]:
-		return false
-	if unit_suppressed(u):
 		return false
 	if _host._member_enemy_in_range(u):
 		return false
@@ -219,16 +216,6 @@ func is_leader_or_commander(u: Node, squad_id: String) -> bool:
 		if not cmd.is_empty() and cmd == str(u.get_instance_id()):
 			return true
 	return false
-
-
-## 真实压制态（duck 查询 StatusEffects.SUPPRESSED；组件缺失 / 压制未启用返回 false）。
-func unit_suppressed(u: Node) -> bool:
-	if u == null or not is_instance_valid(u) or not u.has_method("get_status_effects"):
-		return false
-	var se: Node = u.get_status_effects()
-	if se == null or not is_instance_valid(se) or not se.has_method("has_suppressed"):
-		return false
-	return bool(se.has_suppressed())
 
 
 ## 玩家手动号令保护期查询（复用既有保护期状态，单一真相源）：

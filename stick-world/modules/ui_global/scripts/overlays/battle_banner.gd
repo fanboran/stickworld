@@ -1,7 +1,7 @@
 extends Control
 ## 战斗胜负横幅 —— 战果仪式感（Kingdom 式全屏横幅：中央大字滑入停留淡出）。
 ##
-## 经 UIKit.full_rect 挂 HudOverlay 槽；DemoQuest 监听 battle_ended 后调用
+## 经 UIKit.full_rect 挂 HudOverlay 槽；装配层接 EventBus 战斗信号后调用
 ## show_banner(victory)。不阻挡输入（mouse_filter IGNORE）。
 
 var _label: Label = null

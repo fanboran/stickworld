@@ -53,8 +53,7 @@ func _run_tests() -> void:
 	# boot：地图就绪 + deferred 装配（construction api 初始化）完成
 	var ok: bool = await TestHelpers.await_condition(func():
 		var map: Node2D = _game_root.get_current_map() if _game_root.has_method("get_current_map") else null
-		return map != null and _game_root.get_node_or_null("RecruitManager") != null \
-				and _game_root.get_node_or_null("DemoQuest") != null, 20.0, "boot")
+		return map != null and _game_root.get_node_or_null("RecruitManager") != null, 20.0, "boot")
 	_runner.assert_true(ok, "GameRoot 应在 20s 内装配完成（地图+RecruitManager）")
 	if not ok:
 		print(_runner.summary())

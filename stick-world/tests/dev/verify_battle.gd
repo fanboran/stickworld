@@ -26,10 +26,6 @@ func _run() -> void:
 	for i in 20:
 		await get_tree().process_frame
 
-	var quest: Node = _game_root.get_node_or_null("DemoQuest")
-	if quest == null:
-		_fail("DemoQuest 未装配")
-		return
 	var result: Dictionary = {"ended": false, "victory": false}
 	EventBus.battle_ended.connect(func(_bid: String, v: bool) -> void:
 		result["ended"] = true
@@ -89,20 +85,6 @@ func _run() -> void:
 			waited, "胜" if result["victory"] else "败"])
 	else:
 		_fail("空格恢复后 %.0fs 未分胜负（AI 自主接战断链）" % BATTLE_TIMEOUT)
-
-	# 3) DemoQuest 胜局统计验证（battle_ended 只计数不驱动目标）
-	var wins: int = int(quest.get("_battle_win_count"))
-	if result["victory"]:
-		if wins == 1:
-			_pass("胜利已入战斗胜局统计")
-		else:
-			_fail("胜局未统计（_battle_win_count=%d）" % wins)
-	else:
-		if wins == 0:
-			_pass("败局不增胜局统计（符合设计）——真实游玩玩家操作可获胜")
-		else:
-			_fail("败局误增胜局统计（_battle_win_count=%d）" % wins)
-
 
 func _fail(msg: String) -> void:
 	_fails += 1

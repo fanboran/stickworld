@@ -5,7 +5,7 @@ extends Node
 ## heal_cast——三者生产端均为高频事件，无暂停类副作用）。
 ## 分项：零订阅者 emit / 50 订阅者 emit / 50 订阅者+轻量消费体（模拟 UI 刷新）。
 ## 顺带验证订阅方调用链是否有 O(n) 重活：轻量消费体按真实订阅方
-## （resource_bar._on_resource_changed / demo_quest）的行为建模。
+## （resource_bar._on_resource_changed 等 UI 订阅方）的行为建模。
 ##
 ## 运行：godot --headless --path . res://tests/dev/bench_infra_eventbus.tscn
 

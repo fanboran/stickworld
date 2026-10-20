@@ -49,7 +49,7 @@ modules/construction/
 - `modules/building_gen/`：Building 基类与建筑场景（building_catalog 经其 api 注册默认场景）。
 - `modules/resources/`：ResourcesApi 运行时注入（成本扣减、清场回收）。
 - 地图经 set_map 注入 + 鸭子协议（placement_grid / building_host / expand_map），不引用 world 内部脚本。
-- 被依赖：`modules/units/`（StickmanEntity 注入本 api，行为端派工与交互探测按 工地>仓库>资源点）、`modules/world/`（SystemSetup 装配、初始建筑预置、demo_quest 监听 building_completed）。
+- 被依赖：`modules/units/`（StickmanEntity 注入本 api，行为端派工与交互探测按 工地>仓库>资源点）、`modules/world/`（SystemSetup 装配、初始建筑预置）。
 
 ---
 

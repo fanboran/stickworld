@@ -4,7 +4,7 @@ extends RefCounted
 ## 职责域：
 ##   快捷键全分派（动作表驱动：存读档/面板开关/快捷栏/暂停/ESC——绑定见
 ##   assets/config/input_actions.json）→ handle_shortcuts
-##   ESC 统一模态栈逐层退栈（附身让位/战略图优先/暂停菜单兜底）→ _handle_escape
+##   ESC 统一模态栈逐层退栈（附身让位/暂停菜单兜底；战略图已并入层键）→ _handle_escape
 ##   模态面板开关公共路径（背包/设置菜单）→ toggle_inventory /
 ##   toggle_settings_menu / _toggle_modal_panel
 ##   Hotbar 物品格转发与占位面板 → _use_hotbar_slot / _open_placeholder_panel
@@ -183,12 +183,7 @@ func _open_placeholder_panel(preset_id: String) -> void:
 func _handle_escape() -> bool:
 	if _host.input_dispatcher != null and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
 		return false
-	# 战略图（Tab）打开时 ESC 先交给它：下钻返回 L2 / 关闭地图，不弹暂停菜单
-	if _host._strategic_map != null:
-		var sc: Node = _host._strategic_map.get_node_or_null("Content")
-		if sc != null and sc.visible and sc.has_method("handle_escape"):
-			sc.handle_escape()
-			return true
+	# 模态栈统一退栈（强弱分级/战略图层键都归栈：强模态屏蔽、战略图自带下钻语义）
 	var stack := _get_modal_stack()
 	if stack != null and stack.handle_escape():
 		return true

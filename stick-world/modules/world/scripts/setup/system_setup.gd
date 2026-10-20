@@ -57,8 +57,7 @@ const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/sc
 const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
 const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_root.tscn")
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
-const _QuestPanelScript: GDScript = preload("res://modules/ui_global/scripts/hud/quest_panel.gd")
-const _DemoQuestScript: GDScript = preload("res://modules/world/scripts/setup/demo_quest.gd")
+const _BattleBannerScript: GDScript = preload("res://modules/ui_global/scripts/overlays/battle_banner.gd")
 const _UnitLodDirectorScript: GDScript = preload("res://modules/units/scripts/entity/unit_lod_director.gd")
 const _RecruitManagerScript: GDScript = preload("res://modules/organization/scripts/recruit_manager.gd")
 const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
@@ -143,9 +142,9 @@ func setup_steps(root: GameRoot) -> Array:
 	return _step_table()
 
 
-## 装配收尾（Demo 目标链 deferred：需在资源初始发放之后做基线快照）
+## 装配收尾（战斗横幅 deferred）
 func finish_setup() -> void:
-	call_deferred("_setup_demo_quest_deferred")
+	call_deferred("_setup_battle_banner_deferred")
 
 
 ## 装配步骤表：每项 = [细分标签, 可调用]。顺序有依赖（UI 根/核心系统先于
@@ -389,8 +388,8 @@ func register_debug_drawers() -> void:
 	_extras().register_debug_drawers()
 
 
-func _setup_demo_quest_deferred() -> void:
-	_extras()._setup_demo_quest_deferred()
+func _setup_battle_banner_deferred() -> void:
+	_extras()._setup_battle_banner_deferred()
 
 
 func _setup_post_process() -> void:

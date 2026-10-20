@@ -7,9 +7,10 @@ extends Control
 ## 选中建筑类型进入选址模式：鼠标移动显示半透明 ghost 预览，左键确认建造，右键/Esc 取消。
 ## 资源不足或无场景的建筑类型灰显。由 GameRoot 在 _ready 中 set_script 装配，setup(game_root)。
 ##
-## UI 公共层收编：按钮/面板/标签一律经 ui_global 出口创建（StickKit.sketch_button /
-## StickKit.panel / StickKit.label，手绘涂鸦皮肤查 SketchStyle 变体表 + StickTokens
-## 取色）；布局结构与功能行为不变（按钮位置/选址流程原样）。
+## 弹窗行为模板（DOCK 首个业务面板）：列表窗走 BuildListWindow（StickWindow·DOCK，
+## 右下停靠 + 安全矩形夹紧 + ✕/ESC 自关，面板外穿透）；"建造"按钮是右下角停靠
+## HUD 部件（StickKit.dock）；选址提示钉在右上时钟区下方。控件一律经 ui_global
+## 出口创建（StickKit / SketchStyle 变体表 + StickTokens 取色）。
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
@@ -21,7 +22,7 @@ var _camera_rig: Camera2D = null
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
 var _toggle_btn: Button = null
-var _list_panel: PanelContainer = null
+var _list_window: BuildListWindow = null
 var _list_container: VBoxContainer = null
 var _hint_label: Label = null  # 选址模式提示
 
@@ -83,9 +84,6 @@ const _COST_FIELD_ZH: Dictionary = {
 
 ## 由 GameRoot 调用，注入引用并构建 UI。
 func setup(game_root: Node) -> void:
-	# Demo 引导：建造目标激活时按钮呼吸高亮（quest_advanced 信号驱动）
-	if EventBus != null and EventBus.has_signal("quest_advanced"):
-		EventBus.quest_advanced.connect(_on_quest_advanced)
 	# 始终接收输入（即使游戏暂停，建造菜单仍可取消）
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_process_input(true)
@@ -115,42 +113,28 @@ func setup(game_root: Node) -> void:
 func _build_ui() -> void:
 	# 父 Control 的位置/范围由 ui_root.tscn 预置节点配置（编辑器可见可调）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 右下角"建造"按钮（避开左侧 ResourceBar）。控件统一走 ui_global 手绘
-	# 组件出口（StickKit.sketch_button → SketchButton，皮肤查 SketchStyle 变体表）
+	# 右下角"建造"按钮（避开左侧 ResourceBar）：dock 出口自动留 SCREEN_MARGIN，
+	# 效果与原手写 BOTTOM_RIGHT 锚 + 偏移一致（-108/-42/-12/-12）
 	_toggle_btn = StickKit.sketch_button(self, "建造", _on_toggle_pressed,
 			StickKit.ButtonKind.NORMAL, 30.0)
 	_toggle_btn.name = "ToggleBtn"
-	_toggle_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_toggle_btn.offset_left = -108.0
-	_toggle_btn.offset_top = -42.0
-	_toggle_btn.offset_right = -12.0
-	_toggle_btn.offset_bottom = -12.0
-	# 建筑列表面板（按钮上方，右侧）：手绘涂鸦面板（SketchPanel）
-	_list_panel = StickKit.panel(self, SketchPanel.Tone.DARK)
-	_list_panel.name = "ListPanel"
-	_list_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_list_panel.offset_left = -220.0
-	_list_panel.offset_top = -470.0
-	_list_panel.offset_right = -12.0
-	_list_panel.offset_bottom = -54.0
-	_list_panel.visible = false
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_list_panel.add_child(scroll)
-	_list_container = VBoxContainer.new()
-	_list_container.name = "List"
-	_list_container.add_theme_constant_override("separation", 4)
-	scroll.add_child(_list_container)
-	# 选址模式提示（顶部居中偏右，GlobalHUD 下方且避开地图中央）；
-	# 字号/强调色走 StickKit.SECTION 档（14 号琥珀），不再手写 override
+	StickKit.dock(_toggle_btn, StickKit.Corner.BOTTOM_RIGHT, Vector2(96, 30))
+	# 建筑列表窗：DOCK 模板（右下停靠、✕/ESC 自关、面板外穿透）——窗体骨架与
+	# 定位归 StickWindow，条目内容经 list_container 由 _refresh_list 装填
+	_list_window = BuildListWindow.new()
+	_list_window.name = "ListWindow"
+	add_child(_list_window)
+	_list_container = _list_window.list_container
+	# 选址模式提示（右上时钟堆叠区下方——避开 top_right zone 保留区 y 8~150，
+	# 见 hud_zone_layout.gd）；字号/强调色走 StickKit.SECTION 档（14 号琥珀）
 	_hint_label = StickKit.label(self, "选址模式：左键建造 | 右键/Esc 取消",
 			StickKit.LabelKind.SECTION)
 	_hint_label.name = "HintLabel"
 	_hint_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_hint_label.offset_left = -440.0
-	_hint_label.offset_top = 80.0
+	_hint_label.offset_top = 156.0
 	_hint_label.offset_right = -12.0
-	_hint_label.offset_bottom = 104.0
+	_hint_label.offset_bottom = 180.0
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_hint_label.visible = false
 
@@ -271,14 +255,14 @@ func _missing_summary(def: Dictionary) -> String:
 
 func _on_resource_changed(_rid: String, _amt: float, _delta: float, _region: String) -> void:
 	# 隐藏期间跳过重建（resource_changed 高频触发）；打开路径 _on_toggle_pressed 必刷新
-	if _list_panel == null or not _list_panel.visible:
+	if _list_window == null or not _list_window.visible:
 		return
 	_refresh_list()
 
 
 ## 解锁发放（奖励闭环消费端）：面板开着就当场重刷——刚解锁的建筑由灰显变可建
 func _on_unlock_granted(_unlock_id: String) -> void:
-	if _list_panel == null or not _list_panel.visible:
+	if _list_window == null or not _list_window.visible:
 		return
 	_refresh_list()
 
@@ -294,20 +278,20 @@ func _update_visibility() -> void:
 	var explore: bool = _input_dispatcher != null and _input_dispatcher.has_method("get_mode") and _input_dispatcher.get_mode() == PlayerControlAPI.Mode.EXPLORE
 	_toggle_btn.visible = explore
 	if not explore:
-		_list_panel.visible = false
+		_list_window.visible = false
 		_cancel_placing()
 
 
 # ─────────────────────────────── 按钮回调 ────────────────────────────────
 
 func _on_toggle_pressed() -> void:
-	_list_panel.visible = not _list_panel.visible
-	if _list_panel.visible:
+	_list_window.visible = not _list_window.visible
+	if _list_window.visible:
 		_refresh_list()
 
 
 func _on_building_selected(def_id: String) -> void:
-	_list_panel.visible = false
+	_list_window.visible = false
 	_start_placing(def_id)
 
 
@@ -583,23 +567,3 @@ func _get_mouse_world_y() -> float:
 func _show_notify(msg: String) -> void:
 	if EventBus != null and EventBus.has_signal("ui_notification"):
 		EventBus.ui_notification.emit("建造", msg, "info")
-
-
-# ─────────────────────────────── Demo 引导强调 ────────────────────────────────
-
-var _pulse_tween: Tween = null
-
-func _on_quest_advanced(quest_id: String) -> void:
-	_stop_build_pulse()
-	if quest_id != "build" or _toggle_btn == null or not is_instance_valid(_toggle_btn):
-		return
-	_pulse_tween = _toggle_btn.create_tween().set_loops()
-	_pulse_tween.tween_property(_toggle_btn, "modulate", Color(1.35, 1.15, 0.8), 0.6)
-	_pulse_tween.tween_property(_toggle_btn, "modulate", Color.WHITE, 0.6)
-
-func _stop_build_pulse() -> void:
-	if _pulse_tween != null and _pulse_tween.is_valid():
-		_pulse_tween.kill()
-		_pulse_tween = null
-	if _toggle_btn != null and is_instance_valid(_toggle_btn):
-		_toggle_btn.modulate = Color.WHITE

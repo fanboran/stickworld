@@ -101,9 +101,6 @@ func _switch_intent_count(best_id: String, units: Array) -> int:
 		if ai != null and ai.has_method("get_current_behavior") \
 				and String(ai.get_current_behavior()) in ["retreat", "seek_cover"]:
 			continue
-		var se = SquadCardData.status_of(u)
-		if se != null and se.has_method("has_suppressed") and bool(se.has_suppressed()):
-			continue
 		if best_leader != null and u is Node2D and best_leader is Node2D \
 				and (u as Node2D).global_position.distance_to(
 						(best_leader as Node2D).global_position) > radius:

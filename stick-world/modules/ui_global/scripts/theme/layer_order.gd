@@ -21,6 +21,9 @@ const STRATEGIC_L1 := 100
 const STRATEGIC_L3 := 101
 ## 战略图 L2（L3 下钻）
 const STRATEGIC_L2 := 102
+## 启动跳板加载层（主菜单→游戏场景切换期，挂场景树根；压过一切场景内 UI，
+## 含 game_root 的 WorldLoadingLayer——数值须大于全部场景内层号）
+const BOOT_LOADING := 110
 
 # ─────────────────────────────── UIRoot 内 z_index ────────────────────────────────
 

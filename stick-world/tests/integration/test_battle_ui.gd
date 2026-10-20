@@ -85,7 +85,7 @@ func _test_battle_panel_assembled() -> void:
 		return
 	_runner.assert_true(_battle_panel.get_parent() != null, "BattlePanel 应在场景树中")
 	# 验证 setup 已调用（HBox 应存在）
-	var hbox: Node = _battle_panel.get_node_or_null("HBox")
+	var hbox: Node = _battle_panel.find_child("HBox", true, false)  # 底栏质感包装层之下，递归找
 	_runner.assert_true(hbox != null, "BattlePanel UI 应已构建（HBox 存在）")
 
 

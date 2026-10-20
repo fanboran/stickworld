@@ -50,6 +50,9 @@ func _ready() -> void:
 	var canvas := get_parent() as CanvasLayer
 	if canvas != null:
 		canvas.layer = LayerOrder.STRATEGIC_L2
+	# 并入统一模态栈（活层 STRATEGIC_MAP，三视图互斥同键；可见即入栈，
+	# 隐藏经栈的可见性同步自动退栈）
+	visibility_changed.connect(_on_modal_visibility_changed)
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
 	# 地图层开关（B4）：政治层开关 → 渲染器换层（其余层 L2 无内容，忽略）
@@ -60,6 +63,15 @@ func _ready() -> void:
 ## 注入 L1 下钻视图（由接线方调用）
 func set_l1_view(view: Node) -> void:
 	l1_view = view
+
+
+## 可见即并入模态栈 STRATEGIC_MAP 层（三视图互斥同键：先隐藏者先经可见性同步退栈）
+func _on_modal_visibility_changed() -> void:
+	if not visible:
+		return
+	var stack := UIModalStack.find(self)
+	if stack != null and not stack.is_open(UIModalStack.Layer.STRATEGIC_MAP):
+		stack.push(self, UIModalStack.Layer.STRATEGIC_MAP)
 
 
 func _auto_find_components() -> void:

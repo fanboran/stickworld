@@ -142,26 +142,24 @@ func register_debug_drawers() -> void:
 	DebugApi.register_drawer("team_ai_hud", Callable(_host._DebugDrawers, "draw_team_ai_hud"))
 
 
-# ─────────────────────────────── Demo 目标链装配 ────────────────────────────────
+# ─────────────────────────────── 战斗横幅装配 ────────────────────────────────
 
-## 装配演示目标链（四阶段引导 + 胜利结算）。
-## deferred 时机：晚于 _setup_resources_api_deferred（deferred 队列 FIFO），
-## 保证初始资源已发放、DemoQuest 的采集基线快照不被初始资源污染。
-func _setup_demo_quest_deferred() -> void:
-	if _host._root.ui_root == null or _host._root._resources_api == null:
+## 战斗横幅：遭遇战预告（红字短暂）+ 胜负横幅。挂 HudOverlay 槽、接 EventBus
+## 战斗信号（原由演示目标链驱动装配，演示线根除后独立装配）。
+func _setup_battle_banner_deferred() -> void:
+	if _host._root.ui_root == null:
 		return
-	var panel: Control = _host._QuestPanelScript.new()
-	panel.name = "QuestPanel"
-	if not _host._root.ui_root.add_to_slot("HudOverlay", panel):
-		panel.queue_free()
+	var banner: Control = UIKit.full_rect(_host._BattleBannerScript, "BattleBanner")
+	if not _host._root.ui_root.add_to_slot("HudOverlay", banner):
+		banner.queue_free()
 		return
-	# 定位归 zone：top_left_stack 堆叠区（排在资源条之下，见 hud_zone_layout.gd）
-	_host._root.ui_root.place_in_zone(&"top_left_stack", panel)
-	var quest := Node.new()
-	quest.set_script(_host._DemoQuestScript)
-	quest.name = "DemoQuest"
-	_host._root.add_child(quest)
-	quest.setup(panel, _host._root._resources_api, _host._root._construction_api, _host._root.ui_root)
+	if EventBus != null:
+		if EventBus.has_signal("battle_started"):
+			EventBus.battle_started.connect(func(_battle_id: String) -> void:
+				banner.show_preview())
+		if EventBus.has_signal("battle_ended"):
+			EventBus.battle_ended.connect(func(_battle_id: String, victory: bool) -> void:
+				banner.show_banner(victory))
 
 
 # ─────────────────────────────── 后处理层装配（Demo P3）────────────────────────────────

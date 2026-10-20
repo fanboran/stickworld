@@ -82,8 +82,6 @@ static func state_flags(u: Node) -> Dictionary:
 	var se := status_of(u)
 	if se == null:
 		return flags
-	if se.has_method("has_suppressed"):
-		flags["suppressed"] = bool(se.has_suppressed())
 	if se.has_method("has_effect"):
 		flags["stunned"] = bool(se.has_effect(EFFECT_STUN))
 		flags["healing"] = bool(se.has_effect(EFFECT_HEAL))

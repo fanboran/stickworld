@@ -34,8 +34,6 @@ modules/world/
     │   ├── save_handler.gd             #   SaveHandler：SQLite 存读档全流程（地图/建筑/实体/资源点 → save_meta）
     │   ├── travel_handler.gd           #   TravelHandler：玩家实体查找 + 室内退出检查（大建筑传送链随 mega_interior 图清退拆除）
     │   ├── initial_content.gd          #   InitialContent：村民 NPC（经 TownLifeAPI 配比）/ dev 遭遇战 / 仓库预置
-    │   ├── demo_quest.gd               #   DemoQuest：三阶段引导目标链（采集→建造→编队）+ 结算
-    │   └── villager_bubble.gd          #   VillagerBubble：村民头顶对话气泡（DemoQuest 驱动）
     ├── loading/
     │   ├── scene_loader.gd             #   SceneLoader：map_id 注册表 + 出口表 + travel_to_map 统一入口 + EventBus 转发
     │   ├── world_chunk_host.gd         #   WorldChunkHost：当前地图实例挂载点
@@ -89,12 +87,12 @@ modules/world/
 |---|---|---|
 | 发布 | `game_started` | GameRoot（装配完成时） |
 | 发布 | `map_loaded` / `map_unloaded` / `travel_started` / `travel_completed` | SceneLoader 同名转发 |
-| 发布 | `ui_notification` / `quest_advanced` | SaveHandler（读档失败）、DemoQuest |
+| 发布 | `ui_notification` | SaveHandler（读档失败） |
 | 订阅 | `travel_requested` | SceneLoader（战略图 → 场景图） |
 | 订阅 | `game_saving` / `game_loaded` | SaveHandler |
 | 订阅 | `interior_exited` | TravelHandler（室内退出检查；`mega_interior_entered/exited` 已无订户，信号定义保留待室内 v3 接回） |
 | 订阅 | `strategic_map_closed` | SystemSetup（恢复场景图输入） |
-| 订阅 | `squad_created` / `battle_started` / `battle_ended` | DemoQuest（目标链推进） |
+| 订阅 | `battle_started` / `battle_ended` | 战斗横幅装配（胜负横幅与预告） |
 
 ---
 

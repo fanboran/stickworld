@@ -1,6 +1,9 @@
 class_name DebugToolsPanel
-extends Control
+extends StickWindow
 ## 调试工具面板 —— F4 切换的交互式调试窗口（区别于 F3 绘制覆盖层）。
+##
+## 弹窗行为模板：StickWindow FLOATING（可拖标题栏、无遮罩、ESC 自关、
+## 面板外鼠标穿透到游戏）——拖动/关闭/安全矩形夹紧均由基类提供。
 ##
 ## 四个页签，覆盖 2026-08-22 新系统的可视化调试：
 ##   特效   —— 三种粒子效果试放（视口中心 / 点击放置 / 压力测试）
@@ -37,24 +40,22 @@ var _place_fx_id: String = FxLibrary.BUILD_DUST
 var _refresh_accum: float = 0.0
 ## 时间轴是否正被拖动（Slider 无 dragging 属性，用信号打标）
 var _time_slider_held := false
-## 标题栏拖动
-var _dragging := false
-var _drag_offset := Vector2.ZERO
+## 初始落位（安全矩形内左上，避开顶栏/材料条；标题栏拖动可挪）
+const _INITIAL_POS := Vector2(24.0, 112.0)
 
 
 func _ready() -> void:
 	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_build_ui()
+	behavior = Behavior.FLOATING
+	window_title = "调试工具（开关在 F3 调试面板）"
+	window_size = Vector2(440, 0)  # 高度随页签内容自增（custom_minimum_size 语义）
+	_build_window()
+	_panel.position = _INITIAL_POS
 
 
 func _process(delta: float) -> void:
 	if not visible:
 		return
-	# 标题栏拖动
-	if _dragging:
-		position = get_global_mouse_position() - _drag_offset
 	# 系统引用每秒重试解析（GameRoot 装配晚于本面板属常态）
 	_resolve_retry -= delta
 	if _resolve_retry <= 0.0:
@@ -74,9 +75,9 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible or not _place_mode_armed:
-		return
-	if event is InputEventMouseButton and event.pressed \
+	# 点放模式：下一次世界点击试放特效（消费防穿透到选择系统）
+	if visible and _place_mode_armed \
+			and event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		var world_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
 		# canvas 逆变换落点是视觉域；FxPool.spawn_burst 内部会对地面锚再做
@@ -86,6 +87,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			world_pos = remapper.unmap_fx_pos(world_pos)
 		_spawn_fx(world_pos)
 		get_viewport().set_input_as_handled()
+		return
+	# 基类：ESC 关自身（handled，不触发暂停菜单）
+	super._unhandled_input(event)
 
 
 ## 按效果 ID 分发：GPUParticles 爆发（FX_IDS 均为一次性爆发型）
@@ -121,31 +125,12 @@ func _sys_label(missing_hint: String) -> Label:
 
 # ─────────────────────────────── UI 骨架 ────────────────────────────────
 
-func _build_ui() -> void:
-	var panel := SketchPanel.new()
-	panel.name = "Panel"
-	panel.position = Vector2(24, 90)
-	panel.custom_minimum_size = Vector2(440, 0)
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	panel.add_child(vbox)
-
-	# 标题行（可拖动区域）
-	var title := Label.new()
-	title.text = "调试工具（开关在 F3 调试面板 · 拖此行移动）"
-	title.add_theme_font_size_override("font_size", StickTokens.FONT_TITLE)
-	title.modulate = StickTokens.ACCENT
-	title.mouse_filter = Control.MOUSE_FILTER_PASS
-	title.gui_input.connect(_on_title_gui_input)
-	vbox.add_child(title)
-
+## 窗体骨架（SketchPanel + 标题栏拖动 + ✕）由 StickWindow 提供；此处只装页签内容
+func _build_content() -> void:
 	# 页签按钮行
 	var tab_row := HBoxContainer.new()
 	tab_row.add_theme_constant_override("separation", 4)
-	vbox.add_child(tab_row)
+	_body.add_child(tab_row)
 	for tab_name in TAB_NAMES:
 		var b := StickKit.sketch_button(tab_row, tab_name, _switch_tab.bind(tab_name))
 		b.toggle_mode = true
@@ -157,7 +142,7 @@ func _build_ui() -> void:
 		content.name = tab_name
 		content.add_theme_constant_override("separation", 6)
 		content.visible = tab_name == _active_tab
-		vbox.add_child(content)
+		_body.add_child(content)
 		_tabs[tab_name] = content
 
 	_build_fx_tab(_tabs["特效"])
@@ -185,12 +170,6 @@ func _sync_tab_buttons() -> void:
 	for key in TAB_NAMES:
 		var b: Button = _tabs[key + "_btn"]
 		b.button_pressed = key == _active_tab
-
-
-func _on_title_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		_dragging = event.pressed
-		_drag_offset = get_global_mouse_position() - position
 
 
 # ─────────────────────────────── 页签：特效 ────────────────────────────────

@@ -89,8 +89,7 @@ var _drag_start_cam: Vector2 = Vector2.ZERO
 var base_zoom: float = 1.0
 ## 用户缩放（滚轮/滑块可调）。默认 1.0 = HD-2D 构图契约基准档（2026-09-16 换轨
 ## 24px/格 后归一）：1 格 = 24 世界单位 = 24 设计像素，前后景分界线压屏幕下
-## **1/4 线**的构图与旧 0.75 档逐像素一致（旧档已折入世界常量）。开场推镜
-## （demo_quest）动态读本值。
+## **1/4 线**的构图与旧 0.75 档逐像素一致（旧档已折入世界常量）。
 var user_zoom: float = 1.0:
 	set(v):
 		user_zoom = clampf(v, ZOOM_MIN, ZOOM_MAX)

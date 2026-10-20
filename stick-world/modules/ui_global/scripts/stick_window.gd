@@ -19,6 +19,8 @@ enum Behavior { FLOATING, DOCK, POPOVER }
 @export var behavior := Behavior.FLOATING
 ## POPOVER 锚点（屏幕坐标）
 @export var anchor_pos := Vector2(200, 200)
+## DOCK 停靠角（默认右上；四角可选，停靠后统一夹进安全矩形避让常驻 HUD）
+@export var dock_corner := StickKit.Corner.TOP_RIGHT
 
 # ─────────────────────────────── 内部节点 ────────────────────────────────
 var _panel: PanelContainer = null
@@ -72,13 +74,26 @@ func _build_content() -> void:
 
 
 ## 初始定位（FLOATING 居中；DOCK 停靠；POPOVER 锚点）
-## FLOATING/POPOVER 一律夹进安全矩形（HUD 顶栏/材料条/底栏避让），
+## 三种行为一律夹进安全矩形（HUD 顶栏/材料条/底栏避让），
 ## 防"弹窗盖住常驻 HUD 按钮"（StickKit.safe_rect 单一真相源，见 docs/技术/UI/布局规则与AI自检.md）。
+## DOCK 也夹紧：角落停靠只定"贴哪条边"，HUD 预留区（如底部模式面板 88px、
+## 顶部时钟区）由安全矩形统一推开——停靠角与 HUD 防撞不必二选一。
 func _position_panel() -> void:
 	var vp := get_viewport().get_visible_rect() if get_viewport() != null else Rect2(0, 0, 1920, 1080)
 	match behavior:
 		Behavior.DOCK:
-			StickKit.dock(_panel, StickKit.Corner.TOP_RIGHT, window_size)
+			# 纯 position 停靠（不设 anchor）：后续 _clamp_into_safe_rect 也是
+			# position 语义，避免 anchor 与 position setter 混用失效（布局规则 §9.1）
+			var m := StickTokens.SCREEN_MARGIN
+			match dock_corner:
+				StickKit.Corner.TOP_LEFT:
+					_panel.position = Vector2(m, m)
+				StickKit.Corner.TOP_RIGHT:
+					_panel.position = Vector2(vp.size.x - window_size.x - m, m)
+				StickKit.Corner.BOTTOM_LEFT:
+					_panel.position = Vector2(m, vp.size.y - window_size.y - m)
+				_:
+					_panel.position = Vector2(vp.size.x - window_size.x - m, vp.size.y - window_size.y - m)
 		Behavior.POPOVER:
 			_panel.position = anchor_pos
 		_:
@@ -86,8 +101,7 @@ func _position_panel() -> void:
 	# 尺寸定稿后（首次布局/resize）再夹一次，确保真实面板尺寸也落在安全区内
 	if not _panel.resized.is_connected(_clamp_into_safe_rect):
 		_panel.resized.connect(_clamp_into_safe_rect)
-	if behavior != Behavior.DOCK:
-		_clamp_into_safe_rect()
+	_clamp_into_safe_rect()
 
 
 ## 把面板矩形夹进安全矩形（FLOATING/POPOVER）。拖动不触发（只监听 resized）。

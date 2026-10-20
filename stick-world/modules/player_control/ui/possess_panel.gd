@@ -11,6 +11,12 @@ extends Control
 ## 提供"退出附身"按钮（ESC 同效）。
 ##
 ## 由 GameRoot 在 _ready 中 set_script 装配，随后调用 setup(game_root)。
+##
+## 刷新机制（信号驱动，不再每帧字符串重建）：
+##   - HP/士气：附身开始时订阅实体 health 组件 damaged/healed/morale_changed，
+##     变化即刷新；附身结束断开。
+##   - 无信号的连续值（冷却/情绪/行为/朝向/坐标）：单个 0.2s 低频 Timer 兜底
+##     （仅已附身且面板可见时跑）——字符串重建从每帧降到 5Hz。
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
@@ -19,6 +25,17 @@ var _possession: Node = null
 # ─────────────────────────────── UI 元素 ────────────────────────────────
 var _info_label: Label = null
 var _release_btn: Button = null
+
+# ─────────────────────────────── 信号订阅簿记 ────────────────────────────────
+## 当前订阅的 health 组件（断开/失效清理用）
+var _bound_health: Node = null
+## health 信号 → 本面板回调（断开时按表拆线）
+var _health_binds: Array = []
+## 连续值低频兜底刷新
+var _refresh_timer: Timer = null
+
+## 连续值刷新周期（秒）：冷却/坐标等连续量人眼 5Hz 足够
+const CONTINUOUS_REFRESH_SEC := 0.2
 
 
 # ─────────────────────────────── 装配 ────────────────────────────────
@@ -37,16 +54,29 @@ func _build_ui() -> void:
 	# 清空占位子节点
 	for child in get_children():
 		child.queue_free()
+	# 底栏质感（HUD 部件标准：条状部件 = PanelContainer + window_panel_light，
+	# 与顶栏/资源条同黑玻璃质感，不用裸背景）
+	var bar := PanelContainer.new()
+	bar.name = "Bar"
+	bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	bar.grow_vertical = Control.GROW_DIRECTION_BOTH
+	bar.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	add_child(bar)
+	var margin := MarginContainer.new()
+	margin.name = "Margin"
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	bar.add_child(margin)
+
 	# 根容器：水平布局
 	var hbox := HBoxContainer.new()
 	hbox.name = "HBox"
-	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hbox.add_theme_constant_override("separation", 16)
-	hbox.offset_left = 8
-	hbox.offset_top = 4
-	hbox.offset_right = -8
-	hbox.offset_bottom = -4
-	add_child(hbox)
+	margin.add_child(hbox)
 
 	# ── 单位信息 ──
 	var info_section := StickKit.section(hbox, "附身单位")
@@ -64,6 +94,14 @@ func _build_ui() -> void:
 	action_section.add_child(action_hbox)
 	_release_btn = StickKit.sketch_button(action_hbox, "退出附身 (ESC)", _on_release_pressed)
 
+	# 连续值低频兜底（默认停，附身开始才起表）
+	_refresh_timer = Timer.new()
+	_refresh_timer.name = "ContinuousRefresh"
+	_refresh_timer.wait_time = CONTINUOUS_REFRESH_SEC
+	_refresh_timer.autostart = false
+	_refresh_timer.timeout.connect(_refresh_info)
+	add_child(_refresh_timer)
+
 
 # ─────────────────────────────── 信号连接 ────────────────────────────────
 
@@ -78,30 +116,66 @@ func _connect_signals() -> void:
 # ─────────────────────────────── 信号回调 ────────────────────────────────
 
 func _on_possession_started(_entity) -> void:
+	_bind_entity_signals()
 	_refresh_info()
+	_refresh_timer.start()
 
 
 func _on_possession_ended(_entity) -> void:
+	_unbind_entity_signals()
+	_refresh_timer.stop()
 	_info_label.text = "未附身"
+
+
+## 订阅当前附身实体的离散属性信号（HP/士气变化即刷，不等兜底节拍）
+func _bind_entity_signals() -> void:
+	_unbind_entity_signals()
+	var entity: Node2D = _current_entity()
+	if entity == null:
+		return
+	var health: Node = entity.get_health() if entity.has_method("get_health") else null
+	if health == null:
+		return
+	_bound_health = health
+	for sig_name in ["damaged", "healed", "morale_changed"]:
+		if health.has_signal(sig_name):
+			var cb := Callable(self, "_on_health_changed")
+			if health.connect(sig_name, cb) == OK:
+				_health_binds.append([sig_name, cb])
+
+
+func _unbind_entity_signals() -> void:
+	if _bound_health != null and is_instance_valid(_bound_health):
+		for entry in _health_binds:
+			var sig_name: String = entry[0]
+			var cb: Callable = entry[1]
+			if _bound_health.has_signal(sig_name) and _bound_health.is_connected(sig_name, cb):
+				_bound_health.disconnect(sig_name, cb)
+	_health_binds.clear()
+	_bound_health = null
+
+
+func _on_health_changed(_a = null, _b = null, _c = null) -> void:
+	_refresh_info()
+
+
+## 当前附身实体（含失效防护；不在附身态返回 null）
+func _current_entity() -> Node2D:
+	if _possession == null or not _possession.has_method("get_possessed_entity"):
+		return null
+	var entity: Node2D = _possession.get_possessed_entity()
+	if entity == null or not is_instance_valid(entity):
+		return null
+	return entity
 
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
 
-func _process(_delta: float) -> void:
-	# 面板不可见（未附身/面板隐藏）时不做每帧字符串重建
-	if not is_visible_in_tree():
-		return
-	_refresh_info()
-
-
 func _refresh_info() -> void:
-	if _info_label == null:
+	if _info_label == null or not is_visible_in_tree():
 		return
-	if _possession == null:
-		_info_label.text = "未附身"
-		return
-	var entity: Node2D = _possession.get_possessed_entity()
-	if entity == null or not is_instance_valid(entity):
+	var entity: Node2D = _current_entity()
+	if entity == null:
 		_info_label.text = "未附身"
 		return
 	# 收集单位信息

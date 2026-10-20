@@ -1,10 +1,9 @@
 extends SketchPanel
-## Demo 阶段目标卡 —— 左上角常驻小卡：当前目标 + 进度 + 已完成列表。
+## 阶段目标卡 —— 左上角常驻小卡：当前目标 + 进度 + 已完成列表。
 ##
-## 纯被动显示部件：由 DemoQuest（装配逻辑组件）调用 show_quest / mark_done 驱动，
-## 自身不监听任何业务信号。定位归 zone：由装配层经 UIRoot.place_in_zone 钉进
-## top_left_stack 堆叠区（资源条下方；未来多任务线扩展 = 多挂几张卡，见
-## hud_zone_layout.gd），本部件只声明体量。
+## 纯被动显示部件：由装配层经 show_quest / mark_done 驱动，自身不监听任何
+## 业务信号（演示目标链已根除，现无喂给方、未挂载；复用时经 UIRoot.place_in_zone
+## 钉进 top_left_stack 堆叠区，本部件只声明体量，见 hud_zone_layout.gd）。
 
 var _current_title: Label
 var _current_desc: Label
@@ -40,23 +39,23 @@ func _ready() -> void:
 	_title_label = Label.new()
 	_title_label.text = "阶段目标"
 	_title_label.add_theme_font_size_override("font_size", StickTokens.FONT_HUD)
-	_title_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.45))
+	_title_label.add_theme_color_override("font_color", StickTokens.ACCENT)
 	title_row.add_child(_title_label)
 
 	_current_title = Label.new()
 	_current_title.add_theme_font_size_override("font_size", StickTokens.FONT_BODY)
-	_current_title.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
+	_current_title.add_theme_color_override("font_color", StickTokens.TEXT)
 	box.add_child(_current_title)
 
 	_current_desc = Label.new()
 	_current_desc.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
-	_current_desc.add_theme_color_override("font_color", Color(0.72, 0.75, 0.8))
+	_current_desc.add_theme_color_override("font_color", StickTokens.TEXT_DIM)
 	_current_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_current_desc)
 
 	_progress_label = Label.new()
 	_progress_label.add_theme_font_size_override("font_size", StickTokens.FONT_SECTION)
-	_progress_label.add_theme_color_override("font_color", Color(0.55, 0.85, 0.6))
+	_progress_label.add_theme_color_override("font_color", StickTokens.SUCCESS)
 	box.add_child(_progress_label)
 
 	_done_box = VBoxContainer.new()
@@ -82,7 +81,7 @@ func mark_done(title: String) -> void:
 	var done := Label.new()
 	done.text = "✓ %s" % title
 	done.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
-	done.add_theme_color_override("font_color", Color(0.45, 0.75, 0.5))
+	done.add_theme_color_override("font_color", StickTokens.SUCCESS)
 	_done_box.add_child(done)
 
 

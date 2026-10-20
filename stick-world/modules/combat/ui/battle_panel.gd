@@ -10,6 +10,7 @@ extends Control
 ##
 ## 由 GameRoot 在 _ready 中 set_script 装配，随后调用 setup(game_root)。
 ## 信号驱动更新：selection_changed / squad_created / squad_disbanded。
+## 底栏质感：PanelContainer + StickStyle.window_panel_light（HUD 部件标准）。
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
@@ -48,16 +49,29 @@ func _build_ui() -> void:
 	# 清空占位子节点
 	for child in get_children():
 		child.queue_free()
+	# 底栏质感（HUD 部件标准：条状部件 = PanelContainer + window_panel_light，
+	# 与顶栏/资源条同黑玻璃质感，不用裸背景）
+	var bar := PanelContainer.new()
+	bar.name = "Bar"
+	bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	bar.grow_vertical = Control.GROW_DIRECTION_BOTH
+	bar.add_theme_stylebox_override("panel", StickStyle.window_panel_light())
+	add_child(bar)
+	var margin := MarginContainer.new()
+	margin.name = "Margin"
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	bar.add_child(margin)
+
 	# 根容器：水平布局，填满面板
 	var hbox := HBoxContainer.new()
 	hbox.name = "HBox"
-	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hbox.add_theme_constant_override("separation", 16)
-	hbox.offset_left = 8
-	hbox.offset_top = 4
-	hbox.offset_right = -8
-	hbox.offset_bottom = -4
-	add_child(hbox)
+	margin.add_child(hbox)
 
 	# ── 1. 框选信息 ──
 	var sel_section := StickKit.section(hbox, "框选")

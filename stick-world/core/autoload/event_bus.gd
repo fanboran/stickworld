@@ -61,8 +61,6 @@ extends Node
 @warning_ignore("unused_signal") signal heal_cast(battle_id: String, caster_id: int, target_id: int, anim_name: String)
 
 # ─────────────────────────────── Demo 引导（演示冲刺）────────────────────────────────
-# 阶段目标推进：DemoQuest -> UI（建造按钮强调等注意力引导）
-@warning_ignore("unused_signal") signal quest_advanced(quest_id: String)
 
 # ─────────────────────────────── 战斗编队（§14.4）────────────────────────────────
 # 框选/选择变化：SelectionSystem -> UI

@@ -21,10 +21,19 @@ enum Layer {
 	EMPIRE_PANEL,  ## 3 功能大界面空面板（K/O/J/L，同类单例，替换不叠加）
 	INVENTORY,     ## 4 背包（E 键；确认框需盖在其上）
 	CONTAINER,     ## 5 容器交互（翻包/村仓——同类单例，开新容器替换旧）
-	CONFIRM,       ## 6 最顶：确认框（SystemOverlay，ESC = 取消）
+	STRATEGIC_MAP, ## 6 战略图三视图（L1/L2/L3 互斥同键；活层 + 自带 ESC 下钻语义）
+	CONFIRM,       ## 7 确认框（SystemOverlay，ESC = 取消）
+	WORLD_LOAD,    ## 8 最顶：载入屏（强模态——屏蔽 ESC，加载完成自动退栈）
 }
 ## 无层
 const NONE := -1
+
+## 强模态层（弹窗与模态 §一「强/弱两级」）：屏蔽 ESC——不可退栈、ESC 也不落
+## 暂停菜单。载入屏在此；新游戏向导建成时并入本表。
+const STRONG_LAYERS: Array[int] = [Layer.WORLD_LOAD]
+## 活层（入栈不接管时间）：战略图是世界活视图、开图不冻结模拟；载入屏的
+## 时间流由启动/旅行序列自管。暂停簿记只随非活层走（见 _pause_if_needed）。
+const LIVE_LAYERS: Array[int] = [Layer.STRATEGIC_MAP, Layer.WORLD_LOAD]
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 ## 层键 → 激活对象（每层同时只挂一个 ActiveObject）
@@ -39,11 +48,13 @@ var _prev_speed: int = -1
 # ─────────────────────────────── 压栈 ────────────────────────────────
 
 ## 把模态压入指定层。同一实例重复 push = 提到栈顶；同层被不同实例占用 = 替换（同类单例）。
-func push(screen: Control, layer: int) -> void:
+## screen 收 CanvasItem：模态面板是 Control，战略图三视图控制器是 Node2D（各自
+## CanvasLayer 下，不经 ModalOverlay），栈只做显隐/层序簿记，不限定载体类型。
+func push(screen: CanvasItem, layer: int) -> void:
 	if screen == null:
 		return
 	if layers.has(layer) and is_instance_valid(layers[layer]):
-		var existing: Control = layers[layer]
+		var existing: CanvasItem = layers[layer]
 		if existing == screen:
 			raise_to_top(layer)
 		else:
@@ -53,7 +64,7 @@ func push(screen: Control, layer: int) -> void:
 
 
 ## 同层不同实例：先退旧再压新（不 reveal/restore，避免同帧闪烁）
-func _replace_existing(layer: int, existing: Control, screen: Control) -> void:
+func _replace_existing(layer: int, existing: CanvasItem, screen: CanvasItem) -> void:
 	_untrack(existing)
 	_covered.erase(existing)
 	layers.erase(layer)
@@ -64,13 +75,15 @@ func _replace_existing(layer: int, existing: Control, screen: Control) -> void:
 	_push_new(screen, layer)
 
 
-func _push_new(screen: Control, layer: int) -> void:
+func _push_new(screen: CanvasItem, layer: int) -> void:
 	_cover_layers_below(layer)
 	layers[layer] = screen
 	_track(screen)
 	_raise_in_parent(screen)
-	_pause_if_needed()
-	if screen.has_method("open"):
+	_pause_if_needed(layer)
+	if screen.visible:
+		pass  # 已在展示中（如战略图先 open 后入栈）：不重复触发 open
+	elif screen.has_method("open"):
 		screen.open()
 	else:
 		screen.show()
@@ -80,7 +93,7 @@ func _push_new(screen: Control, layer: int) -> void:
 func _cover_layers_below(layer: int) -> void:
 	for key in layers.keys():
 		if int(key) < layer:
-			var s: Control = layers[key]
+			var s: CanvasItem = layers[key]
 			_covered[s] = true
 			s.hide()
 
@@ -100,7 +113,7 @@ func raise_to_top(layer: int) -> void:
 	while t > layer:
 		pop(t)
 		t = top_layer()
-	var s: Control = layers.get(layer) as Control
+	var s: CanvasItem = layers.get(layer)
 	if s != null and _covered.has(s):
 		_covered.erase(s)
 		s.show()
@@ -113,7 +126,7 @@ func raise_to_top(layer: int) -> void:
 func pop(layer: int) -> void:
 	if not layers.has(layer):
 		return
-	var screen: Control = layers[layer]
+	var screen: CanvasItem = layers[layer]
 	_untrack(screen)
 	_covered.erase(screen)
 	layers.erase(layer)
@@ -145,17 +158,26 @@ func _reveal_top() -> void:
 	var t := top_layer()
 	if t == NONE:
 		return
-	var s: Control = layers.get(t) as Control
+	var s: CanvasItem = layers.get(t)
 	if s != null and _covered.has(s):
 		_covered.erase(s)
 		s.show()
 
 
-## ESC 统一退栈：有模态 → pop 栈顶并消费；无模态 → 返回 false（调用方决定开暂停菜单）
+## ESC 统一退栈，三级语义（弹窗与模态 §一「强/弱两级」+ 战略图自带下钻）：
+##   强模态 → 屏蔽（消费但不退栈，ESC 也不落暂停菜单）；
+##   顶层自带 handle_escape 语义（战略图：旅行弹窗→下钻返回→关图）→ 委托之；
+##   其余弱模态 → pop 栈顶。无模态 → false（调用方决定开暂停菜单）。
 func handle_escape() -> bool:
 	if not is_any_open():
 		return false
-	pop(top_layer())
+	var t := top_layer()
+	if STRONG_LAYERS.has(t):
+		return true
+	var s: CanvasItem = layers.get(t)
+	if s != null and s.has_method("handle_escape") and s.handle_escape():
+		return true
+	pop(t)
 	return true
 
 
@@ -165,7 +187,7 @@ func handle_escape() -> bool:
 func top_layer() -> int:
 	var top := NONE
 	for key in layers.keys():
-		var s: Control = layers[key]
+		var s: CanvasItem = layers[key]
 		if not is_instance_valid(s):
 			_untrack(s)
 			layers.erase(key)
@@ -177,12 +199,12 @@ func top_layer() -> int:
 	return top
 
 
-## 当前栈顶对象（无则 null）
-func top() -> Control:
+## 当前栈顶对象（无则 null）。返回 CanvasItem（模态面板 Control / 战略图 Node2D）。
+func top() -> CanvasItem:
 	var t := top_layer()
 	if t == NONE:
 		return null
-	return layers.get(t) as Control
+	return layers.get(t)
 
 
 func is_any_open() -> bool:
@@ -202,10 +224,11 @@ func get_entry(layer: int) -> Control:
 
 # ─────────────────────────────── 输入屏蔽：暂停随栈 ────────────────────────────────
 
-## 首个模态入栈时暂停（记原速度）；栈空时恢复原速度。与 StickScreen 自身暂停
-## 兼容：面板 open() 时发现已暂停则不再记录，恢复只由最外层负责。
-func _pause_if_needed() -> void:
-	if TimeManager == null or _prev_speed >= 0:
+## 首个**非活层**入栈时暂停（记原速度）；栈内无非活层时恢复原速度。活层
+## （战略图/载入屏，见 LIVE_LAYERS）不接管时间——开图不冻结模拟。与
+## StickScreen 自身暂停兼容：面板 open() 时发现已暂停则不再记录，恢复只由最外层负责。
+func _pause_if_needed(layer: int) -> void:
+	if LIVE_LAYERS.has(layer) or TimeManager == null or _prev_speed >= 0:
 		return
 	if TimeManager.is_paused():
 		_prev_speed = -1
@@ -215,24 +238,34 @@ func _pause_if_needed() -> void:
 
 
 func _restore_if_empty() -> void:
-	if not layers.is_empty() or _prev_speed < 0:
+	if _has_pausing_layer() or _prev_speed < 0:
 		return
 	if TimeManager != null and TimeManager.is_paused():
 		TimeManager.set_speed(_prev_speed)
 	_prev_speed = -1
 
 
+## 栈内是否还有接管时间的层（恢复判定按"非活层清空"，而非栈清空——
+## 活层盖在暂停层上再退掉时，暂停层仍在栈里，速度不该被提前恢复）
+func _has_pausing_layer() -> bool:
+	for key in layers.keys():
+		if not LIVE_LAYERS.has(int(key)):
+			return true
+	return false
+
+
 # ─────────────────────────────── 可见性同步 ────────────────────────────────
 
 ## 面板自身按钮 close（如设置"关闭"）→ visible=false → 本栈同步退栈，
-## 保证栈状态与真实可见性一致（被栈盖住的层除外）。
-func _track(screen: Control) -> void:
+## 保证栈状态与真实可见性一致（被栈盖住的层除外）。战略图三视图经同一机制
+## 自动退栈（关闭/下钻都走 visible=false）。
+func _track(screen: CanvasItem) -> void:
 	var cb := _on_screen_visibility_changed.bind(screen)
 	_visibility_cbs[screen] = cb
 	screen.visibility_changed.connect(cb)
 
 
-func _untrack(screen: Control) -> void:
+func _untrack(screen: CanvasItem) -> void:
 	if _visibility_cbs.has(screen):
 		var cb: Callable = _visibility_cbs[screen]
 		if screen.visibility_changed.is_connected(cb):
@@ -240,14 +273,14 @@ func _untrack(screen: Control) -> void:
 		_visibility_cbs.erase(screen)
 
 
-func _on_screen_visibility_changed(screen: Control) -> void:
+func _on_screen_visibility_changed(screen: CanvasItem) -> void:
 	if _covered.has(screen):
 		return  # 栈主动盖住（仍在栈中）
 	if not screen.visible:
 		_unregister(screen)
 
 
-func _unregister(screen: Control) -> void:
+func _unregister(screen: CanvasItem) -> void:
 	var layer := _find_layer(screen)
 	if layer == NONE:
 		return
@@ -258,7 +291,7 @@ func _unregister(screen: Control) -> void:
 	_restore_if_empty()
 
 
-func _find_layer(screen: Control) -> int:
+func _find_layer(screen: CanvasItem) -> int:
 	for key in layers.keys():
 		if layers[key] == screen:
 			return int(key)

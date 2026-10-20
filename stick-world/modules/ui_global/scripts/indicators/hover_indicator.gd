@@ -7,6 +7,12 @@ extends Control
 ## 2D 图恒等。鼠标屏幕点经 viewport canvas_transform 逆变换进视觉域，
 ## 不手搓相机公式（协议铁律见 MapBase 视觉域坐标协议段）。
 ##
+## 事件驱动（悬停检测已移出 _process）：鼠标移动（_unhandled_input，GUI 未消费
+## 的移动才触发——光标在 UI 上时不做世界悬停）按 0.1s 节流触发扫描；空闲时
+## set_process(false) 零轮询。悬停期间恢复 _process：呼吸动画逐帧 + 0.1s 复扫
+## （鼠标静止时实体会走出光标，靠复扫清框）。已知取舍：暂停解除后光标不动
+## 则悬停框不重现（TimeManager 无变速信号可钩），动一下鼠标即恢复。
+##
 ## 依赖由 SystemSetup 装配时 setup() 注入，不自行查找。
 
 const FRAME_COLOR: Color = Color(1.0, 1.0, 1.0, 0.9)
@@ -14,12 +20,16 @@ const BREATH_AMP: float = 3.0
 const BREATH_SPEED: float = 3.0
 const CORNER_LEN: float = 10.0
 const CORNER_WIDTH: float = 2.0
+## 扫描节流间隔（秒）：移动事件合并扫描 / 悬停复扫同节拍
+const SCAN_INTERVAL_MSEC := 100
 
 var _hovered_entity: Node2D = null
 var _hovered_range: CollisionShape2D = null
-## 悬停扫描节流：全实体命中扫描 10Hz 足够（悬停框呼吸仍逐帧重绘）
+## 悬停复扫节拍累计（悬停期间 _process 内）
 var _scan_acc: float = 0.0
 var _breath_time: float = 0.0
+## 上次扫描时刻（msec，移动事件节流）
+var _last_scan_msec: int = -SCAN_INTERVAL_MSEC
 
 var _game_root: Node = null
 
@@ -34,28 +44,64 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	size = get_viewport_rect().size
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_process(false)
+	if get_viewport() != null:
+		get_viewport().size_changed.connect(_on_viewport_resized)
+
+
+func _on_viewport_resized() -> void:
+	size = get_viewport_rect().size
+	queue_redraw()
+
+
+## 鼠标移动驱动扫描（GUI 消费过的移动不触发——光标悬在界面控件上时不做世界
+## 悬停）；0.1s 节流合并高频移动事件
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseMotion):
+		return
+	var now := Time.get_ticks_msec()
+	if now - _last_scan_msec < SCAN_INTERVAL_MSEC:
+		return
+	_last_scan_msec = now
+	if TimeManager and TimeManager.is_paused():
+		_set_hovered(null, null)
+		return
+	_update_hovered()
+	_after_scan()
 
 
 func _process(delta: float) -> void:
 	_breath_time += delta
-	size = get_viewport_rect().size
 	# 模态/暂停时（时间冻结）不显示悬停反馈，避免反馈漏过遮罩层；
-	# 仅在「原悬停框还在屏上」时补一次清屏重绘，暂停期不再每帧重绘
+	# 清屏重绘一次后即停.process（恢复需再动鼠标）
 	if TimeManager and TimeManager.is_paused():
 		if _hovered_entity != null:
-			_hovered_entity = null
-			_hovered_range = null
-			queue_redraw()
+			_set_hovered(null, null)
+		else:
+			set_process(false)
 		return
-	# 仅悬停中（呼吸动画需逐帧）或目标刚变化（清旧框/画新框）时重绘；
-	# 全实体扫描降到 10Hz——无悬停的绝大多数帧零重绘、扫描也按节拍走
-	var prev: Node2D = _hovered_entity
+	# 悬停复扫：鼠标静止、实体走出光标时清框（画与判定共用矩形，框会跟人走）
 	_scan_acc += delta
-	if _scan_acc >= 0.1:
+	if _scan_acc >= SCAN_INTERVAL_MSEC / 1000.0:
 		_scan_acc = 0.0
+		var prev: Node2D = _hovered_entity
 		_update_hovered()
-	if _hovered_entity != null or prev != null:
-		queue_redraw()
+		if _hovered_entity != prev:
+			_after_scan()
+			return
+	queue_redraw()
+
+
+## 扫描后同步：目标变化才重绘；有悬停才需要 _process（呼吸），空闲即停
+func _after_scan() -> void:
+	set_process(_hovered_entity != null)
+	queue_redraw()
+
+
+func _set_hovered(entity: Node2D, rng: CollisionShape2D) -> void:
+	_hovered_entity = entity
+	_hovered_range = rng
+	_after_scan()
 
 
 func _draw() -> void:

@@ -144,7 +144,7 @@ func _ready() -> void:
 	_runner.add_test("W1 观测信号: phase_changed / roles_reassigned（§2.6 接口缺口）", _test_w1_signals)
 	_runner.add_test("相位切换: 末跳（跃进线=终点）全员到位后计划完成", _test_final_leg_done)
 	_runner.add_test("接敌反应: 背敌成员 → seek_cover（既有行为接入）", _test_back_enemy_cover)
-	_runner.add_test("接敌反应: 被瞄准（被压制代理）成员 → seek_cover", _test_suppressed_cover)
+	_runner.add_test("接敌反应: 被瞄准成员 → seek_cover（轻量感知反应）", _test_arrow_threat_cover)
 	_runner.add_test("守卫: 士气行为/玩家号令/接战成员不被相位号令打断", _test_guards)
 	_runner.add_test("零回归: 关态无计划；开态号令建/撤计划（GK-4 生产默认开）", _test_default_off)
 	_runner.add_test("触发: 组织号令通知整编制入计划", _test_org_notify)
@@ -395,13 +395,13 @@ func _test_back_enemy_cover() -> void:
 	_runner.assert_equal(units[0].ai.orders_for("move"), 0, "找掩体成员不应同时收到跃进号令")
 
 
-func _test_suppressed_cover() -> void:
+func _test_arrow_threat_cover() -> void:
 	var w: Dictionary = _make_world(2)
 	var fs: Node = w["fs"]
 	var units: Array = w["units"]
 	var sid: String = w["sid"]
 	_enable(fs)
-	# 被压制代理：u0 刚被瞄准（arrow_threat_time 新鲜）、u1 无登记 → 只 u0 找掩体
+	# 瞄准登记代理：u0 刚被瞄准（arrow_threat_time 新鲜）、u1 无登记 → 只 u0 找掩体
 	units[0].arrow_threat_time = Time.get_ticks_msec() / 1000.0 - 1.0
 	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
 	fs._tick_phase_plans(0.5)

@@ -54,8 +54,8 @@ func _run() -> void:
 		_fail("测试编队创建失败")
 		return _finish()
 	_helper.formation.assign_leader(_squad_id, _helper.units[0])
-	# 两个成员压成异常态：一名被压制（黄）、一名士气见底（红条）
-	_apply_member_state(_helper.units[1], "suppressed")
+	# 两个成员压成异常态：一名眩晕、一名士气见底（红条）
+	_apply_member_state(_helper.units[1], "stunned")
 	_apply_member_state(_helper.units[2], "low_morale")
 	# A5 相位计划（缺省关闭；验收显式开启）→ 前进号令激活计划
 	_helper.formation.set_phase_plan_params({"phase_plan_enabled": true})
@@ -132,16 +132,16 @@ func _wait_world_ready() -> void:
 		await get_tree().process_frame
 
 ## 施加异常单兵态（验收用；全走既有公开 API）：
-##   suppressed → StatusEffects.apply(SUPPRESSED)；low_morale → HealthComponent.set_morale
+##   stunned → StatusEffects.apply(STUN)；low_morale → HealthComponent.set_morale
 func _apply_member_state(u: Node, kind: String) -> void:
 	if u == null or not is_instance_valid(u):
 		return
 	match kind:
-		"suppressed":
+		"stunned":
 			if u.has_method("get_status_effects"):
 				var se: Node = u.get_status_effects()
 				if se != null and se.has_method("apply"):
-					se.apply(5, 60.0)  # StatusEffects.Type.SUPPRESSED = 5
+					se.apply(3, 60.0)  # StatusEffects.Type.STUN = 3
 		"low_morale":
 			if u.has_method("get_health"):
 				var h: Node = u.get_health()

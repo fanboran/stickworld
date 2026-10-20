@@ -23,7 +23,7 @@ extends PanelContainer
 ##   角色/相位 → squad_phase_plan 经宿主私有表 duck 取用（debug_info_panel.gd 先例），
 ##        刷新走 phase_changed / roles_reassigned 两信号（A5/W1 已补，不逐帧轮询）；
 ##   士气/单兵状态 → 单位侧只读口 get_health().get_morale_ratio()/AIController.is_disengaging()、
-##        get_status_effects().has_suppressed()/has_effect(HEAL|STUN)；组件缺失跳过；
+##        get_status_effects().has_effect(HEAL|STUN)；组件缺失跳过；
 ##   组织态 FORMING 招兵位 → organization_api.get_organization().state；
 ##   号令 → EventBus.order_issued（瞬时事件：换绑小队即清空，无存量查询口——见交接遗留）。
 ## 例外：士气流/权威值等缓变值走 POLL_INTERVAL 低频节拍（team_ai_hud 同惯例），
@@ -63,8 +63,8 @@ const ORDER_NAMES: Dictionary = {
 ## 玩家直令档位（order_issued.source_tier：0 = 玩家现场指挥；>0 = 经编制逐层接力）
 const ORDER_TIER_PLAYER: int = 0
 
-## 单兵状态效果类型（镜像 StatusEffects.Type：BURN0 POISON1 SLOW2 STUN3 HEAL4
-## SUPPRESSED5——压制走 has_suppressed 方法口，此处只需持续回复与眩晕两项）
+## 单兵状态效果类型（镜像 StatusEffects.Type：BURN0 POISON1 SLOW2 STUN3 HEAL4；
+## 此处只需持续回复与眩晕两项）
 const EFFECT_STUN: int = 3
 const EFFECT_HEAL: int = 4
 

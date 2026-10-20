@@ -49,6 +49,9 @@ func _ready() -> void:
 	var canvas := get_parent() as CanvasLayer
 	if canvas != null:
 		canvas.layer = LayerOrder.STRATEGIC_L3
+	# 并入统一模态栈（活层 STRATEGIC_MAP，三视图互斥同键；可见即入栈，
+	# 隐藏经栈的可见性同步自动退栈）
+	visibility_changed.connect(_on_modal_visibility_changed)
 	# 渲染器悬停检测需要相机做屏幕->地图坐标换算
 	if map_renderer != null and map_renderer.has_method("set_camera"):
 		map_renderer.set_camera(map_camera)
@@ -66,6 +69,15 @@ func _ready() -> void:
 func _on_l1_opened() -> void:
 	if visible or (l2_view != null and l2_view.visible):
 		close()
+
+
+## 可见即并入模态栈 STRATEGIC_MAP 层（三视图互斥同键：先隐藏者先经可见性同步退栈）
+func _on_modal_visibility_changed() -> void:
+	if not visible:
+		return
+	var stack := UIModalStack.find(self)
+	if stack != null and not stack.is_open(UIModalStack.Layer.STRATEGIC_MAP):
+		stack.push(self, UIModalStack.Layer.STRATEGIC_MAP)
 
 
 ## 注入 L2 下钻视图（由 SystemSetup 装配时调用，晚于 _ready）

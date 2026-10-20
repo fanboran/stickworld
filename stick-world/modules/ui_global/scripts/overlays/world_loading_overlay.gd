@@ -166,11 +166,17 @@ func set_sub_progress(ratio: float) -> void:
 	_sub_fill.size.x = SUB_BAR_WIDTH * clampf(ratio, 0.0, 1.0)
 
 
-## 世界就绪后淡出（幂等）
+## 世界就绪后淡出（幂等）。**同步**退出模态栈 WORLD_LOAD 强模态层——强模态屏蔽
+## ESC，滞留栈上会把加载期之后的所有 ESC 吞掉（弹窗与模态 §一：载入屏"加载完成
+## 自动退栈"的落地口）。退栈不等 0.35s 淡出（栈只是簿记，层是 LIVE 不涉暂停
+## 恢复；淡出纯视觉照常播）。
 func hide_loading() -> void:
 	if not _shown:
 		return
 	_shown = false
+	var stack := UIModalStack.find(self)
+	if stack != null and stack.is_open(UIModalStack.Layer.WORLD_LOAD):
+		stack.pop(UIModalStack.Layer.WORLD_LOAD)
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.35)
 	tween.tween_callback(func():

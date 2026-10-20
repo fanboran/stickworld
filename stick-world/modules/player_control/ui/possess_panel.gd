@@ -171,6 +171,14 @@ func _current_entity() -> Node2D:
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
 
+## 隐藏期跳过刷新（不可见刷了也看不见）；补「显示即刷」：possession_started
+## 信号先于 ModePanel 面板切换到达时，信号当拍的刷新会被隐藏守卫吞掉——
+## 不补这一笔，首屏信息停在"未附身"直到 0.2s 兜底节拍。
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and is_visible_in_tree():
+		_refresh_info()
+
+
 func _refresh_info() -> void:
 	if _info_label == null or not is_visible_in_tree():
 		return

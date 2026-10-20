@@ -42,6 +42,13 @@ func start(host: Node) -> void:
 	# 战斗测试需要空旷初始图（启动直连后默认开局图是 HD-2D 主街布景）
 	game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场开机（旧 2D 演练场已随旧 2D 图清退删除）
 	host.add_child(game_root)
+	# 等 boot 完成（_boot_world_phase 翻 false＝地图就绪、加载覆盖已淡出）再跑断言：
+	# 载入屏在模态栈语义下是强模态（屏蔽 ESC/不接管时间），boot 未完就断言会被吞。
+	# 上限 600 帧防挂（headless 下 bake 已短路，正常数十帧内就绪）。
+	for i in 600:
+		if game_root.get("_boot_world_phase") == false:
+			break
+		await host.get_tree().process_frame
 	# 等待地图加载和实体生成
 	for i in 8:
 		await host.get_tree().process_frame

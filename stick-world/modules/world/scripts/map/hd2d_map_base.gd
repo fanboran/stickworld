@@ -700,6 +700,11 @@ func get_minimap_base() -> Dictionary:
 ## 烘焙失败返回空且**保旧图**（有旧图时换图原子性：要么新图要么旧图）。
 ## 返回烘焙结果（同 hd2d_world.bake_minimap_strip），缓存在 _minimap_base 供取用。
 func bake_minimap_base(target_w: int, target_h: int) -> Dictionary:
+	# headless 无渲染服务器：烘焙内部 await frame_post_draw 永不发射（与
+	# game_root._yield_frame 的短路口径同源）——返回空走小地图平面图兜底，
+	# 否则 _on_map_loaded 协程在此悬死、世界就绪链（加载覆盖淡出等）全部不到。
+	if DisplayServer.get_name() == "headless":
+		return {}
 	if _hd == null or not _hd.has_method("bake_minimap_strip"):
 		return {}
 	_minimap_bake_size = Vector2i(target_w, target_h)

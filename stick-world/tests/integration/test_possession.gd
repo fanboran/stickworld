@@ -278,6 +278,11 @@ func _test_player_attack() -> void:
 	if target_health == null:
 		_runner.assert_true(false, "目标无 HealthComponent")
 		return
+	# 主控伤害 ×2（SWL userControlledDamageMultiplier 真值）后 3 击不再保证
+	# 存活——抬满血防死亡影响后续 possess_api 用例（伤害验证只看 hp 变化）
+	var max_hp: float = maxf(float(target_health.get("max_hp")), 400.0)
+	target_health.set("max_hp", max_hp)
+	target_health.set("hp", max_hp)
 	var hp_before: float = target_health.hp
 	# 执行攻击（3 次即可验证伤害，避免杀死目标影响后续 possess_api 测试）
 	for i in 3:

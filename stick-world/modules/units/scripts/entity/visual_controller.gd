@@ -105,6 +105,23 @@ func _physics_tick(_delta: float) -> void:
 	_mirror_base_anim = ""
 	if not base.is_empty():
 		_on_rig_anim_finished(base)
+	else:
+		# A2（审计 2026-10-14）：无 base 插播（受击）结束后回 locomotion——
+		# 旧实现直接跳过回切，镜像冻在受击末帧、_current_anim 停在插播前的
+		# attack（is_attack_anim_active 恒真 → 锁足定身 + feed/mirror 状态
+		# 错配 = 幻影第二刀）。受击打断攻击是 SWL 语义（被打即断招），回
+		# 移动态不续攻击
+		_recut_locomotion()
+
+
+## 受击等插播收尾的移动回切（A2）：镜像与状态机同步回 walk/idle。
+func _recut_locomotion() -> void:
+	if _entity == null or _entity._action_locked:
+		return
+	if _entity._current_speed > IDLE_THRESHOLD:
+		play("walk")
+	else:
+		play("idle")
 
 
 ## 启动 billboard 单次动画软件计时（仅无 rig 链；有 rig 时 rig 信号是触发源，
@@ -169,9 +186,11 @@ func play(anim_name: String) -> void:
 	# （实体在 HD-2D 图上没有 2D 骨架），必须无条件推进；rig 播放放最后（可缺）
 	# 死亡终态门禁（2026-08-31 审计 P0-1）：dead 是 ANY→dead 的终态，
 	# 死后一切 walk/idle/attack 请求一律拒绝——防移动减速逻辑把死亡动画
-	# 在 0.25s 内覆盖成"尸体站起来"
+	# 在 0.25s 内覆盖成"尸体站起来"。A1 修正（审计 2026-10-14）：口径与
+	# rig 侧（begins_with("dead")）对齐——旧精确名匹配把变体池拦在门外
+	#（普通死池 50%、爆头池 87.5% 被拦 = "站着死"地上无躺尸的主因）
 	if _entity.has_method("is_dead") and _entity.is_dead() \
-			and anim_name != "dead" and anim_name != "dead_headshot":
+			and not anim_name.begins_with("dead"):
 		return
 	# 动作锁定时保持当前动作动画（如 build），不切走
 	if _entity._action_locked:
@@ -429,6 +448,10 @@ func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking:
 		# 计时长度按变体实际时长。闪白脉冲（feed 边沿消费触发镜像闪白）
 		var chosen: String = Anims.pick_hit_anim(from_front, big, head, blocking)
 		var state: String = "hit_front" if from_front else "hit_back"
+		# A2：_current_anim 同步推进到受击态（单一真相源）——插播期间
+		# is_attack_anim_active 读到 false = 攻击被打断（SWL 语义），锁足
+		# 随之释放；不再停在 "attack" 让镜像与实体状态错配（幻影第二刀源）
+		_entity._current_anim = state
 		_mirror_seq += 1
 		_start_oneshot_mirror(state, "", chosen if chosen != state else "", chosen)
 		return

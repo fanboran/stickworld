@@ -1190,17 +1190,12 @@ func _on_died() -> void:
 		if _battle_instance.has_method("on_unit_died"):
 			_battle_instance.on_unit_died(self)
 	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
-	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")
-	var stay: float = 5.0
-	if not possessed and _generate_loot_container():
-		stay = 12.0  # 有遗物的尸体延长保留（翻检窗口；翻空由物理帧快进淡出）
-	# Demo 收敛：尸体滞留后淡出退场（战场清爽不堆尸；附身实体除外——
-	# 玩家视点所在的身体不做异步自毁）
+	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")。
+	# 滞留/淡出由 _physics_process 死亡分支的物理帧计时**唯一驱动**
+	#（A1b：旧 tween 与物理计时双驱动打架——有遗物尸体在 alpha≈0.36 被物理
+	# 路径瞬删跳变；时长真相源归一 4/12s + 1.2s 淡出）
 	if not possessed:
-		var fade := create_tween()
-		fade.tween_interval(stay)
-		fade.tween_property(self, "modulate:a", 0.0, 1.4)
-		fade.tween_callback(queue_free)
+		_generate_loot_container()
 
 
 ## 死亡遗物生成（weapon_type→def 映射 + 盾 + 随机小额消耗品）。

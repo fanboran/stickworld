@@ -2,8 +2,8 @@ extends SketchButton
 ## L1 班组卡 · 成员行（W2 · 组织界面与AI状态接线总体方案 §3.2.A）。
 ##
 ## 一行 = 一名成员（火柴人无名氏，不显示名字——沿用个体一览的定稿口径）：
-##   火柴人图标位 + 职责角色角标（核心/侦察/双翼）+ 士气微型条 + 单兵状态。
-## 四项对应"这班人现在怎么样 / 在干什么"，不做字段堆砌（§3.2.A 信息密度取舍）。
+##   火柴人图标位 + 职责角色角标（核心/侦察/双翼）+ 单兵状态。
+## 三项对应"这班人现在怎么样 / 在干什么"，不做字段堆砌（§3.2.A 信息密度取舍）。
 ##
 ## 交互：整行即选中按钮——行自己只切视觉（选中 = ACCENT 琥珀底，§1.2 强调色
 ## 只用于选中/激活），选中唯一性由卡片持有（点击回调交回卡片裁决）。
@@ -31,13 +31,8 @@ const ROLE_BADGES: Dictionary = {
 	"flank_l": ["左翼", &"lake"],
 }
 
-## 士气色带阈值（足→绿 / 中→黄 / 低→红；语义色只在反馈场景出现，不参与装饰）
-const MORALE_GOOD: float = 0.6
-const MORALE_LOW: float = 0.3
-
 @onready var _icon: TextureRect = $Row/Icon
 @onready var _role: Label = $Row/Role
-@onready var _morale: ProgressBar = $Row/Morale
 @onready var _state: Label = $Row/State
 
 ## 绑定的成员（卡片把"任命班长/移出班组"落到具体单位；行自身不访问）
@@ -50,18 +45,14 @@ func _ready() -> void:
 	# 字号/颜色只从 StickTokens 取（场景不写死视觉 token）
 	_role.add_theme_font_size_override("font_size", StickTokens.FONT_TINY)
 	_state.add_theme_font_size_override("font_size", StickTokens.FONT_TINY)
-	_morale.show_percentage = false
 	set_selected(false)
 
 
 ## 数据注入（卡片按节拍调用；单位实例未变时只更新数值，不重建节点）。
 ## flags = 单兵状态事实字典（FLAG_* 键，缺键 = 未知按无异常处理——取数缺口静默降级）
-func set_data(u: Node, role: String, morale_ratio: float, flags: Dictionary) -> void:
+func set_data(u: Node, role: String, flags: Dictionary) -> void:
 	unit = u
 	_report_role(role)
-	# 士气微型条：value 归一化 + modulate 色带（不手写颜色，只调 token）
-	_morale.value = clampf(morale_ratio, 0.0, 1.0)
-	_morale.modulate = _morale_color(morale_ratio)
 	# 单兵状态：无异常留空
 	var state := _state_text(flags)
 	_state.text = state
@@ -95,14 +86,6 @@ func _state_text(flags: Dictionary) -> String:
 	if bool(flags.get(FLAG_HEALING, false)):
 		return STATE_HEALING
 	return ""
-
-
-func _morale_color(ratio: float) -> Color:
-	if ratio >= MORALE_GOOD:
-		return StickTokens.SUCCESS
-	if ratio >= MORALE_LOW:
-		return StickTokens.WARN
-	return StickTokens.DANGER
 
 
 func _state_color(state: String) -> Color:

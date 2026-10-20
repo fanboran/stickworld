@@ -113,7 +113,7 @@ func _new_org(name: String, tier: int, parent: String) -> String:
 	return String(r.data.org_id) if r.get("ok", false) else ""
 
 
-## 造一棵可看的五层军树：一连（满编、有士气）、二连（群龙无首持续空缺）
+## 造一棵可看的五层军树：一连（满编）、二连（群龙无首持续空缺）
 func _build_army() -> void:
 	var army := _new_org("铁砧师", 5, "")
 	var regiment := _new_org("第三团", 4, army)
@@ -126,22 +126,22 @@ func _build_army() -> void:
 	for i in 2:
 		var platoon := _new_org("第一连·%d排" % (i + 1), 1, company_a)
 		for j in 3:
-			_api.assign_stickman(platoon, str(_make_unit(0.35 + 0.2 * i).get_instance_id()), "fighter")
+			_api.assign_stickman(platoon, str(_make_unit().get_instance_id()), "fighter")
 		_api.assign_commander(platoon, str(_first_member(platoon)))
 	_api.assign_commander(company_a, str(_first_member_of_child(company_a)))
-	_api.assign_stickman(company_a, str(_make_unit(0.55).get_instance_id()), "fighter")
+	_api.assign_stickman(company_a, str(_make_unit().get_instance_id()), "fighter")
 	# 二连：连长空缺 + 一个空架排（L1 FORMING 合法空，不标群龙无首）
 	var p3 := _new_org("第三排", 1, company_b)
-	var p3_lead := _make_unit(0.25)
+	var p3_lead := _make_unit()
 	_api.assign_stickman(p3, str(p3_lead.get_instance_id()), "fighter")
-	_api.assign_stickman(p3, str(_make_unit(0.30).get_instance_id()), "fighter")
+	_api.assign_stickman(p3, str(_make_unit().get_instance_id()), "fighter")
 	_api.assign_commander(p3, str(p3_lead.get_instance_id()))  # 群龙无首时的补位候选样本
 	_new_org("第四排", 1, company_b)
 	# 各级指挥官链（不变量：中间层有主——二连故意留空做群龙无首样本）
 	_api.assign_commander(company_a, _first_member_of_child(company_a))
 	_api.assign_commander(battalion, _first_member_of_child(battalion))
 	_api.assign_commander(regiment, _first_member_of_child(regiment))
-	_api.assign_commander(army, str(_make_unit(0.9).get_instance_id()))
+	_api.assign_commander(army, str(_make_unit().get_instance_id()))
 	# state 直改出多档状态徽标（当前无状态机推进；仅截图样本用）
 	_mgr.organizations[regiment].state = 2
 	_mgr.organizations[battalion].state = 3
@@ -151,10 +151,8 @@ func _build_army() -> void:
 	_expand_all(_panel._tree.get_root())
 
 
-func _make_unit(morale_ratio: float) -> StubUnit:
+func _make_unit() -> StubUnit:
 	var health := HealthScript.new()
-	health.max_morale = 100.0
-	health.morale = morale_ratio * 100.0
 	var u := StubUnit.new()
 	u.health = health
 	_map.add_child(u)
@@ -191,16 +189,16 @@ func _emit_reports() -> void:
 	# ① 补位成功（filled=true）：连长阵亡 → 排长自动接任
 	var company_c := _new_org("第三连", 2, String(_orgs["battalion"]))
 	var platoon_c := _new_org("第五排", 1, company_c)
-	var successor := _make_unit(0.8)
+	var successor := _make_unit()
 	_api.assign_stickman(platoon_c, str(successor.get_instance_id()), "fighter")
 	_api.assign_commander(platoon_c, str(successor.get_instance_id()))
-	var chief := str(_make_unit(0.7).get_instance_id())
+	var chief := str(_make_unit().get_instance_id())
 	_api.assign_stickman(company_c, chief, "fighter")
 	_api.assign_commander(company_c, chief)
 	_api.remove_stickman(company_c, chief)
 	# ② 补位无人（filled=false）：连长阵亡 → 群龙无首
 	var company_d := _new_org("第四连", 2, String(_orgs["battalion"]))
-	var lone := str(_make_unit(0.5).get_instance_id())
+	var lone := str(_make_unit().get_instance_id())
 	_api.assign_stickman(company_d, lone, "fighter")
 	_api.assign_commander(company_d, lone)
 	_api.remove_stickman(company_d, lone)

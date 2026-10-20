@@ -32,6 +32,13 @@ modules/stick_rig/
 
 ## 机制要点
 
+- **头部旋转语义**：头圆挂 head 骨、圆心上偏 `HEAD_ORBIT`（绕颈根公转）——`head:rotation`
+  动画轨道 = 可见仰俯（负=仰头后上、正=低头前下）；所有动画均带该轨道（无轨道路径会残留
+  陈旧旋转）。
+- **拉弓瞄准俯仰**（SWL Archer.Aim/_currentAim 直译）：弓手姿势跟射角走——实体侧按
+  ArrowBallistics 弹道解算逐拍推 `aim_pitch`，镜像链进 rig 后由 procedural_overlay
+  平滑追踪并应用于**持弓臂 upper_arm_inner**（臂+前臂+手+弓整组抬起；躯干直立腿站定
+  ——SWL 实机观感基准；仅弓族动画生效）。
 - **crowd 合批**：远景单位由 crowd_renderer 收进 MultiMesh 桶（血条摆动/武器图集走 GPU shader）；
   烘制参数常量在 health_bar_indicator，crowd_renderer_buckets 直接取用（同模块内部依赖）。
 - **鸭子协议边界**：crowd_renderer / health_bar_indicator 对实体的访问全部走

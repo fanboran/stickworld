@@ -17,7 +17,7 @@ const WORKSPACES: Array[Dictionary] = [
 	{
 		"id": "military", "label": "军事",
 		"quick": ["进攻", "防御", "行军", "呼叫支援", "部署", "操练"],
-		"stats": {"编制数": "12", "总兵力": "1,480", "士气": "82%"},
+		"stats": {"编制数": "12", "总兵力": "1,480"},
 	},
 	{
 		"id": "research", "label": "科研",

@@ -21,6 +21,7 @@ extends Node
 
 # 显式 preload，避免 headless 模式下 class_name 全局注册未触发
 const ScriptDecisionClock := preload("res://modules/units/scripts/ai/ai_decision_clock.gd")
+const StickProf := preload("res://core/services/stick_prof.gd")
 const ScriptBehaviorRegistry := preload("res://modules/units/scripts/ai/behavior_registry.gd")
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
@@ -44,28 +45,13 @@ const TEAM_AI_STANCE_DEFEND: int = 1
 const TEAM_AI_STANCE_ATTACK: int = 2
 const TEAM_AI_STANCE_ROUT: int = 3
 
-## 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙 背水一战。
-## 被围判定：SURROUND_RANGE 内敌对单位 >= SURROUND_MIN 视为被围
-const SURROUND_RANGE: float = 120.0
 ## 威胁判定距离（SWL Ai.IsUnderThreat：近身有活敌即被威胁；
-## dump 无数值真值，取被围半径同量级，待实测校准）
+## dump 无数值真值，待实测校准）
 const THREAT_RANGE: float = 140.0
 ## 打通态脱离距离（px）【提案/待定·待实测校准】：拦路者跑出此距离视为"已脱离"
 ##（不再构成拦路——风筝敌人越拉越远即放弃追打恢复赶路；再拦再触发）
 const BREACH_DROP_DIST: float = 320.0
-## 被围所需敌对单位数
-const SURROUND_MIN: int = 2
-## 背墙判定：身后此距离内有掩体视为背墙
-const WALL_LOOKBACK: float = 80.0
-## 低血狂暴判定阈值（hp_ratio 低于此值视为低血）
-const RAGE_LOW_HP: float = 0.3
-## 狂暴所需最低士气（低血但士气高于此值 → 狂暴反击；低于此值走避战调制）
-const RAGE_MORALE_THRESHOLD: float = 0.4
-## 撤退掷骰 RNG 默认种子（A3 · C6：固定默认种子锁确定性，单测可锁/battle_sim
-## 可复现；与 A1 team_ai DEFAULT_RANDOM_SEED 同值惯例。测试经
-## _retreat_mod_rng.seed 重掷，生产恒定）
-const RETREAT_MOD_DEFAULT_SEED: int = 20260911
-
+## 被围/背墙/低血狂暴常量已删（裁决#31——低血狂暴整体退役）
 ## 工作类型（与 FormationSystem.WorkType 保持一致，本地常量避免跨模块依赖）
 const WorkTypeCombat := "WORK_COMBAT"
 const WorkTypeBuild := "WORK_BUILD"
@@ -101,25 +87,13 @@ var _domain_next_at: Dictionary = {}
 ## W2 出生错峰专用 RNG（与全局 randf 隔离：种子可注入 = 单测确定性；
 ## 装配置一次种子，逐通道各抽一次 = 通道间独立错峰）
 var _jitter_rng := RandomNumberGenerator.new()
+## 命运骰 RNG（决策域概率掷骰统一出口：村民闲逛/看门狗推力方向——
+## 与全局 randf 隔离，P4 回放「每单位可注入种子」全覆盖收口；种子按实体
+## 实例 id 派生（同 _resolve_jitter_seed 惯例），测试重掷 _dice_rng.seed 可复现）
+var _dice_rng := RandomNumberGenerator.new()
+var _dice_seeded: bool = false
 ## 上一帧是否被附身（用于检测附身状态变化）
 var _was_possessed: bool = false
-## 9i+ 试探接敌脉冲状态（test_engage_enabled 开时在脱战低士气分支消费）
-var _test_pulse_active: bool = false
-var _test_pulse_until: float = -1.0e9
-## A3 · C6 撤退掷骰专用 RNG（与全局 randf 隔离：固定默认种子锁确定性，
-## 单测/battle_sim 可复现；先例 team_ai._rng）
-var _retreat_mod_rng := RandomNumberGenerator.new()
-## A3 · C6 下次允许掷骰的战斗时刻（战斗时长时间戳法，同 _test_pulse_until；
-## 掷骰节流 = 档案 retreat_mod_reevaluate 评估周期内只掷一次）
-var _retreat_mod_next_roll_at: float = -1.0e9
-## W1 观测面（get_retreat_mod_state 消费）：最近一次调制评估快照——候选因子
-## 命中集/掷骰值/概率/是否触发。评估未到达（开关关/无威胁/节流内）时保持
-## 上次评估值；last_chance 为 NAN = 尚未评估过。
-var _retreat_mod_last_factors: Dictionary = {}
-var _retreat_mod_last_roll: float = NAN
-var _retreat_mod_last_chance: float = NAN
-var _retreat_mod_last_result: bool = false
-
 # ── 9h 卡死看门狗（O(1)：只记上次采样位置 + 累计计时，不扫描不查询邻居）──
 ## 有移动意图（实体速度 > 档案阈值）但窗口内净位移 ≈ 0 → 强制重决策。
 var _wd_timer: float = 0.0
@@ -129,8 +103,9 @@ var _wd_last_pos: Vector2 = Vector2.ZERO
 var _wd_nudge_until: float = -1.0e9
 ## 分离推力方向（触发时随机掷一次，短窗内恒定）
 var _wd_nudge_dir: Vector2 = Vector2.ZERO
-## 避战行为态（裁决【删溃逃、立避战】：由 behavior_retreat enter/exit 置位清位，
-## 非士气阈值推导——"谁执行谁置位"单一真相源；is_disengaging() 对外查询）
+## 撤离行为态（retreat 行为 enter/exit 置位清位，"谁执行谁置位"单一真相源；
+## is_disengaging() 对外查询）。**自动避战已根除**（创始人裁决）：本态只由
+## 命令撤离（RETREAT 号令/TeamAi ROUT 战役撤仗）进入，单位不再自发脱战
 var _disengaging: bool = false
 ## 遇阻接战"打通"态（创始人口径：任务路上被敌拦住且无法简单绕过 → 攻击路径上
 ## 的敌人）：由 behavior_move 请求置位（request_breach_engagement），拦路者作为
@@ -158,7 +133,6 @@ func _ready() -> void:
 	if _entity == null:
 		push_error("[AIController] 父节点非 CharacterBody2D，AI 无法工作")
 		return
-	_retreat_mod_rng.seed = RETREAT_MOD_DEFAULT_SEED
 	_setup_state_machine()
 	# W2 出生错峰：装配完成即预置首次决策/域级到期时刻（关=装配后 interval，
 	# 与旧累加器语义一致；开=预置假偏移防成批出生齐套，见 apply_spawn_jitter）
@@ -180,6 +154,12 @@ func _setup_state_machine() -> void:
 ## 由 StickmanEntity._physics_process 在处理 AI 输入前调用。
 ## 负责状态机调度 + 决策，设置 entity 的 AI 移动方向。
 func physics_update(delta: float) -> void:
+	var _pt := StickProf.t0()
+	physics_update_inner(delta)
+	StickProf.t1("AI思考", _pt)
+
+
+func physics_update_inner(delta: float) -> void:
 	if _entity == null or not is_instance_valid(_entity):
 		return
 	if _state_machine == null:
@@ -217,9 +197,7 @@ func physics_update(delta: float) -> void:
 ## P0 决策：命令覆盖 > 战斗（参战时）> work（有派工）> idle/wander 循环。
 ## 命令覆盖：tactical_orders 下达的号令优先于自主决策。
 ## 职责过滤：编队中的单位只能做队伍职责范围内的行为（见 _can_work / _can_combat）。
-## 优先级（裁决【删溃逃、立避战】落定）：命令覆盖 > 自主决策；单位级"士气崩溃
-## 强制溃逃"链已删除（溃逃退役），低士气降级为避战打分输入（C6 三因子概率
-## 调制），劣势时脱离接火是战术行为不是失控逃跑。
+## 优先级：命令覆盖 > 自主决策（压制机制已整体删除＝创始人裁决）。
 func _make_decision() -> void:
 	# 0. 遇阻接战维护（打通态）：拦路者仍有效 → 持续锁定攻击（号令挂起不清不降级；
 	# 被打断后经此重入）。击杀/脱离 → 清态，落回下方正常决策
@@ -269,7 +247,7 @@ func _make_decision() -> void:
 		# 其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）。
 		# 村民 wander 锚定村庄中心（批次 4）：待业村民全天闲逛，无锚会累积
 		# 漂出村子/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
-		if _is_villager() and randf() < villager_wander_probability:
+		if _is_villager() and _dice() < villager_wander_probability:
 			_state_machine.travel("wander", _villager_wander_params())
 			return
 		# 没有派工，原地待机（工人无事做原地待命）
@@ -300,7 +278,7 @@ func _make_decision() -> void:
 ## 对冲）。触发动作：战斗中重进 attack（enter 清目标/持瞄状态 → 下一拍重选目标 =
 ## "清当前目标/换目标"）+ 一次短分离推力（随机方向覆盖行为层意图，行为下一拍
 ## 收回控制权）；号令行军等非战斗行为只推力不清令（号令是玩家意图不归看门狗撤）。
-## 无意图（站桩输出/压制/硬直/待命）即清零重计——不误伤合法静止。
+## 无意图（站桩输出/硬直/待命）即清零重计——不误伤合法静止。
 func _watchdog_tick(delta: float) -> void:
 	var profile: Dictionary = _get_behavior_profile()
 	if not bool(profile.get("stuck_watchdog_enabled", true)):
@@ -330,7 +308,7 @@ func _watchdog_tick(delta: float) -> void:
 
 ## 卡死触发处置：换目标（战斗中重进 attack）+ 分离推力 + 可关调试日志。
 func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
-	_wd_nudge_dir = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+	_wd_nudge_dir = Vector2(_dice_range(-1.0, 1.0), _dice_range(-1.0, 1.0)).normalized()
 	_wd_nudge_until = _world_time + 0.25
 	if _state_machine != null and _state_machine.get_current_behavior_name() == "attack":
 		# 打通态卡死：重进 attack 保留 forced_target（否则 enter 清目标后自由选敌，
@@ -343,8 +321,9 @@ func _stuck_break(profile: Dictionary, pos: Vector2) -> void:
 		print("[AIController] 卡死看门狗触发: pos=%v 行为=%s 换目标+分离推力" % [pos, behavior])
 
 
+
 ## 尝试战斗决策。当 entity 参战（有激活的 battle_instance）时返回 true 并切换到战斗行为。
-## 决策优先级：低士气脱战 -> 不接敌待命；C6 劣势掷骰 -> 避战；重伤且附近有掩体 -> seek_cover；默认 -> attack。
+## 决策优先级：C6 劣势掷骰 -> 避战；重伤且附近有掩体 -> seek_cover；默认 -> attack。
 ## 职责过滤：队伍职责不含 WORK_COMBAT 的单位不进入战斗决策（如建造队/工人队）。
 func _try_combat() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
@@ -366,36 +345,8 @@ func _try_combat() -> bool:
 		if not _state_machine.is_current_finished():
 			return true
 	var bi_param: Dictionary = {"battle": bi}
-	var health: Node = _entity.get_health() if _entity.has_method("get_health") else null
-	# 低士气决策（裁决【删溃逃、立避战】：is_routed 强制溃逃链已删除——低士气降级
-	# 为避战打分输入）：脱战（近身无威胁）且士气过低 → 不主动接敌，原地待命回士气
-	#（9i+ 再战/试探脉冲仍可拉回）；近身低士气**不强制脱离**，保持还击（C6 掷骰
-	# 治理去留——避免"finish→重 travel"逐拍抖动，还击本身就是避战期的合法行为）
-	if health != null and health.has_method("get_morale_ratio") \
-			and health.get_morale_ratio() < 0.25 and not _is_under_threat(bi):
-		# 脱战低士气：9i+ 增强（逃开后再战 + 前排试探接敌）
-		if _try_rout_reengage(bi, bi_param, health):
-			return true
-		# 既有行为：不进战斗决策（避免 travel→finish 抖动），原地待命回士气
-		return false
-	# A3 · C6 概率调制避战：劣势/被压时概率脱离接火（裁决口径：避战是模拟高阶
-	# 操作智慧的战术行为，非失控逃跑；强制链优先的旧注释随溃逃退役删除）
-	if _try_retreat_modulation(bi, bi_param, health):
-		return true
-	# 状态调制（反编译参考实装 E）：低血狂暴 / 被围背墙背水一战
-	var mods: Dictionary = _compute_state_modifiers(bi, health)
-	if _should_rage(mods, health):
-		var rage_param: Dictionary = bi_param.duplicate()
-		rage_param["rage"] = true
-		_state_machine.travel("attack", rage_param)
-		return true
-	# HP 低且附近有掩体 -> seek_cover
-	if health != null and health.has_method("get_hp_ratio") and health.get_hp_ratio() < 0.4:
-		var cover = bi.get_cover() if bi.has_method("get_cover") else null
-		if cover != null and cover.has_method("has_covers") and cover.has_covers():
-			_state_machine.travel("seek_cover", bi_param)
-			return true
-	# 默认 -> attack（MERIC 祭司路由到 heal，P7 批次 7b）
+	# 默认 -> attack（MERIC 祭司路由到 heal，P7 批次 7b）。
+	# 低血狂暴 / 低血找掩体已删（创始人 2026-10-13 裁决#31：两者此前已令删）
 	if _is_meric():
 		_state_machine.travel("heal", bi_param)
 	else:
@@ -403,130 +354,6 @@ func _try_combat() -> bool:
 	return true
 
 
-## A3 · C6 概率调制避战（裁决【删溃逃、立避战】：设计文档12号 §三C6 / 设计原则3）：
-## 劣势（血量/士气逼近阈值或周边友军崩坏）时按档案概率掷骰脱离接火——非确定性
-## 开关消除阈值边界的机械感（掷骰是执行机制不是因果，候选判定仍是真实战况）。
-## 出口 = 避战统一出口（_travel_disengage：优先 seek_cover，无掩体走 fallback
-## 短距后撤；绝不走向地图边缘）。旧"强制溃逃链并存/双档 withdraw"语义随溃逃退役：
-## withdraw 档保留为命令路径语义（可下令的 RETREAT / TeamAi ROUT 撤离），C6 不再下发。
-## 返回 true 表示已切入避战行为。
-func _try_retreat_modulation(bi: Node, bi_param: Dictionary, health: Node) -> bool:
-	# 指挥官避战豁免（斩首规则）：永不脱离接火——is_disengaging 恒 false，
-	# 指挥官跑不了，被近身就地还击（_seek_cover 低血分支保留：就近掩体仍属还击）。
-	if _is_commander():
-		return false
-	var profile: Dictionary = _get_behavior_profile()
-	if not bool(profile.get("retreat_mod_enabled", false)):
-		return false
-	# 近身无威胁不评估（脱战不逃；脱战低士气分支语义不变）
-	if not _is_under_threat(bi):
-		return false
-	# 掷骰节流：评估周期内只掷一次（CoH retreat_chance_reevaluate_ticks 20 tick≈2.5s）
-	var now: float = bi.get_duration() \
-			if bi != null and is_instance_valid(bi) and bi.has_method("get_duration") else 0.0
-	if now < _retreat_mod_next_roll_at:
-		return false
-	_retreat_mod_next_roll_at = now + maxf(float(profile.get("retreat_mod_reevaluate", 2.5)), 0.05)
-	# 候选判定（因果=真实战况，三因子任一成立即候选）
-	var hp_ok := true
-	var morale_ok := true
-	if health != null:
-		if health.has_method("get_hp_ratio"):
-			hp_ok = health.get_hp_ratio() >= float(profile.get("retreat_mod_hp_ratio", 0.49))
-		if health.has_method("get_morale_ratio"):
-			morale_ok = health.get_morale_ratio() >= float(profile.get("retreat_mod_morale_ratio", 0.35))
-	var line_collapsed := _nearby_ally_break_ratio(bi, profile) \
-			>= float(profile.get("retreat_mod_ally_break_ratio", 0.51))
-	# W1 观测面：候选因子命中项登记（任一 true = 撤退候选；查询 get_retreat_mod_state）
-	_retreat_mod_last_factors = {
-		"hp_low": not hp_ok,
-		"morale_low": not morale_ok,
-		"line_collapsed": line_collapsed,
-	}
-	if hp_ok and morale_ok and not line_collapsed:
-		return false
-	# 掷骰概率三级链（难度分档已裁决移除·开放问题#3）：档案显式值（NAN=未覆写）
-	# → personality 单一档案 global 行 retreat_chance → 代码默认
-	var chance: float = float(profile.get("retreat_mod_chance", NAN))
-	if is_nan(chance):
-		chance = ScriptBehaviorProfiles.get_personality_retreat_chance()
-	if is_nan(chance):
-		chance = 0.30
-	# W1 观测面：掷骰值/概率/结果登记（概率是执行机制不是因果，调试可见）
-	var roll: float = _retreat_mod_rng.randf()
-	_retreat_mod_last_roll = roll
-	_retreat_mod_last_chance = chance
-	_retreat_mod_last_result = roll < chance
-	if roll >= chance:
-		return false
-	# 避战统一出口：优先 seek_cover（就掩还击），无掩体走 fallback 短距脱离
-	_travel_disengage(bi)
-	return true
-
-
-## 附近友军崩坏比例（A3 · C6 候选因子三）：判定半径内同阵营单位中"已阵亡或
-## 避战中"的占比（CoH retreat_suppressed_percentage「周边小队被压制比例」同构
-## ——本作压制映射到士气/存活状态）。无友军（孤军）返回 0：孤军安危由个人
-## 血量/士气因子承担，不构成战线崩坏信号。
-func _nearby_ally_break_ratio(bi: Node, profile: Dictionary) -> float:
-	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_faction"):
-		return 0.0
-	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
-		return 0.0
-	var radius: float = float(profile.get("retreat_mod_ally_radius", 300.0))
-	var total: int = 0
-	var broken: int = 0
-	for ally_v in bi.get_allies_of(_entity.get_faction()):
-		# 名单可能含已释放单位（战斗清场竞态）：先有效性后 cast——对 freed 引用
-		# 做 as 运算会报 "Trying to cast a freed object"
-		if not is_instance_valid(ally_v):
-			continue
-		var ally := ally_v as Node2D
-		if ally == null or ally == _entity:
-			continue
-		if _entity.global_position.distance_to(ally.global_position) > radius:
-			continue
-		total += 1
-		var dead: bool = ally.has_method("is_dead") and ally.is_dead()
-		# 避战中（行为态，duck 查询队友 AIController）的友军同计"战线崩坏"——
-		# 脱离接火的队友不再支撑战线（裁决【删溃逃、立避战】：旧 is_routed 退役）
-		var disengaging: bool = false
-		var aai: Node = ally.get_ai_controller() if ally.has_method("get_ai_controller") else null
-		if aai != null and is_instance_valid(aai) and aai.has_method("is_disengaging"):
-			disengaging = bool(aai.is_disengaging())
-		if dead or disengaging:
-			broken += 1
-	if total <= 0:
-		return 0.0
-	return float(broken) / float(total)
-
-
-## 撤退调制状态只读快照（W1 · 方案 §2.6 接口缺口补齐；调试悬停/观察场消费）：
-##   enabled            档案开关实测值（retreat_mod_enabled）
-##   next_roll_at       下次允许掷骰的战斗时刻（节流窗口起点）
-##   throttle_remaining 节流窗口余量（s，≥0；战斗时长不可用 = 0）
-##   last_factors       最近评估候选因子命中项 {hp_low, morale_low, line_collapsed}
-##   last_roll/last_chance/last_result  最近掷骰值/概率/是否触发（NAN = 从未评估）
-## 纯查询零副作用；实体/战斗实例不可用降级安全默认（调试面板不倒逼战斗侧改结构）。
-func get_retreat_mod_state() -> Dictionary:
-	var profile: Dictionary = _get_behavior_profile()
-	var now: float = 0.0
-	if _entity != null and is_instance_valid(_entity) and _entity.has_method("get_battle_instance"):
-		var bi: Node = _entity.get_battle_instance()
-		if bi != null and is_instance_valid(bi) and bi.has_method("get_duration"):
-			now = float(bi.get_duration())
-	return {
-		"enabled": bool(profile.get("retreat_mod_enabled", false)),
-		"next_roll_at": _retreat_mod_next_roll_at,
-		"throttle_remaining": maxf(_retreat_mod_next_roll_at - now, 0.0),
-		"last_factors": _retreat_mod_last_factors.duplicate(),
-		"last_roll": _retreat_mod_last_roll,
-		"last_chance": _retreat_mod_last_chance,
-		"last_result": _retreat_mod_last_result,
-	}
-
-
-## 是否祭司兵种（MERIC 路由判定，P7 批次 7b）
 func _is_meric() -> bool:
 	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_weapon"):
 		return false
@@ -590,53 +417,6 @@ func _count_enemies_near(pos: Vector2, radius: float, bi: Node) -> int:
 	return n2
 
 
-## 9i+ 逃开后再战 + 前排试探接敌（P6 批次 7c，design §2.1.3.6 #1/#4）。
-## 全部档案开关默认关 = 返回 false → 既有"原地待命"行为；姿态查询不可用降级同。
-## 仅改决策取向，不触碰选目标、出手、伤害管线；手动号令执行中不生效（命令覆盖优先）。
-func _try_rout_reengage(bi: Node, bi_param: Dictionary, health: Node) -> bool:
-	var profile: Dictionary = _get_behavior_profile()
-	var reengage_on: bool = bool(profile.get("rout_reengage_enabled", false))
-	var test_on: bool = bool(profile.get("test_engage_enabled", false))
-	if not reengage_on and not test_on:
-		return false
-	# GARRISON 维持待命（归队由锚点号令覆盖）；ROUT 战役撤离不再接敌（C3：全军撤；
-	# 个别溃兵被 ROUT 撤离号令周期重发拉回，此处再战通道同样关闭）；查询不可用降级为 DEFEND（保守不压上）
-	var stance: int = _query_team_stance(bi)
-	if stance == TEAM_AI_STANCE_GARRISON or stance == TEAM_AI_STANCE_ROUT:
-		return false
-	# 仅 ATTACK/DEFEND 姿态下执行再战/试探（stance 查询失败降级 DEFEND 也允许）
-	var morale_ratio: float = 1.0
-	if health != null and health.has_method("get_morale_ratio"):
-		morale_ratio = health.get_morale_ratio()
-	# #1 逃开后再战：士气过再战线 → 重进 attack（重返战线）
-	if reengage_on and morale_ratio >= float(profile.get("re_engage_morale", 0.15)):
-		_state_machine.travel("attack", bi_param)
-		return true
-	# #4 前排怯战试探接敌：脉冲周期在"允许进 attack / 维持待命"间切换
-	if test_on:
-		# 手动号令执行中不生效（命令覆盖优先，spec §5.6.3.2）
-		if not _ordered_behavior.is_empty():
-			return false
-		if bi == null or not is_instance_valid(bi) or not bi.has_method("get_nearest_enemy"):
-			return false
-		var enemy: Node = bi.get_nearest_enemy(_entity)
-		if enemy == null or not is_instance_valid(enemy):
-			return false
-		var dist: float = _entity.global_position.distance_to(enemy.global_position)
-		if dist > float(profile.get("test_engage_range", 480.0)):
-			return false
-		# 脉冲推进（时间戳法，无需在 physics_update 推进独立计时器）
-		var now: float = bi.get_duration() if bi.has_method("get_duration") else 0.0
-		if now >= _test_pulse_until:
-			_test_pulse_active = not _test_pulse_active
-			_test_pulse_until = now + (float(profile.get("test_pulse_on", 2.0)) if _test_pulse_active \
-					else float(profile.get("test_pulse_off", 3.0)))
-		if _test_pulse_active:
-			_state_machine.travel("attack", bi_param)
-			return true
-	return false
-
-
 ## 读取当前兵种行为档案（RWR 基线+覆盖；无武器回落 SWORD 基线）
 func _get_behavior_profile() -> Dictionary:
 	if _entity != null and is_instance_valid(_entity) and _entity.has_method("get_weapon"):
@@ -653,7 +433,29 @@ func _roll_decision_interval() -> float:
 	var p: Dictionary = _get_behavior_profile()
 	var base: float = float(p.get("decision_interval", ScriptDecisionClock.DECISION_INTERVAL))
 	var variance: float = maxf(float(p.get("decision_variance", 0.0)), 0.0)
-	return maxf(base + randf_range(-variance, variance), ScriptDecisionClock.MIN_DECISION_INTERVAL)
+	# 间隔方差掷骰走 _jitter_rng（决策时钟族专用 RNG——种子随装配注入，单测锁
+	# 种子可复现间隔序列；旧全局 randf 是确定性收口的漏网点）
+	return maxf(base + _jitter_rng.randf_range(-variance, variance),
+			ScriptDecisionClock.MIN_DECISION_INTERVAL)
+
+
+## 命运骰掷点（决策域概率：闲逛/推力方向；首掷按实体实例 id 派生种子）
+func _dice() -> float:
+	_seed_dice_once()
+	return _dice_rng.randf()
+
+
+func _dice_range(from: float, to: float) -> float:
+	_seed_dice_once()
+	return _dice_rng.randf_range(from, to)
+
+
+func _seed_dice_once() -> void:
+	if _dice_seeded:
+		return
+	_dice_seeded = true
+	_dice_rng.seed = int(_entity.get_instance_id()) \
+			if _entity != null and is_instance_valid(_entity) else 20261006
 
 
 # ─────────────────── W2 决策时钟族壳转发（逻辑在 ai_decision_clock.gd）───────────────────
@@ -711,52 +513,6 @@ func _query_team_stance(bi: Node) -> int:
 	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_stance"):
 		return TEAM_AI_STANCE_DEFEND
 	return int(tai.get_stance())
-
-
-## 状态调制检测（反编译参考实装 E）：低血 / 避战 / 被围 / 背墙。
-## 返回 {"low_hp", "disengaging", "surrounded", "backed_to_wall"} 布尔集。
-func _compute_state_modifiers(bi: Node, health: Node) -> Dictionary:
-	var mods := {
-		"low_hp": false,
-		"disengaging": false,
-		"surrounded": false,
-		"backed_to_wall": false,
-	}
-	if health != null:
-		mods["low_hp"] = health.has_method("get_hp_ratio") and health.get_hp_ratio() < RAGE_LOW_HP
-	# 避战中（裁决：溃逃退役后的行为态）不狂暴——脱离接火的单位不背水一战
-	mods["disengaging"] = _disengaging
-	# 被围：SURROUND_RANGE 内敌对单位数 >= SURROUND_MIN（空间网格邻域查询）
-	if bi != null:
-		mods["surrounded"] = _count_enemies_near(
-				_entity.global_position, SURROUND_RANGE, bi) >= SURROUND_MIN
-	# 背墙：身后（朝向反方向）WALL_LOOKBACK 距离内有掩体
-	if bi != null and bi.has_method("get_cover"):
-		# CoverSystem 是 RefCounted（纯逻辑），注解用 Variant 防类型不匹配报错
-		var cover = bi.get_cover()
-		if cover != null and cover.has_method("is_in_cover"):
-			var facing: int = _entity.get_facing() if _entity.has_method("get_facing") else 1
-			var back_pos: Vector2 = _entity.global_position - Vector2(facing, 0) * WALL_LOOKBACK
-			mods["backed_to_wall"] = cover.is_in_cover(back_pos)
-	return mods
-
-
-## 狂暴判定（反编译参考实装 E，参考传奇 RageSystem/DesperationTriggered）：
-##   - 避战中 -> 不狂暴（脱离接火的单位不背水一战）
-##   - 被围 + 背墙 -> 背水一战，强制狂暴
-##   - 低血且士气高于 RAGE_MORALE_THRESHOLD -> 狂暴反击
-##   - 其余 -> 不狂暴（走现有 seek_cover / attack 决策）
-func _should_rage(mods: Dictionary, health: Node) -> bool:
-	if mods.get("disengaging", false):
-		return false
-	if mods.get("surrounded", false) and mods.get("backed_to_wall", false):
-		return true
-	if mods.get("low_hp", false):
-		var morale_ratio: float = 1.0
-		if health != null and health.has_method("get_morale_ratio"):
-			morale_ratio = health.get_morale_ratio()
-		return morale_ratio > RAGE_MORALE_THRESHOLD
-	return false
 
 
 ## 尝试 job 域探测组（W2 域级节流出口）：派工探测失败再试采集探测，两者皆空才
@@ -925,7 +681,7 @@ func _try_follow() -> bool:
 
 ## 是否避战中（裁决【删溃逃、立避战】的行为态查询口）：由 behavior_retreat
 ## enter/exit 置位清位。消费面：UI 状态角标/友军战线崩坏比例/狂暴抑制等
-## "这个单位现在在不在脱离接火"的询问；非士气阈值推导。
+## "这个单位现在在不在脱离接火"的询问；由避战行为置位。
 func is_disengaging() -> bool:
 	return _disengaging
 
@@ -956,13 +712,13 @@ func set_order(behavior_name: String, params: Dictionary = {}) -> void:
 	if _state_machine != null and not _state_machine.has_behavior(behavior_name):
 		push_warning("[AIController] 拒绝未注册行为命令: %s" % behavior_name)
 		return
-	# 指挥官守卫（斩首规则）：rank>=3 不接推进/撤离类号令——指挥官留守后方，
-	# 只做被近身自卫（行为层 LEASH 内迎击），任何来路的号令都拉不走他。
-	# idle（HOLD_POSITION）放行——留守语义兼容。
-	if _entity != null and is_instance_valid(_entity) \
-			and _entity.has_method("is_commander") and _entity.is_commander() \
-			and behavior_name in ["move", "retreat", "seek_cover"]:
-		return
+	if OS.get_environment("STICK_TRACE_ORDER") == "1":
+		var tgt = params.get("target", "—")
+		print("[OrderTrace] iid=%d %s target=%s follow=%s f=%d"
+				% [get_instance_id() % 10000, behavior_name, tgt,
+						params.get("follow_order", false), Engine.get_process_frames()])
+	# （旧守位者号令守卫随摆场指挥官/护卫根除，2026-10-14——此前守位者在此
+	# 拒绝推进/撤离类号令留守阵地）
 	_ordered_behavior = behavior_name
 	_ordered_params = params
 	_breach_target = null  # 新号令显式接管：打通插叙作废（粘性只保原号令）
@@ -995,30 +751,9 @@ func has_order() -> bool:
 
 # ─────────────────────────────── 内部辅助 ────────────────────────────────
 
-# （_is_routing 已随裁决【删溃逃、立避战】删除：溃逃布尔态退役，
-#   避战行为态走 is_disengaging()——由 behavior_retreat 置位，非士气阈值推导）
-
-
-## 是否指挥官（斩首规则，duck；多个消费点共用：C6 避战豁免/号令守卫）
-func _is_commander() -> bool:
-	return _entity != null and is_instance_valid(_entity) \
-			and _entity.has_method("is_commander") and _entity.is_commander()
-
-
-## 避战统一出口（裁决【删溃逃、立避战】）：优先 seek_cover（有掩体先就掩——
-## behavior_seek_cover 内建"掩体中还击"，即"避战期不主动接敌但被打还手"的就掩
-## 半边）；无掩体走 fallback 短距后撤（SAFE_DISTANCE 内脱离，behavior_retreat
-## 既有语义，绝不走向地图边缘）。C6 概率调制调用。
-func _travel_disengage(bi: Node) -> void:
-	var bi_param: Dictionary = {"battle": bi} if bi != null and is_instance_valid(bi) else {}
-	var cover = bi.get_cover() if bi != null and is_instance_valid(bi) \
-			and bi.has_method("get_cover") else null
-	if cover != null and cover.has_method("has_covers") and cover.has_covers():
-		_state_machine.travel("seek_cover", bi_param)
-		return
-	var params: Dictionary = bi_param.duplicate()
-	params["retreat_mode"] = "fallback"
-	_state_machine.travel("retreat", params)
+# （_is_routing 已随裁决【删溃逃】删除：溃逃布尔态退役；
+#   撤离行为态走 is_disengaging()——由 behavior_retreat 置位。
+#   自动避战链（C6 掷骰/还击窗）与压制机制均已随创始人裁决整体删除）
 
 
 # ─────────────────── 遇阻接战（打通态：任务路上攻击拦路者）───────────────────
@@ -1031,7 +766,7 @@ func is_breach_engaged() -> bool:
 			and not (_breach_target.has_method("is_dead") and _breach_target.is_dead())
 
 
-## 打通态维护拍（决策首位，压制分支之后）：拦路者有效（存活 + 未跑出脱离距离）
+## 打通态维护拍（决策首位）：拦路者有效（存活 + 未跑出脱离距离）
 ## → 保持/重入 attack（forced_target 锁定拦路者）；失效 → 清态返回 false，交还
 ## 正常决策流（命令覆盖段自动续行原号令）。返回 true = 本拍被打通态占用。
 func _breach_tick() -> bool:
@@ -1081,5 +816,3 @@ func request_breach_engagement(blocker: Node) -> bool:
 			or _state_machine.is_current_finished():
 		_state_machine.travel("attack", {"forced_target": _breach_target})
 	return true
-
-

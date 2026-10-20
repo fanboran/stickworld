@@ -10,8 +10,8 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
-## billboard 几何真相源（随身特效抬升常量的同步对象）
-const CharSprite3D := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
+## billboard 几何真相源（随身特效抬升常量的同步对象）：角色视觉宿主
+const CharRig3D := preload("res://modules/hd2d/scripts/char_rig_3d.gd")
 ## 骨架场景真相源（RIG_SCENE 必须取自此，禁跨模块裸路径字面量）
 const StickRigAPI := preload("res://modules/stick_rig/api.gd")
 
@@ -142,11 +142,11 @@ func _test_entity_collider_origin_space() -> void:
 ## 中途空指针返回，角色 quad 拿到 null material_override，被引擎默认材质画成**灰方块**
 ## （街上行走的村民全体变灰块），且不报任何可见错误。改经 api 出口 + 本断言双保险。
 func _test_rig_scene_source() -> void:
-	_runner.assert_true(CharSprite3D.RIG_SCENE == StickRigAPI.RIG_SCENE_PATH,
+	_runner.assert_true(CharRig3D.RIG_SCENE_PATH == StickRigAPI.RIG_SCENE_PATH,
 			"RIG_SCENE 取 stick_rig api 出口（禁跨模块裸路径字面量）")
-	_runner.assert_true(ResourceLoader.exists(CharSprite3D.RIG_SCENE),
-			"骨架场景存在: " + CharSprite3D.RIG_SCENE)
-	_runner.assert_true(load(CharSprite3D.RIG_SCENE) is PackedScene,
+	_runner.assert_true(ResourceLoader.exists(CharRig3D.RIG_SCENE_PATH),
+			"骨架场景存在: " + CharRig3D.RIG_SCENE_PATH)
+	_runner.assert_true(load(CharRig3D.RIG_SCENE_PATH) is PackedScene,
 			"骨架场景可加载为 PackedScene")
 
 
@@ -164,7 +164,7 @@ func _test_fx_anchor_lift() -> void:
 	_runner.assert_approx(fresh.fx_anchor_lift(), 0.0, 0.0001, "_hd 未就绪回退 0")
 	fresh.free()
 	# 同步断言：常量必须等于 billboard 脚线以上到髋的几何（FOOT_ANCHOR 量到脚墨迹，
-	# billboard 按脚墨迹落 FOOT_ROW）——改 char_sprite_3d 几何时本值必须同步
+	# billboard 按脚墨迹落 FOOT_ROW）——改角色宿主（char_rig_3d）几何时本值必须同步
 	_runner.assert_approx(Hd2dStreetMap.BILLBOARD_HIP_H_PX,
-			CharSprite3D.FOOT_ANCHOR.y * CharSprite3D.RIG_SCALE, 0.01,
+			CharRig3D.FOOT_ANCHOR.y * CharRig3D.RIG_SCALE, 0.01,
 			"BILLBOARD_HIP_H_PX = FOOT_ANCHOR.y × RIG_SCALE（billboard 髋高）")

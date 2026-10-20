@@ -1,5 +1,6 @@
 class_name ArrowProjectile
 extends Area2D
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 箭矢投影物 -- 弓（WeaponType.BOW）远程攻击发射。
 ##
 ## 复刻 SWL Arrow 类特性：
@@ -203,6 +204,12 @@ func _ground_progress() -> float:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("箭矢", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期箭矢悬停）；
 	# 步长经 sim_delta 携带速度档（弹道积分随档位缩放）
 	if TimeManager != null:

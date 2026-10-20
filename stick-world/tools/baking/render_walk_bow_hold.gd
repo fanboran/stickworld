@@ -3,7 +3,7 @@ extends SceneTree
 ##
 ## 渲染通道与游戏一致：walk_bow_hold 经 set_state_anim("walk", …) 换入 walk state
 ## 资源（持弓行走无独立状态节点，与 walk_bow 同机制），AnimationTree.advance 手动
-## 推相位定帧（LOD 驱动同通道）；挂弓口径同 WeaponMount/char_sprite_3d。
+## 推相位定帧（LOD 驱动同通道）；挂弓口径同 WeaponMount/char_rig_3d。
 ##
 ## 出图：temp/观察场AI验收/动画/walk_bow_hold.png（worktree 根相对 res://../）
 ## 运行：godot --path <工程> --script res://tools/baking/render_walk_bow_hold.gd
@@ -12,7 +12,7 @@ extends SceneTree
 const RIG_SCENE := "res://modules/stick_rig/scenes/stickman_test.tscn"
 const BOW_SCENE := "res://modules/stick_rig/scenes/components/weapon_bow.tscn"
 const HAND_BONE := "hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand"
-## 摆位锚（脚底骨骼墨迹基准，取 char_sprite_3d 同款值）
+## 摆位锚（脚底骨骼墨迹基准，取 char_rig_3d 同款值）
 const FOOT_ANCHOR := Vector2(3.0, 141.0)
 const RIG_SCALE := 0.9
 
@@ -67,7 +67,7 @@ func _spawn_bowman(world: Node2D, foot_pos: Vector2, t: float) -> void:
 	await process_frame
 	var rig: Node2D = inst.get_node("OutlineGroup/StickmanRig")
 	rig.scale = Vector2(RIG_SCALE, RIG_SCALE)
-	# 挂弓（GripPoint 对齐握把，口径同 WeaponMount._mount_one / char_sprite_3d）
+	# 挂弓（GripPoint 对齐握把，口径同 WeaponMount._mount_one / char_rig_3d）
 	var bow: Node2D = (load(BOW_SCENE) as PackedScene).instantiate()
 	var grip := bow.get_node_or_null("GripPoint") as Marker2D
 	var spr := bow.get_node_or_null("Sprite") as Sprite2D

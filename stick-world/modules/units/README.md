@@ -40,7 +40,7 @@ modules/units/
     │   ├── block_resolver.gd             # 盾牌格挡纯判定（正面扇区 + 概率掷骰，无状态）
     │   ├── hitstop_controller.gd         # 命中顿帧（仅附身命中触发，全局最小间隔节流）
     │   ├── hitbox.gd                     # 受击判定 Area2D + 碰撞层 bit 常量
-    │   ├── status_effects.gd             # 状态效果（BURN/POISON/SLOW/STUN/HEAL/SUPPRESSED）
+    │   ├── status_effects.gd             # 状态效果（BURN/POISON/SLOW/STUN/HEAL；压制机制已删）
     │   ├── incoming_threat_ledger.gd     # 在飞箭矢账本（伤害估计 + 威胁时刻）
     │   └── unit_lod_director.gd          # 战斗级 LOD 调度（T0/T1/T2 三档 + 滞回 + 恐慌降刻，SystemSetup 装配）
     ├── ai/
@@ -126,4 +126,4 @@ modules/units/
 
 ### 单元测试
 
-相关套件：test_stickman_anims / test_health_component / test_strike_frame / test_combat_fidelity / test_incoming_threat_ledger / test_behavior_state_machine / test_behavior_harvest / test_ai_param_panel / test_ai_retreat_modulation / test_suppression / test_ai_spawn_jitter / test_ai_timing_save（均在 tests/unit/，运行方式见 [docs/技术/教程/测试矩阵.md](file:///f:/VSCode/game-2/docs/技术/教程/测试矩阵.md)）。
+相关套件：test_stickman_anims / test_health_component / test_strike_frame / test_combat_fidelity / test_incoming_threat_ledger / test_behavior_state_machine / test_behavior_harvest / test_ai_param_panel / test_ai_spawn_jitter / test_ai_timing_save（均在 tests/unit/，运行方式见 [docs/技术/教程/测试矩阵.md](file:///f:/VSCode/game-2/docs/技术/教程/测试矩阵.md)）。

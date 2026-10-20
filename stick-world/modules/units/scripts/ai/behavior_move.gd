@@ -166,6 +166,7 @@ func update(delta: float) -> void:
 	if _arrived:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
+		face_battle_dir()  # 站定面向敌阵（倒退/横移归位的移动残影朝向收口）
 		return
 
 	var pos: Vector2 = entity.global_position
@@ -180,10 +181,12 @@ func update(delta: float) -> void:
 		if _catching_up:
 			_catching_up = false
 			_update_formation_block(true)
-		# 编队成员到达队形位 → 播列阵动画并短暂滞留（对应传奇 ArriveAtFormationAnimationSystem）
+		# 编队成员到达队形位 → 短暂滞留一拍（列阵节奏；对应传奇
+		# ArriveAtFormationAnimationSystem 的"到位站定"）。**不播列阵动画**：
+		# SWL 的到达动画属造兵场景（单位逐个走出、落位一次礼节），战斗内
+		# 全员落位齐播 = 举手姿势穿帮（素材语义错配，创始人两次点正）——
+		# 动画只留给生产场景（recruit_manager 招募落位）
 		if _is_squad_member():
-			if entity.has_method("play_arrive"):
-				entity.play_arrive()
 			_arrive_hold = ARRIVE_HOLD_DURATION
 		elif not _hold_on_arrive:
 			finish()
@@ -243,16 +246,21 @@ func _is_squad_member() -> bool:
 ##      转入攻击拦路者（"打通"态：原号令挂起不清，击杀/脱离后自动续行赶路）。
 func _handle_path_block(block: Dictionary, dir: Vector2) -> void:
 	var nearest: Node = block.get("nearest")
-	# ③ 远程特例：射程内直接还击 → 边走边射，绕行分量照给（有隙绕着走）
+	# ③ 远程特例：射程内直接还击 → 边走边射。战斗推进令（engage_in_range）
+	# 不织绕行横分量——走射直穿（裁决#32：战场无绕行，敌挡路=接战）；赶路
+	# move（travel/村民）保留有隙绕行
 	if _ranged_walk_by_shot(nearest):
 		_detour_elapsed = 0.0
-		_detour_lateral = _detour_component_if_gap(block, dir)
+		_detour_lateral = Vector2.ZERO if _engage_in_range else _detour_component_if_gap(block, dir)
 		return
-	# ② 前置否决：敌已贴身（身体接触，绕行无物理空隙）或绕行超时限 → 不再绕
+	# ② 前置否决：敌已贴身（身体接触，绕行无物理空隙）或绕行超时限 → 不再绕。
+	# 战斗推进令（engage_in_range）整段跳过绕行：敌挡路＝接战——绕行是赶路
+	#（travel/村民）语义，两军对进时互相绕＝永不贴身永不接敌，表现就是
+	#「一群人互相不攻击跑步顶」（创始人 2026-10-12 实机点正）
 	var contact: bool = float(block.get("nearest_dist", INF)) <= BLOCKER_CONTACT_DIST
 	var expired: bool = _detour_elapsed >= DETOUR_GIVE_UP_TIME
 	var gap_side: float = 0.0
-	if not contact and not expired:
+	if not _engage_in_range and not contact and not expired:
 		gap_side = _probe_detour_gap(dir, float(block.get("side", 0.0)))
 	if gap_side != 0.0:
 		# ① 局部绕行（空隙侧横分量偏航；累计时长供"绕行超阈值"兜底转攻击）

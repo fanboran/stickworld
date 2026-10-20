@@ -12,7 +12,6 @@ extends Node3D
 ##
 ##   # 只出某一张：--shots=a | b | c | d | e
 ##   # 性能档（关 vsync + 可选放大分辨率压过刷新率上限）：--perf=1 [--res=2560x1440]
-##   # SubViewport 更新模式对照：--sv=always|once|disabled
 ##   # 角色 quad 通道对照：--char=blend|scissor
 ##
 ## 依赖（复用 proto_25d 已提交的 Blender 半场产物，本目录不改它）::
@@ -42,7 +41,8 @@ const S := 1.0 / 32.0                    # 卡 meta 烘焙 px -> 格：json 恒 
                                          # 24px/格 的屏幕密度由相机承担（set_cam_zoom），格数口径两侧一致
 const TILT_DEG := 26.0                   # 俯角：创始人要求"稍微增加"（原 20°），本次 +6°
 const CARD_SHADER := preload("res://modules/hd2d/shaders/card.gdshader")
-const CHAR_HOST := preload("res://modules/hd2d/scripts/char_sprite_3d.gd")
+const CharRig3D := preload("res://modules/hd2d/scripts/char_rig_3d.gd")
+const CHAR_DIRECT_BUCKETS := preload("res://modules/hd2d/scripts/char_direct_buckets.gd")
 const POST_SHADER := preload("res://modules/hd2d/shaders/post_hd2d.gdshader")
 const BUILDING_SHADOW_SHADER := preload("res://modules/hd2d/shaders/building_shadow.gdshader")
 
@@ -160,8 +160,9 @@ const FRONT_ROW: Array = [
 ##   · bg2 基线 = 真实地平线（底衬远端同步收到此处）。
 const SKYLINE_Z := -6.73                 # bg1 基线压屏幕下 1/3 线：v=-h/6 → z=-(v+CY·cosθ)/sinθ
 ## 战场地平线（格）：绿草地皮远端 z=0（=行走带后界 688px）。战场构图契约
-## （创始人 2026-09-16：全场景只有前景大地无后景）把它钉在屏幕上 1/3 线——
-## 地面占下 2/3、天空占上 1/3，任意缩放档成立（见 set_cam_zoom 战场分支）
+## （全场景只有前景大地无后景）把地面高度钉在**半屏**——02-战斗系统.md 二-A
+## Tier0「半屏高：战场高度约 1/2 屏幕高」（创始人 2026-10-05 改约，原为地平线
+## 钉上 1/3 线/地占下 2/3），任意缩放档成立（见 set_cam_zoom 战场分支）
 const BF_HORIZON_Z := 0.0
 ## 深端行走界（2D y）：前后景分界线（黄线）+2px 防与 bg1 卡共面闪烁——前景
 ## 整段可行走，建筑 footprint/城墙带是真正障碍（创始人 2026-09-15：黄线以下
@@ -239,23 +240,6 @@ const WALK_FRONT_PX := 970.5 # 行走带前端 px（宿主 WALK_FRONT_Y；= 516 
 const BSHADOW_Z := 3.3
 const BSHADOW_DEPTH := 2.6
 
-## 角色站位（3 个，全部正对相机）：主角色在路中、一前一后两个做纵深参照
-const CHARS: Array = [
-	{"x": -19.0, "z": 16.0, "flip": true},
-	{"x": 6.0, "z": 12.0, "flip": false},
-	{"x": 21.5, "z": 9.0, "flip": true},
-]
-## 遮挡验证：两个角色、同 x、只差 z。判读方式：
-##   x=-11 的那个正对 house_w8 的墙心（会被房子挡住）；
-##   x=-30.5 的那个在街排空隙（左边没房子，任何 z 都该看得见）—— 它是**对照组**，
-##   证明"z=-3 这一层的角色确实被渲染了"，从而把 x=-11 那个的消失归因于遮挡
-##   而不是"没画出来"。
-## OCC_X := 被墙挡的那个的 x；OCC_CTRL_X := 对照组 x
-const OCC_X := -11.0
-const OCC_CTRL_X := -30.5
-const OCC_FRONT_Z := 4.0
-const OCC_BEHIND_Z := -3.0
-
 var _root := ""
 var _temp := ""
 var _cards: Dictionary = {}
@@ -267,6 +251,34 @@ var _layout: Dictionary = {}      # 布局驱动模式的数据（空 = 手摆�
 @export var layout_data: Dictionary = {}
 var layout_name := ""             # 布局名（--layout= 或地图宿主 set；空 = 手摆主街）
 var battlefield := false          # 战场模式（城东开阔野地：无墙无街无楼群，战痕散布）
+## 战场行走带前缘的世界地面 z（格，含前缘余量；宿主地图算好 ground_bottom 后
+## 经 set_bf_band_front_z 推入——set_cam_zoom 战场分支的出界兜底锚，0 = 未推入
+var _bf_band_front_z := 0.0
+## 最近一次 set_cam_zoom 的原始入参（set_bf_band_front_z 迟到时重算取景用）
+var _last_user_zoom := -1.0
+## 战场地面占比锚（02 二-A.2「半屏高」直给参数）：推入后草地远端（BF_HORIZON_Z）
+## 钉在屏上 (1-p) 处——p=0.5 即地面占屏下 1/2；优先级高于带前缘兜底
+var _bf_ground_ratio := -1.0
+
+
+## 战场地面占比推入（一屏战场宿主调；同带前缘的迟到重算语义）
+func set_bf_ground_ratio(p: float) -> void:
+	if not battlefield or absf(p - _bf_ground_ratio) < 0.001:
+		return
+	_bf_ground_ratio = p
+	if _last_user_zoom > 0.0:
+		set_cam_zoom(_last_user_zoom)
+
+
+## 战场带前缘推入（宿主 battlefield 图 _ready 里 ground_bottom 定稿后调）：
+## 迟到重算——世界场景 build 时 set_cam_zoom(0.75) 先跑，此刻带前缘还没推入，
+## 推入后按同缩放档重跑一遍取景
+func set_bf_band_front_z(z: float) -> void:
+	if not battlefield or absf(z - _bf_band_front_z) < 0.001:
+		return
+	_bf_band_front_z = z
+	if _last_user_zoom > 0.0:
+		set_cam_zoom(_last_user_zoom)
 var resource_field := false       # 城外资源图模式（同战场式开阔，但无战争遗物、无天空剪影）
 var _tex_cache: Dictionary = {}
 
@@ -308,7 +320,7 @@ var _lamp_root: Node3D
 var _cam: Camera3D
 var _cam_attrs: CameraAttributesPractical
 var _char_host: Node3D = null
-## 实体 billboard 宿主容器（spawn_character 的挂点；烘焙整体归排除层）——
+## 实体宿主容器（spawn_character 的挂点；烘焙整体归排除层）——
 ## 与演示宿主 _char_host 分开：游戏图的火柴人全在这，不在演示宿主下
 var _char_entities_root: Node3D = null
 var _post_layer: CanvasLayer
@@ -330,8 +342,8 @@ var _wind := 0.0
 var _last_light_mode := "day"
 
 var _opts := {
-	"shots": "none", "perf": false, "res": "", "sv": "always", "layout": "",
-	"char": "blend", "tag": "", "svscale": "2", "flat": false, "debug": false,
+	"shots": "none", "res": "", "layout": "",
+	"tag": "", "flat": false, "debug": false,
 	"hide": "",
 }  # shots 默认 "none" = 静默常驻模式（游戏地图挂载用；probe 出图须显式 --shots=…）
 
@@ -378,11 +390,10 @@ func _ready() -> void:
 	if str(_opts["shots"]) == "none":
 		# 静默常驻（游戏内地图模式）：白天全效档点亮场景即返回，不截屏不退出
 		_apply_light("day")
-		_apply_stage("c")
+		# 渲染链二分诊断口：STICK_HD2D_STAGE=a/b 跳过后处理/辉光/DOF（默认 c 全效）
+		_apply_stage(OS.get_environment("STICK_HD2D_STAGE") if OS.get_environment("STICK_HD2D_STAGE") != "" else "c")
 		_update_px_size()
 		return
-	if bool(_opts["perf"]):
-		await _run_perf()
 	else:
 		await _run_shots(str(_opts["shots"]))
 	print("[hd2d] DONE")
@@ -446,16 +457,8 @@ func _parse_args() -> void:
 			continue
 		if s.begins_with("--shots="):
 			_opts["shots"] = s.get_slice("=", 1)
-		elif s.begins_with("--perf="):
-			_opts["perf"] = s.get_slice("=", 1) != "0"
 		elif s.begins_with("--res="):
 			_opts["res"] = s.get_slice("=", 1)
-		elif s.begins_with("--sv="):
-			_opts["sv"] = s.get_slice("=", 1)
-		elif s.begins_with("--svscale="):
-			_opts["svscale"] = s.get_slice("=", 1)
-		elif s.begins_with("--char="):
-			_opts["char"] = s.get_slice("=", 1)
 		elif s.begins_with("--tag="):
 			_opts["tag"] = s.get_slice("=", 1)
 		elif s.begins_with("--flat="):
@@ -1257,7 +1260,10 @@ func set_cam_x(cx: float) -> void:
 func set_cam_zoom(user_zoom: float) -> void:
 	if _cam == null or user_zoom <= 0.05:
 		return
+	_last_user_zoom = user_zoom
 	var uz: float = clampf(user_zoom, 0.25, 8.0)
+	if _joint_buckets != null:
+		_joint_buckets.update_outline_eff(uz)
 	var vp := _cam.get_viewport().get_visible_rect().size
 	_apply_cam_framing(DESIGN_HEIGHT * vp.x / (24.0 * vp.y * uz), _cam)
 
@@ -1288,12 +1294,19 @@ func _apply_cam_framing(size_units: float, cam: Camera3D) -> void:
 	var h_anchor: float = DESIGN_HEIGHT / 32.0
 	var z_bottom: float                                  # 屏幕底沿锚线的世界地面 z
 	if battlefield:
-		# 战场构图契约（创始人 2026-09-16）：全场景只有前景大地——地平线
-		# （绿草地皮远端 BF_HORIZON_Z）钉屏幕上 1/3 线，地面占下 2/3，任意
-		# 缩放档成立。推导同下行：屏幕底沿地面 z = 地平线 + (2/3)·h_v/sinθ
-		# ⇒ P.z = 地平线 + h_v/(6·sinθ) + P.y/tanθ
-		z_bottom = BF_HORIZON_Z + h_v * (2.0 / 3.0) / sin(t)
-		cam.position.z = BF_HORIZON_Z + h_v / (6.0 * sin(t)) + cam.position.y / tan(t)
+		# 战场构图契约（半屏高，02-战斗系统.md 二-A Tier0）：全场景只有前景大地
+		# ——地平线（绿草地皮远端 BF_HORIZON_Z）名义钉屏幕中线，地面占下 1/2。
+		# 带前缘兜底（2026-10-05 出界修复）：战场行走带深 85 格 + 前缘余量，半屏
+		# 构图在近缩放档只能装下 ~51-68 格——纯钉中线会把带前缘投到屏幕底沿
+		# 之外（战线贴前缘 = 整团出界）。取 max：半屏能装下时地平线恒中线；
+		# 装不下时以带前缘+余量为底锚（地平线相应上移），任意缩放档带内单位
+		# 永不出屏。推导同 village 分支：P.z = z_bottom − h_v/(2 sinθ) + P.y/tanθ
+		if _bf_ground_ratio > 0.0:
+			# 地面占比锚（半屏高直给）：屏幕底沿 = 草远端 + 占比×整屏地面深
+			z_bottom = BF_HORIZON_Z + _bf_ground_ratio * h_v / sin(t)
+		else:
+			z_bottom = maxf(BF_HORIZON_Z + h_v * 0.5 / sin(t), _bf_band_front_z)
+		cam.position.z = z_bottom - h_v * 0.5 / sin(t) + cam.position.y / tan(t)
 	else:
 		z_bottom = SKYLINE_Z + h_anchor / (3.0 * sin(t))
 		cam.position.z = z_bottom - h_v * 0.5 / sin(t) + cam.position.y / tan(t)
@@ -1320,6 +1333,17 @@ func _apply_cam_framing(size_units: float, cam: Camera3D) -> void:
 ## 宿主用本值做坐标重映射（remap_fx_pos）。
 func get_ground_squash() -> float:
 	return sin(deg_to_rad(TILT_DEG))
+
+
+## 3D 取景中心对应的地面世界 z（格）：z_c = P.z − P.y/tanθ（屏幕中心点
+## 的地面深度，沿视轴退避不改变该值——正交投影）。视觉域坐标协议
+##（remap_fx_pos 族）的活锚：取景中心随缩放档/构图契约变，旧实现锚死
+## walk_front 常量，相机一对错位时 2D 画布特效（伤害飘字等）整体偏移
+## （实测战场 Y 跟随态下沉半屏，2026-10-05）
+func get_view_center_ground_z() -> float:
+	if _cam == null:
+		return 0.0
+	return _cam.position.z - _cam.position.y / tan(deg_to_rad(TILT_DEG))
 
 
 ## 地面世界抬升（格）：台面/台后城内地面比街面高 PLAT_H——角色走到 z<路肩
@@ -1463,8 +1487,12 @@ func _build_world() -> void:
 	add_child(we)
 
 	# --- 太阳（card 靠伪法线吃它）+ 冷天空补光 ---
+	# 实时阴影是诊断口（STICK_SUN_SHADOW=0 关）：方向光 shadow pass 每帧把
+	# 全 3D 场景（含 ~5k MultiMesh 实例）重渲一遍进 shadow map，成本与窗口
+	# 分辨率无关（P0 实测 720p 与 1080p 帧时同阶）。战场模式单位全在一屏、
+	# 接触阴影走脚底贴片，实时影的观感收益待与帧时一起验收定去留。
 	_sun = DirectionalLight3D.new()
-	_sun.shadow_enabled = true
+	_sun.shadow_enabled = OS.get_environment("STICK_SUN_SHADOW") != "0"
 	_sun.directional_shadow_max_distance = 140.0
 	add_child(_sun)
 	# 补光（fill）：从主光反侧打一盏**不投影**的冷光，专门抬暗部。
@@ -1624,12 +1652,6 @@ func _build_world() -> void:
 	set_cam_zoom(0.75)
 	_build_sky()        # 贴图天幕 + 日/月盘（相机子节点，须在 set_cam_zoom 之后建）
 
-	# --- 2D 角色宿主（SubViewport -> billboard）---
-	# 静默常驻模式（游戏地图挂载）不生成写死的演示火柴人——街上有真玩家了；
-	# 实体角色渲染由宿主调 enable_play_characters() 接管（玩家/NPC 进 3D 场景）
-	if str(_opts["shots"]) != "none":
-		_spawn_char_host(float(str(_opts["svscale"])))
-
 	# --- HD-2D 后处理（屏幕空间：移轴 + 暗角 + 分级）---
 	_post_layer = CanvasLayer.new()
 	_post_layer.name = "PostHD2D"
@@ -1660,29 +1682,36 @@ func _build_world() -> void:
 	_hud.visible = false
 	_hud2.visible = false
 
-	# 应用 SubViewport 更新模式选项（静默模式无 char_host，跳过）
-	if _char_host != null:
-		match str(_opts["sv"]):
-			"once":
-				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-			"disabled":
-				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-			_:
-				_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
-
-## 游戏地图挂载：启用 3D 角色渲染通道（不生成演示站位）。
-## 宿主把玩家/NPC 逐个 add_char 并逐帧 set_world_pos——角色写深度站进场景，
-## 能被前景遮挡、与建筑正确排序（HD-2D 最佳实践，替代 2D canvas 浮层）。
-func enable_play_characters() -> void:
-	if _char_host == null:
-		_spawn_char_host(1.0, false)
-
-
-## 游戏接入：生成一个**独立**角色实例（各自 SubViewport/骨架/动画）。
-## 玩家与村民各自独立动画（共享 viewport 会全员同姿态），由宿主逐帧驱动。
+## 游戏接入：生成一个独立角色实例（各自 rig/动画），由宿主逐帧驱动。
 func spawn_character() -> Node:
-	var h: Node = CHAR_HOST.new()
+	return _spawn_joint_character()
+
+
+## 关节烘焙路线（裁决#15）：每实体一个 char_rig_3d 宿主（真 rig 只解算不进
+## 视口，部件直写全局 3D MultiMesh 桶——形状由 char_joint_atlas 预烘关节贴图
+## 承运，零逐帧视口零逐帧回读）。桶/隐藏 rig 画布按需装配一次。
+var _joint_buckets: Node = null
+var _joint_rig_parent: Node2D = null
+
+func _spawn_joint_character() -> Node:
+	if _joint_buckets == null:
+		var b: Node = CHAR_DIRECT_BUCKETS.new()
+		b.name = "CharJoint3D"
+		add_child(b)
+		# 描边宽档初值：桶默认按 zoom=0.75，本场景 set_cam_zoom 已跑过则以实档覆盖
+		if _last_user_zoom > 0.0:
+			b.update_outline_eff(clampf(_last_user_zoom, 0.25, 8.0))
+		_joint_buckets = b
+		var layer := CanvasLayer.new()
+		layer.name = "JointRigHosts"
+		layer.visible = false   # 只解算不绘制（CanvasItem 隐藏停绘制不停 _process）
+		add_child(layer)
+		var rigs := Node2D.new()
+		rigs.name = "Rigs"
+		layer.add_child(rigs)
+		_joint_rig_parent = rigs
+	var h: Node = CharRig3D.new()
 	h.name = "Char%d" % _char_seq
 	_char_seq += 1
 	# 挂实体容器（非 hd2d_world 根）：小地图烘焙按容器整体归排除层——
@@ -1691,27 +1720,10 @@ func spawn_character() -> Node:
 		_char_entities_root.add_child(h)
 	else:
 		add_child(h)
-	h.set_px_scale(2.0)   # 2x 超采样：描边锐利无彩边
-	h.build(self, "idle", TILT_DEG)
-	h.add_char(0.0, 0.0, false)
+	h.build(self, _joint_buckets, _joint_rig_parent, "idle", TILT_DEG)
 	return h
 
 var _char_seq: int = 0
-
-## 建/重建 2D 角色宿主（SubViewport -> billboard）。px_scale > 1 = SubViewport
-## 以更高分辨率渲染同一个 2D 角色（世界占位不变），用于隔离它的渲染开销。
-func _spawn_char_host(px_scale: float = 1.0, with_demo: bool = true) -> void:
-	if _char_host != null:
-		_char_host.queue_free()
-	_char_host = CHAR_HOST.new()
-	_char_host.name = "CharHost"
-	add_child(_char_host)
-	_char_host.set_px_scale(px_scale)
-	_char_host.build(self, "walk", TILT_DEG)
-	if with_demo:
-		for e in CHARS:
-			_char_host.add_char(float(e["x"]), float(e["z"]), bool(e["flip"]))
-		_char_host.mark_regular()
 
 
 ## 建筑接地影：贴在路肩带**之上**（y=0.07，高过所有分带面）的程序化软影。
@@ -2593,8 +2605,6 @@ func _apply_light(mode: String) -> void:
 	var lamp := 0.0
 	var night_mix := 0.0   # 夜档=1：整卡换用 Blender 月夜灯位烘的 <卡>_night.png
 	var night_comp := 0.0  # 夜档卡亮度补偿（烘卡亮度不被场景光二次压暗，见 card.gdshader）
-	var char_tint := Color(1, 1, 1)
-	var char_add := Color(0, 0, 0)
 	var post := {
 		# 主场景零模糊（创始人拍板）：移轴归零，模糊只由 DOF 的远焦层承担
 		"tilt_level": 0.0, "tilt_radius": 7.0, "tilt_center": 0.72,
@@ -2632,10 +2642,6 @@ func _apply_light(mode: String) -> void:
 			lamp = 1.3
 			night_mix = 1.0
 			night_comp = 0.6
-			# 2D 角色在夜里被"场景光"照到：冷蓝压暗 + 灯笼暖光池（加色收敛——
-			# 加多了角色拖橙边，也把画面带黄）
-			char_tint = Color(0.55, 0.61, 0.80)
-			char_add = Color(0.10, 0.055, 0.02)
 			# 夜景同样不做屏幕空间移轴：主场景零模糊是全局口径，夜幕的层次交给远焦 DOF
 			post["tilt_level"] = 0.0
 			post["vig_strength"] = 0.50
@@ -2659,8 +2665,6 @@ func _apply_light(mode: String) -> void:
 		l.light_energy = lamp
 	_last_light_mode = mode
 	_apply_cloud_light(mode)
-	if _char_host != null:
-		_char_host.set_light(char_tint, char_add)
 	_set_post(post)
 	print("[hd2d] 光照档=%s glow=%.2f lamp=%.2f night_mix=%.1f comp=%.2f" % [mode, glow, lamp, night_mix, night_comp])
 
@@ -2683,8 +2687,6 @@ func _update_px_size() -> void:
 ##   b: 加角色（SubViewport -> billboard），仍无任何后处理
 ##   c: 再加 HD-2D 后处理（glow + DOF + 移轴 + 暗角 + 分级）
 func _apply_stage(stage: String) -> void:
-	if _char_host != null:
-		_char_host.set_chars_visible(stage != "a")
 	_post_rect.visible = stage == "c" or stage == "d" or stage == "e"
 	_update_px_size()
 	var hd := stage == "c" or stage == "d" or stage == "e"
@@ -2746,16 +2748,9 @@ func _last_frame_ms() -> float:
 
 func _run_shots(which: String) -> void:
 	var t0 := Time.get_ticks_usec()
-	# SubViewport 实测：量 alpha 包围盒，证明 2D 像素真进了纹理
-	var bb: Rect2i = await _char_host.measure_bbox()
-	var px_per_grid := 24.0 * float(_char_host.px_scale)
-	print("[hd2d] SubViewport %dx%d 角色 alpha 包围盒=%s  -> 角色高 %.2f 格 (契约 4.09；1px=%.5f 格)" % [
-		_char_host.viewport.size.x, _char_host.viewport.size.y, str(bb),
-		float(bb.size.y) / px_per_grid, 1.0 / px_per_grid])
-
 	var do: Array = []
 	if which == "all" or which == "":
-		do = ["a", "b", "c", "d", "e"]
+		do = ["a", "c", "e"]
 	else:
 		do = [which]
 
@@ -2766,23 +2761,14 @@ func _run_shots(which: String) -> void:
 				_apply_stage("a")
 				await _settle(1.4)
 				await _shot("hd2d_a_base")
-			"b":
-				_apply_light("day")
-				_apply_stage("b")
-				await _settle(1.4)
-				await _shot("hd2d_b_char")
 			"c":
 				_apply_light("day")
 				_apply_stage("c")
-				_char_host.visible = false   # 验收图不要演示火柴人（正式静默模式本就没有）
 				await _settle(1.4)
 				await _shot("hd2d_c_final")
-			"d":
-				await _shot_occlusion()
 			"e":
 				_apply_light("night")
 				_apply_stage("e")
-				_char_host.visible = false
 				await _settle(1.6)
 				await _shot("hd2d_e_night")
 			"s":
@@ -2799,157 +2785,20 @@ func _run_shots(which: String) -> void:
 	print("[hd2d] 出图用时 %.1f s" % (float(Time.get_ticks_usec() - t0) / 1000000.0))
 
 
-## 遮挡验证：两个角色、同 x、只差 z。两格并排。
-## 判读：
-##   左格 FRONT  z=+4：两个角色都完整可见，且 x=-11 那个**盖住**建筑立面
-##                     （角色更近 → 深度测试通过）；
-##   右格 BEHIND z=-3：x=-30.5 的对照角色照常可见（证明这一层的角色在渲染）；
-##                     x=-11 那个与墙体重叠的像素整片消失，只在卡的 alpha 剪影
-##                     缺口（门柱边缘 alpha<0.4 的像素）透出几道细缝。
-## 后者同时证明：遮挡是**逐像素 alpha 剪影**级，而不是整片 quad 级 ——
-## 这是纸片路线能不能用的关键判据。
-func _shot_occlusion() -> void:
-	_apply_light("day")
-	_apply_stage("d")
-	var ch: Node3D = _char_host
-	# 清掉常规站位（含接地影），换成验证站位
-	for c in ch.get_children():
-		if c is MeshInstance3D and (str(c.name).begins_with("Char_")
-				or str(c.name).begins_with("Shadow_")):
-			(c as MeshInstance3D).visible = false
-	# 标签只用左边那一个：每格画面顶部写该格的状态，并排后读作 [FRONT…] | [BEHIND…]
-	# （两个标签都用会让两格各自出现"FRONT + BEHIND"四个字样，判读混乱）
-	_hud.text = "FRONT  z=+4（两角色都在街上：x=-11 盖住建面）"
-	_hud.visible = true
-	_hud2.visible = false
-	# 左格：两个角色都在建筑之前
-	var qf1: MeshInstance3D = ch.add_char(OCC_X, OCC_FRONT_Z)
-	var qf2: MeshInstance3D = ch.add_char(OCC_CTRL_X, OCC_FRONT_Z, true)
-	await _settle(1.2)
-	var p1: String = await _shot("_occ_front")
-	qf1.visible = false
-	qf2.visible = false
-	# 右格：同样的两个 x，退到建筑之后
-	var qb1: MeshInstance3D = ch.add_char(OCC_X, OCC_BEHIND_Z)
-	var qb2: MeshInstance3D = ch.add_char(OCC_CTRL_X, OCC_BEHIND_Z, true)
-	_hud.text = "BEHIND  z=-3（对照角色仍在，x=-11 被墙吃掉）"
-	await _settle(0.9)
-	var p2: String = await _shot("_occ_behind")
-	_hud.visible = false
-	_hud2.visible = false
-	_stitch(p1, p2, "hd2d_d_occlusion")
-	# 验证站位用完即弃，避免污染后续镜头（夜景那格要保持与 _c 同内容）
-	qf1.queue_free()
-	qf2.queue_free()
-	qb1.queue_free()
-	qb2.queue_free()
-	ch.clear_extra()
-	# 常驻角色恢复可见（_apply_stage 下一档会再统一设一次，这里保证独立出图时也对）
-	ch.set_chars_visible(true)
+
 
 
 # ------------------------------------------------------------------ 出图（合成）
 
-## 两图并排（中间 8px 分隔），落 hd2d_d_occlusion.png
-func _stitch(p1: String, p2: String, out_name: String) -> void:
-	var a := Image.new()
-	var b := Image.new()
-	if a.load(p1) != OK or b.load(p2) != OK:
-		push_error("[hd2d] 并排失败：读不到 "+p1+" / "+p2)
-		return
-	var gap := 8
-	var w := a.get_width() + b.get_width() + gap
-	var h := maxi(a.get_height(), b.get_height())
-	var out := Image.create(w, h, false, a.get_format())
-	out.fill(Color(0.02, 0.02, 0.03))
-	out.blit_rect(a, Rect2i(0, 0, a.get_width(), a.get_height()), Vector2i(0, 0))
-	out.blit_rect(b, Rect2i(0, 0, b.get_width(), b.get_height()),
-		Vector2i(a.get_width() + gap, 0))
-	var p := _temp + "proto_hd2d/" + out_name + ".png"
-	out.save_png(p)
-	print("[hd2d] stitch -> %s  %dx%d" % [p, w, h])
+
 
 
 # ------------------------------------------------------------------ 性能
 
-func _run_perf() -> void:
-	print("[hd2d] === 性能档 ===")
-	if str(_opts["res"]) != "":
-		var parts := str(_opts["res"]).split("x")
-		if parts.size() == 2:
-			DisplayServer.window_set_size(Vector2i(int(parts[0]), int(parts[1])))
-			await _settle(0.8)
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	Engine.max_fps = 0
-	await _settle(0.5)
-	print("[hd2d] vsync_mode=%d（2=disabled）  视口=%s" % [
-		DisplayServer.window_get_vsync_mode(), str(get_viewport().get_visible_rect().size)])
-	_update_px_size()
-
-	_apply_light("day")
-	_apply_stage("c")
-
-	# 热身：**必须先跑一轮"角色 + SubViewport ALWAYS + 后处理全开"再开始计时**。
-	# 实测（未热身）：L1 与 L4 是同一配置，却读到 55.6ms vs 6.06ms —— 差的就是
-	# 首次用到 char shader / SubViewport 渲染目标时的一次性编译与显存分配。
-	_char_host.set_chars_visible(true)
-	_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	await _settle(4.0)
-
-	# L0: 无角色（对照，后处理开）
-	_char_host.set_chars_visible(false)
-	await _measure("L0 无角色（对照，后处理开）", 3.0)
-	# L1: 角色 + SubViewport 每帧更新
-	_char_host.set_chars_visible(true)
-	_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	await _measure("L1 角色 + SubViewport ALWAYS", 3.0)
-	# L2: 角色 + SubViewport 冻结（只省 SubViewport 那一份）
-	_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-	await _settle(0.6)
-	await _measure("L2 角色 + SubViewport DISABLED(冻结)", 3.0)
-	# L3: 角色每帧更新 + 后处理关（量后处理成本）
-	_char_host.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	_apply_stage("b")
-	await _measure("L3 角色 ALWAYS + 后处理关", 3.0)
-	_apply_stage("c")
-	await _measure("L4 = L1 复测（验证热身已消掉一次性成本）", 3.0)
-	# L5: SubViewport 放大到 8x（相对默认 2x 是 16 倍像素）—— 把 SubViewport 的
-	# 渲染开销顶出本机 vsync 天花板 + 外部进程抢占的噪声底，才量得出这一项。
-	_spawn_char_host(8.0)
-	await _settle(3.0)
-	await _measure("L5 SubViewport 8x（16 倍像素，隔离该项开销）", 3.0)
-	_spawn_char_host(2.0)
-	await _settle(2.0)
-	await _measure("L6 回到默认 2x 复测", 3.0)
-	await _shot("hd2d_perf")
-	print("[hd2d] === 性能档结束 ===")
-	_apply_stage("c")
 
 
-func _measure(label: String, seconds: float) -> void:
-	await _settle(1.5)                     # 档内再稳一帧
-	_samples = PackedFloat32Array()
-	_measuring = true
-	var t0 := Time.get_ticks_usec()
-	await _settle(seconds)
-	var el := float(Time.get_ticks_usec() - t0) / 1000000.0
-	_measuring = false
-	var arr := Array(_samples)
-	arr.sort()
-	if arr.is_empty():
-		print("[perf] %s：无样本" % label)
-		return
-	var fps := float(arr.size()) / maxf(0.001, el)
-	var draws := int(RenderingServer.get_rendering_info(
-		RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME))
-	var prims := int(RenderingServer.get_rendering_info(
-		RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME))
-	print("[perf] %-40s 帧时=%.2f ms (%.0f fps)  min=%.2f p10=%.2f med=%.2f p95=%.2f max=%.2f  draws=%d prims=%d" % [
-		label, 1000.0 / maxf(0.01, fps), fps, float(arr[0]),
-		float(arr[mini(arr.size() - 1, int(arr.size() * 0.10))]),
-		float(arr[arr.size() / 2]),
-		float(arr[mini(arr.size() - 1, int(arr.size() * 0.95))]),
-		float(arr[arr.size() - 1]), draws, prims])
+
+
 
 
 func _process(delta: float) -> void:

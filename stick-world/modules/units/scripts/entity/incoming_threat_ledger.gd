@@ -10,7 +10,8 @@ extends RefCounted
 ## 在飞箭矢的满伤害估计总额（箭矢终态结算时扣减；估计口径允许偏差）
 var incoming_arrow_damage: float = 0.0
 
-## 最后一次被敌方箭矢瞄准的时刻（s，Time.get_ticks_msec 换算；-999=无威胁）
+## 最后一次被敌方箭矢瞄准的时刻（s，物理帧钟 Engine.get_physics_frames/
+## ticks_per_second——写入/消费全线同源，暂停冻结、回放确定；-999=无威胁）
 var arrow_threat_time: float = -999.0
 
 

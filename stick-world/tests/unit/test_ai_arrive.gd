@@ -1,8 +1,9 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：AI 完善批次 4——列阵到位动画 + 队友死亡补位。
-## 4.1 behavior_move 编队成员到达播 arrive + 滞留；非成员直接 finish
+## 单元测试：AI 完善批次 4——到位滞留节奏 + 队友死亡补位。
+## 4.1 behavior_move 编队成员到达滞留一拍（不播 arrive——战斗内不播列阵动画，
+##     动画只留生产场景 recruit_manager；创始人两次点正举手姿势穿帮）；非成员直接 finish
 ## 4.2 队友死亡（从 squad 移除）后 get_squad_dest 点位变化 = 自动补位
 
 @warning_ignore("shadowed_global_identifier")
@@ -65,7 +66,7 @@ class FakeUnit:
 
 func _ready() -> void:
 	_runner = TestRunner.new()
-	_runner.add_test("列阵: 编队成员到达播 arrive + 滞留", _test_arrive_member)
+	_runner.add_test("到位: 编队成员到达滞留一拍（不播 arrive）", _test_arrive_member)
 	_runner.add_test("列阵: 非编队成员到达直接 finish", _test_arrive_nonmember)
 	_runner.add_test("补位: 队友死亡后点位变化", _test_reposition)
 	_runner.run()
@@ -93,9 +94,9 @@ func _test_arrive_member() -> void:
 	var r: Array = _make_move_behavior(true)
 	var beh: Node = r[0]
 	var unit: FakeUnit = r[1]
-	beh.update(0.1)  # 到达 → 播 arrive + 滞留
-	_runner.assert_true(unit.arrive_calls > 0, "编队成员到达应播 arrive")
-	_runner.assert_false(beh.is_finished(), "播 arrive 期间不应立即 finish")
+	beh.update(0.1)  # 到达 → 滞留一拍（战斗内不播 arrive）
+	_runner.assert_equal(unit.arrive_calls, 0, "战斗内到达不播 arrive（动画留生产场景）")
+	_runner.assert_false(beh.is_finished(), "滞留期间不应立即 finish")
 	beh.update(0.5)  # 滞留结束 → finish
 	_runner.assert_true(beh.is_finished(), "滞留结束后应 finish")
 

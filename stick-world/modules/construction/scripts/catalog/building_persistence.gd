@@ -37,7 +37,10 @@ func save_to_db(db, slot_id: int, map_id: String) -> void:
 		push_error("[BuildingPersistence] buildings 旧数据清理失败 slot=%d map=%s: %s" % [slot_id, map_id, str(db.error_message)])
 	var bld_rows: Array = []
 	for b_id in _root._buildings.keys():
-		var b: Node = _root._buildings[b_id]
+		# 无类型取出再判活：建筑可能已被释放（战场演示跨图清理/拆除尾帧），
+		# 类型化赋值在赋值处就炸 "Trying to assign invalid previously freed
+		# instance"（自动存档与建筑释放竞态，实测 autosave 窗口必现）
+		var b = _root._buildings[b_id]
 		if not is_instance_valid(b) or not (b is Building):
 			continue
 		var typed: Building = b as Building

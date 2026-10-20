@@ -7,7 +7,7 @@ extends RefCounted
 ## 状态字段（_insert_position/_choosing_commander/_selected_org）与五个瞬时控件句柄
 ## （_rename_edit/_child_name_edit/_autonomy_option/_insert_name_edit/_insert_commander_option）
 ## 单一真相源留在宿主，本助手经 _host 读写；业务常量同样经宿主取（TAG/STATE/AUTONOMY 表）。
-## 活数据（人员/士气/统辖候选/空缺判定/配色）经 _host.vitals（org_panel_vitals.gd）取。
+## 活数据（人员/统辖候选/空缺判定）经 _host.vitals（org_panel_vitals.gd）取。
 ## 宿主经 const preload 引用本类（本文件不写 class_name）。
 
 # ─────────────────────────────── 回引 ────────────────────────────────
@@ -69,7 +69,7 @@ func _render_org_detail(d: Dictionary) -> void:
 		(d.personnel as Array).size(), (d.child_orgs as Array).size(),
 		parent_name, String(d.location) if not String(d.location).is_empty() else "（未设）"]
 	_host._detail_box.add_child(info)
-	# ── 组织概览卡（状态/士气/统辖/群龙无首/补位候选序）──
+	# ── 组织概览卡（状态/统辖/群龙无首/补位候选序）──
 	_render_org_vitals(d)
 	# ── 自主权限（即点即改） ──
 	var auto_row := HBoxContainer.new()
@@ -198,12 +198,11 @@ func _render_org_detail(d: Dictionary) -> void:
 		row.add_child(rm_btn)
 
 
-## 组织概览卡（内嵌 LIGHT 区块）：状态徽标 + 士气条 + 统辖规模 + 空缺警示 + 补位候选序。
-## 与树徽标同源数据（vitals.org_people / vitals.people_morale），避免两处口径分叉。
+## 组织概览卡（内嵌 LIGHT 区块）：状态徽标 + 统辖规模 + 空缺警示 + 补位候选序。
+## 与树徽标同源数据（vitals.org_people），避免两处口径分叉。
 func _render_org_vitals(d: Dictionary) -> void:
 	var org_id := String(d.id)
 	var people = _host.vitals.org_people(org_id)
-	var morale = _host.vitals.people_morale(people)
 	var panel := SketchPanel.new()
 	panel.tone = SketchPanel.Tone.LIGHT
 	_host._detail_box.add_child(panel)
@@ -223,21 +222,6 @@ func _render_org_vitals(d: Dictionary) -> void:
 			StickKit.LabelKind.BODY)
 	StickKit.label(head, "｜ 直属 %d 人 · 统辖 %d 人" % [
 			(d.personnel as Array).size(), people.size()], StickKit.LabelKind.HINT)
-	# 士气条（存活成员均值；一个都解析不到则不显示该行——取不到就不显示）
-	if morale >= 0.0:
-		var mrow := HBoxContainer.new()
-		mrow.add_theme_constant_override("separation", 6)
-		box.add_child(mrow)
-		StickKit.label(mrow, "士气", StickKit.LabelKind.HINT)
-		var bar := SketchProgress.new()
-		bar.max_value = 1.0
-		bar.value = morale
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(180, 14)
-		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		mrow.add_child(bar)
-		StickKit.label(mrow, "%d%%" % int(round(morale * 100.0)), StickKit.LabelKind.HINT,
-				_host.vitals.morale_color(morale))
 	# 群龙无首：与树标记同一语义（空缺就是空缺，不美化）
 	if _host.vitals.is_leaderless(d):
 		StickKit.label(box, "群龙无首：指挥官空缺，命令将停驻此层——请任命或等待补位",

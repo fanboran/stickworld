@@ -20,11 +20,18 @@ const ANIM_IDLE_STAFF := "idle_staff"
 const ANIM_WALK := "walk"
 const ANIM_RUN := "run"
 const ANIM_ATTACK := "attack"
+## 剑士攻击池第二式（Swordwrath-Attack2 真数据，Hit@0.9 与 Attack1@1.0 略异；
+## 池随机抽取，消费见兵种档案 attack_pool——机制同矛士 9f 攻击池）
+const ANIM_ATTACK_2 := "attack_2"
 ## 各武器专属攻击动画（转译自解包 Spine 数据，见 tools/baking/spine_import.gd）
 const ANIM_ATTACK_SPEAR := "attack_spear"
 ## 9f 矛士攻击池候选（Spearton-Attack2/3 戳刺变体，经档案 attack_pool 随机抽取）
 const ANIM_ATTACK_SPEAR_2 := "attack_spear_2"
 const ANIM_ATTACK_SPEAR_3 := "attack_spear_3"
+## 玩家蓄力投矛表现（Spearton-Throw 1.733s 真数据，S1b）：矛已出手纯表现无结算
+## 挂钩（Hit 事件被 weapon_mount 动画名过滤拦下，伤害走矛投射物）；attack_ 前缀
+## 享受 entity_motion 攻击守卫（播完前移动不切走）与播完回切通用语义
+const ANIM_THROW_SPEAR := "attack_spear_throw"
 const ANIM_ATTACK_PICKAXE := "attack_pickaxe"
 const ANIM_ATTACK_STAFF := "attack_staff"
 const ANIM_ATTACK_BOW := "attack_bow"
@@ -37,6 +44,11 @@ const ANIM_ATTACK_BOW := "attack_bow"
 ##   trim_after 变换生成；attack_bow（原版 Draw 全条）保留作对照/回退。
 const ANIM_ATTACK_BOW_HOLD := "attack_bow_hold"
 const ANIM_ATTACK_BOW_RELEASE := "attack_bow_release"
+## 装填动画（SWL Archidon-Reload 1.167s 直译）：放箭后冷却窗内播放
+## （收弓取箭上弦），冷却尽被下一轮拉满持瞄打断——SWL IsReloading/Reload
+## 语义，消费方 = weapon_mount._process 持瞄窗装填仲裁（玩家蓄力路径不经
+## 仲裁，无装填段）。
+const ANIM_ATTACK_BOW_RELOAD := "attack_bow_reload"
 ## 祭司治疗动画池（Meric-Heal1/Heal2，P7 批次 7b：dump healingAnimation 字段直译候选）
 ## 动画资产由任务 3.2 多骨架导入产出；本批先落常量供编译，运行时 _load_anim 缺资源只 push_warning
 const ANIM_HEAL_MERIC_1 := "heal_meric_1"
@@ -130,11 +142,14 @@ static func pick_heal_anim() -> String:
 
 const ANIM_DIR := "res://modules/stick_rig/animations/"
 
-## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓）
+## 全部攻击动画（通用剑攻 + 各武器专属：矛刺/镐挥/法杖/拉弓；装填是弓攻
+## 循环的冷却段——进本集只取状态机通用过渡，不进 WEAPON_ATTACK_ANIM，
+## 命中帧结算仍按放箭段 attack_bow_release）
 const ATTACK_ANIMS: Array[String] = [
 	ANIM_ATTACK, ANIM_ATTACK_SPEAR, ANIM_ATTACK_PICKAXE,
 	ANIM_ATTACK_STAFF, ANIM_ATTACK_BOW,
 	ANIM_ATTACK_BOW_HOLD, ANIM_ATTACK_BOW_RELEASE,
+	ANIM_ATTACK_BOW_RELOAD,
 ]
 
 ## 祭司治疗动画池（类型化数组直初始化，不经三元退化为 untyped，§七.4）
@@ -177,9 +192,13 @@ static func idle_for_weapon(weapon_type: int) -> String:
 ## 武器类型 -> 持械行走动画名（键序对齐 WeaponMount.WeaponType；缺省 = 通用 walk）。
 ## 原版各兵种 Walk：剑士 Swordwrath-Walk（通用）、弓手 Archidon-Walk（下肢走步、
 ## 上肢无通道 = 保持持弓 setup 姿态，与 idle_bow 同源）——其余兵种暂用通用走姿。
-## 消费方（weapon_mount 实体侧换装 / char_sprite_3d 镜像层换装）经 walk_for_weapon
+## 消费方（weapon_mount 实体侧换装 / char_rig_3d 镜像层换装）经 walk_for_weapon
 ## 取名，走 set_state_anim 换 walk state 资源（盾姿态分层同款机制，不增状态节点）。
 const ANIM_WALK_BOW := "walk_bow"
+## 持弓跑动（Archidon-Run 真数据直译：弓手专属步态，换装消费见 WEAPON_RUN_ANIM）
+const ANIM_RUN_BOW := "run_bow"
+## 持矛跑动（Spearton-Run 真数据直译：矛士专属步态，换装消费同 run_bow）
+const ANIM_RUN_SPEAR := "run_spear"
 ## 持弓行走·拉弓保持变体（烘焙合并资产，tools/baking/bake_walk_bow_hold.gd 生成）：
 ## walk_bow 腿轨 ∪ attack_bow_hold 上身轨按 Drawn@0.5 拉满帧定格——持瞄窗内移动
 ## 时上身保持拉满姿态（腿走弓不收）。消费接线（walk state 资源换装）由后续批次接。
@@ -193,11 +212,23 @@ const WEAPON_WALK_ANIM: Dictionary = {
 static func walk_for_weapon(weapon_type: int) -> String:
 	return WEAPON_WALK_ANIM.get(weapon_type, ANIM_WALK)
 
+## 武器类型 -> 持械跑动动画名（键序对齐 WeaponMount.WeaponType；缺省 = 通用 run）。
+## 弓/矛专属跑姿（真数据直译，此前共用剑士 run）；消费方与
+## WEAPON_WALK_ANIM 同款（换装 run state 资源，walk_for_weapon 镜像）。
+const WEAPON_RUN_ANIM: Dictionary = {
+	1: ANIM_RUN_SPEAR,       # SPEAR：持矛跑动（Spearton-Run）
+	2: ANIM_RUN_BOW,         # BOW：持弓跑动（Archidon-Run）
+}
+
+## 取武器类型对应的跑动动画名（未知类型回落通用跑姿）
+static func run_for_weapon(weapon_type: int) -> String:
+	return WEAPON_RUN_ANIM.get(weapon_type, ANIM_RUN)
+
 ## 武器类型 -> 持瞄保持行走变体名（键序对齐 WeaponMount.WeaponType；缺省空串 =
 ## 无保持变体，消费方回落 walk_for_weapon 的基础走姿）。持瞄窗（attack_bow_hold
 ## 激活期间）内移动时 walk state 换装成本变体——上身保持拉满、下肢照常走步；
 ## 窗结束恢复 walk_for_weapon。消费方与盾姿态分层同通道（weapon_mount 瞄准窗
-## 开关 → visual_controller.set_bow_aim_stance 换装 / char_sprite_3d.set_stance_anims 镜像）。
+## 开关 → visual_controller.set_bow_aim_stance 换装 / char_rig_3d.set_stance_anims 镜像）。
 const WEAPON_WALK_HOLD_ANIM: Dictionary = {
 	2: ANIM_WALK_BOW_HOLD,  # BOW：拉弓保持行走（walk_bow_hold 合并变体）
 }
@@ -235,18 +266,28 @@ static func setup_player(player: AnimationPlayer) -> void:
 	_load_anim(lib, ANIM_RUN)
 	# 持弓行走变体（武器走姿分层，walk state 资源换装用）
 	_load_anim(lib, ANIM_WALK_BOW)
+	# 持弓跑动变体（武器跑姿分层，run state 资源换装用）
+	_load_anim(lib, ANIM_RUN_BOW)
+	# 持矛跑动变体（同上）
+	_load_anim(lib, ANIM_RUN_SPEAR)
 	# 持弓行走·拉弓保持变体（烘焙合并资产，上身定格拉满+腿走步态，机制同上）
 	_load_anim(lib, ANIM_WALK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK)
+	# 剑士攻击池第二式（池变体资源，换进 attack state——同矛士池机制）
+	_load_anim(lib, ANIM_ATTACK_2)
 	_load_anim(lib, ANIM_ATTACK_SPEAR)
 	_load_anim(lib, ANIM_ATTACK_SPEAR_2)
 	_load_anim(lib, ANIM_ATTACK_SPEAR_3)
+	# 玩家蓄力投矛表现（Spearton-Throw 直译，S1b）
+	_load_anim(lib, ANIM_THROW_SPEAR)
 	_load_anim(lib, ANIM_ATTACK_PICKAXE)
 	_load_anim(lib, ANIM_ATTACK_STAFF)
 	_load_anim(lib, ANIM_ATTACK_BOW)
 	# 弓手射击两段（拉弓保持 / 释放，见 ANIM_ATTACK_BOW_HOLD 注）
 	_load_anim(lib, ANIM_ATTACK_BOW_HOLD)
 	_load_anim(lib, ANIM_ATTACK_BOW_RELEASE)
+	# 装填动画入库（消费接线归 S1b 行为批次，见常量注）
+	_load_anim(lib, ANIM_ATTACK_BOW_RELOAD)
 	# 祭司治疗动画（P7 批次 7b：Meric-Heal1/Heal2，资产由任务 3.2 导入）
 	for a in HEAL_ANIMS:
 		_load_anim(lib, a)
@@ -323,6 +364,14 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 	# 不加直达则 travel 绕经 idle，拉满姿态会朝站姿闪跳一下再放箭
 	sm.add_transition(ANIM_ATTACK_BOW_HOLD, ANIM_ATTACK_BOW_RELEASE, _smt(0.1, false))
 	sm.add_transition(ANIM_ATTACK_BOW_RELEASE, ANIM_ATTACK_BOW_HOLD, _smt(0.1, false))
+	# 装填段专属过渡（S1b 冷却窗消费，weapon_mount._process 装填仲裁驱动）：
+	# - 装填播完仍在移动 → walk（通用集只补了 →idle，移动回切走这条）
+	# - 冷却尽时拉满持瞄直接打断装填尾段（SWL 下一轮 Draw 起拍语义——
+	#   持瞄窗仲裁从 reload 直接 travel 到 hold，不经 idle 中转）
+	# - 装填中被取消窗放行的提前重射直接切 release（不经 hold 绕行）
+	sm.add_transition(ANIM_ATTACK_BOW_RELOAD, ANIM_WALK, _smt(0.08, false))
+	sm.add_transition(ANIM_ATTACK_BOW_RELOAD, ANIM_ATTACK_BOW_HOLD, _smt(0.08, false))
+	sm.add_transition(ANIM_ATTACK_BOW_RELOAD, ANIM_ATTACK_BOW_RELEASE, _smt(0.08, false))
 	# 祭司治疗施法（P7 补接线）：与攻击同款模式——LOOP_NONE 一次性动画，
 	# AT_START 切入防吃进度，播完回 idle（WeaponMount.cast_heal 驱动 travel）
 	for a in HEAL_ANIMS:
@@ -380,6 +429,17 @@ static func setup_tree(tree: AnimationTree, player: AnimationPlayer) -> Animatio
 		sm.add_transition(s, ANIM_ARRIVE, _smt(0.1, false))
 	sm.add_transition(ANIM_ARRIVE, ANIM_IDLE, _smt(0.08))
 	sm.add_transition(ANIM_ARRIVE, ANIM_DEAD, _smt(0.1, false))
+	# 玩家蓄力投矛（S1b，weapon_mount.throw_spear_manual 驱动）：从基础态切入，
+	# 播完回 walk/idle（攻击前缀统一走 _on_rig_anim_finished），死亡/受击可打断
+	_add_state(sm, ANIM_THROW_SPEAR)
+	for s in [ANIM_IDLE, ANIM_WALK, ANIM_RUN]:
+		sm.add_transition(s, ANIM_THROW_SPEAR, _smt(0.1, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_IDLE, _smt(0.12))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_WALK, _smt(0.08, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_DEAD, _smt(0.15, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_DEAD_HEADSHOT, _smt(0.15, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_HIT_FRONT, _smt(0.05, false))
+	sm.add_transition(ANIM_THROW_SPEAR, ANIM_HIT_BACK, _smt(0.05, false))
 	# 先关联 player，再设 tree_root，最后激活
 	tree.anim_player = player.get_path()
 	tree.tree_root = sm
@@ -415,6 +475,55 @@ static func set_state_animation(sm: AnimationNodeStateMachine, state_name: Strin
 	var node: AnimationNode = sm.get_node(state_name)
 	if node is AnimationNodeAnimation:
 		node.animation = anim_name
+
+
+# ============================================================
+#  无 rig 数据访问器（billboard 镜像链/无头命中解析共用）
+# ============================================================
+## .tres 本身就是 Animation 资源：length / loop_mode / metadata 不依赖 rig
+## 实例即可直读。HD-2D billboard 图上实体 2D 骨架已删（rig==null）——
+## 命中帧解析（weapon_mount._resolve_hit_event_time）、攻击播完回切
+## （visual_controller 软件定时）、出手前预测（behavior_attack）都从这里
+## 拿动画数据，与 2D 富管线的 rig.get_anim_event_time 同一真相源。
+static var _rigless_cache: Dictionary = {}
+
+
+## 动画时长（秒）；资源不存在返回 -1
+static func rigless_anim_length(anim_name: String) -> float:
+	var res := _rigless_res(anim_name)
+	return res.length if res != null else -1.0
+
+
+## 动画内嵌事件时间（秒）；首个匹配事件的绝对时间，无事件/无资源返回 -1。
+## 与 rig.get_anim_event_time 同构（元数据同源）
+static func rigless_anim_event_time(anim_name: String, event_name: String) -> float:
+	var res := _rigless_res(anim_name)
+	if res == null or not res.has_meta("anim_events"):
+		return -1.0
+	for e in res.get_meta("anim_events"):
+		if str(e["name"]) == event_name:
+			return float(e["time"])
+	return -1.0
+
+
+## 是否单次动画（LOOP_NONE）——billboard 软件回切定时只对单次动画生效
+## （循环动画永不结束，rig._check_animation_finished 同口径）
+static func rigless_is_oneshot(anim_name: String) -> bool:
+	var res := _rigless_res(anim_name)
+	return res != null and res.loop_mode == Animation.LOOP_NONE
+
+
+static func _rigless_res(anim_name: String) -> Animation:
+	if anim_name.is_empty():
+		return null
+	if _rigless_cache.has(anim_name):
+		return _rigless_cache[anim_name]
+	var path := ANIM_DIR + anim_name + ".tres"
+	var res: Animation = null
+	if ResourceLoader.exists(path):
+		res = load(path) as Animation
+	_rigless_cache[anim_name] = res
+	return res
 
 
 # ============================================================

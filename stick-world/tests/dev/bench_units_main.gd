@@ -172,7 +172,7 @@ func _inject_walk_input() -> void:
 			e.ai_move(_dirs[i], e._ai_running)
 
 
-## 黄金哈希：位置/hp/morale/facing/z_index/当前动画 摘要。
+## 黄金哈希：位置/hp/facing/z_index/当前动画 摘要。
 ## 优化不得改变该值（行为零回归的机器可判据）。
 func _golden_hash() -> String:
 	var s := ""
@@ -181,10 +181,9 @@ func _golden_hash() -> String:
 			s += "gone;"
 			continue
 		var h: Node = e.get_health()
-		s += "%.6f,%.6f:%.3f:%.3f:%d:%d:%s;" % [
+		s += "%.6f,%.6f:%.3f:%d:%d:%s;" % [
 			e.global_position.x, e.global_position.y,
 			h.hp if h != null else -1.0,
-			h.morale if h != null else -1.0,
 			e.get_facing(), e.z_index, e.get_current_anim(),
 		]
 	return s.sha1_text()
@@ -196,7 +195,6 @@ func _golden_hash() -> String:
 func _bench_micro() -> void:
 	await _micro_sync_markers()
 	await _micro_query_neighbors()
-	await _micro_rest_morale()
 	await _micro_stun_query()
 	await _micro_z_index_write()
 	await _micro_y_clamp()
@@ -225,16 +223,6 @@ func _micro_query_neighbors() -> void:
 			"us_per_call": float(Time.get_ticks_usec() - t0) / n})
 	await get_tree().process_frame
 
-
-func _micro_rest_morale() -> void:
-	var t0 := Time.get_ticks_usec()
-	for it in MICRO_ITERS:
-		for e in _units:
-			e._apply_rest_morale_recovery(1.0 / 60.0)
-	var n: int = MICRO_ITERS * UNIT_COUNT
-	_emit({"bench": "micro_rest_morale", "calls": n,
-			"us_per_call": float(Time.get_ticks_usec() - t0) / n})
-	await get_tree().process_frame
 
 
 func _micro_stun_query() -> void:

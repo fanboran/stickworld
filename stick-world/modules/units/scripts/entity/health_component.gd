@@ -1,40 +1,28 @@
 class_name HealthComponent
 extends Node
-## 生命与士气组件 -- 挂在 StickmanEntity 下，管理 HP / 士气。
+## 生命组件 -- 挂在 StickmanEntity 下，管理 HP。
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1（HealthComponent）。
 ## P0 阶段数值为占位值（数值层待原型后填，见 §16）。
 ##
 ## 职责：
-##   - 维护 hp / max_hp / morale / max_morale
-##   - take_damage() 扣血并降低士气
+##   - 维护 hp / max_hp
+##   - take_damage() 扣血
 ##   - 提供 is_dead() 查询
-##   - 发射 died / damaged / morale_changed 信号供外部响应
-##
-## 士气语义（裁决【删溃逃、立避战】）：士气值/受击损士气/恢复/光环全部保留，
-## 降级为**避战打分输入**（AIController C6 三因子等消费）——组件层不再持有
-## "溃逃"布尔态（旧 rout_threshold/is_routed 已退役：避战是行为态，由避战行为
-## 置位，经 AIController.is_disengaging() 查询，不是士气阈值推导）。
+##   - 发射 died / damaged / healed 信号供外部响应
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 @warning_ignore("unused_signal") signal died
 @warning_ignore("unused_signal") signal damaged(amount: float, source: Node)
 @warning_ignore("unused_signal") signal healed(amount: float)
-@warning_ignore("unused_signal") signal morale_changed(old_val: float, new_val: float)
 
 # ─────────────────────────────── @export（P0 占位数值）────────────────────────────────
 ## 最大 HP
 @export var max_hp: float = 100.0
-## 最大士气
-@export var max_morale: float = 100.0
-## 受伤时士气下降系数（每点伤害扣多少士气）
-@export var morale_damage_ratio: float = 0.6
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 当前 HP
 var hp: float = 0.0
-## 当前士气
-var morale: float = 0.0
 ## 死亡原因：最后一击是否爆头（原版 Kill(isHeadShot) 参数——爆头致死播
 ## Death-Headshot 专属死亡动画）。由 DamagePipeline 在爆头致死时置位。
 var died_from_headshot: bool = false
@@ -42,7 +30,6 @@ var died_from_headshot: bool = false
 
 func _ready() -> void:
 	hp = max_hp
-	morale = max_morale
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -53,13 +40,7 @@ func take_damage(amount: float, source: Node = null) -> void:
 		return
 	amount = maxf(0.0, amount)
 	hp = maxf(0.0, hp - amount)
-	# 士气随伤害下降
-	var old_morale: float = morale
-	morale = maxf(0.0, morale - amount * morale_damage_ratio)
 	damaged.emit(amount, source)
-	# 受击反馈走命中帧动画与血条，不产粒子（混战粒子会糊住火柴人剪影）
-	if old_morale != morale:
-		morale_changed.emit(old_morale, morale)
 	if hp <= 0.0:
 		died.emit()
 
@@ -73,35 +54,6 @@ func heal(amount: float) -> void:
 	healed.emit(amount)
 
 
-## 恢复士气（不超过上限）
-func restore_morale(amount: float) -> void:
-	amount = maxf(0.0, amount)
-	var old_morale: float = morale
-	morale = minf(max_morale, morale + amount)
-	if old_morale != morale:
-		morale_changed.emit(old_morale, morale)
-
-
-## 损失士气（伤亡恐慌/士气惩罚；不影响 HP，与 take_damage 的伴随士气损失区分）。
-func lose_morale(amount: float) -> void:
-	amount = maxf(0.0, amount)
-	if is_dead():
-		return
-	var old_morale: float = morale
-	morale = maxf(0.0, morale - amount)
-	if old_morale != morale:
-		morale_changed.emit(old_morale, morale)
-
-
-## 设置士气（受情绪标签影响时调用）
-func set_morale(value: float) -> void:
-	value = clampf(value, 0.0, max_morale)
-	var old_morale: float = morale
-	if old_morale != value:
-		morale = value
-		morale_changed.emit(old_morale, value)
-
-
 ## 是否已死亡
 func is_dead() -> bool:
 	return hp <= 0.0
@@ -112,10 +64,3 @@ func get_hp_ratio() -> float:
 	if max_hp <= 0.0:
 		return 0.0
 	return hp / max_hp
-
-
-## 士气比例 [0,1]
-func get_morale_ratio() -> float:
-	if max_morale <= 0.0:
-		return 0.0
-	return morale / max_morale

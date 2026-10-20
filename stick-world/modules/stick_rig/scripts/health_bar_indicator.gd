@@ -1,5 +1,6 @@
 class_name HealthBarIndicator
 extends Node2D
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 头顶阵营指示 + 手绘风血条。
 ##
 ## 视觉设计（2026-08-31 观察场审计重做）：
@@ -266,6 +267,12 @@ func set_rank(r: int) -> void:
 
 
 func _process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_process_tick(delta)
+	StickProf.t1("血条镜像", _pt)
+
+
+func _process_tick(delta: float) -> void:
 	# LOD 频率闸门：节流档累积到 1/hz 才跑一次（delta 换成累计值，速率语义不变）
 	if _update_hz <= 0.0:
 		return

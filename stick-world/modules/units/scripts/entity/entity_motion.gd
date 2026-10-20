@@ -4,7 +4,9 @@ extends RefCounted
 ## 职责：
 ## - 地形/持盾移速倍率查询（_terrain_speed_mult / _blocking_speed_mult）
 ## - 加速/减速与移动动画公式（_handle_acceleration / _handle_deceleration）
-## - AI 驱动移动与群体分离（_handle_ai_input / _apply_separation / _apply_static_separation）
+## - AI 驱动移动与群体分离转向力（_handle_ai_input / _apply_separation；
+##   位置互推已退役——固体碰撞语义见 battle_sim._clip_axis 与非 sim 链
+##   stickman_entity._update_solid_collision_mask）
 ## - 群体让路（9k，RTS 式：友军挡路给横向绕行分量，_sim_ally_yield / _ally_yield_lateral）
 ## - 统一移动处理（_apply_movement：方向 → 朝向/加速/奔跑 → velocity，sim 分支逐行保留）
 ##
@@ -24,21 +26,26 @@ func _init(entity: Node) -> void:
 
 
 # ─────────────────────────────── 运动常量 ────────────────────────────────
-## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT）
-const WALK_ANIM_BASE: float = 75.0   # 24px 换轨（旧 100；格/秒口径不变 → 动画相位不变）
-## run 动画基准速率（跑速=RUN_ANIM_BASE 时 anim_speed=1.0 * ANIM_SPEED_MULT，即原校准点；
-## 动画速率随 RUN_SPEED 等比联动——跑得越快步频越快，防滑步）
-const RUN_ANIM_BASE: float = 156.0   # 24px 换轨（旧 208×0.75；run_speed 同比 320→240）
-## 动画整体播放倍率（×1.4 加速，与 visual_controller.gd 一致）
-const ANIM_SPEED_MULT: float = 1.4
+## walk 动画基准速率（速度=WALK_ANIM_BASE 时 anim_speed=1.0）。滑步/倍速治理
+## 2026-10-06：基准必须=满走速 WALK_SPEED(160)——旧值 75 是 32→24px 换轨遗留，
+## 配 ×1.4 倍率后满走播速 2.99×、满跑 2.87×，全员 locomotion 约三倍速播放
+## ＝"画面像开倍速+滑步"的总根
+const WALK_ANIM_BASE: float = 160.0
+## run 动画基准速率（跑速=RUN_ANIM_BASE 时 anim_speed=1.0）＝RUN_SPEED(320)，
+## 动画速率随跑速联动——跑得越快步频越快，防滑步
+const RUN_ANIM_BASE: float = 320.0
+## 动画整体播放倍率（1.0=原作步频直出；历史值 1.4 是无设计档出处的遗留加速，
+## 2026-10-06 创始人验收"画面跟开了倍速一样"后复位）
+const ANIM_SPEED_MULT: float = 1.0
 ## 切到 idle 的速度阈值（减速停止判定；原实体常量随减速公式迁入）
 const IDLE_THRESHOLD: float = 5.0
 ## 分离检测半径（px）：与友军/任何单位过近时互相推开。数值与不变式（体宽 <
 ## 半径 < 编队间距）唯一维护在 formation 模块 formation_spacing.gd——历史上本处
 ## 与实体壳/批模拟各持一份副本，换轨漏改导致分离力对抗槽位、阵型挤散
 const SEPARATION_RADIUS: float = preload("res://modules/formation/api.gd").SEPARATION_RADIUS
-## 椭圆分离双轴（创始人 2026-09-30 观感裁决：billboard 竖长卡纵深重叠，纵向
-## 半径加大；单一真相源 formation_spacing，消费方判定已全部改椭圆口径）
+## 椭圆分离双轴（纵半径 = 前排间距量级——创始人 2026-10-11 裁决：垂直碰撞
+## 箱设成前排那么大，接战战团靠碰撞自然展开，不需要阵型算法管接战期间距；
+## 单一真相源 formation_spacing，消费方判定已全部改椭圆口径）
 const _FormationAPI := preload("res://modules/formation/api.gd")
 const SEPARATION_RADIUS_X: float = _FormationAPI.SEPARATION_RADIUS_X
 const SEPARATION_RADIUS_Y: float = _FormationAPI.SEPARATION_RADIUS_Y
@@ -48,8 +55,6 @@ const SEPARATION_SCAN_RADIUS: float = maxf(SEPARATION_RADIUS_X, SEPARATION_RADIU
 const COHESION_STEER_FORCE: float = 0.8
 ## 分离推力系数（叠加到 AI 移动方向）
 const SEPARATION_FORCE: float = 1.6
-## 静态分离单帧位置修正上限（px）：N 路推力累加后仍 ≤ 此值，防瞬移（审计 P0-3）
-const MAX_SEPARATION_CORRECTION: float = 3.0
 ## 让路触发门槛：友军相对移动意图方向的前向点积 ≥ 此值才算"挡在去路上"（9k）。
 ## 身旁/身后的友军走常规分离不算挡路；收拢末段友军偏出锥面，绕行权重随点积衰减归零
 const YIELD_AHEAD_DOT: float = 0.35
@@ -83,7 +88,9 @@ func _blocking_speed_mult() -> float:
 	return 1.0
 
 
-func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
+## 移速倍率链（地形×档案×减速态×持盾×护甲）——加速/减速/换档斜坡共用，
+## 单点维护防漂移（原减速路径漏 slow_mult 一项，斜坡化后两路同源）
+func _speed_mult_chain() -> float:
 	var se: Node = _entity.get_status_effects()
 	if not _entity._se_checked:
 		_entity._se_checked = true
@@ -93,24 +100,35 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 	var slow_mult: float = 1.0
 	if se != null and _entity._se_has_speed_mult:
 		slow_mult = se.get_speed_mult()
-	# 持盾移速惩罚（盾姿态分层，计划 5）：举盾行军更沉稳（档案 block_move_mult）
-	var block_mult: float = _blocking_speed_mult()
-	var mult: float = _terrain_speed_mult() * _entity.move_speed_mult * slow_mult * block_mult * _entity.armor_speed_factor
+	# 主控移速加成（SWL USER_CONTROLLED_SPEED=1.3 真值直译，翻译档 §7.1.1）：
+	# 附身单位全移速 ×1.3——操控"身手更矫健"的三特权之一（伤害 ×2 在
+	# damage_pipeline、攻速 ×1.3 在 weapon_mount 冷却链）
+	var uc_mult: float = 1.3 if _entity.possessed else 1.0
+	return _terrain_speed_mult() * _entity.move_speed_mult * slow_mult \
+			* _blocking_speed_mult() * _entity.armor_speed_factor * uc_mult
+
+
+func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
+	var mult: float = _speed_mult_chain()
 	var walk_cap: float = _entity.WALK_SPEED * mult
 	var run_cap: float = _entity.RUN_SPEED * mult
 	# 攻击动画期间不切移动动画（SWL 攻击与移动解耦：走 A 边跑边拉弓，
 	# 动画播完由 rig animation_finished 回切；否则 run/walk 每帧覆盖拉弓动画）
 	var attacking: bool = _entity._current_anim.begins_with("attack")
 	if _entity._is_running:
-		_entity._current_speed = run_cap
+		# 换档斜坡（批3）：跑档速度不瞬设——加速度限幅逼近跑速（SWL walkPower/Run
+		# 力模型的连续速度观感等价物；walk→run 瞬跳 160→320 是速度硬跳观感源）；
+		# 步频随爬升速度联动（攻击期间不动动画速率）
+		_entity._current_speed = move_toward(_entity._current_speed, run_cap, _entity.accel * delta)
+		if not attacking:
+			_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		return
 	_entity._current_speed += _entity.accel * delta
 	if allow_run and _entity._current_speed >= walk_cap:
+		# 进跑档只翻档位不跳速度——速度由跑档分支斜坡爬升
 		_entity._is_running = true
-		_entity._current_speed = run_cap
 		if not attacking:
 			_entity._visual.play("run")
-			_entity._visual.set_anim_speed(run_cap / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 	else:
 		# 不允许跑时，速度封顶在 walk_cap（受地形影响）
 		_entity._current_speed = minf(_entity._current_speed, walk_cap)
@@ -122,9 +140,10 @@ func _handle_acceleration(delta: float, allow_run: bool = true) -> void:
 
 func _handle_deceleration(delta: float) -> void:
 	if _entity._is_running:
+		# 换档斜坡（批3）：退档不瞬降（原 run→walk 为 320→160 瞬跳+立即换 walk）——
+		# 速度保留由下方减速段统一下坡；跑速带内维持跑步步态（步频随速度联动，
+		# 不提前换 walk——高速播 walk=快走滑步），掉进走速带自然换档
 		_entity._is_running = false
-		_entity._current_speed = _entity.WALK_SPEED * _terrain_speed_mult() * _entity.move_speed_mult * _blocking_speed_mult() * _entity.armor_speed_factor
-		_entity._visual.play("walk")
 	# 攻击动画期间不切移动动画（同 _handle_acceleration：走 A 保护）
 	var attacking: bool = _entity._current_anim.begins_with("attack")
 	if _entity._current_speed > 0:
@@ -133,6 +152,12 @@ func _handle_deceleration(delta: float) -> void:
 			_entity._current_speed = 0.0
 			if not attacking:
 				_entity._visual.play("idle")
+		elif _entity._current_speed > _entity.WALK_SPEED * _speed_mult_chain():
+			# 跑速带内减速：跑步步态+步频联动
+			if not attacking:
+				if _entity._current_anim != "run":
+					_entity._visual.play("run")
+				_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		else:
 			if not attacking and _entity._current_anim == "idle":
 				_entity._visual.play("walk")
@@ -144,7 +169,8 @@ func _handle_deceleration(delta: float) -> void:
 
 ## AI 驱动移动：根据 _ai_move_dir 处理加速/减速/动画，复用与玩家输入相同的物理逻辑。
 ## 移动方向叠加群体分离（防叠人/1字长蛇，行业 soft-body separation 简化版）
-## 与友军让路绕行（9k）。意图归零时清让路缓存（接近槽位/到位后绕行分量归零）。
+## 与友军让路绕行（9k，仅非战斗态——见 _yield_enabled）。意图归零时清让路缓存
+##（接近槽位/到位后绕行分量归零）。
 func _handle_ai_input(delta: float) -> void:
 	var dir: Vector2 = _entity._ai_move_dir
 	if dir != Vector2.ZERO:
@@ -155,12 +181,49 @@ func _handle_ai_input(delta: float) -> void:
 	_apply_movement(delta, dir, _entity._ai_running, false)
 
 
+## 让路开关（裁决#32）：友军让路横织只属非战斗赶路（村民穿行/旅行）——
+## 战斗期接敌方向被友军挡住时靠分离椭圆对推开（SWL PushApart 语义：推挤
+## 穿过而非侧织绕行），横向织行在战场观感上就是"绕来绕去不打"。
+func _yield_enabled() -> bool:
+	if not _entity.has_method("get_battle_instance"):
+		return true
+	var bi: Node = _entity.get_battle_instance()
+	return bi == null or not is_instance_valid(bi) \
+			or not bi.has_method("is_active") or not bi.is_active()
+
+
 ## 椭圆分离归一距离（1.0=椭圆边界，<1 过近）：横向/纵深双轴口径——
 ## 与旧圆形 (1-dist/r) 权重语义同构，直接替换比较基准
-func _sep_ellipse_d(offset: Vector2) -> float:
-	var ex: float = offset.x / SEPARATION_RADIUS_X
-	var ey: float = offset.y / SEPARATION_RADIUS_Y
+func _sep_ellipse_d(offset: Vector2, rx: float, ry: float) -> float:
+	var ex: float = offset.x / rx
+	var ey: float = offset.y / ry
 	return sqrt(ex * ex + ey * ey)
+
+
+## 分离半径解析（战斗域超级大档，2026-10-14 创始人裁决「碰撞体积再大一圈、
+## 尤其垂直开到超级大」）：战斗活跃期用战斗域 56/220（Y = 立绘视觉足印
+## ≈屏高 97/投影压缩 0.44，球阵被物理摊成宽浅横列），城镇/劳作维持基础值
+## 48/110——工位间距 96 < 超级大纵轴，全局放大 = 全镇互推乱套
+func _sep_radii() -> Vector2:
+	if _entity.has_method("get_battle_instance"):
+		var bi: Node = _entity.get_battle_instance()
+		if bi != null and is_instance_valid(bi) \
+				and bi.has_method("is_active") and bi.is_active():
+			return Vector2(_FormationAPI.SEPARATION_RADIUS_X_BATTLE,
+					_FormationAPI.SEPARATION_RADIUS_Y_BATTLE)
+	return Vector2(SEPARATION_RADIUS_X, SEPARATION_RADIUS_Y)
+
+
+## 分离不反转意图（批3 治"分离推挤换边"）：SWL PushApart 推的是刚体位置、
+## 从不反转移动意图——归一混合下逆意图分量一旦压过意图本身，单位就会倒着走
+## （朝向翻转/热锅蚂蚁源头之一）。反向推力压过走力 = **零速顶住**（SWL 走力
+## 对抗推力的失速观感；velocity=0 自动落进卡死看门狗的无意图豁免，压阵单位
+## 不再被误判卡死吃随机推力）；否则按横向分量偏航全速前进。前向/顶住二值，
+## 硬重叠交给静态分离的位置修正。
+static func _sep_no_reverse(mixed: Vector2, dir_n: Vector2) -> Vector2:
+	if mixed.dot(dir_n) < 0.0:
+		return Vector2.ZERO
+	return mixed.normalized()
 
 
 ## 班内一次性归队（SWL 滞回+节流直译；内核 formation/squad_cohesion——
@@ -190,9 +253,12 @@ func _apply_separation(dir: Vector2) -> Vector2:
 		var result := dir
 		var push_sim: Vector2 = _entity._sim.separation_push_ellipse(_entity._sim_sid)
 		if push_sim != Vector2.ZERO:
-			result = (result + push_sim * SEPARATION_FORCE).normalized()
+			result = _sep_no_reverse(result + push_sim * SEPARATION_FORCE, dir_n)
 		# 让路扫描与 AI 决策同拍（相位错峰，免逐帧邻居查询分配）；帧间持有缓存向量
-		if _entity._ai_tick_counter % _entity._ai_rate_div == _entity._ai_phase % _entity._ai_rate_div:
+		#（战斗期让路关闸 = 缓存清零，见 _yield_enabled）
+		if not _yield_enabled():
+			_yield_cache = Vector2.ZERO
+		elif _entity._ai_tick_counter % _entity._ai_rate_div == _entity._ai_phase % _entity._ai_rate_div:
 			_yield_cache = _sim_ally_yield(dir_n)
 		if _yield_cache != Vector2.ZERO:
 			result = (result + _yield_cache).normalized()
@@ -200,13 +266,17 @@ func _apply_separation(dir: Vector2) -> Vector2:
 	var map_ref: Node2D = _entity._map_ref
 	if map_ref == null or not is_instance_valid(map_ref) or not _entity._map_has_query:
 		return dir
-	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）
-	if _entity._sep_frame_counter % _entity._sep_rate_div != 0:
+	# 帧率优化：分离扫描隔物理帧跑（与静态分离共用帧计数）；
+	# 相位按实例奇偶错开（批3 错峰）——全场不再同刻同拍扫描修正
+	if _entity._sep_frame_counter % _entity._sep_rate_div != _entity._sep_phase:
 		return dir
 	var push := Vector2.ZERO
 	var yield_side: float = 0.0
 	var yield_mag: float = 0.0
-	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS):
+	var yield_on: bool = _yield_enabled()
+	var radii: Vector2 = _sep_radii()
+	var scan: float = maxf(radii.x, radii.y)
+	for e in map_ref.query_neighbors(_entity.global_position, scan):
 		if e == _entity or not is_instance_valid(e):
 			continue
 		if not (e is CharacterBody2D):
@@ -215,13 +285,13 @@ func _apply_separation(dir: Vector2) -> Vector2:
 			continue
 		var offset: Vector2 = _entity.global_position - e.global_position
 		var dist: float = offset.length()
-		var ed: float = _sep_ellipse_d(offset)
+		var ed: float = _sep_ellipse_d(offset, radii.x, radii.y)
 		if ed >= 1.0 or dist <= 0.001:
 			continue
 		# 越近推力越大（椭圆归一距离的 1-ed 线性权重）
 		push += offset.normalized() * (1.0 - ed)
-		# 9k 让路：仅友军计入"挡路"（同阵营 + 前向锥面内；权重随椭圆距离×前向点积衰减）
-		if "faction_id" in e and e.faction_id == _entity.faction_id:
+		# 9k 让路（非战斗态）：仅友军计入"挡路"（同阵营 + 前向锥面内；权重随椭圆距离×前向点积衰减）
+		if yield_on and "faction_id" in e and e.faction_id == _entity.faction_id:
 			var ahead: float = -offset.normalized().dot(dir_n)
 			if ahead > YIELD_AHEAD_DOT:
 				var w: float = (1.0 - ed) * ahead
@@ -232,7 +302,7 @@ func _apply_separation(dir: Vector2) -> Vector2:
 		return dir
 	var result := dir
 	if push != Vector2.ZERO:
-		result = (result + push * SEPARATION_FORCE).normalized()
+		result = _sep_no_reverse(result + push * SEPARATION_FORCE, dir_n)
 	if yield_mag > 0.0:
 		result = (result + _ally_yield_lateral(dir_n, yield_side, yield_mag)).normalized()
 	return result
@@ -247,12 +317,13 @@ func _sim_ally_yield(dir_n: Vector2) -> Vector2:
 	var my_faction: int = _entity.faction_id
 	var side: float = 0.0
 	var mag: float = 0.0
-	for oid in sim.query_neighbor_ids(my_pos, SEPARATION_SCAN_RADIUS):
+	var radii: Vector2 = _sep_radii()
+	for oid in sim.query_neighbor_ids(my_pos, maxf(radii.x, radii.y)):
 		if sim.get_faction(oid) != my_faction:
 			continue
 		var to: Vector2 = sim.get_pos(oid) - my_pos
 		var dist: float = to.length()
-		var ed: float = _sep_ellipse_d(to)
+		var ed: float = _sep_ellipse_d(to, radii.x, radii.y)
 		if dist <= 0.001 or ed >= 1.0:
 			continue
 		var ahead: float = to.dot(dir_n) / dist
@@ -284,42 +355,11 @@ func _ally_yield_lateral(dir_n: Vector2, side: float, mag: float) -> Vector2:
 	return perp * (minf(mag, 1.0) * YIELD_LATERAL_FORCE)
 
 
-## 静态分离（soft-body 位置修正）：对过近邻居直接推位置（重叠量各半，双向）。
-## 与 _apply_separation 的区别：后者只在移动时生效；停住的单位（射程边缘
-## 互停的敌我）靠本方法持续分开，解决"黏住"bug。参考 RtsGame.resolveSoftCollisions。
-## 2026-08-31 审计 P0-3：所有邻居的推力**先累加再限幅**——原实现对每路推力
-## 直接写坐标线性叠加（被 N 人围住 = N 路叠加无上限，一帧几十上百 px = 肉眼瞬移），
-## 现在单帧总修正 ≤ MAX_SEPARATION_CORRECTION。
-func _apply_static_separation() -> void:
-	var map_ref: Node2D = _entity._map_ref
-	if map_ref == null or not is_instance_valid(map_ref) or not _entity._map_has_query:
-		return
-	var total_push := Vector2.ZERO
-	# +8px 余量：网格位置是本帧重建时刻的快照，覆盖帧内已发生的位移
-	for e in map_ref.query_neighbors(_entity.global_position, SEPARATION_SCAN_RADIUS + 8.0):
-		if e == _entity or not is_instance_valid(e):
-			continue
-		if not (e is CharacterBody2D):
-			continue
-		if e.has_method("is_dead") and e.is_dead():
-			continue
-		var offset: Vector2 = _entity.global_position - e.global_position
-		var dist: float = offset.length()
-		var ed: float = _sep_ellipse_d(offset)
-		if ed >= 1.0:
-			continue
-		if dist <= 0.001:
-			# 完全重叠：退化为固定方向（向上），否则无法计算推开方向
-			offset = Vector2.UP
-			ed = 0.0
-		# 重叠量的一半推给自己（对方也在推自己，双向合计推开整个重叠量）；
-		# 深度按椭圆归一折算（纵深轴为名义尺度）
-		total_push += offset.normalized() * ((1.0 - ed) * SEPARATION_RADIUS_Y * 0.5)
-	if total_push == Vector2.ZERO:
-		return
-	if total_push.length() > MAX_SEPARATION_CORRECTION:
-		total_push = total_push.normalized() * MAX_SEPARATION_CORRECTION
-	_entity.global_position += total_push
+## 静态分离（soft-body 位置修正）已随固体碰撞语义退役（裁决#40b：任何单位
+## 不被其他单位位移——SWL Unit.PushApart 基类为空方法，翻译档 §7.1.2）。
+## 站位不再由互推维持：sim 链逐轴固体阻挡（battle_sim._clip_axis）/Node 链
+## 单位层物理互撞（battle 期 collision_mask 开单位层，move_and_slide 贴边滑动）
+## 接管"不穿人"；本类的 _apply_separation 转向力保留（只弯折移动方向，不挪人）。
 
 
 ## 统一移动处理（玩家与 AI 共用）：方向 → 朝向/加速/奔跑 → velocity。
@@ -331,13 +371,22 @@ func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> 
 		if dir.length() > 1.0:
 			dir = dir.normalized()
 		if dir.x != 0:
-			var new_facing := 1 if dir.x > 0 else -1
-			if new_facing != _entity._facing:
-				_entity._facing = new_facing
-				_entity._apply_scale()
+			# facing 滞回（批3 源治热锅蚂蚁）+ 朝向节流走闸（SWL
+			# DIRECTION_CHANGE_FREQUENCY=0.5 直译）：反向意图连续持续
+			# FACING_PERSIST_SECS 才放行翻面请求——节流窗内保持原朝向
+			# （人向新向走、脸缓半拍转——SWL 转身节奏），瞬时反号攒不满
+			# 滞回窗根本翻不动；节流兜底低频翻转
+			var side := 1 if dir.x > 0 else -1
+			if _entity.note_move_facing(side, delta):
+				_entity.try_set_facing(side)
+		else:
+			_entity.note_move_facing(0, delta)
 		if run:
 			_entity._is_running = true
-			_entity._current_speed = _entity.RUN_SPEED * _terrain_speed_mult() * _entity.move_speed_mult
+			# 换档斜坡（批3）：强制跑同样不瞬跳——AI run/walk 意图切换即速度
+			# 硬跳的主源；加速度限幅逼近跑速（步频随速度联动）
+			var run_target: float = _entity.RUN_SPEED * _terrain_speed_mult() * _entity.move_speed_mult
+			_entity._current_speed = move_toward(_entity._current_speed, run_target, _entity.accel * delta)
 			_entity._visual.play("run")
 			_entity._visual.set_anim_speed(_entity._current_speed / RUN_ANIM_BASE * ANIM_SPEED_MULT)
 		else:

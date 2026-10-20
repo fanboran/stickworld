@@ -193,7 +193,7 @@ func _squad_names(n: int) -> Array:
 	return names
 
 
-## 状态行：checkpoint 说明 + 存活比 / 终局判定（斩首优先）
+## 状态行：checkpoint 说明 + 存活比 / 终局判定
 func _status_text() -> String:
 	var base := _ckpt_note if _ckpt_note != "" else "RL checkpoint · greedy 决策"
 	var la := _count_alive(_arena.get("_attacker"))

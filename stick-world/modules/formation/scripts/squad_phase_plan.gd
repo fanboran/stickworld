@@ -103,6 +103,10 @@ var _final_target: Vector2 = Vector2.ZERO  ## 推进终点（号令目标点）
 var _leap_line: Vector2 = Vector2.ZERO     ## 当前跃进线（本轮波次落点基准）
 var _advance_dir: Vector2 = Vector2.RIGHT  ## 推进方向（终点 - 小队质心，退化 +x）
 var _phase: int = PH_IDLE           ## 当前相位
+var _wave_dests: Dictionary = {}    ## 波次落点缓存（iid -> 世界坐标）：跃进相位内逐成员
+                                    ## 冻结——落点锚定的是跃进线不是活体质心，成员陆续
+                                    ## 到位引起的质心漂移/锚向歪斜不得回引晃动落点
+                                    ## （否则到位判定在容差边缘反复横跳，波次靠超时兜底）
 var _phase_timer: float = 0.0       ## 当前相位已耗时（s）
 var _wait_duration: float = 0.0     ## 当前等待相位总时长（进入等待时掷骰定局）
 var _roles: Dictionary = {}         ## 成员角色：unit.get_instance_id() -> ROLE_*（每循环重排自愈掉员）
@@ -239,7 +243,7 @@ func assign_roles(units: Array, slots: Dictionary, anchor: Dictionary, quality_o
 # ─────────────────────────────── 相位机（宿主节拍驱动）────────────────────────────────
 
 ## 计划节拍推进（宿主按 phase_tick_interval 调用；原则④ 决策有节拍，无自转）。
-## 每拍：先接敌反应（被压制/背敌 → seek_cover），再推进当前相位。
+## 每拍：先接敌反应（被瞄准/背敌 → seek_cover），再推进当前相位。
 func tick(delta: float) -> void:
 	if not _active:
 		return
@@ -282,11 +286,13 @@ func _enter(phase: int) -> void:
 			_roll_wait(false)
 		_:
 			pass
+	if phase == PH_CORE_LEAP or phase == PH_FLANK_LEAP:
+		_wave_dests.clear()   # 新波次：落点缓存随相位重建（见 _tick_leap）
 
 
 ## 单波次跃进推进（core_wave=true 核心+Scout / false 双翼）：
 ##   - 波次成员逐一取 11b 槽位落点（get_squad_dest mode="formation"，复用槽位基建）；
-##   - 守卫成员（士气行为/接战/他人号令）本拍不打断；同目标号令不重发（防重入）；
+##   - 守卫成员（撤退类行为/接战/他人号令）本拍不打断；同目标号令不重发（防重入）；
 ##   - 全员到位（或移动超时）→ 进入等待相位；末跳（跃进线即终点）完成 → 计划完成。
 func _tick_leap(units: Array, core_wave: bool) -> void:
 	var wave_roles: Array = [ROLE_CORE, ROLE_SCOUT] if core_wave else [ROLE_RFLANK, ROLE_LFLANK]
@@ -296,12 +302,17 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 		var role := get_role_of(u)
 		if not (role in wave_roles):
 			continue
-		var dest: Vector2 = _host.get_squad_dest(_squad_id, u, _leap_line, "formation")
+		# 波次落点冻结（首拍计算后缓存）：活体锚（质心/平均面向）随成员到位而漂移，
+		# 逐拍重算会让已到位成员的落点又漂出容差——波次语义是"到这条线"，不是"追活锚"
+		var iid: int = u.get_instance_id()
+		if not _wave_dests.has(iid):
+			_wave_dests[iid] = _host.get_squad_dest(_squad_id, u, _leap_line, "formation")
+		var dest: Vector2 = _wave_dests[iid]
 		if u.global_position.distance_to(dest) <= tolerance:
 			continue  # 已到位
 		all_set = false
 		if _member_guarded(u):
-			continue  # 接战/士气行为/玩家号令：本拍不打断（超时兜底推进相位）
+			continue  # 接战/撤退类行为/玩家号令：本拍不打断（超时兜底推进相位）
 		if _ordered_to(u, dest):
 			continue  # 号令在途且目标未变，防重入重播
 		_issue_move(u, dest)
@@ -321,9 +332,12 @@ func _tick_leap(units: Array, core_wave: bool) -> void:
 ##   - 被瞄准：arrow_threat_time 窗口内的瞄准登记（轻量感知反应）；
 ##   - 背敌：推进方向反半平面 back_enemy_radius 内有存活敌人（reaction-plan
 ##     DT_AWAY_FROM_TARGET 语义映射）。
-## 守卫成员（士气行为/接战中/他人号令）不介入——接战成员交还战斗行为。
+## 守卫成员（撤退类行为/接战中/他人号令）不介入——接战成员交还战斗行为。
 func _contact_reaction(units: Array) -> void:
-	var now_real: float = Time.get_ticks_msec() / 1000.0
+	# arrow_threat_time 时基 = 物理帧钟（写入侧 weapon_ranged、消费侧
+	# team_ai_snapshot/behavior_attack 同源；暂停冻结、回放确定）
+	var now_real: float = float(Engine.get_physics_frames()) \
+			/ float(Engine.physics_ticks_per_second)
 	var window: float = float(_p.get("threat_window", 3.0))
 	var radius: float = float(_p.get("back_enemy_radius", 260.0))
 	var back_dot: float = float(_p.get("back_enemy_dot", -0.25))
@@ -434,7 +448,7 @@ func _ai_of(u: Node) -> Node:
 
 
 ## 成员是否处于"本拍不打断"守卫（与编队跟队 tick 同口径）：
-##   士气驱动行为（retreat/seek_cover）/ 射程内接战（交还战斗行为）/ 玩家与上级号令。
+##   撤退类行为（retreat/seek_cover）/ 射程内接战（交还战斗行为）/ 玩家与上级号令。
 func _member_guarded(u: Node) -> bool:
 	var ai: Node = _ai_of(u)
 	if ai == null:

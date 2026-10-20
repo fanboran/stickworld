@@ -92,8 +92,8 @@ GameRoot.BattleDirector（多战场调度；team_ai_enabled 开时对双方启�
 | TeamAi 总开关 | team_ai_enabled（ai.personality.global，缺键默认开） | battle_director.gd `_team_ai_enabled` | — |
 | 任务槽内核 | slot_kernel_enabled（ai.personality） | team_ai.gd `_task_board_enabled` → task_board.gd | test_task_board.gd |
 | 效用打分 | default_behavior_v2_enabled / demand_increment / demand_variance / softmax_*（ai.personality）；写入端 ai.org_default_behavior 的 writer_enabled | team_ai.gd → utility_scorer.gd | test_utility_scorer.gd / test_org_default_behavior.gd |
-| 点射节奏 | burst_shots / burst_wait / night_hesitate_mult（ai.behavior_profiles baseline 行） | units behavior_attack.gd（连射-停顿节奏）+ units weapon_mount.gd（连射散布热度） | test_ai_param_panel.gd |
-| 压制=定时锁死 | suppression_enabled 键族（ai.behavior_profiles baseline 行） | units status_effects.gd（触发+士气流失）/ ai_controller.gd（决策禁令）/ arrow_projectile.gd（近失）；modules/formation/scripts/squad_phase_plan.gd 消费其查询 | test_suppression.gd |
+| 点射节奏（已退役） | burst_* / night_hesitate_mult 键已清（裁决#32：RWR 血统，SWL/SW3 dump 无点射/犹豫机制） | —（weapon_mount 散布热度保留为射击手感参数） | test_ai_param_panel.gd（退役键不复活断言） |
+| 压制=定时锁死（已删除） | 整机制删除＝创始人裁决（键族清除；RL层级指挥训练v3 同口径） | —（无消费方；STATUS 效果组件仅存 BURN/POISON/SLOW/STUN/HEAL） | —（test_suppression.gd 随机制删除） |
 | 撤退调制 | retreat_mod_enabled 键族（ai.behavior_profiles）+ retreat_chance（ai.personality.global） | units ai_controller.gd（中间带掷骰）+ units behavior_retreat.gd（双档） | test_ai_retreat_modulation.gd |
 | 小队相位计划 | phase_plan_enabled（ai.squad_phase_plan.global，生效默认开） | modules/formation/scripts/formation_system.gd 宿主段 → squad_phase_plan.gd | test_squad_phase_plan.gd |
 | 权威值跳槽 | authority_switch_enabled 键族（ai.formation_authority.global，生效默认开） | modules/formation/scripts/formation_system.gd 权威值择班段 + 自主跳槽段 | test_authority_switch.gd |

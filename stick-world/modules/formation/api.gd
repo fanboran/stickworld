@@ -8,7 +8,7 @@
 ## 编制层级（现实军衔体系重排）：班 squad（8~12 人小班、硬顶 15，班长 rank 1，
 ## 阵亡组织侧补位免费轮转；班内另有火力组指挥分组 = 号令寻址粒度，不占军衔
 ## 不入组织树）→ 排 platoon（2~3 班 + 排长 1 名 rank 2，战斗域本地
-## 聚合不入组织树；排长阵亡 = 指挥链缺口：该排失去集火号令与排长士气光环，
+## 聚合不入组织树；排长阵亡 = 指挥链缺口：该排失去集火号令，
 ## 到战斗结束不补员）→ 连/战场（2~4 排 + 连长或指挥官 rank 3，挂载点 =
 ## platoon 的 company_id 字段，指挥官批次接入）。
 ##
@@ -70,6 +70,10 @@ const SEPARATION_RADIUS_X: float = _Spacing.SEPARATION_RADIUS_X
 const SEPARATION_RADIUS_Y: float = _Spacing.SEPARATION_RADIUS_Y
 ## 分离半径兼容别名（= 横向轴 X）：消费方未改椭圆判定前自动跟随横向口径
 const SEPARATION_RADIUS: float = _Spacing.SEPARATION_RADIUS
+## 战斗域分离半径（战场单位专用超级大档，2026-10-14 创始人裁决；城镇用基础值，
+## 判据见 scripts/formation_spacing.gd 战斗域段）
+const SEPARATION_RADIUS_X_BATTLE: float = _Spacing.SEPARATION_RADIUS_X_BATTLE
+const SEPARATION_RADIUS_Y_BATTLE: float = _Spacing.SEPARATION_RADIUS_Y_BATTLE
 
 ## ── 在役 FormationSystem 宿主注册（units 侧消费聚拢转向建议的合规通道）──
 ## FormationSystem._enter_tree/_exit_tree 登记注销（单战场单实例，后进先出）；

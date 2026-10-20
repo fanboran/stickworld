@@ -23,6 +23,13 @@ extends Node
 ## WORK_COMBAT/WORK_BUILD/WORK_HAUL/WORK_TRANSPORT/WORK_FORAGE，避免跨模块依赖；
 ## WORK_HAUL 为全员基础能力，is_work_allowed 恒放行。
 
+# ─────────────────────────────── 类型契约出口 ────────────────────────────────
+## 批模拟内核脚本（battle_sim.gd）——units 侧 sim 接线（set_battle_sim 注入的
+## 实例类型）经本常量引用，禁止直连 class_name BattleSim（重命名即静默断多处，
+## 见 stick_rig/api.gd 导 ANIMS_SCRIPT 先例）。类型注解与静态调用共用。
+const BATTLE_SIM_SCRIPT: GDScript = preload("res://modules/combat/scripts/battle/battle_sim.gd")
+
+
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## BattleDirector 实例引用（由 GameRoot 装配时注入）
 var _director: Node = null

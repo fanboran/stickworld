@@ -237,7 +237,7 @@ func _setup_team_ai_hud() -> void:
 
 ## 挂 L1 班组卡（combat/ui/squad_card.tscn，场景=布局唯一真相源）到 ContextPanel 的
 ## SquadInspector 具名槽（槽在 context_panel.tscn 声明，UI.md §10.1 层级图），
-## 并注入 GameRoot（卡片数据自取：框选解析小队 → 编制/相位/士气 duck 取数）。
+## 并注入 GameRoot（卡片数据自取：框选解析小队 → 编制/相位/状态 duck 取数）。
 ## 显隐由卡片自管（框选到小队即有、清空即收），装配层不参与业务判断。
 ## 走 add_to_slot 的路径形式——槽在 ContextPanel 之下（UI.md §10.1 组织层级），
 ## 槽名即 UIRoot 下的相对 NodePath。
@@ -286,6 +286,8 @@ func _setup_inventory() -> void:
 	_host._root.ui_root.add_to_slot("HudOverlay", hb)
 	if hb.has_method("setup"):
 		hb.setup(_host._root, service)
+	_host._root._hotbar = hb
+	_host._root._apply_observer_view()   # 观战机位可能早于装配置位（见 observer_view 声明）
 	var inv := UIKit.full_rect(_host._InventoryScreenScript, "InventoryScreen")
 	if not _host._root.ui_root.add_to_slot("ModalOverlay", inv):
 		return

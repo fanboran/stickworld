@@ -5,7 +5,7 @@ extends RefCounted
 ## 纪律（与 system_setup 拆分同构）：
 ## - 状态全部留在宿主（squad_card.gd），本助手经 _host 回引现读宿主状态
 ##   （_squad_id/_selection/_formation/_org_api），不另立状态；
-## - 单兵组件探测（health_of/status_of/ai_of/is_dead/is_disengaging/morale_of/state_flags/
+## - 单兵组件探测（health_of/status_of/ai_of/is_dead/is_disengaging/state_flags/
 ##   role_zh/signature）不依赖宿主状态，做成 static：宿主与权威对比块助手经
 ##   const preload 类调用（SquadCardData.xxx(...)），不经实例调用（规避
 ##   STATIC_CALLED_ON_INSTANCE 警告）；
@@ -62,18 +62,10 @@ static func is_dead(u: Node) -> bool:
 
 
 ## 是否避战中（裁决【删溃逃、立避战】：行为态查询，经 AIController.is_disengaging；
-## 旧 health.is_routed 士气阈值布尔态已退役）
+## 旧 health.is_routed 布尔态已退役）
 static func is_disengaging(u: Node) -> bool:
 	var ai := ai_of(u)
 	return ai != null and ai.has_method("is_disengaging") and bool(ai.is_disengaging())
-
-
-## 士气比例（get_health().get_morale_ratio；不可查回 1.0 = 条形满、不误报低压）
-static func morale_of(u: Node) -> float:
-	var h := health_of(u)
-	if h != null and h.has_method("get_morale_ratio"):
-		return float(h.get_morale_ratio())
-	return 1.0
 
 
 ## 单兵状态事实（事实注入行，行内做文案映射；查询缺口即 false = 不显示角标）

@@ -6,7 +6,7 @@ extends RefCounted
 ## 与原版一致的分层：
 ##   ① 入参打包 DamageParameters（伤害来源上下文）
 ##   ② 修饰链（结算前）：爆头加值 / 暴击倍率 / 格挡减免 / 单位类型减伤（雕像 0.3、巨人 0.66）
-##   ③ 入血结算：HealthComponent.take_damage（伴随士气下降）
+##   ③ 入血结算：HealthComponent.take_damage
 ##   ④ 反伤链（结算后）：暴击自伤 critBonusDamageInflictedToSelf + ApplyDamageReflect
 ##      （受击方 reflect_damage 配置反弹给攻击者，受 CanReceiveReflectDamage 约束）
 ##   ⑤ 表现链（结算后）：受击方向动画 / 血溅 / 音效钩子 / 死亡处理
@@ -85,9 +85,16 @@ static func apply(target: Node, p: Params) -> float:
 	# 暴击（倍率；各武器可调）
 	if p.is_crit:
 		final_amount *= p.crit_damage_multiplier
-	# 单位类型减伤（原版：雕像 0.3 / 巨人 0.66，仅对可格挡类直伤生效）
+	# 主控伤害加成（SWL userControlledDamageMultiplier=2 真值直译，翻译档
+	# §7.1.1）：附身单位直伤翻倍——"一人成军"的爽感来源（攻速 ×1.3 在
+	# weapon_mount 冷却链、移速 ×1.3 在 entity_motion 速度链，三特权同批）
+	if p.inflictor != null and is_instance_valid(p.inflictor) \
+			and p.inflictor.has_method("is_possessed") and p.inflictor.is_possessed():
+		final_amount *= 2.0
+	# 单位类型减伤（原版：雕像 0.3 / 巨人 0.66，仅对可格挡类直伤生效；
+	# 创始人裁决 2026-10-16：×0.3 扩展到**一切建筑**——箭矢打建筑钝化）
 	if p.type != DAMAGE_TYPE.REFLECT:
-		if _is_statue(target):
+		if _is_building_like(target):
 			final_amount *= DAMAGE_REDUCTION_TO_STATUE
 		elif _is_massive(target):
 			final_amount *= DAMAGE_REDUCTION_TO_MASSIVE
@@ -97,7 +104,9 @@ static func apply(target: Node, p: Params) -> float:
 		final_amount *= float(target.get_armor_factor())
 	# 格挡判定（举盾姿态 + 正面来袭 + 概率）：减伤 85%，播放格挡动画；
 	# 不可格挡类型（法术/反伤/溅射）跳过。成功格挡后进入 blockResetInterval 冷却。
+	var blocked := false
 	if p.is_blockable and _try_block(target, p.direction):
+		blocked = true
 		final_amount *= 0.15
 		if target.has_method("play_block"):
 			target.play_block()
@@ -140,10 +149,12 @@ static func apply(target: Node, p: Params) -> float:
 	if p.splash_radius > 0.0 and p.inflictor != null:
 		_apply_splash(target, p)
 
-	# 伤害飘字（Demo 打磨：白=普通 / 金=暴击·爆头；表现层经 FxLibrary，不回写战斗逻辑）
-	if final_amount > 0.0 and target is Node2D:
+	# 伤害飘字（Demo 打磨：白=普通 / 金=暴击·爆头；表现层经 FxLibrary，不回写战斗逻辑）。
+	# 传 target 让数字跟随目标（命中后目标继续移动/被击退，定死出生点=蹦空气）。
+	# 格挡命中不飘字：格挡动画/音效已是反馈，×0.15 的碎数字只会糊屏。
+	if final_amount > 0.0 and not blocked and target is Node2D:
 		var crit_look: bool = p.is_crit or p.is_head_shot
-		FxLibrary.spawn_damage_text(target.get_tree(), (target as Node2D).global_position, final_amount, crit_look)
+		FxLibrary.spawn_damage_text(target.get_tree(), (target as Node2D).global_position, final_amount, crit_look, target)
 
 	return final_amount
 
@@ -170,9 +181,14 @@ static func _apply_splash(main_target: Node, p: Params) -> void:
 			apply(enemy, sub)
 
 
-## 雕像判定（is_in_group("statue") 或 has_method("is_statue")）
-static func _is_statue(target: Node) -> bool:
-	return target.is_in_group("statue") or (target.has_method("is_statue") and target.is_statue())
+## 建筑/雕像判定（is_in_group("statue"/"building") 或 has_method；裁决
+## 2026-10-16：建筑统一吃 ×0.3 减伤——箭矢打建筑钝化，雕像不再单列）
+static func _is_building_like(target: Node) -> bool:
+	if target.is_in_group("statue") or target.is_in_group("building"):
+		return true
+	if target.has_method("is_statue") and target.is_statue():
+		return true
+	return target.has_method("is_building") and target.is_building()
 
 
 ## 巨型单位判定（group "massive" 或 mass 阈值字段）

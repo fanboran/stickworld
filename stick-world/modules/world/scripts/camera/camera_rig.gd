@@ -14,8 +14,10 @@ extends Camera2D
 ## 设计基准垂直像素（世界坐标恒定，= 1080P 垂直分辨率）
 ## 1080P 为默认设计分辨率，其他分辨率按此换算（base_zoom = vp_h / 1080）
 const DESIGN_HEIGHT: float = 1080.0
-## 用户缩放下限（0.6667=缩小到旧 0.5 档视野，看更广）
-const ZOOM_MIN: float = 0.6667
+## 用户缩放下限（0.45 = 半屏地平线构图档：战场行走带 93 格装进半屏地面
+## 需要 uz ≤ 22.5/(sin26°×93.1) ≈ 0.464，1080p base_zoom=1 下旧下限 0.6667
+## 够不到——2026-10-05 创始人"地面降到 1/2 屏幕"改约配套放宽）
+const ZOOM_MIN: float = 0.45
 ## 用户缩放上限（最大迫近，2.6667=旧 2.0 档特写）
 const ZOOM_MAX: float = 2.6667
 ## 缩放步长
@@ -57,6 +59,9 @@ var centered_mode: bool = false
 ## 纵深不随目标走；RTS 观战类（战斗演练场）开此后镜头中心纵向贴住目标，
 ## 混战线南漂时大军不再沉出屏幕下沿。Y 限制在 [ground_y, ground_bottom] 带内）
 var follow_target_y: bool = false
+## 垂直锁定 y（NAN = 未锁）：一屏战场口径——战场=视野，竖直取景恒钉死
+## （地面/地平线零漂移）；锁定后 follow_target_y/底锚计算全部让位
+var _vertical_lock_y: float = NAN
 ## 手动控制激活中（拖动/边缘/小地图跳转）
 var _manual_active: bool = false
 ## 手动控制冷却剩余时间（拖动/缩放结束后递减，归零时退出 manual）
@@ -244,6 +249,11 @@ func _clamp_camera_x(x: float) -> float:
 
 
 func _update_position(delta: float) -> void:
+	# 垂直锁定（一屏战场）：恒钉死，任何其他竖直逻辑让位
+	if not is_nan(_vertical_lock_y):
+		global_position.y = _vertical_lock_y
+		_apply_x_only(delta)
+		return
 	# 垂直位置：默认视野下边界固定在 ground_bottom（缩放时以草坪下边界为锚点）；
 	# 居中模式开 follow_target_y 时改为纵向贴住跟随目标
 	var target_y: float = _compute_camera_y()
@@ -286,6 +296,34 @@ func _update_position(delta: float) -> void:
 			randf_range(-_shake_intensity, _shake_intensity)
 		)
 		global_position += shake_offset
+
+
+## 仅水平定位（竖直锁定态的 x 通道：手动/弹回/居中跟随/1-4 跟随全保留）
+func _apply_x_only(delta: float) -> void:
+	var target_x: float = global_position.x
+	if _manual_active:
+		if _edge_scroll_dir != 0 and not _dragging:
+			target_x = global_position.x + _edge_scroll_dir * edge_scroll_speed * delta
+		target_x = _clamp_camera_x(target_x)
+	elif _returning:
+		var return_target_x: float = _compute_return_target_x()
+		target_x = lerp(global_position.x, return_target_x, RETURN_SMOOTHING * delta)
+		target_x = _clamp_camera_x(target_x)
+		_return_elapsed += delta
+		if _return_elapsed >= RETURN_TRANSITION_TIME:
+			_returning = false
+	elif centered_mode and follow_target != null and is_instance_valid(follow_target):
+		target_x = follow_target.global_position.x
+		target_x = lerp(global_position.x, target_x, CENTER_SMOOTHING * delta)
+		target_x = _clamp_camera_x(target_x)
+	elif follow_target != null and is_instance_valid(follow_target):
+		target_x = _compute_follow_x(delta)
+	global_position.x = target_x
+	if _shake_time > 0.0:
+		global_position += Vector2(
+			randf_range(-_shake_intensity, _shake_intensity),
+			randf_range(-_shake_intensity, _shake_intensity)
+		)
 
 
 func _compute_camera_y() -> float:
@@ -595,6 +633,16 @@ func is_middle_scrolling() -> bool:
 
 func get_middle_anchor() -> Vector2:
 	return _middle_anchor
+
+
+## 垂直锁定（一屏战场口径）：y = 世界坐标 2D 相机中心。锁定后竖直取景恒定
+## （地面零漂移），x 逻辑照常；clear 解锁回既有竖直逻辑
+func set_vertical_lock(y: float) -> void:
+	_vertical_lock_y = y
+
+
+func clear_vertical_lock() -> void:
+	_vertical_lock_y = NAN
 
 
 ## RTS 式跳转：相机跳到指定 X 位置，暂停自动跟随

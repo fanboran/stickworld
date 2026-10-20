@@ -45,6 +45,21 @@ func update_follow(squad_id: String, follow_default_gap: float, catchup_run_dist
 	# 与"跟随玩家"模式互斥（跟随玩家由 BehaviorFollow 决策，锚定号令会打断它）
 	if squad.get("follow_player", false):
 		return
+	# 批5 战斗锚定期整班跳过（远程槽位锚定驻防接管）：锚定期成员的站位目标 =
+	# 战斗槽位（接敌改道 + 射程内收拢），支援推进号令会与槽位收拢互拔
+	# （0.5s 重下号令 travel 重入 = 收拢舞步不收敛）。锚清除（脱战）自动恢复跟队。
+	if squad.has("combat_anchor"):
+		return
+	# 战线在役时跟队让位（2026-10-12 出生碰撞重叠根修）：战线（battle_line）
+	# 持有成员槽位权威（随线号令/远程随行线）——跟队锚点（前队质心−gap）与
+	# 战线槽位是两套几何，开战首拍即冲突：远程组被跟队锚点拽进近战预备列
+	# ＝出生即碰撞重叠（观察场实锤：出生 −1080 两帧内被拽到 −735 近战块里，
+	# melee×ranged 40 对重叠）。战线无此阵营时不拦截（无战线场景跟队照旧）。
+	if _host._battle_lines != null and not _host._battle_lines.is_empty():
+		var u0 = squad["units"].front()
+		if u0 != null and is_instance_valid(u0) and u0.has_method("get_faction") \
+				and _host._battle_lines.has(int(u0.get_faction())):
+			return
 	var front_id: String = squad.get("follow_squad_id", "")
 	if front_id.is_empty():
 		return
@@ -97,7 +112,7 @@ func update_follow(squad_id: String, follow_default_gap: float, catchup_run_dist
 			continue
 		if ai.has_method("get_current_behavior") \
 				and ai.get_current_behavior() in ["retreat", "seek_cover"]:
-			continue  # 士气驱动行为，不拽回队列
+			continue  # 撤退类行为（避战/找掩体），不拽回队列
 		if _host._member_enemy_in_range(u):
 			continue  # 射程内有敌（含风筝窗口），交还给战斗行为
 		var slot: Vector2 = _host.get_squad_dest(squad_id, u, anchor, "formation")

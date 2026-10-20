@@ -10,10 +10,12 @@ render_mode blend_mix, unshaded, cull_disabled, depth_draw_never;
 uniform vec4 blob_color : source_color = vec4(0.06, 0.05, 0.05, 0.50);
 uniform float core : hint_range(0.0, 1.0) = 0.18;
 uniform float edge : hint_range(0.0, 1.0) = 1.0;
+// 整卡透明度（尸体渐隐 #8）：与角色卡 master_alpha 同步推入，尸体渐隐时影子同步退场
+uniform float master_alpha : hint_range(0.0, 1.0) = 1.0;
 
 void fragment() {
 	float d = length(UV - vec2(0.5)) * 2.0;
 	float a = 1.0 - smoothstep(core, edge, d);
 	ALBEDO = blob_color.rgb;
-	ALPHA = a * blob_color.a;
+	ALPHA = a * blob_color.a * master_alpha;
 }

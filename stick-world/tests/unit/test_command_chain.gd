@@ -141,6 +141,7 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("CommandChain: deliver 恒即时送达（撤抽象公式，签名兼容）", _test_deliver_instant)
 	_runner.add_test("CommandChain: 死亡单位跳过、活体照常送达", _test_deliver_skips_dead)
+	_runner.add_test("CommandChain: AI 号令多人班错峰散布、玩家号令即时", _test_ai_stagger, true)
 	_runner.add_test("CommandChain: deliver_via_orgs 缺 org_api 安全返回", _test_relay_guard)
 	_runner.add_test("TacticalOrders: 号令类型到行为名映射", _test_order_to_behavior)
 	_runner.add_test("TacticalOrders: 号令类型到参数映射", _test_order_to_params)
@@ -184,6 +185,33 @@ func _test_deliver_skips_dead() -> void:
 	_runner.assert_equal(dead_unit.ai.behavior, "", "死亡单位应跳过（不设置行为）")
 	_runner.assert_equal(last_delivered_ids.size(), 1, "unit_ids 应只含送达的活体单位（死者跳过）")
 	alive.free_ai()
+
+
+## AI 号令错峰（批4 去齐步化，02 二-B #10）：多人班 tier>0 → 窗内按序散布送达
+##（首人 0 延迟即时、末人窗内延迟）；玩家号令（tier=0）恒即时。chain 须入树
+##（timer 走 SceneTree；未入树回退即时是测试桩语义，另循上两用例覆盖）
+func _test_ai_stagger() -> void:
+	var cc := ScriptCommandChain.new()
+	add_child(cc)
+	var u1 := StubUnit.new()
+	var u2 := StubUnit.new()
+	var u3 := StubUnit.new()
+	# 玩家号令：三人班即时全员到达
+	cc.deliver(0, "sq_a", [u1, u2, u3], "idle", {}, 0, 1, "")
+	_runner.assert_true(u1.ai.has_order() and u2.ai.has_order() and u3.ai.has_order(),
+			"玩家号令即时全员到达")
+	u1.free_ai(); u2.free_ai(); u3.free_ai()
+	# AI 号令：首人即时（错峰首位 0 延迟）、末人窗内未达、窗过后全员到达
+	var v1 := StubUnit.new()
+	var v2 := StubUnit.new()
+	var v3 := StubUnit.new()
+	cc.deliver(1, "sq_b", [v1, v2, v3], "move", {}, 1, 1, "")
+	_runner.assert_true(v1.ai.has_order(), "AI 号令首人即时（错峰首位零延迟）")
+	_runner.assert_false(v3.ai.has_order(), "AI 号令末人错峰未达（窗 0.35s 内）")
+	await get_tree().create_timer(0.6, false).timeout
+	_runner.assert_true(v2.ai.has_order() and v3.ai.has_order(), "错峰窗过后全员到达")
+	v1.free_ai(); v2.free_ai(); v3.free_ai()
+	cc.queue_free()
 
 
 func _test_relay_guard() -> void:

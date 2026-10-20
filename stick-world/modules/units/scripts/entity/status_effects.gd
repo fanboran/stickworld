@@ -1,5 +1,6 @@
 class_name StatusEffects
 extends Node
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 状态效果组件（SWL ApplyBurn/ApplySlow/ApplyFreeze + legend 81 个 Unit System 的
 ## 最小集直译，2026-08-31 全量直译批次）。
 ##
@@ -15,6 +16,9 @@ extends Node
 ## 查询：has_stun() / get_speed_mult() / has_effect(Type)
 ## DOT 伤害走 DamagePipeline 单入口（type=SPELL、is_blockable=false——状态伤害不可格挡）。
 ## HEAL 正向结算不经 DamagePipeline（伤害单入口语义不破坏，spec §6.2.2.2a）。
+##
+## （压制机制已整体删除＝创始人裁决：组件不再承载 SUPPRESSED 态与触发链；
+##  相关裁决史见 RL层级指挥训练v3 设计档与 02-战斗系统 根除避战段。）
 
 signal effect_applied(type: int, duration: float)
 
@@ -76,6 +80,12 @@ func get_speed_mult() -> float:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("状态效果", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	if _effects.is_empty() or _owner == null or not is_instance_valid(_owner):
 		return
 	var now: float = _now()

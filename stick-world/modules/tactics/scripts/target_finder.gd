@@ -23,6 +23,12 @@ extends RefCounted
 ##   - fixate_on: Node        盯防指定目标（存活且在 range 内则直接返回它）
 ##   - ignore_current_attackers: bool  忽略正被围攻的目标（battle.register_attacker 记录；防集火重叠）
 ##   - max_attackers_per_target: int   每目标最多攻击者数（配合上者，缺省 3）
+##   - only_forward: bool     只取身前目标（SWL Ai.OnlyTargetsUnitsForward/
+##                            IsValidForForwardOnlyTarget 直译【事实】签名，防回头送
+##                            高置信推断）：候选 x 相对单位必须在本方朝向半平面
+##                            （贴齐 x±0 容许）。背后之敌留给身后的队友——混战线
+##                            互穿后"最近敌"在背后 = 整队掉头对穿（左右横跑主因，
+##                            2026-10-06 创始人点正：敌人在正面，要变也是变 y）
 ##
 ## find_targets_in_arc() 额外支持（原版 MeleeAttack.NumberOfUnitsThatCanHit 的 AOE 挥击）：
 ##   - facing: Vector2        挥击朝向（单位向量；缺省按 unit.get_facing() 取 ±x）
@@ -70,9 +76,14 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 	var prefer_statue: bool = opts.get("prefer_statue", false)
 	var ignore_attackers: bool = opts.get("ignore_current_attackers", false)
 	var max_attackers: int = opts.get("max_attackers_per_target", 3)
+	# 前向过滤预计算（SWL OnlyTargetsUnitsForward 语义）：朝向 × 相对 x 判半平面
+	var only_forward: bool = bool(opts.get("only_forward", false))
+	var my_facing: int = unit.get_facing() if unit.has_method("get_facing") else 1
+	var my_x: float = (unit as Node2D).global_position.x if unit is Node2D else 0.0
 
 	var best: Node = null
 	var best_score: float = INF
+	var forward_pass: Array = []   # 过了前向半平面的候选（兜底池——兜底也不许越半平面）
 	# 防集火过滤开关提到循环外（battle 方法表固定，逐候选 has_method 是纯重复开销）
 	var check_attackers: bool = ignore_attackers and battle.has_method("get_attacker_count")
 	for e in enemies:
@@ -81,6 +92,11 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 		var d: float = unit.global_position.distance_to(e.global_position)
 		if range > 0.0 and d > range:
 			continue
+		# 前向半平面：背后的候选直接跳过（x 贴齐容许——y 对齐的近邻不算背后）
+		if only_forward and e is Node2D:
+			if ((e as Node2D).global_position.x - my_x) * float(my_facing) < 0.0:
+				continue
+			forward_pass.append(e)
 		if prefer_statue and not _is_statue(e):
 			continue
 		# 防集火重叠：正被 ≥max_attackers 个单位围攻的目标跳过（除非无其他选择时兜底放宽）
@@ -96,9 +112,13 @@ static func find_target(unit: Node, opts: Dictionary = {}) -> Node:
 		if score < best_score:
 			best_score = score
 			best = e
-	# 兜底：全部目标都被围攻时，允许选最靠近的（避免无人攻击）
-	if best == null and ignore_attackers:
-		return _nearest_enemy(unit, enemies, range)
+	# 兜底：全部前向目标都被围攻时，允许选最靠近的（避免无人攻击）。
+	# 兜底池 = 前向通过者——**根本没有前向候选时不兜底**（返回 null）：背后之敌
+	# 不可为目（SWL IsValidForForwardOnlyTarget 语义；兜底若扫全敌会把"背后最近
+	# 敌"选回来，前向过滤失效 = 左右横跑复发）
+	if best == null and ignore_attackers \
+			and (not only_forward or not forward_pass.is_empty()):
+		return _nearest_enemy(unit, forward_pass if only_forward else enemies, range)
 	return best
 
 

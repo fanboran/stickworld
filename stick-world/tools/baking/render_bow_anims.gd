@@ -11,7 +11,7 @@ extends SceneTree
 const RIG_SCENE := "res://modules/stick_rig/scenes/stickman_test.tscn"
 const BOW_SCENE := "res://modules/stick_rig/scenes/components/weapon_bow.tscn"
 const HAND_BONE := "hip/spine_root/lower_torso/chest_mid/upper_torso/upper_arm_inner/forearm_inner/hand_inner/weapon_hand"
-## 摆位锚（脚底骨骼墨迹基准，取 char_sprite_3d 同款值）
+## 摆位锚（脚底骨骼墨迹基准，取 char_rig_3d 同款值）
 const FOOT_ANCHOR := Vector2(3.0, 141.0)
 const RIG_SCALE := 0.9
 
@@ -79,7 +79,7 @@ func _spawn_bowman(world: Node2D, foot_pos: Vector2, anim: String, t: float) -> 
 	await process_frame
 	var rig: Node2D = inst.get_node("OutlineGroup/StickmanRig")
 	rig.scale = Vector2(RIG_SCALE, RIG_SCALE)
-	# 挂弓（GripPoint 对齐握把，口径同 WeaponMount._mount_one / char_sprite_3d）
+	# 挂弓（GripPoint 对齐握把，口径同 WeaponMount._mount_one / char_rig_3d）
 	var bow: Node2D = (load(BOW_SCENE) as PackedScene).instantiate()
 	var grip := bow.get_node_or_null("GripPoint") as Marker2D
 	var spr := bow.get_node_or_null("Sprite") as Sprite2D
@@ -93,7 +93,7 @@ func _spawn_bowman(world: Node2D, foot_pos: Vector2, anim: String, t: float) -> 
 		push_warning("[render_bow_anims] 手骨未找到，弓未挂载")
 	if anim == "walk_bow":
 		# 持弓行走不是独立状态：走游戏同款换装（walk state 资源 → walk_bow）
-		# ——实体侧 WeaponMount._reload_weapons / 镜像层 char_sprite_3d 同一机制
+		# ——实体侧 WeaponMount._reload_weapons / 镜像层 char_rig_3d 同一机制
 		if rig.has_method("set_state_anim"):
 			rig.set_state_anim("walk", "walk_bow")
 		anim = "walk"

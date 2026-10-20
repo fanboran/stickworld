@@ -8,7 +8,7 @@
 [ext_resource type="Script" uid="uid://0d05hxudimxm" path="res://modules/units/scripts/entity/weapon_mount.gd" id="6_weapon"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hs7ru"]
-size = Vector2(83, 24)
+size = Vector2(40, 48)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hitbox"]
 size = Vector2(38, 262.5)

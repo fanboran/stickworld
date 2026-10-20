@@ -1,0 +1,300 @@
+extends Node
+## char_direct_buckets.gd —— 关节烘焙路线的全局 3D 桶管理（每 hd2d_world 一份）。
+##
+## 职责：角色身体两桶（几何两遍·裁决#24：描边桶 + 填充桶，同款预烘关节
+## 贴图图集采样、同 shader 不同 edge_cutoff——见 char3d_body_opaque 头注）
+## + 武器/盾（按纹理分桶）+ 关节贴图图集（char_joint_atlas 子节点，宿主
+## 申报规格、本节点在版本变化时把新贴图绑给两桶材质）+ 血条图集
+##（char_bar_atlas 子节点）。
+##
+## 写段铁律＝**官方 setter 全程**（set_instance_transform/color/custom_data，
+## 交接档 §二b-1 裁定：裸 buffer 手打包编码是死路，官方 setter 是唯一无格式
+## 风险的坦途——temp/mm3d_setter_probe 实证三通道全到位）。紧凑行制：宿主在
+## 晚优先级 _process(1100) 逐行追加（行写入自带帧戳游标复位），本节点 1200
+## 清尾部（退化变换）——无段池无空闲簿记，死单位不追加即消失。
+##
+## 渐隐（尸体）不换桶——实例色 alpha 逐帧压低（本桶材质本就是 blend_mix
+## 透明混合，深度写保跨角色遮挡）。
+
+const BODY_SHADER := preload("res://modules/hd2d/shaders/char3d_body_opaque.gdshader")
+const StickProf := preload("res://core/services/stick_prof.gd")
+const WEAPON_SHADER := preload("res://modules/hd2d/shaders/char3d_weapon_atlas.gdshader")
+const JOINT_ATLAS_SCRIPT := preload("res://modules/hd2d/scripts/char_joint_atlas.gd")
+const BAR_ATLAS_SCRIPT := preload("res://modules/hd2d/scripts/char_bar_atlas.gd")
+
+## 世界占位 AABB（MultiMesh 剔除按盒，实例动态写入不逐帧精确，给全域冗余）
+const WORLD_AABB := AABB(Vector3(-30000.0, -2000.0, -30000.0), Vector3(60000.0, 4000.0, 60000.0))
+## 退化变换（零基＝零面积三角形＝隐形；清尾用）
+const XF_HIDDEN := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)
+## 「不写 custom 通道」哨兵色（合法 Color 域之外）
+const CUSTOM_SKIP := Color(-1.0, -1.0, -1.0, -1.0)
+
+# ─────────────────────────── 静态网格（3D 版） ───────────────────────────
+
+## 1x1 居中 quad（XY 平面，z=0，白色顶点色——MultiMesh 实例色与顶点色相乘）
+static var _quad3d: ArrayMesh = null
+
+static func get_quad3d() -> ArrayMesh:
+	if _quad3d != null:
+		return _quad3d
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = PackedVector3Array([
+		Vector3(-0.5, -0.5, 0), Vector3(0.5, -0.5, 0), Vector3(0.5, 0.5, 0), Vector3(-0.5, 0.5, 0),
+	])
+	arr[Mesh.ARRAY_TEX_UV] = PackedVector2Array([
+		Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1),
+	])
+	var cols := PackedColorArray()
+	cols.resize(4)
+	cols.fill(Color.WHITE)
+	arr[Mesh.ARRAY_COLOR] = cols
+	arr[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 0, 2, 3])
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	_quad3d = m
+	return m
+
+
+## 紧凑追加桶（官方 setter 写行；帧戳游标制，1200 清尾）
+class RowBucket:
+	extends Node
+	var mm: MultiMesh = null
+	var cursor := 0            # 本帧已写行数
+	var high_water := 0        # 历史最大行数（instance_count 水位）
+	var _stamp := -1           # 帧戳（新帧自动复位游标）
+	## 色/UV 逐行缓存（P0 帧成本治理）：rig 宿主每帧重写的 color/custom 绝大多数
+	## 与上帧逐位相同（描边白×tint、填充色、UV 子矩形全是静态量）——值不变就
+	## 跳过 setter（MultiMesh 三通道调用是 rig 宿主 ~17ms/帧的大头之一）。
+	## 写前值比较：行易主（单位死亡后游标前移、后继单位行序前移）时新值≠旧值
+	## 照样落写，无陈旧缓存风险。变换通道每帧必写（动画位移动态），不缓存。
+	var _col_cache := PackedColorArray()
+	var _cus_cache := PackedColorArray()
+	const SENTINEL := Color(-1.0, 0.0, 0.0, 0.0)
+	## 塌陷探针：上一帧游标（-1=未记）
+	var _last_cursor := -1
+	## 行 0 数据探针去重缓存
+	var _last_row0_probe := ""
+
+	func _setup(name: String, mesh: ArrayMesh, mat: Material, use_custom: bool) -> void:
+		set_name(name)
+		var mmi := MultiMeshInstance3D.new()
+		mmi.material_override = mat
+		mm = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.use_custom_data = use_custom
+		mm.mesh = mesh
+		mm.instance_count = 0
+		mm.custom_aabb = WORLD_AABB
+		mmi.multimesh = mm
+		add_child(mmi)
+
+	## 行写入（官方 setter 三通道；custom=CUSTOM_SKIP 则不写该通道）
+	func row(xf: Transform3D, col: Color, custom: Color) -> void:
+		var f := Engine.get_process_frames()
+		if f != _stamp:
+			_stamp = f
+			cursor = 0
+		if cursor >= high_water:
+			high_water = cursor + 1
+			# MultiMesh instance_count 赋值 = 实例缓冲区**重新分配并全零**
+			#（颜色/自定义通道归零透明）——缓存必须全量失效，否则跳写通道
+			# 停在零值 = 整批身体隐形（2026-10-13 r35 连拍实锤：血条/箭矢/影
+			# 在、身体全没；写入侧游标正常）。水位只增不减 → 失效只在扩容
+			# 帧发生，稳态零开销
+			mm.instance_count = high_water
+			_col_cache.resize(high_water)
+			_cus_cache.resize(high_water)
+			for i in high_water:
+				_col_cache[i] = SENTINEL
+				_cus_cache[i] = SENTINEL
+		mm.set_instance_transform(cursor, xf)
+		if _col_cache[cursor] != col:
+			mm.set_instance_color(cursor, col)
+			_col_cache[cursor] = col
+		if custom != CUSTOM_SKIP and _cus_cache[cursor] != custom:
+			mm.set_instance_custom_data(cursor, custom)
+			_cus_cache[cursor] = custom
+		cursor += 1
+
+	## 尾部清隐（宿主全写完后调：本帧未写的旧行退化隐形——零面积三角形；
+	## 整帧零写入时游标也要复位，否则上帧旧行残留可见）
+	func end_tick() -> void:
+		var f := Engine.get_process_frames()
+		if f != _stamp:
+			_stamp = f
+			cursor = 0
+		# 整帧零写/塌陷边沿探针（无条件，vanish 类报障取证口）：
+		# 高水位 >50 行时游标跌 0 = 整桶本帧零写入（全部身体隐形）；
+		# 游标较上帧掉幅 >30% 水位 = 大批单位停写（跳写塌陷级）
+		if high_water > 50:
+			if cursor == 0 and _last_cursor > 0:
+				print("[RowProbe] %s f=%d 整帧零写 high=%d" % [name, f, high_water])
+			elif _last_cursor > 0 and cursor < _last_cursor * 0.7:
+				print("[RowProbe] %s f=%d 塌陷 %d→%d high=%d" % [
+						name, f, _last_cursor, cursor, high_water])
+		_last_cursor = cursor
+		# 行 0 数据变更探针（无条件低频采样）：custom=UV 子矩形、color=实例色
+		# 都是行内容静态量——跳变 = 缓冲与缓存失同步/行内容被改写（vanish 类
+		# "行在但隐形"的 GPU 侧取证口）
+		if high_water > 50 and f % 15 == 0 and mm.has_method("get_instance_custom_data"):
+			var c0: Color = mm.get_instance_custom_data(0)
+			var col0: Color = mm.get_instance_color(0)
+			var key := "%s|%s" % [c0, col0]
+			if key != _last_row0_probe:
+				_last_row0_probe = key
+				print("[RowProbe] %s f=%d 行0 custom=%s color=%s" % [name, f, c0, col0])
+		# 行退化探针（无条件低频采样）：均匀抽 4 行查变换基长度，接近零 =
+		# 零面积三角形（写入侧给的是退化变换 → 隐形的直接证据）
+		if high_water > 50 and f % 15 == 0:
+			for k in 4:
+				var idx := int(high_water * float(k) / 4.0)
+				if idx >= high_water:
+					idx = high_water - 1
+				var xf0 := mm.get_instance_transform(idx)
+				var bl := xf0.basis.x.length() + xf0.basis.y.length() \
+						+ xf0.basis.z.length()
+				if bl < 0.01:
+					print("[RowProbe] %s f=%d 行%d 退化 basis_len=%.5f" % [
+							name, f, idx, bl])
+		# 跳写塌陷打点（STICK_TRACE_WRITE=1）：>30% 行未写 = 有单位跳帧
+		#（行按调用序分配，跳写者之后的所有单位行序前移、尾部当帧消失——
+		# 「整个身体闪烁消失」候选机制的取证口）
+		if OS.get_environment("STICK_TRACE_WRITE") == "1" and cursor > 0 \
+				and cursor < high_water * 0.7:
+			print("[WriteTrace] %s f=%d cursor=%d high=%d 跳写塌陷" % [name, f, cursor, high_water])
+		for i in range(cursor, high_water):
+			mm.set_instance_transform(i, XF_HIDDEN)
+		# 水位不回缩（避免频繁 realloc；隐形行零渲染成本）
+
+
+# ─────────────────────────── 实例状态 ───────────────────────────
+
+## 描边桶（几何两遍的底遍：加宽胶囊行、白色实例色、ZB_STROKE 垫后；
+## edge_cutoff=0.5 硬切＝环宽即几何意图宽，2026-10-13 创始人点正「描边太粗」
+## 后与填充同款收口——旧 0.004 软阈保留 mip 摊开的 alpha 裙边（实测 4~14px））
+var stroke: RowBucket = null
+var _stroke_mat: ShaderMaterial = null
+var body: RowBucket = null          # 身体填充桶（edge_cutoff=0.5 硬切边——内边界 crisp）
+var _body_mat: ShaderMaterial = null
+## 描边单侧宽（rig px）——画布同款「屏幕像素下限」补偿（裁决#24 照抄
+## stickman_skeleton.outline_world_width 语义）：屏上 1 rig px =
+## RIG_SCREEN×zoom（char_rig_3d.RIG_SCALE 同源常数）。宿主量化 0.5 步申报
+## 图集（格位 4px 量化下重烘频次极低）。初值按默认观察档 zoom=0.75。
+## 2026-10-14 创始人点正「描边加粗」：全环 ≈ 2×OUTLINE_SCREEN_PX 屏 px
+##（zoom 0.75 实测 ~1.9px）——战场档图集对屏幕 minification ~4×，1px 级
+## 环带经 mip 均值后 alpha 低于 edge_cutoff 会碎裂发虚（抗锯齿分析见
+## docs/技术/架构/场景与战斗/HD2D角色渲染与抗锯齿.md），环带加粗才吃得住
+## 深度缩小。特写档 RIG 底 1.5 不变（特写世界宽锚）。
+const OUTLINE_WIDTH_RIG := 1.5
+const OUTLINE_SCREEN_PX := 1.0
+const RIG_SCREEN := 0.35625
+var outline_eff := maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * 0.75))
+## 武器桶：纹理路径 → 桶（每纹理独立 MultiMesh，纹理=uniform；紧凑行制）
+var _weapon_buckets: Dictionary = {}  # path -> {bucket, tex}
+## 关节贴图图集（headless 跳过装配；宿主申报规格，版本变化时绑新贴图）
+var joint_atlas: Node = null
+var _joint_tex_version := -1
+## 血条图集（headless 跳过装配）
+var bar_atlas: Node = null
+## 渲染状态探针去重缓存
+var _last_render_state := ""
+
+
+func _ready() -> void:
+	process_priority = 1200  # 宿主(1100) 之后清尾
+	if DisplayServer.get_name() != "headless":
+		# 描边桶先建（树序即绘制序，语义上「底遍」；深度语义下非必需）
+		var stroke_node := RowBucket.new()
+		add_child(stroke_node)
+		_stroke_mat = ShaderMaterial.new()
+		_stroke_mat.shader = BODY_SHADER
+		_stroke_mat.set_shader_parameter("edge_cutoff", 0.5)
+		stroke_node._setup("Char3DBodyStroke", get_quad3d(), _stroke_mat, true)
+		stroke = stroke_node
+		var body_node := RowBucket.new()
+		add_child(body_node)
+		_body_mat = ShaderMaterial.new()
+		_body_mat.shader = BODY_SHADER
+		_body_mat.set_shader_parameter("edge_cutoff", 0.5)
+		body_node._setup("Char3DBody", get_quad3d(), _body_mat, true)
+		body = body_node
+		joint_atlas = JOINT_ATLAS_SCRIPT.new()
+		joint_atlas.name = "JointBakeAtlas"
+		add_child(joint_atlas)
+		bar_atlas = BAR_ATLAS_SCRIPT.new()
+		bar_atlas.name = "CharBarAtlas"
+		add_child(bar_atlas)
+
+
+## 相机缩放变化时刷新描边宽（hd2d_world.set_cam_zoom 调；宿主逐帧读
+## outline_eff，量化档变化才触发图集重烘）。
+func update_outline_eff(cam_zoom: float) -> void:
+	var next: float = maxf(OUTLINE_WIDTH_RIG, OUTLINE_SCREEN_PX / (RIG_SCREEN * cam_zoom))
+	if absf(next - outline_eff) > 0.0001 \
+			and OS.get_environment("STICK_TRACE_ATLAS") == "1":
+		print("[EffTrace] f=%d zoom=%.4f eff=%.4f→%.4f" % [
+				Engine.get_process_frames(), cam_zoom, outline_eff, next])
+	outline_eff = next
+
+
+func _process(_delta: float) -> void:
+	if body == null:
+		return
+	# 图集原子发布：格位表+贴图同帧落地（重烘期间宿主继续用旧套，零错配帧）
+	if joint_atlas != null:
+		joint_atlas.publish()
+		# 关节贴图版本监视：版本 bump（发布）后绑新贴图给两桶材质
+		var v: int = joint_atlas.version()
+		if v != _joint_tex_version:
+			_joint_tex_version = v
+			var tex: Texture2D = joint_atlas.texture()
+			_body_mat.set_shader_parameter("atlas_tex", tex)
+			_stroke_mat.set_shader_parameter("atlas_tex", tex)
+	_render_probe()
+	var _pt := StickProf.t0()
+	stroke.end_tick()
+	body.end_tick()
+	for path in _weapon_buckets:
+		(_weapon_buckets[path]["bucket"] as RowBucket).end_tick()
+	StickProf.t1("桶清尾", _pt)
+
+
+## 身体两桶渲染状态变更探针（无条件、变更才打一行；vanish 类"行在但隐形"
+## 报障的取证口：贴图槽尺寸/实例数/可见层/材质优先级任何一项跳变即现形）
+func _render_probe() -> void:
+	var tex: Texture2D = _body_mat.get_shader_parameter("atlas_tex")
+	var tex_key := "null" if tex == null else str(tex.get_size())
+	var state := "%s ic=%d/%d vis=%s pri=%d/%d" % [
+			tex_key, stroke.mm.instance_count, body.mm.instance_count,
+			stroke.get_child(0).visible, _stroke_mat.render_priority, _body_mat.render_priority]
+	if state != _last_render_state:
+		_last_render_state = state
+		print("[BucketsProbe] f=%d %s" % [Engine.get_process_frames(), state])
+
+
+# ─────────────────────────── 宿主写行口（1100 内调用） ───────────────────────────
+
+## 描边行（几何两遍底遍）：变换 + 白×tint×alpha + 格位 UV 子矩形
+func stroke_row(xf: Transform3D, col: Color, uv: Rect2) -> void:
+	stroke.row(xf, col, Color(uv.position.x, uv.position.y, uv.size.x, uv.size.y))
+
+## 身体部件填充行：变换 + 真色（填充身体色×tint×alpha）+ 格位 UV 子矩形
+func body_row(xf: Transform3D, col: Color, uv: Rect2) -> void:
+	body.row(xf, col, Color(uv.position.x, uv.position.y, uv.size.x, uv.size.y))
+
+
+## 武器/盾行（按纹理分桶；无 custom——整纹理 UV）
+func weapon_row(tex_path: String, tex: Texture2D, xf: Transform3D, col: Color) -> void:
+	var b: Dictionary = _weapon_buckets.get(tex_path, {})
+	if b.is_empty():
+		var bucket := RowBucket.new()
+		add_child(bucket)
+		var mat := ShaderMaterial.new()
+		mat.shader = WEAPON_SHADER
+		mat.set_shader_parameter("atlas_tex", tex)
+		bucket._setup("Char3DWeapon_%d" % _weapon_buckets.size(), get_quad3d(), mat, false)
+		b = {"bucket": bucket, "tex": tex}
+		_weapon_buckets[tex_path] = b
+	(b["bucket"] as RowBucket).row(xf, col, CUSTOM_SKIP)

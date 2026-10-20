@@ -19,7 +19,7 @@ extends Node
 ## 不再悬挂，溃兵留在战场（战斗引用解除，不再重开）。
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
-const ScriptBattleAIDirector := preload("res://modules/combat/scripts/battle/battle_ai_director.gd")
+const StickProf := preload("res://core/services/stick_prof.gd")
 const ScriptTeamAi := preload("res://modules/combat/scripts/battle/team_ai.gd")
 const ScriptTeamAiProfiles := preload("res://modules/combat/scripts/battle/team_ai_profiles.gd")
 ## D 刀：数据化批模拟内核（ProjectSettings sim/battle_sim 开关，见 BattleSim.is_enabled）
@@ -40,16 +40,17 @@ enum State {
 	DRAW,           ## 平局（双方同时覆灭）
 }
 
-# ─────────────────────────────── 常量（士气）────────────────────────────────
-## 伤亡恐慌：队友死亡时同阵营单位的最大士气损失（距离衰减）
-const ALLY_DEATH_MORALE_LOSS: float = 12.0
-## 伤亡恐慌影响半径（px）
-const MORALE_AFFECT_RANGE: float = 600.0
-
+# ─────────────────────────────── 常量 ────────────────────────────────
 ## 防集火计数的新鲜窗口（ms）：超过此间隔未再登记的攻击者视为停手，不再计数
 const ATTACKER_FRESH_WINDOW_MS: int = 3000
 
-# ─────────────────────────────── 常量 ────────────────────────────────
+## sim↔单位 AI 树序契约（审计 §三5，P4 前置钉死）：本节点 _physics_process
+## 先 sim.tick 再由各单位 AI 读位置写意图——顺序原本由场景树序隐式决定（树结构
+## 调整即静默改变时序语义）。setup() 把本节点固化到负优先组（先于一切默认 0
+## 优先组的单位节点，Godot 处理序：优先级升序 → 同级树序），与树序解耦；
+## 顺序断言测试 tests/unit/test_sim_tree_order.gd 钉死
+const SIM_FIRST_PRIORITY: int = -100
+
 ## 进攻方阵营 ID
 const FACTION_ATTACKER: int = 1
 ## 防守方阵营 ID
@@ -60,8 +61,6 @@ const FACTION_DEFENDER: int = 2
 var _map: Node2D = null
 ## 掩体系统
 var _cover: ScriptCoverSystem = null
-## 战场导演
-var _director: ScriptBattleAIDirector = null
 ## 进攻方单位列表
 var _units_attacker: Array = []
 ## 防守方单位列表
@@ -79,15 +78,12 @@ var _casualties_defender: int = 0
 ## 相持超时上限（秒；<= 0 = 不限）——超时按剩余兵力判（多者胜，平局按守方胜），
 ## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；由开战调用方按需设置）
 var duration_limit: float = 0.0
-## 收束原因（"annihilation" / "rout" / "mutual" / "timeout" / "decapitation"；
+## 收束原因（"annihilation" / "rout" / "mutual" / "timeout"；
 ## 结算摘要与测试用）：annihilation=全灭（含撤离离场）、rout=有效战力溃散归零
-## （9k 溃逃收敛，已退役）、mutual=双方同时归零、timeout=相持超时、
-## decapitation=斩首（指挥官阵亡 = 该方立即战败，rank 口径见 StickmanEntity.rank）
+## （9k 溃逃收敛，已退役）、mutual=双方同时归零、timeout=相持超时。
+## 输赢口径 = 全面战争式打到一方失去作战能力（全灭/撤离/超时兵力判；
+## 旧"斩首即败"为 AI 线自立开发态规则，已整体退役）
 var _end_reason: String = ""
-## 斩首登记（指挥官实体）：faction -> Node（rank>=3；add_unit 自动扫描登记，
-## register_commander 供测试桩/后设 rank 场景手动补登）。无登记 = 无指挥官战斗，
-## 斩首分支恒跳过（既有战斗零回归）。
-var _commanders: Dictionary = {}
 ## 收束瞬间双方存活数（_end 清空列表前快照，供结算摘要；监听方不必回查已释放实例）
 var _final_alive_attacker: int = 0
 var _final_alive_defender: int = 0
@@ -111,13 +107,13 @@ var _crowd: ScriptCrowdRenderer = null
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
-## 初始化：注入地图，创建掩体系统和导演。
+## 初始化：注入地图，创建掩体系统。
 func setup(map: Node2D) -> void:
+	# 树序契约固化（SIM_FIRST_PRIORITY 注释）：负优先组先于单位节点推进
+	process_physics_priority = SIM_FIRST_PRIORITY
 	_map = map
 	_cover = ScriptCoverSystem.new()
 	_cover.setup(map)
-	_director = ScriptBattleAIDirector.new()
-	_director.setup(self)
 	# D 刀 A/B 开关：启用时参战 AI 单位模拟状态进 BattleSim（移动/分离/冷却/
 	# 命中时序批处理）；附身单位不注册（玩家交互链不动）
 	if ScriptBattleSim.is_enabled() and map != null and is_instance_valid(map):
@@ -172,27 +168,46 @@ func add_unit(unit: Node, faction: int) -> void:
 		_units_attacker.append(unit)
 	else:
 		_units_defender.append(unit)
-	# 斩首登记（指挥官实体自动扫描）：rank>=3 即登记为本方指挥官——生产战场接入
-	# 零接线（单位进战斗前 rank 须已设置）；后设 rank 场景走 register_commander 手动补登
-	if unit.has_method("get_rank") and int(unit.get_rank()) >= 3:
-		register_commander(unit, faction)
+	_settle_spawn_facing(unit, faction)
 
 
-## 登记指挥官（斩首判定口；同阵营重复登记 = 后者覆盖，"战场最高"唯一）。
-## unit 需暴露 is_dead()（StickmanEntity 原生满足；测试桩可用带脚本的 Node）。
-func register_commander(unit: Node, faction: int) -> void:
-	_commanders[faction] = unit
+## 出生朝向统一落定（裁决#21c）：所有出生路径（战场遭遇/驻军/召唤/测试夹具）都经
+## add_unit 登记，故朝向在此一次性落定——朝**敌军一侧的质心**。历史只有观察场在
+## 出生点自己设了朝向，生产路径全军保持默认 _facing=+1（背敌），开局肉眼可见
+## "橘方转身"。先出生的一侧（对面还没有单位）挂起，对面首个单位登记时补定。
+var _face_pending: Array = []
 
 
-## 指挥官是否已阵亡（斩首判定谓词）：未登记 = 无指挥官（false，不触发斩首）；
-## 登记后引用失效（freed 清场竞态）按阵亡算——指挥官不会凭空消失。
-func _is_commander_down(faction: int) -> bool:
-	if not _commanders.has(faction):
-		return false
-	var cmd: Node = _commanders[faction]
-	if cmd == null or not is_instance_valid(cmd):
-		return true
-	return cmd.has_method("is_dead") and cmd.is_dead()
+func _settle_spawn_facing(unit: Node, faction: int) -> void:
+	if not unit.has_method("face_towards") or not unit.has_method("get_faction"):
+		return
+	if not (unit is Node2D):
+		return
+	var foes: Array = _units_defender if faction == FACTION_ATTACKER else _units_attacker
+	var cx: float = 0.0
+	var n: int = 0
+	for f in foes:
+		if is_instance_valid(f) and not (f.has_method("is_dead") and f.is_dead()):
+			cx += (f as Node2D).global_position.x
+			n += 1
+	if n == 0:
+		if not _face_pending.has(unit):
+			_face_pending.append(unit)
+		return
+	cx /= float(n)
+	unit.face_towards(Vector2(cx, (unit as Node2D).global_position.y))
+	if _face_pending.is_empty():
+		return
+	# 挂起方补定：挂起单位要面朝**自己的敌人**＝刚登记的触发者（对面阵营）。
+	# 不能用触发者的 foes 质心——那是挂起方自己一侧：先出生一侧全员挂起、
+	# 对面首个单位触发补定时，旧实现把整军 face_towards(自方质心)＝开局
+	# 集体背敌（2026-10-12 验收图复现，face trace 全员瞄同一点实锤）。
+	var pend: Array = _face_pending
+	_face_pending = []
+	for p in pend:
+		if is_instance_valid(p) and p is Node2D \
+				and p.has_method("get_faction") and p.get_faction() != unit.get_faction():
+			p.face_towards((unit as Node2D).global_position)
 
 
 ## 开始战斗（PREPARING -> ENGAGED）
@@ -203,6 +218,12 @@ func start() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("战团tick", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	if _state != State.ENGAGED:
 		return
 	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期不进入本函数）；
@@ -210,13 +231,14 @@ func _physics_process(delta: float) -> void:
 	var sim: float = TimeManager.sim_delta(delta) if TimeManager != null else delta
 	_duration += sim
 	# D 刀：sim 批循环先行（分离/积分/冷却/命中帧/写回代理）——
-	# AI 决策（director/behavior）读到本刻最新位置
+	# AI 决策（behavior 状态机）读到本刻最新位置。处理序由
+	# process_physics_priority = SIM_FIRST_PRIORITY 固化（见常量注释），
+	# 不再依赖 BattleAnchor 与单位节点的树序
 	if _sim != null:
 		_sim.tick(sim)
 	# §十四 小兵渲染代理（sim 之后：读最新位置/朝向；物理刻驱动即暂停门禁同 sim）
 	if _crowd != null:
 		_crowd.tick(sim)
-	_director.tick(sim)
 	# 阵营 AI tick（P6 TeamAi：注册判空，未注册零开销；内部低频节流 + 门禁双保险）
 	for faction in _team_ai.keys():
 		var tai: ScriptTeamAi = _team_ai[faction]
@@ -240,29 +262,6 @@ func on_unit_died(unit: Node) -> void:
 		_casualties_defender += 1
 	# 清理该目标上的攻击者计数（死亡后不再被围攻）
 	_target_attackers.erase(unit.get_instance_id())
-	# 伤亡恐慌（行业最佳实践）：同阵营存活单位按距离衰减掉士气（见队友倒下）
-	if unit.has_method("get_faction"):
-		_apply_casualty_morale_loss(unit.get_faction(), unit.global_position)
-
-
-## 伤亡恐慌：同阵营存活单位按距离衰减掉士气。
-## 距离 MORALE_AFFECT_RANGE 内的单位损失 LOSS × (1 - dist/range)。
-func _apply_casualty_morale_loss(faction: int, pos: Vector2) -> void:
-	for ally in get_allies_of(faction):
-		if not is_instance_valid(ally) or ally == null:
-			continue
-		if ally.has_method("is_dead") and ally.is_dead():
-			continue
-		if not ally.has_method("get_health"):
-			continue
-		var health: Node = ally.get_health()
-		if health == null or not health.has_method("lose_morale"):
-			continue
-		var dist: float = pos.distance_to(ally.global_position)
-		if dist > MORALE_AFFECT_RANGE:
-			continue
-		var loss: float = ALLY_DEATH_MORALE_LOSS * (1.0 - dist / MORALE_AFFECT_RANGE)
-		health.lose_morale(loss)
 
 
 # ─────────────────────────────── 攻击者计数（防集火重叠）────────────────────────────────
@@ -412,11 +411,6 @@ func get_cover() -> ScriptCoverSystem:
 	return _cover
 
 
-## 获取战场导演
-func get_director() -> ScriptBattleAIDirector:
-	return _director
-
-
 ## 战斗是否进行中
 func is_active() -> bool:
 	return _state == State.ENGAGED
@@ -529,25 +523,13 @@ func get_player_faction() -> int:
 ## 退役删除：避战是战术行为不改变有效战力，避战中的单位被打仍还手，战斗照常
 ## 由歼灭/撤离/超时收束。
 func _check_victory() -> void:
-	# 存活快照先行（斩首分支同样消费：结算摘要 alive 字段任何收束路径都齐备）
+	# 存活快照先行（结算摘要 alive 字段任何收束路径都齐备）
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
 	_final_alive_attacker = a_alive
 	_final_alive_defender = b_alive
-	# 斩首判定（最高优先，先于全灭）：指挥官阵亡 = 该方立即战败——哪怕还有兵
-	# 也是败（斩首规则：指挥链崩 = 战败，不用打到全灭）。双方指挥官同殁 = 同归
-	# （复用全灭同归的 mutual 口径，结算摘要 reason 仍可区分胜负方向）。
-	var attacker_commander_down: bool = _is_commander_down(FACTION_ATTACKER)
-	var defender_commander_down: bool = _is_commander_down(FACTION_DEFENDER)
-	if attacker_commander_down and defender_commander_down:
-		_end(State.DRAW, "mutual")
-		return
-	if attacker_commander_down:
-		_end(State.DEFENDER_WIN, "decapitation")
-		return
-	if defender_commander_down:
-		_end(State.ATTACKER_WIN, "decapitation")
-		return
+	# 收束 = 全灭（含撤离离场）/ 同归 / 相持超时兵力判——全面战争式打到一方
+	# 失去作战能力（纪律线因子后续批次接部队自主避战，非收束判据）
 	if a_alive == 0 and b_alive == 0:
 		_end(State.DRAW, "mutual")
 	elif a_alive == 0:
@@ -632,7 +614,6 @@ func _end(result: State, reason: String = "annihilation") -> void:
 		if tai != null:
 			tai.dispose()
 	_team_ai.clear()
-	_commanders.clear()
 	if EventBus != null:
 		# 先发结算载荷再发胜负（battle_settled → battle_ended）：监听方的据点战
 		# 状态机在 battle_ended 处理里就清掉了战役登记，结算数据须先到

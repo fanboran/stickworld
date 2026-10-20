@@ -137,16 +137,22 @@ static func compile_anims() -> Dictionary:
 			continue
 		var tracks: Dictionary = {}
 		for i in anim.get_track_count():
-			# 只取 value track（:rotation）；方法/事件轨（spine 导入的 Hit 等）
-			# 的 key value 非数值，插值无意义
-			if anim.track_get_type(i) != Animation.TYPE_VALUE:
-				continue
 			var path: NodePath = anim.track_get_path(i)
 			if not str(path).ends_with(":rotation"):
 				continue
 			var bone_name := str(path.get_name(path.get_name_count() - 1))
 			var bone_id: int = Skel.BONE_NAME_TO_ID.get(bone_name, -1)
 			if bone_id < 0:
+				continue
+			if anim.track_get_type(i) == Animation.TYPE_BEZIER:
+				# BEZIER 轨（S1 直译管线旋转轨，Spine 段曲线）：密集采样降级为
+				# 线性平铺表——运行时插值保持纯线性零成本；采样 30Hz ∪ 全键时刻
+				#（键点必采，stepped 前键-ε 的瞬跳转折不丢）
+				tracks[bone_id] = _sample_bezier_to_table(anim, i)
+				continue
+			# 只取 value track（:rotation）；方法/事件轨（spine 导入的 Hit 等）
+			# 的 key value 非数值，插值无意义
+			if anim.track_get_type(i) != Animation.TYPE_VALUE:
 				continue
 			var keys := PackedFloat32Array()
 			var bad_track := false
@@ -168,3 +174,29 @@ static func compile_anims() -> Dictionary:
 			"tracks": tracks,
 		}
 	return tables
+
+
+## BEZIER 轨密集采样 → [t0,v0,t1,v1...] 平铺表（30Hz 网格 ∪ 全部键时刻，
+## 升序去重；批渲染 LOD 距离下与曲线求值无可感差异）
+static func _sample_bezier_to_table(anim: Animation, track_idx: int) -> PackedFloat32Array:
+	var n: int = anim.track_get_key_count(track_idx)
+	var t0: float = anim.track_get_key_time(track_idx, 0)
+	var t1: float = anim.track_get_key_time(track_idx, n - 1)
+	var times := PackedFloat32Array()
+	var tk := t0
+	while tk < t1:
+		times.append(tk)
+		tk += 1.0 / 30.0
+	times.append(t1)
+	for k in n:
+		times.append(float(anim.track_get_key_time(track_idx, k)))
+	times.sort()
+	var out := PackedFloat32Array()
+	var last_t := -1.0e9
+	for tt in times:
+		if tt - last_t < 1e-5:
+			continue
+		last_t = tt
+		out.append(tt)
+		out.append(float(anim.bezier_track_interpolate(track_idx, tt)))
+	return out

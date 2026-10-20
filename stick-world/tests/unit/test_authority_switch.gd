@@ -4,7 +4,7 @@ signal test_done(code: int)
 ## 单元测试：权威值自主跳槽（R4 行为落地，RWR 编制加入的权威值经济）。
 ## 覆盖六条约束：默认关零回归 / 权威值排序决定去向（含玩家班优先）/ authority_margin
 ## 滞回不振荡 / 跳槽冷却窗（含到期）/ 「不该动的别动」守卫（班长·指挥官·溃逃·
-## 被压制·接战中·玩家号令保护期·玩家本体）/ 单拍来源班限流 / 确定性错峰可复现。
+## 接战中·玩家号令保护期·玩家本体）/ 单拍来源班限流 / 确定性错峰可复现。
 ## FormationSystem 不进场景树（_process 不触发），直接调 _tick_authority_switch，确定性。
 
 @warning_ignore("shadowed_global_identifier")
@@ -61,7 +61,7 @@ class BareOrgApi:
 		return {"id": org_id, "commander_id": commander_id}
 
 
-## 单位桩：faction / battle / ai / 附身 / 压制 / 武器射程。
+## 单位桩：faction / battle / ai / 附身 / 武器射程。
 class FakeUnit:
 	extends Node2D
 	var faction_id: int = 1
@@ -92,7 +92,6 @@ class FakeUnit:
 
 	func get_status_effects() -> Node:
 		return self
-
 
 	func set_role(r: String) -> void:
 		role = r
@@ -178,7 +177,7 @@ func _ready() -> void:
 	_runner.add_test("约束5 守卫: 班长本人不被抽走（RWR 放人阈值）", _test_guard_leader)
 	_runner.add_test("约束5 守卫: 组织在册指挥官本人不被抽走", _test_guard_commander)
 	_runner.add_test("约束5 守卫: 玩家附身单位（玩家本体）不被搬动", _test_guard_possessed)
-	_runner.add_test("约束5 守卫: 溃逃/找掩体（士气行为）中不换班", _test_guard_morale_behavior)
+	_runner.add_test("约束5 守卫: 避战/找掩体（撤退类行为）中不换班", _test_guard_retreat_behavior)
 	_runner.add_test("约束5 守卫: 接战中（射程内有敌）不换班", _test_guard_engaged)
 	_runner.add_test("约束5 守卫: 玩家手动号令保护期内不换班（复用 TeamAi 查询）", _test_guard_manual_order)
 	_runner.add_test("约束5 限流: 单拍单来源班只放行名额内人数", _test_per_squad_flow_cap)
@@ -421,11 +420,11 @@ func _test_guard_possessed() -> void:
 	_assert_guard(w, "玩家附身单位（玩家本体）不应被 AI 搬动")
 
 
-func _test_guard_morale_behavior() -> void:
+func _test_guard_retreat_behavior() -> void:
 	var w := _guard_world()
 	w["subject"].ai.force_behavior("retreat")
 	_tick(w["fs"])
-	_assert_guard(w, "溃逃中单位不应换班")
+	_assert_guard(w, "避战中单位不应换班")
 	var w2 := _guard_world()
 	w2["subject"].ai.force_behavior("seek_cover")
 	_tick(w2["fs"])

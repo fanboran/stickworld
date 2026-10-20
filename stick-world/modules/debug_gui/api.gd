@@ -23,8 +23,9 @@ var _drawers: Dictionary = {}
 ## 各绘制器的独立开关（name -> bool），默认全部启用
 var _drawer_enabled: Dictionary = {}
 
-## 调试覆盖层是否可见
-var _visible: bool = true
+## 调试覆盖层是否可见（默认关：10 drawer 逐帧 O(n) 重绘是常驻帧税，且给画面
+## 叠视觉噪声；需要时 F3 手动开，用户设置仍可覆盖——2026-10-05 观感重构批0）
+var _visible: bool = false
 
 ## 图例是否可见
 var _legend_visible: bool = true

@@ -1,0 +1,147 @@
+extends RefCounted
+## 找目标系统——SWL Ai 锁定规则直译（裁决#31 重写：创始人点正「个体锁定规则
+## 为什么这么混乱，就隔壁火柴人战争的锁定规则就可以了」）。
+##
+## 米拉奇战记锁定口径（裁决#35 创始人点正接敌参照，反编译方法体直读
+## `external/decompiled/miraqi/script/.../Isometric2DEntity.as`：findTarget 仅在
+## target==null/死亡时执行）+ SWL 前向过滤（`OnlyTargetsUnitsForward`，签名层
+## 实锤；刷新时机 dump 无方法体不可证，故锁定语义从米拉奇取）：
+##   - **锁定到死**——目标活着就照旧打，死亡/失效才重选。0.5s 例行「最近者得」
+##     刷新是「变心」抖动源（两等距敌间反复横跳、出手半途掉头），本版整删；
+##   - 选举 = 前向半平面内最近存活敌；身前无敌回退全域（防站立挨打死锁）；
+##   - **无距离门**——最近敌直接追（裁决#31 创始人口径）；
+##   - 强制目标（打通态拦路者）即时接管，最高优先。
+##   （旧守位者守卫随摆场指挥官/护卫根除，2026-10-14——此前守位者目标超
+##   仇恨半径即放弃）
+##
+## 参数经兵种档案（behavior_profiles）注入。消费点：behavior_attack（每物理帧
+## advance）。acquire_interval 档案键保留但只供决策钟 combat 域探测节奏
+## （ai_decision_clock），与目标锁定无关。
+
+## 目标选择器（tactics 对外公共类型；显式 preload 防 headless class_name 未注册）
+const ScriptFinder := preload("res://modules/tactics/api.gd").Finder
+
+# ─────────────────────── 宿主注入 ────────────────────────
+## 决策单位（StickmanEntity；读位置/武器/守位，全部 duck）
+var entity: Node = null
+## 所属战斗实例（候选枚举）
+var battle: Node = null
+## 兵种行为档案引用（宿主 enter 时注入；参数缺省回退上方常量）
+var profile: Dictionary = {}
+
+# ─────────────────────── 目标状态 ────────────────────────
+## 当前目标（null = 无目标可打，调用方 finish）
+var _target: Node = null
+## 强制目标（打通态"打通"拦路者：params 注入；死亡/失效/超仇恨半径即清除回落）
+var _forced_target: Node = null
+## 目标已驻留时长（s；换靶清零——纯观测面保留）
+var _dwell: float = 0.0
+
+
+## 装配（宿主 enter 时调用；幂等——重入重绑宿主引用）
+func setup(p_entity: Node, p_battle: Node, p_profile: Dictionary) -> void:
+	entity = p_entity
+	battle = p_battle
+	profile = p_profile
+
+
+## 强制目标注入（打通态：behavior_move 请求 → ai_controller → attack params）
+func set_forced_target(t: Node) -> void:
+	_forced_target = t
+
+
+## 当前目标（behavior_attack 每帧同步到本地 _target 字段供下游消费）
+func get_target() -> Node:
+	return _target
+
+
+## 当前目标驻留时长（s；测试/调试观测面）
+func get_dwell() -> float:
+	return _dwell
+
+
+## 每物理帧推进（米拉奇锁定到死）：目标活着原样奉还（零例行刷新——换靶只
+## 发生在 死亡/失效）；强制目标即时接管；无目标才选举。返回当前目标
+## （null = 无目标可打）。
+func advance(delta: float) -> Node:
+	_dwell += delta
+	if _target_ok(_target):
+		if _target != null:
+			return _target
+	var forced: Node = _valid_forced()
+	if forced != null:
+		_accept(forced)
+		return _target
+	_elect()
+	return _target
+
+
+## 当前目标是否超仇恨半径（观测面保留；裁决#31 起无距离门，恒 false）
+func is_beyond_leash() -> bool:
+	return false
+
+
+# ─────────────────────── 选举（感知拍）────────────────────────────────
+
+## 选举一拍（仅初始/目标死亡后到达此处）：强制目标 → 前向最近 → 全域最近。
+## 无滞回无驻留无刷新——最近者得，得即锁定到死。
+func _elect() -> void:
+	# 1. 强制目标（打通态拦路者）：有效 → 最高优先锁定
+	var forced: Node = _valid_forced()
+	if forced != null:
+		_accept(forced)
+		return
+	# 2. 前向半平面最近存活敌（SWL OnlyTargetsUnitsForward 直译——只打身前
+	#    目标防回头送；前向配对让接触沿正面自然分布）
+	var best: Node = _find_best(true)
+	# 3. 身前无敌（被抄后/残局）回退全域——防站立挨打死锁（SWL 单位会转身使
+	#    半平面旋转，我方面向跟随目标——回退层兜住等价语义）。无距离门——
+	#    最近敌直接追（创始人裁决#31）
+	if best == null:
+		best = _find_best(false)
+	if best != null:
+		_accept(best)
+
+
+## 最近有效敌（前向过滤可配；候选须在仇恨半径内）
+func _find_best(forward_only: bool) -> Node:
+	return ScriptFinder.find_target(entity, {
+		"battle": battle,
+		"ignore_current_attackers": true,
+		"prefer_large": _p("prefer_large", 0.0),
+		"only_forward": forward_only,
+	})
+
+
+## 接受目标（换靶清零驻留时钟；同目标续驻留）
+func _accept(t: Node) -> void:
+	if t == _target:
+		return
+	_target = t
+	_dwell = 0.0
+
+
+## 目标当前是否有效（活着）
+func _target_ok(t: Node) -> bool:
+	if t == null or not is_instance_valid(t):
+		return false
+	if t.has_method("is_dead") and t.is_dead():
+		return false
+	return true
+
+
+## 强制目标有效性维护：有效 → 返回目标；死亡/失效 → 清除返回 null
+func _valid_forced() -> Node:
+	if _forced_target == null:
+		return null
+	if not _target_ok(_forced_target):
+		_forced_target = null
+		return null
+	return _forced_target
+
+
+## 档案参数读取（缺省回退常量）
+func _p(key: String, fallback: float) -> float:
+	if profile == null or not profile.has(key):
+		return fallback
+	return float(profile[key])

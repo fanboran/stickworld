@@ -62,7 +62,7 @@
 | 类别 | 信号 | 参数 |
 |------|------|------|
 | 资源 | `resource_changed` / `resource_not_enough` / `price_changed`（resources/api.gd） | resource_id, ...（旧市场模型信号，随经济重做重审） |
-| 建筑 | `building_started` / `building_completed` / `building_removed`（construction/api.gd） | building_id: String, region_id: String |
+| 建筑 | `building_completed` / `building_removed`（construction/api.gd） | building_id: String, region_id: String |
 | 建筑 | `building_damaged`（construction/api.gd） | building_id: String, damage_amount: float |
 | 建筑 | `building_upgraded`（construction/api.gd） | building_id: String, old_tier: int, new_tier: int |
 | 建筑 | `building_repaired`（construction/api.gd） | building_id: String, repair_amount: float |
@@ -102,8 +102,6 @@
 | `travel_requested` | map_id: String | world_map | SceneLoader | 玩家点击聚落进入场景图 |
 | `map_loaded` | map_id: String, map_type: int | SceneLoader | UI / Environment | 地图加载完成 |
 | `map_unloaded` | map_id: String | SceneLoader | UI | 地图卸载完成 |
-| `chunk_loaded` | chunk_idx: int | SceneLoader | MapInstance | Chunk 加载完成 |
-| `chunk_unloaded` | chunk_idx: int | SceneLoader | MapInstance | Chunk 卸载完成 |
 | `travel_started` | from_id, to_id, mode: int | SceneLoader | UI / WorldClock | 旅行开始 |
 | `travel_completed` | to_id: String | SceneLoader | UI | 旅行完成 |
 | `strategic_map_opened` | - | world_map | UI / InputDispatcher | 战略图打开 |

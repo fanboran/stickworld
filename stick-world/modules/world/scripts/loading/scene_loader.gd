@@ -266,7 +266,6 @@ func preload_chunk(chunk_idx: int) -> void:
 	# 阶段 1：后台 Chunk 预加载（P0-1 地图整体加载，本接口预留）
 	push_warning("[SceneLoader] preload_chunk 未实现（P0-1），chunk %d 未实际加载" % chunk_idx)
 	chunk_loaded.emit(chunk_idx)
-	_emit_event_bus("chunk_loaded", [chunk_idx])
 
 
 ## 卸载 Chunk
@@ -274,4 +273,3 @@ func unload_chunk(chunk_idx: int) -> void:
 	# 阶段 1：Chunk 卸载（P0-1 接口预留）
 	push_warning("[SceneLoader] unload_chunk 未实现（P0-1），chunk %d 未实际卸载" % chunk_idx)
 	chunk_unloaded.emit(chunk_idx)
-	_emit_event_bus("chunk_unloaded", [chunk_idx])

@@ -13,8 +13,9 @@ extends Node
 ## - 单向广播（生产 emit 无订户，2026-08 审计标注，UI/外部接入时连接）：
 ##   game_saved（SaveManager 广播）、balance_changed（热重载预留）、
 ##   battle_started/battle_ended（战斗生命周期）、selection_changed/squad_created/order_issued（编队 UI 数据通道）、
-##   team_ai_stance_changed/heal_cast（战斗可观测性：调试 HUD/测试断言接入时连接）、
-##   chunk_loaded/chunk_unloaded（scene_loader 本地+EventBus 双发：生产消费方连本地信号，外部/测试连 EventBus）
+##   team_ai_stance_changed/heal_cast（战斗可观测性：调试 HUD/测试断言接入时连接）
+## - chunk_loaded/chunk_unloaded 不走 EventBus：scene_loader 自带同名信号是唯一通道
+##   （chunk 流式为预留接口，EventBus 版零订户已下线）
 
 # 信号是公共 API，供其他模块 connect/emit。
 # @warning_ignore("unused_signal") 对每个信号逐条标注，因为该注解只作用于下一条语句。
@@ -91,10 +92,7 @@ extends Node
 @warning_ignore("unused_signal") signal map_loaded(map_id: String, map_type: int)
 # 地图卸载完成：SceneLoader -> UI
 @warning_ignore("unused_signal") signal map_unloaded(map_id: String)
-# Chunk 加载完成：SceneLoader -> MapInstance
-@warning_ignore("unused_signal") signal chunk_loaded(chunk_idx: int)
-# Chunk 卸载完成：SceneLoader -> MapInstance
-@warning_ignore("unused_signal") signal chunk_unloaded(chunk_idx: int)
+# Chunk 加载/卸载走 scene_loader 自带信号（生产消费方连本地信号，chunk 流式为预留接口）
 # 旅行开始：SceneLoader -> UI / WorldClock
 @warning_ignore("unused_signal") signal travel_started(from_id: String, to_id: String, mode: int)
 # 旅行完成：SceneLoader -> UI

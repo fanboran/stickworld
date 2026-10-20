@@ -8,9 +8,6 @@ extends Node
 
 # ===== 公共信号 =====
 
-## 建筑开始建造
-signal building_started(building_id: String, region_id: String)
-
 ## 建筑建造完成
 signal building_completed(building_id: String, region_id: String)
 
@@ -75,15 +72,11 @@ func _on_building_repaired(building_id: String) -> void:
 
 ## 开工建造
 ## [P] region_id 属于玩家控制区域, org_id 存在且标签=ENGINEERING
-## [Q] 创建一个 Construction Project, building 状态=PLANNED, 发射 building_started
-## P0 简化：building_started 信号第一参数为 project_id（建筑实例化前尚无 building_id）
+## [Q] 创建一个 Construction Project, building 状态=PLANNED
 func start_construction(region_id: String, building_type: String, org_id: String) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.start_construction(region_id, building_type, org_id)
-	if result.get("ok", false):
-		building_started.emit(result.get("project_id", ""), region_id)
-	return result
+	return _manager.start_construction(region_id, building_type, org_id)
 
 
 ## 开工建造（指定位置 cell_x，可选 width 覆盖 def 宽度；baseline_y=落位深度 px，
@@ -91,10 +84,7 @@ func start_construction(region_id: String, building_type: String, org_id: String
 func start_construction_at(region_id: String, building_type: String, cell_x: int, org_id: String = "", width: int = -1, baseline_y: float = -1.0) -> Dictionary:
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
-	var result := _manager.start_construction_at(region_id, building_type, cell_x, org_id, width, baseline_y)
-	if result.get("ok", false):
-		building_started.emit(result.get("project_id", ""), region_id)
-	return result
+	return _manager.start_construction_at(region_id, building_type, cell_x, org_id, width, baseline_y)
 
 
 ## 直接生成 OPERATIONAL 状态建筑（绕过建造过程，用于初始建筑/仓库预置）。

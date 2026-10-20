@@ -15,10 +15,10 @@
 |------|------|--------|--------|---------|
 | `map_loaded` | map_id, map_type | SceneLoader | UI、Environment | 地图加载完成 |
 | `map_unloaded` | map_id | SceneLoader | UI | 地图卸载 |
-| `chunk_loaded` | chunk_idx | SceneLoader | MapInstance | Chunk 加载完成 |
-| `chunk_unloaded` | chunk_idx | SceneLoader | MapInstance | Chunk 卸载 |
 | `travel_started` | from_id, to_id, mode | SceneLoader | UI、WorldClock | 开始旅行 |
 | `travel_completed` | to_id | SceneLoader | UI | 旅行完成 |
+
+> Chunk 加载/卸载不经 EventBus：走 `scene_loader.gd` 自带 `chunk_loaded/chunk_unloaded` 信号（chunk 流式为预留接口，生产消费方连本地信号）。
 
 ### 14.2 输入模式/附身事件
 

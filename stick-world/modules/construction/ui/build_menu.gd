@@ -358,7 +358,7 @@ func _cancel_placing() -> void:
 func _confirm_place() -> void:
 	if not _placing or _placing_def_id.is_empty():
 		return
-	# 2026-08 收敛：建造走 ConstructionApi（发射 building_started 信号），查询仍走模块内 manager
+	# 2026-08 收敛：建造走 ConstructionApi，查询仍走模块内 manager
 	var api: Node = _construction_api if _construction_api != null else _construction_manager
 	if api == null or not api.has_method("start_construction_at"):
 		return

@@ -19,12 +19,19 @@ extends CharacterBody2D
 ##   ├── InteractionController (Node, interaction_controller.gd —— 按F交互/提示弹窗)
 ##   └── CollisionShape2D
 ##
-## 子域助手（方法体所在，_init 注入回引，状态字段全留本类）：
+## 子域助手（方法体所在，_init 注入回引，跨域状态字段全留本类）：
 ##   entity/entity_motion.gd     —— 移动/分离/加减速（WALK_ANIM_BASE/ANIM_SPEED_MULT/
 ##                                  IDLE_THRESHOLD/SEPARATION_* 运动常量随迁）
 ##   entity/entity_possession.gd —— 玩家附身输入（移动/攻击/举盾/模式切换；
 ##                                  引擎回调 _input/_unhandled_input 薄壳留本类）
 ##   entity/entity_scale_rig.gd  —— 渲染判定缩放/markers 同步/接触阴影/碰撞基准
+##   entity/entity_regen.gd      —— 生命恢复（附身慢回/脱战回血，回血常量随迁）
+##   entity/entity_facing.gd     —— 翻面控制（节流/滞回/出生宽限/战斗朝向锁/瞄准俯仰；
+##                                  _facing 本体留本类）
+##   entity/entity_death.gd      —— 死亡收口/尸体淡出/遗物/受击处理与打击感
+##                                  （击退冲量/硬直/尸体计时字段留本类）
+##   entity/entity_lod.gd        —— LOD 性能分档（档位/频率常量随迁，无状态）
+##   entity/entity_tuning.gd     —— BalanceConfig 兵种数值/移动校准（static 缓存随迁）
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 ## 基础行走速度（px/s）—— ×1.6 加速后
@@ -58,6 +65,16 @@ const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/enti
 const _PossessionScript: GDScript = preload("res://modules/units/scripts/entity/entity_possession.gd")
 ## 缩放/骨架同步助手脚本（渲染判定缩放/markers 同步，方法体所在）
 const _ScaleRigScript: GDScript = preload("res://modules/units/scripts/entity/entity_scale_rig.gd")
+## 回血助手脚本（附身慢回/脱战回血，方法体所在）
+const _RegenScript: GDScript = preload("res://modules/units/scripts/entity/entity_regen.gd")
+## 朝向助手脚本（翻面节流/滞回/战斗朝向锁/瞄准俯仰，方法体所在）
+const _FacingScript: GDScript = preload("res://modules/units/scripts/entity/entity_facing.gd")
+## 死亡与受击助手脚本（死亡收口/尸体/遗物/受击反馈，方法体所在）
+const _DeathScript: GDScript = preload("res://modules/units/scripts/entity/entity_death.gd")
+## LOD 分档助手脚本（表现层性能分档，方法体所在）
+const _LodScript: GDScript = preload("res://modules/units/scripts/entity/entity_lod.gd")
+## 数值校准助手脚本（BalanceConfig 兵种/移动调参，方法体所在）
+const _TuningScript: GDScript = preload("res://modules/units/scripts/entity/entity_tuning.gd")
 ## 批模拟内核类型经 combat api 契约出口引用（禁直连 class_name BattleSim，
 ## 重命名即静默断多处——见 audit §4.3）
 const ScriptBattleSim := preload("res://modules/combat/api.gd").BATTLE_SIM_SCRIPT
@@ -203,38 +220,21 @@ var _carrying: bool = false
 var _action_locked: bool = false
 ## 玩家按F建造的动画计时器（>0 表示正在播放 build 动画）
 var _player_build_timer: float = 0.0
-## 朝向（1=右，-1=左）
+## 朝向（1=右，-1=左）。翻面节流/滞回/战斗朝向锁逻辑在 entity_facing.gd
+##（节流态随迁助手）；本字段多处直读（受击方向判定/渲染缩放）故留本类
 var _facing: int = 1
-## 朝向节流基准帧（try_set_facing 消费；SW3 Movement.LastFacingChangeFrame 直译：
-## 帧号制 = 确定性可回放，墙钟制在掉帧/变速下行为漂移）
-var _last_direction_change_frame: int = -1
-## 朝向最小变更间隔（物理帧；SW3 Movement.LimitFacingChangeRate 直译。
-## 0.5s × 30Hz = 15 帧——SW3 官方注释原话"Anti-jitter for very fast melee units
-## that overshoot their melee point"）
-const FACING_RATE_LIMIT_FRAMES: int = 15
-## facing 滞回窗（批3 源治热锅蚂蚁）：反向移动意图须连续持续此时长才放行
-## 翻面请求。节流只限翻面速率——意图高频反号时每个节流窗放行一次照样甩头；
-## 滞回让瞬时反号（分离推挤换边/槽位路径横穿/y 微移）攒不满窗根本翻不动
-const FACING_PERSIST_SECS: float = 0.25
-## 反向移动意图连续持续时间（note_move_facing 累积，翻面放行判据）
-var _facing_desire_acc: float = 0.0
 ## 当前动画名
 var _current_anim: String = "idle"
 ## 散步模式（true=只走不跑，按 Alt 切换）
 var _walk_only: bool = false
 
 # ─────────────────────────────── 受击反馈（近战打击感）────────────────────────────────
-## 击退冲量速度（受击时注入，随帧衰减）
+## 击退冲量速度（受击时注入，随帧衰减）。冲量写入与红闪逻辑在 entity_death.gd，
+## 衰减在宿主物理帧（get_knockback_velocity 消费 + tests/dev 基准直写相关字段）
 var _knockback_velocity: Vector2 = Vector2.ZERO
-## 击退衰减（px/s²）。与 battle_sim.KNOCKBACK_DECAY 成对（同值纪律：观察场
-## sim 链 2026-10 标定 700，实体链随统一；批1 建双链契约测试后退役成对常量）
-const KNOCKBACK_DECAY: float = 700.0
-## 受击红闪 Tween（中断旧闪烁）
-var _hurt_tween: Tween = null
-## 受击硬直剩余时间（秒，>0 时 AI 停止行动；行业最佳实践 hit stun）
+## 受击硬直剩余时间（秒，>0 时 AI 停止行动；行业最佳实践 hit stun；
+## 时长常量与写入在 entity_death.gd）
 var _hit_stun_timer: float = 0.0
-## 受击硬直时长（秒）
-const HIT_STUN_DURATION: float = 0.2
 ## 兵种移速倍率（WeaponMount 按行为档案 move_mult 写入：SWL 兵种机动性差异——
 ## Swordwrath 轻快 1.3×、Spearton 沉稳 0.85×，全员同速 = 没有兵种机动性）
 var move_speed_mult: float = 1.0
@@ -249,20 +249,13 @@ var attributes: Dictionary = {}
 ## 体型缩放倍率（SWL minidon 召唤护卫比常规兵种小一圈；1.0 = 正常体型）。
 ## 影响 rig 渲染 + Collider/Range/Hitbox 判定 + 血条高度，经 set_body_scale 设置。
 var body_scale: float = 1.0
-## 尸体停留时长（s；碰撞禁用后计时，之后淡出）——SWL 尸体 fadeOutOver 前的停留
-const CORPSE_LIFETIME: float = 4.0
-## 尸体淡出时长（s，透明度线性降到 0 后移除节点）
-const CORPSE_FADE: float = 1.2
+## 尸体停留/淡出时长常量与淡出驱动在 entity_death.gd（tick_corpse）；
+## 计时字段留本类（tests/dev 基准经 Node.set 直写）
 ## 尸体淡出计时（<0 = 未启动；死亡碰撞禁用后置 CORPSE_LIFETIME）
 var _corpse_fade_timer: float = -1.0
-## 最近受击时刻（ms，脱火恢复判定）
+## 最近受击时刻（ms，脱火恢复判定；回血常量在 entity_regen.gd）
 var _last_hit_ms: int = -999999
-## 脱战回血延迟（s）：距上次受击超过此秒数才开始回（9j；缺陷表口径"脱战 5s 后回"）
-const OUT_OF_COMBAT_HP_REGEN_DELAY: float = 5.0
-## 脱战回血速率（HP/s，整十口径；待实测校准）
-const OUT_OF_COMBAT_HP_REGEN_RATE: float = 10.0
-## 脱战回血上限（max_hp 比例）：最多回到血上限的 25%（战损留痕，9j 缺陷表口径）
-const OUT_OF_COMBAT_HP_REGEN_CAP_RATIO: float = 0.25
+## 脱战回血/附身回血常量与结算在 entity_regen.gd
 ## 死亡后 Collider 禁用倒计时（s；-1=已禁用/未死。在 _physics_process 死亡分支计时，
 ## 替代 SceneTreeTimer lambda——清场竞态下 lambda 捕获失效报错）
 var _dead_disable_timer: float = -1.0
@@ -301,6 +294,16 @@ var _possession: RefCounted = null
 var _aim_preview: Node2D = null
 ## 缩放/骨架同步助手（渲染判定缩放/markers 同步方法体所在）
 var _scale_rig: RefCounted = null
+## 回血助手（附身慢回/脱战回血方法体所在）
+var _regen: RefCounted = null
+## 朝向助手（翻面节流/滞回/战斗朝向锁/瞄准俯仰方法体所在）
+var _facing_helper: RefCounted = null
+## 死亡与受击助手（死亡收口/尸体/遗物/受击反馈方法体所在）
+var _death: RefCounted = null
+## LOD 分档助手（表现层性能分档方法体所在）
+var _lod: RefCounted = null
+## 数值校准助手（BalanceConfig 兵种/移动调参方法体所在）
+var _tuning: RefCounted = null
 
 
 func _init() -> void:
@@ -308,6 +311,11 @@ func _init() -> void:
 	_motion = _MotionScript.new(self)
 	_possession = _PossessionScript.new(self)
 	_scale_rig = _ScaleRigScript.new(self)
+	_regen = _RegenScript.new(self)
+	_facing_helper = _FacingScript.new(self)
+	_death = _DeathScript.new(self)
+	_lod = _LodScript.new(self)
+	_tuning = _TuningScript.new(self)
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -385,8 +393,9 @@ func _ready() -> void:
 			stale_rig.queue_free()
 	else:
 		_scale_rig._spawn_contact_shadow()
-	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归）
-	_apply_balance_data()
+	# 从 BalanceConfig 读取兵种数值（未命中回退 @export 默认，行为零回归；
+	# 方法体在 entity_tuning.gd——兵种覆盖 + 移动/缩放校准 + static 调参缓存）
+	_tuning.apply_balance_data()
 	# 获取 AIController 子节点（§7.1）
 	_ai_controller = get_node_or_null("AIController")
 	_ai_phase = int(get_instance_id() % 2)
@@ -415,52 +424,8 @@ func _ready() -> void:
 		health_component.damaged.connect(_on_damaged)
 
 
-## 从 BalanceConfig 读取兵种数值并覆盖组件默认值。
-## 未命中/字段缺失时保持 @export 默认（当前默认=平原步兵，与 stickmen.tres 一致），保证行为零回归。
-func _apply_balance_data() -> void:
-	if stickman_def_id.is_empty():
-		return
-	var def_path := "units.stickmen." + stickman_def_id
-	var base_hp: Variant = BalanceConfig.get_value(def_path + ".base_hp")
-	var base_attack: Variant = BalanceConfig.get_value(def_path + ".base_attack")
-	if health_component != null and (base_hp is float or base_hp is int) and float(base_hp) > 0.0:
-		health_component.max_hp = float(base_hp)
-		health_component.hp = float(base_hp)
-	if weapon_mount != null and (base_attack is float or base_attack is int) and float(base_attack) > 0.0:
-		weapon_mount.damage = float(base_attack)
-	_apply_movement_tuning()
-
-
-## 移动/缩放数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认。
-## 在 _ready 内先于首次 _apply_scale() 执行，缩放/碰撞体按校准后值构建。
-## id->value 映射按数据引用做 static 缓存：表内容运行期不变，
-## 大批量刷兵时免每单位重建一遍字典（开局/战斗刷新尖峰的纯浪费）。
-static var _tuning_by_id: Dictionary = {}
-static var _tuning_source: Variant = null
-
-
-func _apply_movement_tuning() -> void:
-	if BalanceConfig == null or BalanceConfig.data.is_empty():
-		return
-	var rows_v: Variant = BalanceConfig.get_value("balance.variables")
-	if not (rows_v is Array):
-		return
-	if _tuning_source != rows_v:
-		_tuning_source = rows_v
-		_tuning_by_id = {}
-		for row: Dictionary in rows_v:
-			if row.has("id"):
-				_tuning_by_id[row["id"]] = row.get("value")
-	var by_id: Dictionary = _tuning_by_id
-	var walk: Variant = by_id.get("var_walk_speed")
-	if walk is float or walk is int:
-		WALK_SPEED = float(walk)
-	var run: Variant = by_id.get("var_run_speed")
-	if run is float or run is int:
-		RUN_SPEED = float(run)
-	var scale: Variant = by_id.get("var_base_scale")
-	if scale is float or scale is int:
-		BASE_SCALE = float(scale)
+# BalanceConfig 兵种数值/移动校准方法体在 entity_tuning.gd（_tuning，
+# _ready 内调用；static 调参缓存随迁助手）。
 
 
 ## 实例化并挂载子组件（VisualController / InteractionController / HealthBar）。
@@ -511,32 +476,8 @@ func _physics_tick(delta: float) -> void:
 	# （正是这套回切把 0.8s 死亡动画在 0.25s 内覆盖成 walk/idle，尸体"站起来"）、
 	# 不做分离推挤（尸体不当墙、不滑行）、不受击退。
 	if is_dead():
-		velocity = Vector2.ZERO
-		_knockback_velocity = Vector2.ZERO
-		# 死亡 0.9s 后禁用 Collider（尸体不当墙）——在实体内计时，不用
-		# SceneTreeTimer lambda（清场 queue_free 后 lambda 捕获失效报错）
-		if _dead_disable_timer >= 0.0:
-			_dead_disable_timer -= delta
-			if _dead_disable_timer < 0.0:
-				var col := get_node_or_null("Collider") as CollisionShape2D
-				if col != null:
-					col.set_deferred("disabled", true)
-		# 尸体淡出（SWL fadeOutOver 语义，2026-09-01 观察场反馈：尸体永存
-		# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除；
-		# 有遗物的尸体停留 ×3（12s 翻检窗口，与 _on_died tween 同拍）；翻空的
-		# 尸体快进淡出（遗物被搬走，不再占战场）
-		elif not possessed and _corpse_fade_timer < 0.0:
-			_corpse_fade_timer = CORPSE_LIFETIME * (3.0 if has_meta("loot") else 1.0)
-		if not possessed and _corpse_fade_timer >= 0.0:
-			if _corpse_fade_timer > CORPSE_FADE:
-				var loot: ItemContainer = get_loot_container()
-				if loot != null and loot.is_empty():
-					_corpse_fade_timer = CORPSE_FADE  # 翻空快进淡出
-			_corpse_fade_timer -= delta
-			if _corpse_fade_timer <= 0.0:
-				queue_free()
-			elif _corpse_fade_timer < CORPSE_FADE:
-				modulate.a = clampf(_corpse_fade_timer / CORPSE_FADE, 0.0, 1.0)
+		# Collider 禁用计时与尸体淡出驱动在 entity_death.gd tick_corpse
+		_death.tick_corpse(delta)
 		_sync_markers_transform()
 		return
 	# 眩晕（SWL StunSystem 语义）：既不跑 AI 也不移动，瘫在原地
@@ -560,7 +501,7 @@ func _physics_tick(delta: float) -> void:
 	# 仅在被附身时处理玩家输入
 	if possessed:
 		_possession._handle_player_input(delta)
-		_possess_regen(delta)
+		_regen.tick_possess_regen(delta)
 	else:
 		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动。
 		# 战斗性能优化：AI 决策与行为状态机降到 30Hz（隔物理帧、传倍增 delta
@@ -581,7 +522,7 @@ func _physics_tick(delta: float) -> void:
 		# sim 模式：移动/分离/边界/击退衰减/z_index 全由 BattleSim 批处理；
 		# 实体只保留 AI 决策节流（上方）+ 意图速度标量/动画（_handle_ai_input→
 		# _apply_movement 末尾写 sim）+ 硬直/markers。
-		_apply_rest_hp_recovery(delta)
+		_regen.tick_rest_hp_recovery(delta)
 		if _hit_stun_timer > 0.0:
 			_hit_stun_timer = maxf(0.0, _hit_stun_timer - delta)
 		_sync_markers_transform()
@@ -613,12 +554,12 @@ func _physics_tick(delta: float) -> void:
 			velocity = prev_velocity * TimeManager.speed_factor()
 		move_and_slide()
 		velocity = prev_velocity
-	# 脱战回血（9j）：脱离火线 5s 后 HP 缓慢恢复（上限 25% max_hp；附身单位走 _possess_regen）
-	_apply_rest_hp_recovery(delta)
-	# 击退冲量衰减
+	# 脱战回血（9j）：脱离火线 5s 后 HP 缓慢恢复（上限 25% max_hp；附身单位走附身慢回）
+	_regen.tick_rest_hp_recovery(delta)
+	# 击退冲量衰减（衰减常量在 entity_death.gd，与 battle_sim.KNOCKBACK_DECAY 同值纪律）
 	if _knockback_velocity != Vector2.ZERO:
 		var kb_len: float = _knockback_velocity.length()
-		var dec: float = KNOCKBACK_DECAY * delta
+		var dec: float = _DeathScript.KNOCKBACK_DECAY * delta
 		if kb_len <= dec:
 			_knockback_velocity = Vector2.ZERO
 		else:
@@ -826,58 +767,8 @@ func hide_charge_preview() -> void:
 
 
 # ─────────────────────────────── 附身增益（SWL Unit 真值）────────────────────────────────
-## 附身回血速率（HP/s；SWL 字段名真值 healthRegenPerSecondWhenUserControlled，
-## 数值无 dump 真值为语义推断，待实测校准）
-const POSSESS_REGEN_PER_SECOND: float = 0.5
-## 回血小数累积器（heal 整数 HP 一口，避免高频小数 heal 信号刷屏）
-var _possess_regen_accum: float = 0.0
-
-
-## 附身期间缓慢回血（玩家附身的单位自带恢复——鼓励亲自下场）。
-## 满血/死亡不结算；每累积满 1 HP 调一次 HealthComponent.heal。
-func _possess_regen(delta: float) -> void:
-	var health: Node = get_node_or_null("HealthComponent")
-	if health == null or not is_instance_valid(health):
-		return
-	if health.is_dead() or health.hp >= health.max_hp:
-		_possess_regen_accum = 0.0
-		return
-	_possess_regen_accum += delta * POSSESS_REGEN_PER_SECOND
-	if _possess_regen_accum >= 1.0:
-		var whole: int = int(_possess_regen_accum)
-		_possess_regen_accum -= float(whole)
-		health.heal(float(whole))
-
-
-## 脱战回血小数累积器（与附身回血同款：整数 HP 一口结算，避免高频小数 heal 刷屏）
-var _rest_regen_accum: float = 0.0
-
-
-## 脱战回血（9j 最简版：数值先通，血条渐补表现不做）：脱离火线（5s 未受击，
-## 脱离火线判定（_last_hit_ms 距今超窗）后 HP 缓慢恢复，最多回到血上限的 25%
-## （战损留痕）。附身单位不叠此通道（走 SWL 真值 _possess_regen 慢回）。
-func _apply_rest_hp_recovery(delta: float) -> void:
-	if possessed or health_component == null:
-		return
-	if health_component.is_dead() or health_component.hp >= health_component.max_hp:
-		_rest_regen_accum = 0.0
-		return
-	var since_hit: float = (Time.get_ticks_msec() - _last_hit_ms) / 1000.0
-	if since_hit < OUT_OF_COMBAT_HP_REGEN_DELAY:
-		_rest_regen_accum = 0.0
-		return
-	var cap: float = health_component.max_hp * OUT_OF_COMBAT_HP_REGEN_CAP_RATIO
-	if health_component.hp >= cap:
-		_rest_regen_accum = 0.0
-		return
-	_rest_regen_accum += delta * OUT_OF_COMBAT_HP_REGEN_RATE
-	if _rest_regen_accum >= 1.0:
-		var whole: int = mini(int(_rest_regen_accum), int(cap - health_component.hp))
-		if whole > 0:
-			_rest_regen_accum -= float(whole)
-			health_component.heal(float(whole))
-		else:
-			_rest_regen_accum = 0.0  # 上限截断：尾差不足 1 HP，丢弃余量
+# 附身慢回与脱战回血的常量/结算在 entity_regen.gd（_regen）；物理帧调用点
+# 在 _physics_tick（sim 分支与常规分支）。
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -1157,108 +1048,28 @@ func get_role() -> String:
 
 
 # ─────────────────────────────── 战斗 API（§8）────────────────────────────────
+# 死亡收口/尸体淡出/遗物/受击处理/打击感的方法体在 entity_death.gd（_death）；
+# 以下为信号挂点与对外薄壳（health_component 信号连接、WeaponMount/AI duck 调用）。
 
-## 死亡处理：停止移动、播放死亡动画、禁用受击、通知战斗实例。
-## 爆头致死播 Death-Headshot 专属动画（原版 Kill(isHeadShot) 分家语义）。
-## 2026-08-31 审计 P0-1 死亡收口：这里是一次性权威清理——
-## 清空速度/奔跑态/动作锁（防减速回切覆盖死亡动画）、延迟禁用 Collider
-## （尸体不当墙，消灭卡位源头；_physics_process 的死亡早退管住其余帧级行为）。
+## 死亡处理：停止移动、播放死亡动画、禁用受击、通知战斗实例（细则见助手）。
 func _on_died() -> void:
-	ai_stop()
-	velocity = Vector2.ZERO
-	_knockback_velocity = Vector2.ZERO
-	_current_speed = 0.0
-	_is_running = false
-	# sim 侧意图/击退清零（死亡刻起 sim 不再积分本实体，防御残留）
-	if _sim != null and _sim_sid >= 0:
-		_sim.set_intent(_sim_sid, Vector2.ZERO)
-		_sim.add_knockback(_sim_sid, Vector2.ZERO)
-	# 建造动作锁会拦截 play("dead")——死亡优先级最高，强制解锁
-	_action_locked = false
-	# 死亡变体池（SWL 死亡变体随机）：普通死 Death1/2，爆头死 Headshot 系 8 变体
-	var dead_anim: String = Anims.pick_dead_anim(
-			health_component != null and health_component.died_from_headshot)
-	_visual.play(dead_anim)
-	# 禁用 hitbox 避免继续被攻击
-	if hitbox != null:
-		hitbox.set_deferred("monitorable", false)
-	# 死亡动画（0.8s）播完后由 _physics_process 死亡分支禁用 Collider：
-	# 尸体不当墙（卡位主因）。计时起点在此置位。
-	_dead_disable_timer = 0.9
-	# 通知战斗实例（由 BattleInstance 统计伤亡）
-	if _battle_instance != null and is_instance_valid(_battle_instance):
-		if _battle_instance.has_method("on_unit_died"):
-			_battle_instance.on_unit_died(self)
-	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
-	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")。
-	# 滞留/淡出由 _physics_process 死亡分支的物理帧计时**唯一驱动**
-	#（A1b：旧 tween 与物理计时双驱动打架——有遗物尸体在 alpha≈0.36 被物理
-	# 路径瞬删跳变；时长真相源归一 4/12s + 1.2s 淡出）
-	if not possessed:
-		_generate_loot_container()
-
-
-## 死亡遗物生成（weapon_type→def 映射 + 盾 + 随机小额消耗品）。
-## 返回是否生成了非空容器（决定尸体保留时长）。
-func _generate_loot_container() -> bool:
-	var loot := ItemContainer.new()
-	if weapon_mount != null and is_instance_valid(weapon_mount):
-		var wt: int = int(weapon_mount.weapon_type)
-		var wid: StringName = ItemsAPI.WEAPON_ITEM_BY_TYPE.get(wt, &"")
-		if wid != &"":
-			loot.add(wid, 1)
-		# 盾：显式装备盾或矛士兵种默认盾
-		if bool(weapon_mount.equipped_shield) \
-				or (bool(weapon_mount.shield_enabled) and wt == 1):
-			loot.add(&"shd_wood_001", 1)
-	if randf() < 0.3:
-		loot.add(&"con_bandage", 1)
-	if loot.is_empty():
-		return false
-	set_meta("loot", loot)
-	return true
+	_death.on_died()
 
 
 ## 遗物容器查询（翻包交互/物理帧翻空检测消费）
 func get_loot_container() -> ItemContainer:
-	return get_meta("loot") if has_meta("loot") else null
+	return _death.get_loot_container()
 
 
 ## 受击处理（反编译参考实装 B）：按攻击者方位 vs 自身朝向判定正面/背面，
-## 触发受击插播。SelectHitAnimation 全量直译：部位(Head/Mid)×方向×强度(Big/Small)。
+## 触发受击插播（细则见 entity_death.gd）。
 func _on_damaged(amount: float, source: Node) -> void:
-	# 死亡保护：died 与 damaged 可能同帧连发（AOE 多段/集火补刀），
-	# 尸体不吃受击硬直、不播受击插播（否则覆盖死亡动画 → "尸体站起来"）
-	if is_dead():
-		return
-	# 最近受击时刻（战斗中脱火恢复判定用：≥3s 未受击才算"脱离火线"）
-	_last_hit_ms = Time.get_ticks_msec()
-	if source == null or not is_instance_valid(source):
-		return
-	# 受击硬直：被打瞬间 AI 短暂停滞（行业最佳实践 hit stun）
-	_hit_stun_timer = HIT_STUN_DURATION
-	# 受击音（痛叫三变体）。世界坐标交给 AudioManager：人群战斗时同帧请求并成
-	# 1~2 路声部（而不是叠成音墙，也不是"停旧实例"的机关枪顿挫）；屏外单位自然变轻
-	if AudioManager != null:
-		AudioManager.play_event("unit_hurt", global_position)
-	# 攻击者在自身朝向侧 = 正面受击（后仰）；否则背面受击（前扑）
-	var from_left: bool = source.global_position.x < global_position.x
-	var facing_right: bool = _facing > 0
-	var from_front: bool = from_left != facing_right
-	# 强度分级（SWL Big/Small 按伤害量级）；部位近似（头部命中概率 30%——
-	# 近战挥击/箭雨的头部命中，爆头致死走独立死亡链路不受此影响）
-	var big: bool = amount >= Anims.HIT_BIG_DAMAGE_THRESHOLD
-	var head: bool = randf() < 0.3
-	# 举盾中被击（招架系统配套反馈：Hit-Spearton-Block 池）
-	var blocking: bool = weapon_mount != null and is_instance_valid(weapon_mount) \
-			and weapon_mount.has_method("is_blocking") and weapon_mount.is_blocking()
-	if _visual != null and _visual.has_method("play_hit"):
-		_visual.play_hit(from_front, big, head, blocking)
+	_death.on_damaged(amount, source)
 
 
 ## 是否处于受击硬直（>0 表示被打停中；AI 行为据此暂停行动）。
 func is_in_hit_stun() -> bool:
-	return _hit_stun_timer > 0.0
+	return _death.is_in_hit_stun()
 
 
 # ─────────────────────────────── 状态效果（SWL ApplyBurn/... 直译）────────────────────────────────
@@ -1272,7 +1083,7 @@ var _se_has_stun: bool = false
 @warning_ignore("unused_private_class_variable")
 var _se_has_speed_mult: bool = false
 var _se_checked: bool = false
-## 战斗实例方法存在性缓存（同上，_apply_rest_hp_recovery 每物理帧消费）
+## 战斗实例方法存在性缓存（同上，_update_solid_collision_mask 每物理帧消费）
 var _battle_has_is_active: bool = false
 ## weapon_mount 方法/字段存在性缓存（@onready 装配后不变；举盾移速/受击每帧消费）
 @warning_ignore("unused_private_class_variable")
@@ -1338,105 +1149,42 @@ func on_blocking_changed(blocking: bool) -> void:
 		_visual.set_block_stance(blocking)
 
 
+# ─────────────────────────────── 朝向（翻面控制转发）────────────────────────────────
+# 翻面节流/滞回/出生宽限/战斗朝向锁/瞄准俯仰的方法体在 entity_facing.gd（_facing）；
+# 以下为对外薄壳（entity_motion/behavior_*/visual_controller 经实体 duck 调用）。
+
 ## 面向指定世界坐标（横向翻转；AI 开火前调用——风筝撤退中开火必须回头
 ## 面向目标，否则"背身拉弓"）。
 func face_towards(pos: Vector2) -> void:
-	var dx: float = pos.x - global_position.x
-	if absf(dx) < 1.0:
-		return
-	# 战斗面向强制通道：绕过战斗朝向锁（锁只拦移动翻面，开火瞄准才是朝向
-	# 权威——被锁拦住时，目标丢失窗口里被移动翻成背向的单位会**卡死在背身
-	# 拉弓**：重锁后 _face_target 永远被拒，创始人点正「左下角弓手背对拉弓」）
-	if OS.get_environment("STICK_TRACE_FACING") == "1" and signf(dx) != signf(_facing):
-		print("[FaceTrace] aim iid=%d dx=%.0f pos=%s" % [get_instance_id(), dx, global_position])
-	_force_facing(1 if dx > 0.0 else -1)
+	_facing_helper.face_towards(pos)
 
 
-## 朝向变更节流（SW3 Movement.LimitFacingChangeRate/LastFacingChangeFrame 直译，
-## 帧号制）：0.5s（15 物理）内只许翻一次。移动意图高频反号（分离推挤穿椭圆、
-## 目标在两侧间拍频）此前逐帧翻面 = 全员左右甩头；节流后翻面呈"转身"节奏。
-## 玩家附身豁免（手控输入不经 AI 节拍）。返回是否生效（false=节流窗内，
-## 保持原朝向）
+## 朝向变更节流（SW3 Movement.LimitFacingChangeRate 直译）：0.5s（15 物理）内
+## 只许翻一次；玩家附身豁免。返回是否生效（false=节流窗内，保持原朝向）
 func try_set_facing(new_facing: int) -> bool:
-	if new_facing == _facing:
-		return true
-	# 战斗朝向锁（SWL/SW3 AttackWhileRunning 语义：移动方向与朝向解耦）——
-	# 攻击行为活跃期由开火瞄准独占朝向，移动翻面让位（边退边射 = 倒退跑，
-	# 脸永远朝敌人；旧实现移动侧抢闸导致背身拉弓，创始人点正）
-	if _combat_face_lock:
-		return false
-	return _set_facing_rate_limited(new_facing)
-
-
-## 强制翻面（face_towards 战斗面向消费）：绕过战斗朝向锁，仍走翻面节流
-func _force_facing(new_facing: int) -> bool:
-	if new_facing == _facing:
-		return true
-	return _set_facing_rate_limited(new_facing)
-
-
-func _set_facing_rate_limited(new_facing: int) -> bool:
-	var pf := Engine.get_physics_frames()
-	if not is_possessed() and _last_direction_change_frame >= 0 \
-			and pf - _last_direction_change_frame < FACING_RATE_LIMIT_FRAMES:
-		return false
-	_last_direction_change_frame = pf
-	_facing = new_facing
-	_apply_scale()
-	return true
+	return _facing_helper.try_set_facing(new_facing)
 
 
 ## 移动侧意图喂入（批3 facing 滞回，_apply_movement 每物理帧调用）：
 ## 返回该侧翻面请求是否放行——反向意图连续 ≥ FACING_PERSIST_SECS 才 true。
-## 附身豁免（手控直给）；face_battle_dir 等稳定朝向源不经本闸（直接走
-## try_set_facing 的节流），站定收口不被移动滞回卡住。
-## 出生朝向宽限窗（裁决#21c）：出生/参战登记落定的朝向是"第一眼"观感——
-## 窗口内移动侧一律不产生翻面请求，否则单位开场第一步（去槽位/被推挤）就把
-## 脸转向移动方向，肉眼即"开局转身背对"。战斗面向（face_towards → _force_facing）
-## 不经本闸，瞄准/攻击照旧是朝向权威。
-const SPAWN_FACING_GRACE_FRAMES: int = 30   ## 1s @30Hz
-var _first_move_facing_frame: int = -1
-
 func note_move_facing(side: int, delta: float) -> bool:
-	if is_possessed() or side == 0 or side == _facing:
-		_facing_desire_acc = 0.0
-		return true
-	if _first_move_facing_frame < 0:
-		_first_move_facing_frame = Engine.get_physics_frames()
-	elif Engine.get_physics_frames() - _first_move_facing_frame < SPAWN_FACING_GRACE_FRAMES:
-		_facing_desire_acc = 0.0
-		return false
-	_facing_desire_acc += delta
-	var ok := _facing_desire_acc >= FACING_PERSIST_SECS
-	if ok and OS.get_environment("STICK_TRACE_FACING") == "1":
-		print("[FaceTrace] move iid=%d side=%+d acc=%.2f pos=%s vel=%s"
-				% [get_instance_id(), side, _facing_desire_acc,
-						global_position, velocity])
-	return ok
+	return _facing_helper.note_move_facing(side, delta)
 
 
 ## 战斗朝向锁（behavior_attack 置位：有活跃攻击目标时 true——朝向归
 ## _face_target 开火瞄准管，移动不翻面）
-var _combat_face_lock: bool = false
-
-
 func set_combat_face_lock(locked: bool) -> void:
-	_combat_face_lock = locked
+	_facing_helper.set_combat_face_lock(locked)
 
 
-## 拉弓瞄准俯仰角（SWL Archer._currentAim 表亲；rig 域弧度，负=仰头）：
-## behavior_attack 弓手每拍按弹道解算推送（weapon_mount.get_aim_pitch），
-## 视觉链消费（visual_controller → rig / billboard 镜像 feed）——纯表现态，
-## 不回写战斗逻辑（射击真值由箭矢弹道自走）
-var _aim_pitch: float = 0.0
-
-
+## 写拉弓瞄准俯仰角（behavior_attack 弓手每拍按弹道解算推送；纯表现态）。
 func set_aim_pitch(rad: float) -> void:
-	_aim_pitch = rad
+	_facing_helper.set_aim_pitch(rad)
 
 
+## 读拉弓瞄准俯仰角（视觉链消费：visual_controller → rig / billboard 镜像 feed）。
 func get_aim_pitch() -> float:
-	return _aim_pitch
+	return _facing_helper.get_aim_pitch()
 
 
 ## 立即换持械站姿（换武器时 WeaponMount 调用）：
@@ -1496,54 +1244,12 @@ func get_faction() -> int:
 
 
 # ─────────────────────────────── LOD 性能分档（战斗级节流）────────────────────────────────
+# 档位/频率常量与档位落点方法体在 entity_lod.gd（_lod）；此处留对外薄壳
+#（UnitLodDirector 按相机距离分档下发）。
 
-## 档位常量（与 UnitLodDirector.Tier 对齐；独立定义避免实体反向依赖 combat 侧）
-const PERF_TIER_NEAR: int = 0   ## 近景：全速
-const PERF_TIER_MID: int = 1    ## 中景：动画/叠加 15Hz、血条 10Hz
-const PERF_TIER_FAR: int = 2    ## 远景/离屏：动画/叠加 5Hz、rig 与血条隐藏
-## 各档更新频率（Hz；60 = 每帧全速，与未接入 LOD 时的行为等价）
-const LOD_HZ_FULL: float = 60.0
-const LOD_HZ_MID: float = 15.0
-const LOD_HZ_FAR: float = 5.0
-const LOD_HZ_BAR_MID: float = 10.0
-
-
-## 设置性能档位（由 UnitLodDirector 按相机距离分档下发；无 director 时无人调用
-## = 一切保持现行全速行为）。只动表现层频率/可见性，物理与战斗逻辑不受影响：
-## 命中帧结算走 rig 播放位置轮询，节流后事件最多晚 1 个节拍、不丢失不重发。
-## 死亡/附身优先于 LOD：死者不触碰（尸体血条语义由 _on_died 权威管理），
-## 附身单位恒近景全速（玩家视点所在身体）。
-## p_anim_hz：动画频率直传（hz 策略唯一真相源在 UnitLodDirector——T0 频率随
-## 存活单位密度 60/30/20 自适应，T1/T2 固定 15/5）；<=0 = 未指定，按档位默认。
-## 血条：T0 跟随动画频率、T1 固定 10Hz、T2 隐藏停更。
+## 设置性能档位：只动表现层频率/可见性，物理与战斗逻辑不受影响（细则见助手）。
 func set_perf_tier(tier: int, anim_hz: float = -1.0) -> void:
-	if is_dead() or is_queued_for_deletion():
-		return
-	if possessed:
-		tier = PERF_TIER_NEAR
-	match tier:
-		PERF_TIER_MID:
-			_apply_perf_tier(true, anim_hz if anim_hz > 0.0 else LOD_HZ_MID, LOD_HZ_BAR_MID, true)
-		PERF_TIER_FAR:
-			_apply_perf_tier(false, anim_hz if anim_hz > 0.0 else LOD_HZ_FAR, 0.0, false)
-		_:
-			var hz: float = anim_hz if anim_hz > 0.0 else LOD_HZ_FULL
-			_apply_perf_tier(true, hz, hz, true)
-
-
-## 档位落点：rig 可见性/动画频率（rig 内部同步转发 ProceduralOverlay 同档节流）
-## + 血条频率/显示。rig.visible 由 LOD 独占管辖（受击闪红走 modulate，不依赖 visible）；
-## 小兵渲染代理模式下 rig 让位（CrowdRenderer 全权渲染，LOD 只管血条）。
-func _apply_perf_tier(rig_visible: bool, anim_hz: float, bar_hz: float, bar_visible: bool) -> void:
-	if rig != null and is_instance_valid(rig) and not rig.is_crowd_proxied():
-		rig.visible = rig_visible
-		if rig.has_method("set_anim_update_hz"):
-			rig.set_anim_update_hz(anim_hz)
-	if _health_bar != null and is_instance_valid(_health_bar):
-		if _health_bar.has_method("set_update_hz"):
-			_health_bar.set_update_hz(bar_hz)
-		if _health_bar.has_method("set_display_visible"):
-			_health_bar.set_display_visible(bar_visible)
+	_lod.set_perf_tier(tier, anim_hz)
 
 
 ## 设置所属战斗实例
@@ -1588,28 +1294,13 @@ func is_dead() -> bool:
 
 
 # ─────────────────────────────── 受击反馈（§7.5 近战打击感）────────────────────────────────
+# 击退冲量写入与受击红闪方法体在 entity_death.gd（_death）。
 
 ## 受击反馈：物理击退冲量 + 受击红闪。
 ## 由 WeaponMount.perform_attack 命中时调用（dir 为指向目标的方向）。
 ## sim 模式冲量写入 sim 击退数组（批循环积分+衰减），不再写本地冲量字段。
 func apply_hit_reaction(dir: Vector2, force: float) -> void:
-	if dir != Vector2.ZERO:
-		if _sim_active():
-			_sim.add_knockback(_sim_sid, dir.normalized() * force)
-		else:
-			_knockback_velocity = dir.normalized() * force
-	_flash_hurt()
-
-
-## 受击红闪：身体短暂变红后恢复（Stickman Burst 受击闪光方案）。
-func _flash_hurt() -> void:
-	if rig == null:
-		return
-	if _hurt_tween != null and _hurt_tween.is_valid():
-		_hurt_tween.kill()
-	_hurt_tween = create_tween()
-	_hurt_tween.tween_property(rig, "modulate", Color(1.0, 0.25, 0.25), 0.06)
-	_hurt_tween.tween_property(rig, "modulate", Color.WHITE, 0.18)
+	_death.apply_hit_reaction(dir, force)
 
 
 ## 获取当前击退冲量（供测试/调试）

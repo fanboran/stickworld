@@ -1,5 +1,6 @@
 class_name WeaponMount
 extends Node2D
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 武器挂载点 -- 管理武器/盾牌挂载、攻击动画触发与攻击执行。
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1（WeaponMount）。
@@ -43,6 +44,9 @@ const WeaponBalance := preload("res://modules/units/scripts/entity/weapon_balanc
 const WeaponRanged := preload("res://modules/units/scripts/entity/weapon_ranged.gd")
 ## 持盾格挡助手（三重判定 + blockResetInterval 节流）
 const WeaponBlock := preload("res://modules/units/scripts/entity/weapon_block.gd")
+## 批模拟内核类型经 combat api 契约出口引用（禁直连 class_name BattleSim，
+## 重命名即静默断多处——见 audit §4.3）
+const ScriptBattleSim := preload("res://modules/combat/api.gd").BATTLE_SIM_SCRIPT
 
 ## 武器类型与表现场景映射的真相源在 stick_rig api（武器视觉词汇归 L1）；
 ## 此处 const 转发保持 WeaponMount.WeaponType / WEAPON_SCENE_PATHS 旧引用点不变
@@ -91,19 +95,23 @@ var BLOCK_DAMAGE_FACTOR: float = 0.15
 var BLOCK_RESET_INTERVAL: float = 0.6
 ## 正面格挡判定：来袭方向与朝向夹角余弦大于此值才算"正面"（≈ ±75° 扇区）。
 var BLOCK_FRONT_DOT: float = 0.25
-## 各武器攻击射程（像素，含手臂长度）——**取整十口径，唯一真相源 =
-## 观察场编制设计值**（tests/dev/battle_arena.gd 头注释：矛 120 卡线 / 剑 80 /
-## 杖 280 施法 / 弓 300 压制，见 docs/设计/命名与数值口径.md）。
-## 弓不再用 1400 全屏抛射——超远距抛物线落点散布吃掉命中率，火力压制造
-## 就"看着满天花雨实际没人中箭"；杖 280 对齐火力班编制（原 600 半屏施法
-## 与观察场纵深布阵脱节；kite 死锁警示仍成立：射程不得小于行为档案 kite_range）。
+## 各武器攻击射程（px）——SWL 序列化真值直译（翻译档 §7.1.1：attackRange
+## 世界单位 × 52px/u，取整十）：剑/矛/镐 attackRange 1.5u≈78→80，杖（Magikill
+## 施法距离）7u≈364→360，弓 range 15u≈780。接近停步/出手门按 SWL 方法体系数
+## 折算（0.7/0.8，见 behavior_attack），本表只存序列化原值口径。
 const WEAPON_RANGE: Dictionary = {
 	WeaponType.SWORD: 80.0,
-	WeaponType.SPEAR: 120.0,
-	WeaponType.BOW: 300.0,
-	WeaponType.PICKAXE: 70.0,
-	WeaponType.STAFF: 280.0,
+	WeaponType.SPEAR: 80.0,
+	WeaponType.BOW: 780.0,
+	WeaponType.PICKAXE: 80.0,
+	WeaponType.STAFF: 360.0,
 	WeaponType.MERIC: 400.0,  ## heal_range 兜底语义（唯一真相源仍为行为档案 heal_range，待实测校准）
+}
+## 二线射程（px，SWL attackRangeSecondLine 直译）：矛兵在编队第二列（前排后有
+## 友军遮挡）时用 2.5u≈130 隔排刺击（SWL colInFormation==1 语义；其余兵种
+## secondLine==attackRange 无行为差异，不设）。0 = 无二线。
+const WEAPON_RANGE_SECOND_LINE: Dictionary = {
+	WeaponType.SPEAR: 130.0,
 }
 ## HitStop 参数（命中顿帧）
 var HITSTOP_TIME_SCALE: float = 0.05
@@ -121,15 +129,6 @@ var equip_speed_mult: float = 1.0
 ## 近战挥击扇形额外收 4 个溅射目标、溅射伤害系数 0.2——"一人成军"的爽感来源
 const USER_CONTROLLED_SPLASH_HIT_LIMIT: int = 4
 const USER_CONTROLLED_SPLASH_MODIFIER: float = 0.2
-
-# ─────────────────────────────── 情绪标签（§7.4，battle_ai_director 设置）────────────────────────────────
-## 战场导演打的情绪标签，影响命中与冷却
-enum Mood {
-	STEADY,     ## 稳定（默认）
-	HESITANT,   ## 犹豫（命中率-30%）
-	EXCITED,    ## 亢奋（命中率+10%，冷却-15%）
-	PANICKED,   ## 恐慌（命中率-50%）
-}
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 主手武器类型（默认剑）
@@ -163,6 +162,9 @@ enum Mood {
 @export var damage: float = 15.0
 ## 攻击射程（像素），按武器类型初始化（WEAPON_RANGE）
 @export var attack_range: float = 80.0
+## 二线射程（像素，SWL attackRangeSecondLine 直译；按武器类型初始化
+## WEAPON_RANGE_SECOND_LINE，0 = 无二线——行为层"前排有友军遮挡时隔排刺击"）
+@export var attack_range_second_line: float = 0.0
 ## 攻击冷却（秒）。对齐解包 Spine 攻击动画时长（Swordwrath-Attack1 = 1.33s）：
 ## 冷却 ≥ 动画时长才能完整播完挥剑（否则下次攻击打断未播完的动画）。
 @export var cooldown: float = 1.35
@@ -209,8 +211,6 @@ var _cooldown_timer: float = 0.0
 var _weapon: Node2D = null
 ## 副手盾牌实例（挂 hand_outer 骨骼）
 var _shield: Node2D = null
-## 当前情绪标签
-var _mood: Mood = Mood.STEADY
 ## 延迟结算：pending 目标与倒计时（弓=拉弓满弓放箭 / 杖=施法前摇到点结算，
 ## 视觉对齐各自攻击动画）
 var _pending_ranged_target: Node = null
@@ -240,6 +240,13 @@ var _aim_visual_player: bool = false
 const BOW_AIM_VISUAL_TIMEOUT: float = 5.0
 ## 移动判定阈值（速度平方）：与 hd2d 镜像的 moving 口径一致（25 = 5px/s）
 const BOW_MOVE_SQ_THRESHOLD: float = 25.0
+## 装填动画已播标记（SWL IsReloading 的表现侧，S1b）：本冷却窗内已播过
+## attack_bow_reload——oneshot 同名 play 会从头重播，逐帧仲裁不得重入。
+## 冷却尽（回拉满持瞄）或表现窗关闭时复位，一窗一次
+var _reload_visual_done: bool = false
+## 装填播放判定的冷却残量下限（s）：低于此值视为冷却已尽（防帧尾毛刺在
+## 冷却归零边缘反复横跳）
+const RELOAD_COOLDOWN_EPS: float = 0.05
 
 # ── 治疗能力族（P7 批次 7b：Meric 实体层 CastHeal/CanCastHeal/IsCastingHeal 直译）──
 ## 当前治疗动画名（dump healingAnimation 字段直译，运行时经 StickmanAnims.pick_heal_anim 随机注入）
@@ -287,11 +294,12 @@ func _mount_weapons() -> void:
 	if owner_entity.get("rig") == null:
 		attack_range = 0.0 if weapon_type == WeaponType.NONE \
 				else float(WEAPON_RANGE.get(weapon_type, attack_range))
+		attack_range_second_line = float(WEAPON_RANGE_SECOND_LINE.get(weapon_type, 0.0))
 		# 盾实例对 billboard 图放行（修"矛兵盾 100% 缺失→格挡从未发生"）：
 		# is_shield_blocking 第一重判定只认 _shield 实例存在，此前本分支早退
 		# 使 blockChance 0.35 在观察场从未掷出。2D 骨架未建 → 盾以隐藏逻辑
 		# 实例挂 WeaponMount 自身（数据与状态留 2D 侧），billboard 视觉由
-		# char_sprite_3d 镜像挂盾（渲染走镜像——HD-2D 铁律）。
+		# char_rig_3d 镜像挂盾（渲染走镜像——HD-2D 铁律）。
 		if shield_visual_enabled():
 			_mount_shield(owner_entity)
 		return
@@ -302,6 +310,7 @@ func _mount_weapons() -> void:
 	# NONE = 徒手（背包装备系统卸空主手）：不挂武器模型，射程归零不可攻击
 	if weapon_type == WeaponType.NONE:
 		attack_range = 0.0
+		attack_range_second_line = 0.0
 	else:
 		var scene_path: String = WEAPON_SCENE_PATHS.get(weapon_type, "")
 		if scene_path.is_empty():
@@ -313,6 +322,7 @@ func _mount_weapons() -> void:
 			return
 		_weapon = _mount_one(scene, hand, "Weapon")
 		attack_range = WEAPON_RANGE.get(weapon_type, attack_range)
+		attack_range_second_line = float(WEAPON_RANGE_SECOND_LINE.get(weapon_type, 0.0))
 	# 副手盾牌（**绑定矛兵**：原版也只有 Spearton 持盾，其余兵种无盾——
 	# 曾给全员挂盾导致"人手一面盾"的怪相，用户决策回归原版；
 	# equipped_shield = 玩家背包副手装备盾，任意武器可配）
@@ -337,7 +347,7 @@ func _mount_shield(owner_entity: CharacterBody2D) -> void:
 	if off_hand == null:
 		# HD-2D billboard 图（2D 骨架未创建，rig==null）：逻辑盾挂 WeaponMount
 		# 自身并隐藏——格挡判定（weapon_block 只看 _shield 实例存在性）由此
-		# 真实生效；本实例不进任何渲染（billboard 视觉由 char_sprite_3d 镜像
+		# 真实生效；本实例不进任何渲染（billboard 视觉由 char_rig_3d 镜像
 		# 挂盾，数据与状态留 2D 侧、渲染走镜像）。2D 图走到这里 = 骨骼缺失，仍告警。
 		if owner_entity.get("rig") == null:
 			_shield = scene.instantiate() as Node2D
@@ -466,11 +476,13 @@ func _reload_weapons() -> void:
 	# 武器走姿分层（2026-09-30 实机验收：持弓行走要有脚步+持弓姿态）：
 	# walk state 资源换装（盾姿态分层同款机制）。BOW → walk_bow（Archidon-Walk，
 	# 下肢走步 + 上肢保持持弓），其余兵种恢复通用走姿。HD-2D 镜像侧同步换装在
-	# char_sprite_3d.set_weapon_type（本实体侧 rig 在该图型下为 null）。
+	# char_rig_3d.set_weapon_type（本实体侧 rig 在该图型下为 null）。
 	if owner_entity != null and "rig" in owner_entity:
 		var rig: Node = owner_entity.get("rig")
 		if rig != null and rig.has_method("set_state_anim"):
 			rig.set_state_anim("walk", Anims.walk_for_weapon(weapon_type))
+			# 跑姿同款分层：BOW → run_bow（Archidon-Run，弓手专属步态）
+			rig.set_state_anim("run", Anims.run_for_weapon(weapon_type))
 
 
 ## HP 校准只做一次（出生满血基线）；换武器只迁移伤害/冷却/爆头加值，
@@ -500,6 +512,12 @@ func _find_shield_bone(owner_entity: Node2D) -> Node2D:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("武器挂载", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	# 暂停冻结由引擎总闸负责（本节点 PAUSABLE，暂停期冷却/放箭计时/命中帧全停）；
 	# 步长经 sim_delta 携带速度档
 	if TimeManager != null:
@@ -543,6 +561,12 @@ func _physics_process(delta: float) -> void:
 ## 渲染率关注、且 AI 侧（behavior_attack）照常在实体上跑——_process 两模通吃。
 
 func _process(_delta: float) -> void:
+	var _pt := StickProf.t0()
+	_process_tick(_delta)
+	StickProf.t1("武器瞄窗", _pt)
+
+
+func _process_tick(_delta: float) -> void:
 	if not _aim_visual_active:
 		return
 	if weapon_type != WeaponType.BOW:
@@ -575,10 +599,23 @@ func _process(_delta: float) -> void:
 		if current == Anims.ANIM_ATTACK_BOW_HOLD:
 			_play_via_visual(Anims.ANIM_WALK)
 	else:
-		# 站定即拉弓绷住：motion 减速到 0 时会把状态写回 idle（表现窗拦不住
-		# 那一次写入），这里检测到待机/走姿残留就重新拉起拉弓保持段
-		if current == "idle" or current == Anims.ANIM_WALK or current == "run":
-			_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
+		# 站定：冷却未尽先装填（SWL IsReloading/Reload 语义，对照档 §5）——
+		# 释放段播完回基础态后，冷却窗内播 attack_bow_reload（收弓取箭上弦），
+		# 冷却尽才拉满持瞄。不做这层则弓手两轮之间全程满弓，
+		# "拉弓-放箭-装填-再拉"的循环节奏不可见。motion 减速到 0 时会把状态
+		# 写回 idle（表现窗拦不住那一次写入），这里检测到基础态残留重新拉起。
+		# 装填尾段被冷却尽的拉满直接打断（SWL 下一轮 Draw 起拍——射速权威在
+		# 冷却计时，不为装填动画拖拍）；冷却未尽且装填已播完则维持现状站定
+		if current == "idle" or current == Anims.ANIM_WALK or current == "run" \
+				or current == Anims.ANIM_ATTACK_BOW_RELOAD:
+			if _cooldown_left() > RELOAD_COOLDOWN_EPS:
+				if not _reload_visual_done and current != Anims.ANIM_ATTACK_BOW_RELOAD:
+					_reload_visual_done = true
+					_play_via_visual(Anims.ANIM_ATTACK_BOW_RELOAD)
+			else:
+				_reload_visual_done = false
+				if current != Anims.ANIM_ATTACK_BOW_HOLD:
+					_play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
 
 
 ## 持瞄开始 → 起拉弓表现窗（拉弓保持段由 _process 仲裁落位）
@@ -594,9 +631,11 @@ func _mark_bow_aim_started() -> void:
 
 ## 收瞄准表现窗。return_to_idle=true 且当前停在拉弓保持段时回站姿
 ## （出手路径传 false——release 动画随后接管，不必插一脚 idle）。
+## 装填闩锁随窗复位：新窗（下一轮持瞄）重新计一次装填
 func _end_bow_aim_visual(return_to_idle: bool) -> void:
 	_aim_visual_active = false
 	_aim_visual_player = false
+	_reload_visual_done = false
 	# 窗关即撤持瞄保持换装：walk state 回武器基础走姿（弓 = walk_bow）
 	_set_bow_aim_walk_override(false)
 	if not return_to_idle:
@@ -610,7 +649,7 @@ func _end_bow_aim_visual(return_to_idle: bool) -> void:
 
 ## 持瞄窗 walk 换装开关（经实体 VisualController 的持瞄保持通道）：2D rig
 ## set_state_anim 换装与 billboard 镜像（visual_controller.get_stance_anims
-## 观测口 → char_sprite_3d.set_stance_anims）两处同口径——状态留本挂载，
+## 观测口 → char_rig_3d.set_stance_anims）两处同口径——状态留本挂载，
 ## 名字解析与换装执行在 VisualController（walk state 资源替换，state 不增）。
 func _set_bow_aim_walk_override(on: bool) -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
@@ -690,8 +729,18 @@ func _can_cancel_attack_anim() -> bool:
 	return false
 
 
-## 当前冷却剩余时间
+## 当前冷却剩余时间（本地计时口径；sim 模式下不推进，见 _cooldown_left）
 func get_cooldown_remaining() -> float:
+	return _cooldown_timer
+
+
+## 冷却剩余（双模真相源）：sim 模式计时权威在 BattleSim（本节点
+## _physics_process 早退，_cooldown_timer 冻结在出手值）；非 sim 走本地
+## 逐帧递减计时。can_attack 同款取数口径，供装填仲裁等表现侧消费
+func _cooldown_left() -> float:
+	var s := _sim()
+	if s != null:
+		return s.get_cooldown(_sim_sid())
 	return _cooldown_timer
 
 
@@ -703,6 +752,14 @@ func get_cooldown_remaining() -> float:
 func get_sustained_fire_heat() -> float:
 	_mark_bow_aim_started()
 	return _sustained_fire_heat
+
+
+## 拉弓瞄准俯仰角（SWL Archer.Aim 射角源）：behavior_attack 每拍轮询推送到
+## 实体 aim_pitch（纯表现态）。非弓武器恒 0（杖瞬发无弹道）。
+func get_aim_pitch(target: Node) -> float:
+	if weapon_type != WeaponType.BOW:
+		return 0.0
+	return _ranged.get_aim_pitch(target)
 
 
 ## 是否有未结算的挥砍（已发起、命中帧未到；can_attack 命中帧门禁的查询面）
@@ -766,7 +823,7 @@ func perform_attack(target: Node) -> Dictionary:
 	_pending_strike_owner = owner_entity
 	_strike_fired = false
 	_cancel_window_latched = false
-	# 进入冷却（含情绪修正）；sim 模式计时归 BattleSim（冷却 + strike 命中帧）
+	# 进入冷却；sim 模式计时归 BattleSim（冷却 + strike 命中帧）
 	var s := _sim()
 	if s != null:
 		s.set_cooldown(_sim_sid(), _get_effective_cooldown())
@@ -836,10 +893,15 @@ func release_player_shot(aim_dir: Vector2, power: float) -> Node2D:
 
 ## 玩家蓄力投矛（SWL Spearton.ThrowSpear 的 PC 翻译）：投掷走双倍冷却
 ## （技能语义，原版掷后接拔剑近战，拔剑未实装前用冷却差模拟节奏差）。
+## 掷出播 Spearton-Throw 真数据动画（站定才播，移动投掷保持脚步——同弓
+## 释放段口径）；纯表现无结算挂钩，伤害走矛投射物。
 func throw_spear_manual(aim_dir: Vector2, power: float) -> bool:
 	if not can_attack():
 		return false
 	_ranged.throw_spear_manual(aim_dir, power)
+	var owner_entity: CharacterBody2D = get_owner_entity()
+	if owner_entity != null and owner_entity.velocity.length_squared() <= BOW_MOVE_SQ_THRESHOLD:
+		_play_via_visual(Anims.ANIM_THROW_SPEAR)
 	var factor: float = 2.0
 	var s := _sim()
 	if s != null:
@@ -973,11 +1035,11 @@ func _do_strike() -> void:
 	if wt != WeaponType.BOW:
 		var ang: float = (target.global_position - owner_entity.global_position).angle()
 		FxLibrary.spawn_slash_arc(owner_entity.get_tree(), owner_entity.global_position + Vector2(0, -30), ang, wt == WeaponType.SWORD)
-	# 情绪修正命中率（犹豫/恐慌时挥空）
-	if randf() > _get_effective_hit_chance():
+	# 命中掷骰（未中=挥空）——单位种子 RNG（可注入可复现，P4 回放前置）
+	if _roll_dice() > base_hit_chance:
 		return
 	# 暴击掷骰（原版 isCrit；暴击附带自伤代价 critBonusDamageInflictedToSelf）
-	var is_crit: bool = randf() < crit_chance
+	var is_crit: bool = _roll_dice() < crit_chance
 	# ── AOE 挥击：身前扇形内按 number_of_units_that_can_hit 结算多个目标 ──
 	var victims: Array = _collect_strike_targets(owner_entity, target)
 	for i in victims.size():
@@ -1073,22 +1135,26 @@ func _resolve_hit_event_time() -> void:
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity == null or not "rig" in owner_entity:
 		return
+	var anim_name := _attack_anim_name()
 	var rig: Node = owner_entity.get("rig")
-	if rig == null or not rig.has_method("get_anim_event_time"):
+	if rig != null and rig.has_method("get_anim_event_time"):
+		_hit_event_time = rig.get_anim_event_time(anim_name, "Hit")
 		return
-	_hit_event_time = rig.get_anim_event_time(_attack_anim_name(), "Hit")
+	# billboard 链（rig==null）：无 rig 帧表解析——.tres 元数据直读（镜像通道
+	# 语义补全 #3），命中时序与 2D 富管线同一真相源，不再退化为立即结算
+	_hit_event_time = Anims.rigless_anim_event_time(anim_name, "Hit")
 
 
 # ─────────────────────────────── BattleSim 接线（D 刀）────────────────────────────────
 
 ## 宿主实体的 BattleSim（null = 未注册/未启用/已死——所有 sim 分支的统一入口判定）。
-func _sim() -> BattleSim:
+func _sim() -> ScriptBattleSim:
 	var e := get_owner_entity()
 	if e == null or not is_instance_valid(e):
 		return null
 	if not e.has_method("get_battle_sim"):
 		return null
-	var s: BattleSim = e.get_battle_sim()
+	var s: ScriptBattleSim = e.get_battle_sim()
 	if s == null or e.get_battle_sim_sid() < 0 or e.is_dead():
 		return null
 	return s
@@ -1107,13 +1173,18 @@ func _resolve_hit_seconds() -> float:
 	_resolve_hit_event_time()
 	if _hit_event_time >= 0.0:
 		return _hit_event_time
+	var anim_name := _attack_anim_name()
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity != null and "rig" in owner_entity:
 		var rig: Node = owner_entity.get("rig")
 		if rig != null and rig.has_method("get_anim_length"):
-			var anim_len: float = rig.get_anim_length(_attack_anim_name())
+			var anim_len: float = rig.get_anim_length(anim_name)
 			if anim_len > 0.0:
 				return anim_len * STRIKE_FRAME_RATIO_FALLBACK
+	# billboard 链（rig==null）：无 rig 时长回退走 .tres 直读
+	var rigless_len: float = Anims.rigless_anim_length(anim_name)
+	if rigless_len > 0.0:
+		return rigless_len * STRIKE_FRAME_RATIO_FALLBACK
 	return 0.0
 
 
@@ -1261,6 +1332,10 @@ func _now() -> float:
 ## 驱动手臂挥砍，剑自动跟随，无需程序化 Tween 旋转。
 ## 由发起攻击这一步直接触发——命中帧按动画时间结算，动画必须先起播。
 func _play_swing() -> void:
+	# 攻击池变体每次随机抽取且先于命中帧登记换装（visual_controller.play_attack）：
+	# 命中帧时刻随变体逐击重解析——"换武器才重解析"的缓存语义只对无池武器成立
+	_hit_time_resolved = false
+	_hit_event_time = -1.0
 	var owner_entity: CharacterBody2D = get_owner_entity()
 	if owner_entity != null and owner_entity.has_method("play_attack"):
 		owner_entity.play_attack()
@@ -1284,39 +1359,27 @@ func _get_health(target: Node) -> Node:
 	return target.get_node_or_null("HealthComponent")
 
 
-## 设置情绪标签（由 battle_ai_director 调用，§7.4）
-func set_mood(mood: Mood) -> void:
-	_mood = mood
-
-
-## 获取当前情绪标签
-func get_mood() -> Mood:
-	return _mood
-
-
-## 根据情绪标签计算实际命中率
-func _get_effective_hit_chance() -> float:
-	match _mood:
-		Mood.HESITANT:
-			return base_hit_chance * 0.7
-		Mood.EXCITED:
-			return minf(1.0, base_hit_chance * 1.1)
-		Mood.PANICKED:
-			return base_hit_chance * 0.5
-		_:
-			return base_hit_chance
-
-
-## 根据情绪标签计算实际冷却
+## 实际冷却（附身攻速乘子 × 装备攻速乘子；speed_mult>1 更快 → 冷却变短）
 func _get_effective_cooldown() -> float:
-	var base: float = cooldown
-	match _mood:
-		Mood.EXCITED:
-			base = cooldown * 0.85
-		_:
-			base = cooldown * _user_controlled_speed_mult()
+	var base: float = cooldown * _user_controlled_speed_mult()
 	# 装备攻速乘子（speed_mult>1 更快 → 冷却变短；缺省 1.0 零回归）
 	return base / maxf(0.05, equip_speed_mult)
+
+
+# ── 命运骰 RNG（单位种子隔离：与全局 randf 断开，P4 回放"每单位可注入种子"前置）──
+var _dice_rng := RandomNumberGenerator.new()
+var _dice_seeded: bool = false
+
+
+## 命运骰（命中/暴击掷骰统一出口）：首掷按宿主实体实例 id 派生种子
+## （每单位不同；对齐 ai_controller._resolve_jitter_seed 惯例），测试可直接
+## 重掷 _dice_rng.seed 复现序列。
+func _roll_dice() -> float:
+	if not _dice_seeded:
+		_dice_seeded = true
+		var e := get_owner_entity()
+		_dice_rng.seed = int(e.get_instance_id()) if e != null else 20261006
+	return _dice_rng.randf()
 
 
 ## 装备后有效伤害（基础值 × 装备乘子；所有出手结算统一走本出口）

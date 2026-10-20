@@ -6,7 +6,7 @@ extends Node
 ##     （battle_arena 设 0.75，缩放条 100% 档）以战场中线为中心的可见窗口内
 ##     （边缘留 FIT_MARGIN 余量）；
 ##   ② 能打完：每局在 BATTLE_TIMEOUT_GAME_SEC 游戏秒内战至结算（战斗实例结束
-##     = 全灭或斩首；指挥官斩首也会收束战斗实例）；
+##     = 全灭/撤离/超时兵力判）；
 ##   ③ 无报错：脚本错误落 user://logs/，由 tools/check_godot_errors.sh 门禁扫描，
 ##     本驱动不重复断言。
 ##
@@ -142,7 +142,7 @@ func _run_preset(idx: int) -> Dictionary:
 	if not bool(result["fit"]):
 		result["fit_detail"] = "范围 [%.0f, %.0f] 超出窗口 [%.0f, %.0f]" % [
 			min_x, max_x, mid_x - half_w + FIT_MARGIN, mid_x + half_w - FIT_MARGIN]
-	# ── 等战斗收束（战斗实例结束 = 全灭或斩首结算）──
+	# ── 等战斗收束（战斗实例结束 = 全灭/撤离/超时结算）──
 	var battle: Node = null
 	for u in attackers:
 		if is_instance_valid(u) and u.has_method("get_battle_instance"):

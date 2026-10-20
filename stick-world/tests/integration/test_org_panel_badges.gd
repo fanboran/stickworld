@@ -6,7 +6,6 @@ extends Node
 ##
 ## 覆盖：
 ##   - 状态徽标（org state 字段 → 中文）
-##   - 士气均值徽标（聚合成员实体 health.morale；取不到则不显示）
 ##   - 「群龙无首」空缺标记（L2+ 指挥官空缺；L1 空架不算）
 ##   - 补位候选序（悬停提示 + 详情卡只读展示）
 ##   - 既有主干文案不变（[L1] 名称 · 标签 N人 ▲#id）
@@ -32,7 +31,7 @@ class StubUnit extends Node:
 		return false
 
 
-## 测试桩地图：面板经 get_current_map().get_entities() 取在场实体（士气聚合口径）
+## 测试桩地图：面板经 get_current_map().get_entities() 取在场实体
 class StubMap extends Node:
 	var entities: Array = []
 
@@ -53,12 +52,11 @@ func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("树: 主干文案不回归 + 状态徽标", _test_trunk_and_state)
 	_runner.add_test("树: 直属为 0 省略 N人 段（不留空段）", _test_zero_direct_omits_headcount)
-	_runner.add_test("树: 士气均值徽标（聚合成员实体）", _test_morale_badge)
 	_runner.add_test("树: 群龙无首标记（L2+ 空缺，红字）", _test_leaderless_mark)
 	_runner.add_test("树: 补位候选序进悬停提示（只读）", _test_tooltip_candidates)
 	_runner.add_test("详情: 概览卡含空缺警示 + 补位候选序", _test_detail_vitals)
 	_runner.add_test("OrgPanel: 选中变更发 org_selection_changed（关闭清空）", _test_selection_signal)
-	_runner.add_test("总览: 报表行含人数/状态/士气（森林缩进）", _test_overview_rows)
+	_runner.add_test("总览: 报表行含人数/状态（森林缩进）", _test_overview_rows)
 	_runner.add_test("总览: report_filed → 时间线条目 + 行尾最近上报", _test_overview_timeline)
 	_runner.add_test("总览: commander_assigned → 时间线条目", _test_overview_assign)
 	_runner.add_test("总览: 标签过滤（非匹配组织不生成行）", _test_overview_tag_filter)
@@ -100,11 +98,9 @@ func _setup_env() -> void:
 	_overview = overview
 
 
-## 造一个可解析士气的桩单位（health.morale / max_morale → ratio）
-func _make_unit(morale_ratio: float) -> StubUnit:
+## 造一个在场桩单位（进实体表即可被面板看见）
+func _make_unit() -> StubUnit:
 	var health := HealthScript.new()
-	health.max_morale = 100.0
-	health.morale = morale_ratio * 100.0
 	var u := StubUnit.new()
 	u.health = health
 	_stub_map.add_child(u)   # 进树 = 场景销毁时一并释放（防 ObjectDB 泄漏告警）
@@ -197,24 +193,6 @@ func _test_zero_direct_omits_headcount() -> void:
 	_api.disband_organization(company)
 
 
-func _test_morale_badge() -> void:
-	var r: Dictionary = _api.create_organization("排甲1", "MILITARY", 1, "")
-	var org_id := String(r.data.org_id)
-	var u1 := _make_unit(0.4)
-	var u2 := _make_unit(0.6)
-	_api.assign_stickman(org_id, str(u1.get_instance_id()), "fighter")
-	_api.assign_stickman(org_id, str(u2.get_instance_id()), "fighter")
-	_panel._refresh_tree()
-	var item := _find_item(org_id)
-	_runner.assert_not_null(item, "树应含排甲1节点")
-	if item == null:
-		return
-	var text := String(item.get_text(0))
-	_runner.assert_true(text.contains("士气50%"), "成员士气均值 0.5 应显示为 50%%，实际：%s" % text)
-	_runner.assert_true(String(item.get_tooltip_text(0)).contains("士气均值：50%"),
-			"悬停提示应带士气均值")
-	_api.disband_organization(org_id)
-
 
 func _test_leaderless_mark() -> void:
 	var r: Dictionary = _api.create_organization("连乙", "MILITARY", 2, "")
@@ -295,14 +273,14 @@ func _test_selection_signal() -> void:
 
 # ─────────────────────── UI-W4b：战略总览面板 ───────────────────────
 
-## 报表行：人数（直辖/统辖）+ 状态 + 士气均值条（经在场实体表聚合）+ 森林缩进。
+## 报表行：人数（直辖/统辖）+ 状态 + 森林缩进。
 func _test_overview_rows() -> void:
 	var r: Dictionary = _api.create_organization("总览连", "MILITARY", 2, "")
 	var company := String(r.data.org_id)
 	var c: Dictionary = _api.create_organization("总览排", "MILITARY", 1, company)
 	var platoon := String(c.data.org_id)
-	var u1 := _make_unit(0.4)
-	var u2 := _make_unit(0.6)
+	var u1 := _make_unit()
+	var u2 := _make_unit()
 	_api.assign_stickman(platoon, str(u1.get_instance_id()), "fighter")
 	_api.assign_stickman(platoon, str(u2.get_instance_id()), "fighter")
 	_overview.open()
@@ -316,8 +294,6 @@ func _test_overview_rows() -> void:
 			"报表行应含人数（直辖/统辖），实际：%s" % text)
 	_runner.assert_true(text.contains("军事"), "报表行应含标签列，实际：%s" % text)
 	_runner.assert_true(text.contains("组建中"), "报表行应含状态徽标，实际：%s" % text)
-	_runner.assert_true(text.contains("50%"),
-			"子树两成员士气 0.5 应聚合为 50%%，实际：%s" % text)
 	_runner.assert_true(_overview._rows.has(platoon), "森林子行（L1）应生成")
 	# 选中信号路径以外的选中态：面板自身高亮态字段
 	_overview._selected_org = company

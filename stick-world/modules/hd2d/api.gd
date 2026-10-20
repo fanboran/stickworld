@@ -20,8 +20,6 @@ const WORLD_SCENE := "res://modules/hd2d/scenes/hd2d_world.tscn"
 ## 战场模式：battlefield = true（无墙无街无楼群的开阔野地 + 战痕散布）。
 
 # ─────────────────────────────── 宿主消费的 duck API ────────────────────────────────
-## 生命周期
-## - enable_play_characters()      启用 3D 角色渲染通道（游戏地图挂载时调用）
 ## 相机镜像（2D CameraRig 是唯一相机入口，3D 侧只镜像）
 ## - set_cam_x(cx: float)          横移（1 单位 = 1 格 = 32px）
 ## - set_cam_zoom(user_zoom: float) 滚轮缩放（与 2D 逐像素 1:1）

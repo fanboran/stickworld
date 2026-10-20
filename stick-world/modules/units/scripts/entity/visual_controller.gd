@@ -1,4 +1,5 @@
 extends Node
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 火柴人视觉控制器 —— 动画播放与头顶动作进度条。
 ##
 ## 职责：
@@ -18,8 +19,9 @@ const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
 ## 兵种行为档案（盾姿态分层：持盾动画组/池按武器类型查档案，计划 5）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
-## 动画整体播放倍率（×1.4 加速）
-const ANIM_SPEED_MULT: float = 1.4
+## 动画整体播放倍率（1.0=原作步频直出；历史值 1.4 是无设计档出处的遗留加速，
+## 2026-10-06 创始人验收"画面跟开了倍速一样"后复位，与 entity_motion 同步）
+const ANIM_SPEED_MULT: float = 1.0
 ## walk 动画最低播放速率（0.6 而非 0.2：过低会让起步/停止段动画几乎定格在
 ## "四肢伸直"的起步帧 → 人已滑步四肢却僵直；0.6 倍速下起步即明显摆动）
 const MIN_ANIM_SCALE: float = 0.6
@@ -38,6 +40,103 @@ var _blocking: bool = false
 ## _end_bow_aim_visual / begin_player_draw）驱动，与举盾姿态同一消费通道
 ## （get_stance_anims 镜像观测口 + 2D 侧 set_state_anim 换装）。
 var _bow_aim_active: bool = false
+
+# ─────────── billboard 镜像观测口（无 rig 链的状态出口，战场观感重构批1） ───────────
+## HD-2D billboard 图上 rig==null：动画完成信号/受击播报/速率这些"经 rig 生效"
+## 的语义全部断链。本组状态由 feed（hd2d_map_base._sync_character_render）逐帧
+## 轮询消费，让镜像侧拿到与 2D 富管线等价的语义：
+## - _mirror_seq：动画事件序号，每次 play/攻击变体/受击插播递增——镜像 set_anim
+##   靠它识别"同名重播"（连续第二刀可见）
+## - _mirror_override：单次动画的**状态名**（attack/hit_front/hit_back），非空时
+##   优先于 _current_anim
+## - _mirror_swap：该状态应换装的**变体资源名**（attack_spear_3/hit_mid_front_big
+##   等）——状态机只有状态节点，编号变体靠 set_state_anim 资源换装（2D 链同构）
+## - _oneshot_left：单次动画软件计时（等价 rig.animation_finished 的触发源）
+## - _anim_speed_cached：最近一次 set_anim_speed 的生效值（镜像 set_anim_speed 消费）
+var _mirror_seq: int = 0
+var _mirror_override: String = ""
+var _mirror_base_anim: String = ""
+var _mirror_swap: String = ""
+var _oneshot_left: float = -1.0
+var _anim_speed_cached: float = 1.0
+## aim_pitch 直推缓存（压重复设置；rig 侧另有平滑，此处只防每帧无谓转发）
+var _aim_pitch_sent: float = NAN
+
+
+## 镜像状态观测口（feed 每帧调用）：anim=当前应显示动画（单次变体优先），
+## seq=动画事件序号（同名重播识别），speed=循环动画速率，
+## aim_pitch=拉弓瞄准俯仰（rig 域弧度，负=仰头；SWL Archer._currentAim 镜像）
+func get_mirror_anim_state() -> Dictionary:
+	var anim: String = _entity._current_anim if _entity != null else ""
+	var swap := ""
+	if not _mirror_override.is_empty():
+		anim = _mirror_override
+		swap = _mirror_swap
+	return {"anim": anim, "seq": _mirror_seq, "speed": _anim_speed_cached,
+			"swap": swap,
+			"aim_pitch": _entity.get_aim_pitch() if _entity != null and _entity.has_method("get_aim_pitch") else 0.0}
+
+
+## billboard 软件回切计时（等价 rig.animation_finished 的无 rig 触发源）。
+## oneshot 恒 1.0 速率（rig.set_anim_speed 同规：单次动画保命中帧不变速）；
+## 暂停由引擎总闸负责（树暂停时物理帧停跑本计时自然冻结）
+func _physics_process(_delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(_delta)
+	StickProf.t1("视觉控制", _pt)
+
+
+func _physics_tick(_delta: float) -> void:
+	# 拉弓瞄准俯仰直推（2D rig 路径；billboard 镜像走 get_mirror_anim_state feed）
+	if _entity != null and _entity.rig != null:
+		var pitch: float = _entity.get_aim_pitch() if _entity.has_method("get_aim_pitch") else 0.0
+		if not is_equal_approx(pitch, _aim_pitch_sent):
+			_aim_pitch_sent = pitch
+			_entity.rig.set_aim_pitch(pitch)
+	if _oneshot_left < 0.0:
+		return
+	_oneshot_left -= _delta
+	if _oneshot_left > 0.0:
+		return
+	_oneshot_left = -1.0
+	_mirror_override = ""
+	_mirror_swap = ""
+	var base := _mirror_base_anim
+	_mirror_base_anim = ""
+	if not base.is_empty():
+		_on_rig_anim_finished(base)
+	else:
+		# A2（审计 2026-10-14）：无 base 插播（受击）结束后回 locomotion——
+		# 旧实现直接跳过回切，镜像冻在受击末帧、_current_anim 停在插播前的
+		# attack（is_attack_anim_active 恒真 → 锁足定身 + feed/mirror 状态
+		# 错配 = 幻影第二刀）。受击打断攻击是 SWL 语义（被打即断招），回
+		# 移动态不续攻击
+		_recut_locomotion()
+
+
+## 受击等插播收尾的移动回切（A2）：镜像与状态机同步回 walk/idle。
+func _recut_locomotion() -> void:
+	if _entity == null or _entity._action_locked:
+		return
+	if _entity._current_speed > IDLE_THRESHOLD:
+		play("walk")
+	else:
+		play("idle")
+
+
+## 启动 billboard 单次动画软件计时（仅无 rig 链；有 rig 时 rig 信号是触发源，
+## 双触发会让回切跑两遍）。时长拿不到（资源缺失）时按 0.66s 兜底——多数
+## 攻击/受击动画在 0.4~1.4s，兜底宁可早回切不卡死
+func _start_oneshot_mirror(state_name: String, base_anim: String,
+		swap: String = "", length_anim: String = "") -> void:
+	var len: float = Anims.rigless_anim_length(
+			length_anim if not length_anim.is_empty() else state_name)
+	if len < 0.0:
+		len = 0.66
+	_mirror_override = state_name
+	_mirror_base_anim = base_anim
+	_mirror_swap = swap
+	_oneshot_left = len
 
 
 func setup(entity: Node2D) -> void:
@@ -87,12 +186,24 @@ func play(anim_name: String) -> void:
 	# （实体在 HD-2D 图上没有 2D 骨架），必须无条件推进；rig 播放放最后（可缺）
 	# 死亡终态门禁（2026-08-31 审计 P0-1）：dead 是 ANY→dead 的终态，
 	# 死后一切 walk/idle/attack 请求一律拒绝——防移动减速逻辑把死亡动画
-	# 在 0.25s 内覆盖成"尸体站起来"
+	# 在 0.25s 内覆盖成"尸体站起来"。A1 修正（审计 2026-10-14）：口径与
+	# rig 侧（begins_with("dead")）对齐——旧精确名匹配把变体池拦在门外
+	#（普通死池 50%、爆头池 87.5% 被拦 = "站着死"地上无躺尸的主因）
 	if _entity.has_method("is_dead") and _entity.is_dead() \
-			and anim_name != "dead" and anim_name != "dead_headshot":
+			and not anim_name.begins_with("dead"):
 		return
 	# 动作锁定时保持当前动作动画（如 build），不切走
 	if _entity._action_locked:
+		return
+	# 同名幂等（churn 治理，战场观感重构）：**循环动画**同名 play 直接吞掉——
+	# 否则调用方边沿检测失效时（限位环里速度绕阈值振荡、姿态翻转重入）每帧
+	# 重入，_mirror_seq 逐帧+1 → billboard 镜像每帧重播同名动画（实测原地
+	# 抽搐）+ 逐帧强制重烘（出生大色块的放大器）。**单次动画（attack/hit/
+	# arrive/block…）例外**：同名重播 = 合法的第二刀/再次受击，必须重新起播
+	#（rig.play 的 start() 分支；tests/integration/test_anim_finished 锁死该
+	# 语义）。play_attack/play_hit 显式重播通道不受影响，与 2D rig 的
+	# travel-同名空操作语义一致
+	if anim_name == _entity._current_anim and not Anims.rigless_is_oneshot(anim_name):
 		return
 	# 搬运状态：walk/idle 映射为 walk_carry（手搬姿势）
 	var play_name: String = anim_name
@@ -117,7 +228,12 @@ func play(anim_name: String) -> void:
 	elif _bow_aim_active and not _blocking and not _entity._carrying and anim_name == "walk":
 		_apply_bow_aim_anim()
 	_entity._current_anim = anim_name
+	_mirror_seq += 1
 	if rig == null:
+		# billboard 镜像链：单次动画（arrive/block 等）软件计时回切
+		# （attack 不走 play，经 play_attack 的变体通道）
+		if Anims.rigless_is_oneshot(play_name):
+			_start_oneshot_mirror(play_name, anim_name)
 		return
 	rig.play(play_name)
 
@@ -192,7 +308,7 @@ func _apply_bow_aim_anim() -> void:
 ## 当前生效姿态动画观测口（billboard 镜像消费）：2D 侧换装在 _apply_stance_anim
 ## （依赖 rig，billboard 图 rig==null 不生效，持盾变体此前因此整体不可见）。
 ## HD-2D 镜像 feed 经本口拿当前应生效的 walk/idle 动画名，交
-## char_sprite_3d.set_stance_anims 自行换装——名字解析单一真相源仍在本类
+## char_rig_3d.set_stance_anims 自行换装——名字解析单一真相源仍在本类
 ## （档案键 block_walk_anim/block_idle_anim），镜像层不摸行为档案（L1 不依赖 L2）。
 ## 空名 = 无持盾变体/未举盾，镜像侧恢复武器默认动画。
 func get_stance_anims() -> Dictionary:
@@ -238,7 +354,14 @@ func play_attack(anim_name: String, blocking: bool) -> void:
 func _play_attack_variant(base: String, variant: String) -> void:
 	var rig: Node2D = _entity.rig
 	_entity._current_anim = base   # 状态先行（同 play：billboard 镜像数据源）
+	_mirror_seq += 1               # 同名重挥也递增——镜像靠 seq 识别重播（连续第二刀可见）
 	if rig == null:
+		# billboard 镜像链：override=状态名（attack），swap=变体资源名（池空时
+		# variant==base，swap 留空走基础动画）；软件计时播完回切（等价
+		# rig.animation_finished → _on_rig_anim_finished）。计时长度按变体时长
+		#（变体 Hit 点/时长与基础动画不同）
+		_start_oneshot_mirror(base, base,
+				variant if variant != base else "", variant)
 		return
 	if rig.has_method("set_state_anim"):
 		rig.set_state_anim(base, variant)  # variant==base 即恢复基础动画
@@ -272,9 +395,12 @@ func refresh_idle_stance() -> void:
 ## 设置动画播放速率（按当前速度缩放；全局速度档再乘一层——4x 下循环动画
 ## 同步加速防"滑步"，oneshot 攻击动画在 rig.set_anim_speed 内强制 1.0 保命中帧对齐）。
 func set_anim_speed(v: float) -> void:
+	var sf: float = TimeManager.speed_factor() if TimeManager != null else 1.0
+	# 生效值缓存：billboard 镜像经 get_mirror_anim_state 轮询消费（rig==null 时
+	# rig 侧不生效，缓存是镜像链唯一速率来源）
+	_anim_speed_cached = maxf(v * sf, MIN_ANIM_SCALE)
 	if _entity.rig != null:
-		var sf: float = TimeManager.speed_factor() if TimeManager != null else 1.0
-		_entity.rig.set_anim_speed(maxf(v * sf, MIN_ANIM_SCALE))
+		_entity.rig.set_anim_speed(_anim_speed_cached)
 
 
 ## 设置搬运状态：搬运工持物时 walk 切换为 walk_carry 动画。
@@ -315,7 +441,21 @@ func clear_action() -> void:
 ## 变体池直译（SWL SelectHitAnimation）：big=强击 / head=头部部位 / blocking=举盾中被击
 func play_hit(from_front: bool, big: bool = false, head: bool = false, blocking: bool = false) -> void:
 	var rig: Node2D = _entity.rig
-	if rig != null and rig.has_method("play_hit"):
+	if rig == null:
+		# billboard 镜像链：状态机只有 hit_front/hit_back 两个状态，变体
+		# （hit_mid_front_big 等）靠 set_state_anim 资源换装（2D 链同构）——
+		# override=状态名、swap=变体资源名，镜像侧先换装再播状态；
+		# 计时长度按变体实际时长。闪白脉冲（feed 边沿消费触发镜像闪白）
+		var chosen: String = Anims.pick_hit_anim(from_front, big, head, blocking)
+		var state: String = "hit_front" if from_front else "hit_back"
+		# A2：_current_anim 同步推进到受击态（单一真相源）——插播期间
+		# is_attack_anim_active 读到 false = 攻击被打断（SWL 语义），锁足
+		# 随之释放；不再停在 "attack" 让镜像与实体状态错配（幻影第二刀源）
+		_entity._current_anim = state
+		_mirror_seq += 1
+		_start_oneshot_mirror(state, "", chosen if chosen != state else "", chosen)
+		return
+	if rig.has_method("play_hit"):
 		rig.play_hit(from_front, big, head, blocking)
 
 

@@ -51,7 +51,6 @@ var autonomy_level: AutonomyLevel = AutonomyLevel.MEDIUM
 var succession_rule: SuccessionRule = SuccessionRule.RANK_HIGHEST
 var default_behavior: Dictionary = {}
 var supply_priority: SupplyPriority = SupplyPriority.MEDIUM
-var morale_threshold: float = 0.0
 var current_project: String = ""
 var location: String = ""
 var state: State = State.FORMING

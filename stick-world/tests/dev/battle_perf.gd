@@ -6,7 +6,7 @@ extends Node
 ## 用法（不要 --headless，需要真渲染；建议加 --audio-driver Dummy 关声音降噪）：
 ##   godot --path . --resolution 1920x1080 res://tests/dev/battle_perf.tscn
 ##   godot --path . --resolution 1920x1080 res://tests/dev/battle_perf.tscn -- --preset=1
-## 预设：--preset=0 遭遇战16 / =1 标准战役48（可玩基线）/ =2 大军压境96（默认）
+## 预设：--preset=0 遭遇战16 / =1 密度压力48（规模化基线）/ =2 极端压力96（默认）
 ## headless 模拟速率（无渲染噪声）：
 ##   godot --headless --path . res://tests/dev/battle_perf.tscn -- --headless-measure
 ## 对比基线：git worktree 检出改动前提交跑同命令；量测规范见
@@ -40,7 +40,7 @@ var _bodies_ghost: bool = false
 var _no_ai: bool = false
 var _freeze_entities: bool = false
 var _headless_measure: bool = false
-## --preset=N：0 遭遇战16 / 1 标准战役48 / 2 大军压境96（默认 2）
+## --preset=N：0 遭遇战16 / 1 密度压力48 / 2 极端压力96（默认 2）
 var _preset_arg: int = 2
 ## --shot-at=N：开战后 N 秒截一张附加截图（battle_perf_shot.png，默认关闭）。
 ## 验证战斗早期观感用（全员满血圆点/接阵队形等后期截图看不到的状态）
@@ -223,7 +223,7 @@ func _report() -> void:
 	draws_sorted.sort()
 	var draws_med: float = draws_sorted[draws_sorted.size() / 2] if not draws_sorted.is_empty() else 0.0
 	print("[PERF] %s" % str({
-		"preset": ["遭遇战16(16v16)", "标准战役48(48v48)", "大军压境96(96v96)"][_preset_arg],
+		"preset": ["遭遇战16(16v16)", "密度压力48(48v48)", "极端压力96(96v96)"][_preset_arg],
 		"samples": _samples.size(),
 		"fps_avg": snappedf(avg, 0.1),
 		"fps_median": median,

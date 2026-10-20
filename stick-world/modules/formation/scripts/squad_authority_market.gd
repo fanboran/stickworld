@@ -181,7 +181,7 @@ func prune_registry() -> void:
 ##   2. 班长 / 组织在册指挥官本人——RWR max_leader_authority_willing_to_join_another_squad
 ##      语义（班长权威高于阈值才肯放人）：本班权威值高于 authority_leader_release_threshold
 ##      者视为骨干，不被抽走
-##   3. 士气行为中（retreat / seek_cover = 溃逃 / 找掩体）：不打断士气驱动行为
+##   3. 撤退类行为中（retreat / seek_cover = 避战 / 找掩体）：不打断
 ##   4. 真实压制态（StatusEffects.SUPPRESSED duck 查询，与相位计划同口径）
 ##   5. 接战中（主手射程内有敌）：交还战斗行为，不当场换班
 ##   6. 玩家手动号令保护期内（复用 TeamAi 既有保护期状态）

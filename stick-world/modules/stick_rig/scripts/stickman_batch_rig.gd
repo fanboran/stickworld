@@ -528,16 +528,20 @@ func _rebuild_instance_data() -> void:
 		_bidx.append(PackedInt32Array())
 		_xform.append([])
 		_color.append(PackedColorArray())
-	# 部件查找表：父骨骼 id → 段参数（SKELETON_DATA + EXTRA_LIMBS，type>=0 才有几何）
+	# 部件查找表：挂载骨 id → 段参数（SKELETON_DATA + EXTRA_LIMBS，type>=0 才有几何）。
+	# 矩段挂父骨骼（表示父→子段）；CIRCLE 型（头）挂本骨骼自身——圆心沿骨上偏
+	# HEAD_ORBIT，head 骨旋转才可见（见 stickman_skeleton.HEAD_ORBIT 注释）。
 	var all_data: Dictionary = Skel.SKELETON_DATA.merged(Skel.EXTRA_LIMBS, true)
 	var limb_by_parent: Dictionary = {}
 	for id in all_data:
 		var data: Dictionary = all_data[id]
 		if int(data.get("type", -1)) < 0:
 			continue
-		var pid: int = data["parent"]
-		if not limb_by_parent.has(pid):
-			limb_by_parent[pid] = data
+		var key: int = data["parent"]
+		if int(data.get("type", -1)) == Skel.TYPE_CIRCLE:
+			key = id
+		if not limb_by_parent.has(key):
+			limb_by_parent[key] = data
 	_walk_and_emit(_rig, -1, limb_by_parent)
 	if _acc.size() != _bones_pre.size():
 		var acc: Array[Transform2D] = []
@@ -578,7 +582,9 @@ func _emit_limb(data: Dictionary, bone_pre_idx: int) -> void:
 	if node_type == Skel.TYPE_CIRCLE:
 		var r := maxf(length, w * 2.0) / 2.0
 		@warning_ignore("confusable_local_declaration")
-		var base := Transform2D(0.0, Vector2(data["x"], data["y"]))
+		# 圆心沿挂载骨（head）向上偏 HEAD_ORBIT：旋转绕颈根公转（旧 (x,y) 挂法圆心
+		# 钉在骨原点，旋转不可见）
+		var base := Transform2D(0.0, Vector2(0.0, -Skel.HEAD_ORBIT))
 		_push(1, bone_pre_idx, base * _scale2(r + ow, r + ow), stroke_color)
 		_push(3, bone_pre_idx, base * _scale2(r, r), fill_color)
 		return

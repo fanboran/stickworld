@@ -4,12 +4,12 @@ extends StickWindow
 ##
 ## 定位（docs/技术/UI/组织界面与AI状态接线.md §3.2.C 战略视图）：
 ## 宏观层级 = 密集报表式（01-设计语言.md §1.3）——全组织森林树 + 每组织摘要行
-##（人数 直辖/统辖 / 士气均值 / 状态徽标 / 驻地 / 最近上报）+ 上报流时间线。
+##（人数 直辖/统辖 / 状态徽标 / 驻地 / 最近上报）+ 上报流时间线。
 ## 窗口形态：ModalOverlay 大面板（UI.md §10.1「组织架构总览」既有槽位语义），
 ## 代码建根走 UIKit.full_rect 合规出口（OrgPanel 同款先例）。
 ##
 ## 信息架构：
-##   ① 报表行（左栏，ScrollContainer 内森林缩进列表；行内士气条/状态徽标走手绘语言）——
+##   ① 报表行（左栏，ScrollContainer 内森林缩进列表；状态徽标走手绘语言）——
 ##      布局思路复用指挥链沙盘的「固定步距 + 滚动容器」（拥挤即滚动平移，不压缩行宽）；
 ##   ② 上报流时间线（右栏）——消费 organization api `report_filed`（三型 payload：
 ##      commander_lost / casualty_threshold / contact）+ EventBus `commander_assigned`，
@@ -28,8 +28,6 @@ extends StickWindow
 ## org_report_narrator.gd）；成功刷新面板。
 ## 选中组织行只在本面板高亮自身，**不新造跨面板状态同步**（OrgPanel 无既有联动口）。
 ##
-## 摘要行士气聚合：用「当前地图在场实体表」索引反查（org_panel.gd 同款口径），
-## **不用全局 instance_from_id**（脏 id 会触发 ObjectDB 越界引擎报错——UI-W2-B 教训）。
 ## 组织数据读取一律解包 api 的 {ok, data}（读包装顶层字段是已修复过的 bug 类型）。
 ##
 ## 装配：SystemSetup 阶段表登记，实例挂 UIRoot.ModalOverlay 槽；入口在 OrgPanel 顶部
@@ -142,11 +140,8 @@ var _report_cache: Array = []
 ## 最近上报摘要（org_id -> {kind,text}；报表行「最近上报」列数据源）
 var _last_report: Dictionary = {}
 
-# ── 士气聚合缓存（单次建表内复用；口径同 OrgPanel）──
+# ── 人员聚合缓存（单次建表内复用）──
 var _people_cache: Dictionary = {}
-var _morale_cache: Dictionary = {}
-var _unit_index: Dictionary = {}
-var _unit_index_built: bool = false
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
 var _tag_bar: SketchTabBar = null
@@ -285,10 +280,8 @@ func _refresh_all() -> void:
 func _rebuild_rows() -> void:
 	if _row_box == null:
 		return
-	# 建表前清聚合缓存（人员/士气随组织与实体状态变化，缓存只在单次建表内有效）
+	# 建表前清聚合缓存（人员随组织与实体状态变化，缓存只在单次建表内有效）
 	_people_cache.clear()
-	_morale_cache.clear()
-	_unit_index_built = false
 	for child in _row_box.get_children():
 		_row_box.remove_child(child)
 		child.queue_free()
@@ -335,11 +328,10 @@ func _insert_rows(org_id: String, visible_depth: int) -> bool:
 	return any
 
 
-## 单行摘要（报表式密集排布；行内士气条/状态徽标走手绘语言）。
-## 列：缩进 + 层级 + 状态图标 + 名 + 标签 + 状态 + 人数（直辖/统辖）+ 士气条 + 驻地 + 最近上报。
+## 单行摘要（报表式密集排布；状态徽标走手绘语言）。
+## 列：缩进 + 层级 + 状态图标 + 名 + 标签 + 状态 + 人数（直辖/统辖）+ 驻地 + 最近上报。
 func _make_row(org_id: String, d: Dictionary, depth: int) -> void:
 	var people := _org_people(org_id)
-	var morale := _people_morale(people)
 	var panel := TransferOrgRow.new()
 	panel._panel = self
 	panel.org_id = org_id
@@ -347,7 +339,7 @@ func _make_row(org_id: String, d: Dictionary, depth: int) -> void:
 	panel.compact = true
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.tooltip_text = _row_tooltip(d, people, morale)
+	panel.tooltip_text = _row_tooltip(d, people)
 	panel.gui_input.connect(_on_row_input.bind(org_id))
 	_row_box.add_child(panel)
 	_rows[org_id] = panel
@@ -385,20 +377,6 @@ func _make_row(org_id: String, d: Dictionary, depth: int) -> void:
 	# 状态徽标（中文 + 状态色）
 	_small_label(hb, String(STATE_INT_TO_ZH.get(int(d.state), "?")), 48.0,
 			_state_color(int(d.state)), StickKit.LabelKind.TINY)
-	# 士气均值条（取不到则不显示条形，标 ——— 不误报）
-	if morale >= 0.0:
-		var bar := SketchProgress.new()
-		bar.max_value = 1.0
-		bar.value = morale
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(84, 12)
-		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		_ignore(bar)
-		hb.add_child(bar)
-		_small_label(hb, "%d%%" % int(round(morale * 100.0)), 34.0, _morale_color(morale),
-				StickKit.LabelKind.TINY)
-	else:
-		_small_label(hb, "士气 —", 62.0, StickTokens.TEXT_FAINT, StickKit.LabelKind.TINY)
 	# 驻地
 	var loc := String(d.location)
 	_small_label(hb, "驻地 %s" % (loc if not loc.is_empty() else "—"), 78.0,
@@ -732,73 +710,15 @@ func _collect_people(org_id: String, out: Array[String], seen: Dictionary) -> vo
 		_collect_people(String(child_id), out, seen)
 
 
-## 成员士气均值（0~1，仅存活且可解析成员；无一可解析 → -1 = 不显示该项）
-func _people_morale(people: Array[String]) -> float:
-	var sum := 0.0
-	var n := 0
-	for pid in people:
-		var ratio := _unit_morale(pid)
-		if ratio < 0.0:
-			continue
-		sum += ratio
-		n += 1
-	return sum / float(n) if n > 0 else -1.0
 
 
-func _unit_morale(stickman_id: String) -> float:
-	if _morale_cache.has(stickman_id):
-		return _morale_cache[stickman_id]
-	var value := _probe_unit_morale(stickman_id)
-	_morale_cache[stickman_id] = value
-	return value
-
-
-func _probe_unit_morale(stickman_id: String) -> float:
-	var node := _resolve_unit(stickman_id)
-	if node == null:
-		return -1.0
-	if node.has_method("is_dead") and bool(node.call("is_dead")):
-		return -1.0
-	var health: Node = node.call("get_health") if node.has_method("get_health") else null
-	if health == null or not health.has_method("get_morale_ratio"):
-		return -1.0
-	return clampf(float(health.call("get_morale_ratio")), 0.0, 1.0)
-
-
-## 当前地图实体索引（instance_id -> 在场实体），懒建 + 单次建表内复用。
-## 不用全局 instance_from_id：脏档/测试桩数据会触发 ObjectDB 越界引擎报错；
-## 「地图在场实体表」口径也更诚实——取不到（未出场/他图）就不显示士气。
-func _ensure_unit_index() -> void:
-	if _unit_index_built:
-		return
-	_unit_index_built = true
-	_unit_index.clear()
-	if _game_root == null or not _game_root.has_method("get_current_map"):
-		return
-	var map: Node = _game_root.get_current_map()
-	if map == null or not map.has_method("get_entities"):
-		return
-	for e in map.get_entities():
-		if e != null and is_instance_valid(e) and e.has_method("get_health"):
-			_unit_index[int(e.get_instance_id())] = e
-
-
-func _resolve_unit(stickman_id: String) -> Node:
-	if not stickman_id.is_valid_int():
-		return null
-	_ensure_unit_index()
-	return _unit_index.get(stickman_id.to_int(), null)
-
-
-func _row_tooltip(d: Dictionary, people: Array[String], morale: float) -> String:
+func _row_tooltip(d: Dictionary, people: Array[String]) -> String:
 	var lines: Array[String] = []
 	lines.append("%s · L%d · %s · %s" % [String(d.name), int(d.tier),
 			String(TAG_INT_TO_ZH.get(int(d.tag), "?")), String(STATE_INT_TO_ZH.get(int(d.state), "?"))])
 	var cmd := String(d.commander_id)
 	lines.append("指挥官：%s" % ("▲#%s" % cmd if not cmd.is_empty() else "（空缺）"))
 	lines.append("直属 %d 人 · 统辖 %d 人" % [(d.personnel as Array).size(), people.size()])
-	if morale >= 0.0:
-		lines.append("士气均值：%d%%" % int(round(morale * 100.0)))
 	if int(d.tier) > 1 and cmd.is_empty():
 		lines.append("群龙无首：命令将停驻此层")
 	var rep: Dictionary = _last_report.get(String(d.id), {})
@@ -837,13 +757,6 @@ func _kind_color(kind: String) -> Color:
 		_:
 			return StickTokens.TEXT_DIM
 
-
-func _morale_color(ratio: float) -> Color:
-	if ratio < 0.35:
-		return StickTokens.DANGER
-	if ratio < 0.60:
-		return StickTokens.WARN
-	return StickTokens.SUCCESS
 
 
 ## 顶部母题图标（账本等既有枚；缺失静默跳过）

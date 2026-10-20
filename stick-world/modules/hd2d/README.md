@@ -1,9 +1,9 @@
-# hd2d：HD-2D 渲染栈（3D 世界 + 烘焙卡 + 2D 角色 billboard）
+# hd2d：HD-2D 渲染栈（3D 世界 + 烘焙卡 + 关节烘焙角色）
 
 > 八方旅人式渲染：3D 场景承载 Blender 烘焙的建筑/道具/自然物卡与地面分带，
-> 2D 绘制的火柴人经 SubViewport 贴到 billboard quad 站进场景。本模块定位 L1
-> 基础设施——只管"怎么把世界画出来"，物理/输入/AI/地图规则都在消费方的 2D
-> 宿主里（modules/world 的 Hd2dMapBase 系地图）。
+> 火柴人走**关节烘焙**路线——骨架轨迹预烘进图集，MultiMesh 紧凑行制批量绘制
+> 进 3D 场景。本模块定位 L1 基础设施——只管"怎么把世界画出来"，物理/输入/AI/
+> 地图规则都在消费方的 2D 宿主里（modules/world 的 Hd2dMapBase 系地图）。
 >
 > 渲染协议（坐标投影 / remap_fx_pos / 屏幕映射 / 地面分带）统一见
 > [HD-2D 街景系统](../../docs/技术/架构/建筑管线/HD-2D街景系统.md)，本文件不重复展开。
@@ -19,10 +19,18 @@ modules/hd2d/
 │   └── hd2d_world.tscn             # 3D 世界根场景（Hd2dWorld，挂 hd2d_world.gd）
 ├── scripts/
 │   ├── hd2d_world.gd               # Hd2dWorld：世界构建（卡摆放/墙/地面/天空云/光照/相机镜像）+ duck API + 布局/战场/资源图模式 + 原型截图跑法（--shots）
-│   └── char_sprite_3d.gd           # 角色 billboard：2D 火柴人 → SubViewport → 相机同基 quad；接地影/脚下框/劳作进度条/武器镜像
+│   ├── char_rig_3d.gd              # 角色 3D 宿主（唯一宿主）：骨架驱动/脚底锚定/接地影/武器挂载
+│   ├── char_direct_buckets.gd      # RowBucket 官方 setter 紧凑行制：MultiMesh 批渲染容器
+│   ├── char_joint_atlas.gd         # 关节贴图图集预烘（骨架轨迹 → 图集采样）
+│   ├── char_bar_atlas.gd           # 原版血条驱动镜像图集
+│   ├── hd2d_minimap_style.gd       # 小地图照片式烘焙样式
+│   └── ...
 ├── shaders/
 │   ├── card.gdshader               # 建筑卡：亮度差分伪法线吃真 3D 光照 + 日/夜版混切 + 台基裁剪
-│   ├── char_billboard.gdshader     # 角色卡：SubViewport 像素原样输出（unshaded）+ 写深度参与遮挡 + UV 镜像翻面
+│   ├── char3d_body_opaque.gdshader # 角色身体：图集采样（不透明）
+│   ├── char3d_body_fade.gdshader   # 角色身体：图集采样（渐隐，尸体淡出）
+│   ├── char3d_weapon_atlas.gdshader # 武器图集采样
+│   ├── char3d_bar_atlas.gdshader   # 血条图集
 │   ├── char_shadow.gdshader        # 角色接地影：贴地径向软影
 │   ├── building_shadow.gdshader    # 建筑接地影：贴地椭圆软影（把建筑钉在路肩带上）
 │   └── post_hd2d.gdshader          # 屏幕空间后处理：暗角/移轴/色彩分级（DOF/Glow 走 Environment）
@@ -49,15 +57,15 @@ modules/hd2d/
 
 ## 依赖
 
-- `modules/units/`（StickmanRig 场景与描边脚本、WeaponMount 武器场景表——角色卡内容
-  来自 2D 火柴人管线）；被 `modules/world/` 的地图宿主消费
+- `modules/stick_rig/`（骨架场景/动画管线唯一上游，RIG_SCENE 经其 api 出口取用）；
+  被 `modules/world/` 的地图宿主消费
 
 ---
 
 ## 开发注意事项
 
-- 角色卡 = 相机对齐 billboard（与建筑卡同取向正对相机），只有"脚底锚定地面点"是
-  3D 的，不给角色加任何角度；尺寸契约（SubViewport 像素 ↔ 格换算、比例锚）见
-  `char_sprite_3d.gd` 头注释，改动前先读
+- 角色 = 关节烘焙 MultiMesh（char_rig_3d 唯一宿主），骨架场景路径必须取
+  `stick_rig` api 出口常量（禁跨模块裸路径字面量——曾因裸路径悬空致全员灰方块）；
+  实体统一挂 `CharEntities` 容器（小地图烘焙按容器整体排除）
 - 光照纪律：环境光 + 太阳能量总和 ≈ 1.0（防双计）；色调映射用 LINEAR
   （卡是已带光照的烘焙图，filmic/aces 会压灰）

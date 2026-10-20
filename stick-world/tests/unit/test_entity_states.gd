@@ -53,7 +53,6 @@ func _test_stickman() -> void:
 	s.age = 25
 	s.hp = 80.0
 	s.max_hp = 100.0
-	s.morale = 0.9
 	s.equipment = {"rifle": 1}
 	s.skills.assign(["shoot"])
 	s.traits.assign(["brave"])
@@ -85,7 +84,6 @@ func _test_organization() -> void:
 	o.autonomy_level = 1
 	o.default_behavior = {"aggro": 0.5}
 	o.supply_priority = 2
-	o.morale_threshold = 0.3
 	o.current_project = "proj_1"
 	o.location = "r1"
 	o.state = 1

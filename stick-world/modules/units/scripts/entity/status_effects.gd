@@ -1,5 +1,6 @@
 class_name StatusEffects
 extends Node
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 状态效果组件（SWL ApplyBurn/ApplySlow/ApplyFreeze + legend 81 个 Unit System 的
 ## 最小集直译，2026-08-31 全量直译批次）。
 ##
@@ -30,11 +31,9 @@ extends Node
 ##     BURN/POISON 施加方（直译登记未启用），若未来启用须在管线侧过滤或提高门槛
 ##     （挂总账）。
 ##   - 总开关 suppression_enabled 默认关（零回归基线），近失另有
-##     suppression_near_miss_enabled 默认关（受总门约束）；豁免：已溃逃/已死亡/
+##     suppression_near_miss_enabled 默认关（受总门约束）；豁免：已死亡/
 ##     玩家附身/suppression_immune 兵种级豁免。同 type 刷新不叠加（既有 apply 语义
 ##     = 持续火力延长锁死）。
-##   - 士气联动：SUPPRESSED 期间按 tick 经 lose_morale 流失（power=每 tick 点数，
-##     只损士气不伤血），可推向溃逃——溃逃链优先级高于压制禁令（ai_controller）。
 ##   - 消费端：ai_controller 决策链（强制停滞，禁令不可被常规决策/号令执行打断）、
 ##     behavior_attack（在途行为兜底）、squad_phase_plan（真实压制查询）。
 
@@ -134,6 +133,12 @@ func get_speed_mult() -> float:
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("状态效果", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	if _effects.is_empty() or _owner == null or not is_instance_valid(_owner):
 		return
 	var now: float = _now()
@@ -155,13 +160,7 @@ func _physics_process(delta: float) -> void:
 			if e["next_tick"] <= 0.0:
 				e["next_tick"] = TICK_INTERVAL
 				_apply_hot(e)
-		# 压制期士气流失（A6 · C9 士气联动）：tick 节奏同 DOT/HOT；
-		# 被压制→士气持续流失（语义推断待实测校准），可推向溃逃
-		elif type == Type.SUPPRESSED:
-			e["next_tick"] -= delta
-			if e["next_tick"] <= 0.0:
-				e["next_tick"] = TICK_INTERVAL
-				_apply_suppression_drain(e)
+		# SUPPRESSED 纯定时禁令：无 tick 结算（到期由下方 expired 统一清除）
 	for type in expired:
 		_effects.erase(type)
 
@@ -202,20 +201,18 @@ func _on_owner_damaged(amount: float, source: Node) -> void:
 	var profile: Dictionary = _suppression_profile()
 	if not _qualifies_suppression_hit(amount, source, profile):
 		return
-	# power = 压制期每 tick 士气流失点数（suppression_drain 消费）；同 type 刷新不叠加
-	apply(Type.SUPPRESSED, float(profile.get("suppression_duration", 4.5)),
-			float(profile.get("suppression_morale_per_tick", 2.0)), source)
+	# power 无消费（SUPPRESSED 纯禁令）；同 type 刷新不叠加
+	apply(Type.SUPPRESSED, float(profile.get("suppression_duration", 4.5)), 0.0, source)
 
 
 ## 外部触发源通用入口（箭矢近失等非伤害触发消费）：与受击触发共用总开关/豁免集，
 ## 但不经受击门槛——调用方已完成"这一发够格压制"的判定（如箭矢落点在近失半径内）。
-## 返回是否实际施加。此路径不产生任何伤害（压制惩罚来自行为禁令与士气流失）。
+## 返回是否实际施加。此路径不产生任何伤害（压制惩罚纯来自行为禁令）。
 func apply_suppression(source: Node = null) -> bool:
 	if not _can_suppress():
 		return false
 	var profile: Dictionary = _suppression_profile()
-	apply(Type.SUPPRESSED, float(profile.get("suppression_duration", 4.5)),
-			float(profile.get("suppression_morale_per_tick", 2.0)), source)
+	apply(Type.SUPPRESSED, float(profile.get("suppression_duration", 4.5)), 0.0, source)
 	return true
 
 
@@ -253,19 +250,6 @@ func _qualifies_suppression_hit(amount: float, source: Node, profile: Dictionary
 				and dmg >= float(profile.get("suppression_ranged_min_damage", 4.0)):
 			return true
 	return false
-
-
-## 压制期士气流失（tick 结算）：只损士气不伤血（lose_morale 语义），不进伤害管线。
-## 防御：_owner 失效/已死跳过；power 钳正。
-func _apply_suppression_drain(e: Dictionary) -> void:
-	if _owner == null or not is_instance_valid(_owner):
-		return
-	if _owner.has_method("is_dead") and _owner.is_dead():
-		return
-	var health: Node = _health_of()
-	if health == null or not is_instance_valid(health) or not health.has_method("lose_morale"):
-		return
-	health.lose_morale(maxf(0.0, float(e["power"])))
 
 
 ## 兵种行为档案（压制键族）：按所属实体主手武器类型解析；

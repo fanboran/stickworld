@@ -55,3 +55,55 @@ Sky → Mountains(Mountain ×10) → HillsAndMiniMountains(hill1~3)
 消灭"地面材质硬截断"的本质 = **地平线处必须有内容物**（原野/雾/山脚），且内容物的边缘
 自带渐变。参数化生成的整板背景（含画进去的地平线雾+原野）比"多层条带 + 运行时雾带补丁"
 更接近 SWL 观感；条带层保留做视差纵深。
+
+## 五、单位行为 dump 真值（il2cpp 签名实录，2026-10-13 裁决#32 对照核对）
+
+来源：`external/il2cppdumper/out_legacy/dump.cs`（火柴人战争 Legacy，9.8MB）、
+`external/il2cppdumper/out_saga/dump.cs`（Stick War 3/Saga，50MB）。IL2CPP dump
+无方法体——方法名/字段名即行为流程实录，语义由命名与参数推断。
+
+**Legacy `StickWar.Game.Entities.Ai.Ai` 基类方法表（裁决#31-#32 逐项核对的基准）**：
+
+- 真货（本项目已直译保留）：`DetermineXRunPower`（远跑近走）、`IsTargetReallyClose`
+  （贴身压上）、`GetTargetAttackSpot`/`AttackFromRange`（攻击槽位）、y 对齐 6 函数
+  （`ShouldAdjustYPositionTowardsTarget`/`DetermineYComponentWhenRunningToTarget`/
+  `AdjustGoalYToMoveTowardsTarget`/`CanAdjustYPositionOnly`/`CanWalkTowardsTarget`/
+  `IsCloseEnoughToAdjustYTowardsTarget`）、`OnlyTargetsUnitsForward`（前向锁定）、
+  `PredictedPosition`（跑位截击用，非出手门）、`FaceDirection`/`Face`。
+- ArcherAi 专属真货：`ShouldKite`（风筝）、`isAiming`/`GenerateNextShotRandomness`
+  （高斯持瞄）、`MissingArrowsTolerance`（脱靶容忍）、`PushApartTolerance`
+  （站桩间距）、`AttackLargeTarget`。
+- **不存在**（此前自创/RWR 血统，已删）：犹豫（hesitate）、受击规避侧移、
+  包抄走位、围攻名额外圈等位、连射点射、近战出手预判门。
+
+**SW3（saga）`Quantum.Systems.Unit.Ai` 三件套补充**：
+
+- `UnitAiSystem.UpdateUnitAi`：默认 `MoveToFormationPosition`（走编队位），接战条件
+  满足则 `MoveAndAttackEnemy` → 近战 `MoveAttackTargetMelee`+`ComputeAttackerZStagger`
+  （攻击者纵深错位，不做名队排队）、远程 `PositionRangedUnitToFireOnTargetWhenInRange`
+  +拉弓瞄准释放链（`ShouldAim`/`Aim`/`ShouldReleaseRangedAttack`）。
+- `MeleeAttackSystem`：`CanAttack`（`FrameNextCanAttack` 帧冷却）→ 动画命中帧
+  `HasHitEventPassed` → `Strike`，命中判定 `InRangeForHit(xRange, zRange, targetWidth)`
+  ——出手端无预判门，命中帧自检射程。
+- `Movement` 组件：单一 `MaxSpeed` + `Acceleration`/`Braking`（无走跑双速切换），
+  `IsCatchingUpToEnemy` 追击提速标记；`LimitFacingChangeRate` 朝向翻转限频防抖。
+- `FindTargetAiSystem`：目标优先级 = 距离向量 + 折扣族（`PreferUnitsInRange`/
+  `DiscountZAxisALittle`/`OutOfRangeDiscount`/`UserControlDiscount`）+ 攻击计数
+  （`IncrementAttackerCount`/`DecrementAttackerCount`，选目标时给"少人打的目标"
+  折价——是**选目标**的折扣，不是出手排队门）。
+
+## 六、米拉奇战记（Miragine Battle）反编译提取
+
+- 源：`F:\VSCode\WB\2026-09-07-03-04-16\米拉奇战记\米拉奇战记.swf`（4.6MB，三层
+  加载器壳：壳 → BinaryData 嵌套 SWF → 再嵌套；真游戏在第三层 `miraqi_L3_2.swf`）。
+- 工具链：JPEXS FFDec（`ffdec-cli`，PowerShell 通道运行——Git Bash 直跑 java 会段错误）；
+  壳层剥取用自写 python tag 解析（DefineBinaryData 里签名 `CWS` 即嵌套 SWF）。
+- 产物：`external/decompiled/miraqi/script/`（68 个 .as，包 `dragonforce.*` +
+  主时间轴 `miragine_fla.*`；greensock 补间库占一半，游戏本体 ~1300 行）。
+- **接敌 AI 全貌**（`Isometric2DEntity` 297 行——创始人点名的接敌效果实底）：
+  每帧 `ai()` = `findTarget()`（最近敌，y 距离 ×30 折损 ≈ 只看横轴）→
+  `approachTarget()`：走到「目标正前方 range 处」的停位点，`|Δx| ≤ range &&
+  |Δy| ≤ 30` 即出手；出手 = `weaponSpeed` 帧冷却锁（锁定期间全停移动）+ 生成
+  `Isometric2DAttack` 投射物（近战也是短程飞行的武器精灵），命中端同款
+  `|Δy| ≤ 30` 纵深带复检。**无分离推挤、无预判、无任何多余门**——身体永不
+  互穿的观感来自「停在自身射程外缘」+ 攻击全程站定。

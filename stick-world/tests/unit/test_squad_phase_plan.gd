@@ -145,7 +145,7 @@ func _ready() -> void:
 	_runner.add_test("相位切换: 末跳（跃进线=终点）全员到位后计划完成", _test_final_leg_done)
 	_runner.add_test("接敌反应: 背敌成员 → seek_cover（既有行为接入）", _test_back_enemy_cover)
 	_runner.add_test("接敌反应: 被瞄准（被压制代理）成员 → seek_cover", _test_suppressed_cover)
-	_runner.add_test("守卫: 士气行为/玩家号令/接战成员不被相位号令打断", _test_guards)
+	_runner.add_test("守卫: 撤退类行为/玩家号令/接战成员不被相位号令打断", _test_guards)
 	_runner.add_test("零回归: 关态无计划；开态号令建/撤计划（GK-4 生产默认开）", _test_default_off)
 	_runner.add_test("触发: 组织号令通知整编制入计划", _test_org_notify)
 	_runner.add_test("计划=数据: 资源装载与 GK-4 开闸默认开（config/ai/squad_phase_plan.tres）", _test_resource)
@@ -253,7 +253,9 @@ func _test_phase_cycle() -> void:
 	var units: Array = w["units"]
 	var sid: String = w["sid"]
 	_enable(fs)
-	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
+	# 终点 1400：首轮步长 420 → 剩余 780，次轮步长 273 > 容差 240——
+	# 循环步长必须跑赢到位容差（容差内即判到位，循环会空转成等待）
+	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1400, 500))
 	var plan: Variant = fs._squad_phase_plans[sid]
 	# 第一拍：核心组（u0,u1 核心 + u2 侦察）跃进，两翼不动
 	fs._tick_phase_plans(0.5)
@@ -285,10 +287,10 @@ func _test_phase_cycle() -> void:
 	_runner.assert_equal(plan.get_phase_name(), "flank_wait", "两翼到位后应进跟进等待")
 	var before: int = units[0].ai.orders_for("move")
 	_beat(fs, 12)
-	_runner.assert_equal(plan.get_phase_name(), "core_leap", "跟进等待耗尽应进下一轮核心跃进")
+	_runner.assert_equal(plan.get_phase_name(), "core_leap", "跟进等待耗尽应进下一轮核心跃进（timer=%.2f/%.2f phase=%s active=%s）" % [plan._phase_timer, plan._wait_duration, plan.get_phase_name(), plan.is_active()])
 	var line_x: float = plan.get_leap_line().x
-	_runner.assert_gt(line_x, 480.0, "跃进线应越过首轮位置（交替推进）")
-	_runner.assert_lt(line_x, 1000.0, "跃进线不应越过终点")
+	_runner.assert_gt(line_x, 620.0, "跃进线应越过首轮位置（交替推进）")
+	_runner.assert_lt(line_x, 1400.0, "跃进线不应越过终点")
 	# 新循环核心组应收到推进后的新跃进号令（剩余路程 > arrive_tolerance）
 	_beat(fs)
 	_runner.assert_gt(units[0].ai.orders_for("move"), before, "新循环核心组应收到推进后的新跃进号令")
@@ -391,7 +393,7 @@ func _test_back_enemy_cover() -> void:
 	fs._tick_phase_plans(0.5)
 	_runner.assert_gt(units[0].ai.orders_for("seek_cover"), 0, "背敌成员应被派去找掩体")
 	_runner.assert_gt(units[1].ai.orders_for("seek_cover"), 0, "背敌成员应被派去找掩体")
-	# 找掩体中（士气行为）不被跃进号令打断
+	# 找掩体中（撤退类行为）不被跃进号令打断
 	_runner.assert_equal(units[0].ai.orders_for("move"), 0, "找掩体成员不应同时收到跃进号令")
 
 
@@ -402,7 +404,8 @@ func _test_suppressed_cover() -> void:
 	var sid: String = w["sid"]
 	_enable(fs)
 	# 被压制代理：u0 刚被瞄准（arrow_threat_time 新鲜）、u1 无登记 → 只 u0 找掩体
-	units[0].arrow_threat_time = Time.get_ticks_msec() / 1000.0 - 1.0
+	# arrow_threat_time 时基 = 物理帧钟（生产写入侧 weapon_ranged 同源）
+	units[0].arrow_threat_time = float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second) - 1.0
 	fs.notify_squad_order(ScriptTacticalOrders.OrderType.ADVANCE_ALL, sid, Vector2(1000, 500))
 	fs._tick_phase_plans(0.5)
 	_runner.assert_gt(units[0].ai.orders_for("seek_cover"), 0, "被瞄准成员应被派去找掩体")
@@ -417,7 +420,7 @@ func _test_guards() -> void:
 	var sid: String = w["sid"]
 	_enable(fs)
 	# 角色：核心 u0,u1 + 侦察 u2 + 两翼 u3,u4,u5
-	# u0 溃逃中（士气行为）、u1 玩家号令在身、u2 接战中（射程内敌、前方不触发找掩体）
+	# u0 避战中（撤退类行为）、u1 玩家号令在身、u2 接战中（射程内敌、前方不触发找掩体）
 	units[0].ai.force_behavior("retreat")
 	units[1].ai.force_order("move", {"target": Vector2(9999, 0)})
 	units[4].ai.force_order("move", {"target": Vector2(9999, 0)})  # 两翼侧玩家号令

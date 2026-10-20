@@ -9,6 +9,9 @@
 #   tools/check_godot_errors.sh           # 全量（日志扫描 + 启动模拟）
 #   tools/check_godot_errors.sh -Quick    # 仅日志扫描
 #   tools/check_godot_errors.sh -Warnings # 含 WARNING
+#   tools/check_godot_errors.sh -Since <epoch秒>  # 只扫 mtime 晚于该时刻的日志
+#     （gate 隔离窗口：多会话并行共用 user://logs，防止别的 worktree 同时跑
+#      Godot 写入的日志把本仓门禁打红——日志目录按项目名跨 worktree 共享）
 # 退出码：1 有错误，0 干净。
 
 set -u
@@ -35,17 +38,31 @@ LOG_DIR="$LOG_ROOT/Godot/app_userdata/$PROJ_NAME/logs"
 MAX_FILES=10
 WARNINGS=0
 QUICK=0
+SINCE=0
 
 while [ $# -gt 0 ]; do
 	case "$1" in
 		-Warnings) WARNINGS=1; shift ;;
 		-Quick) QUICK=1; shift ;;
+		-Since) SINCE="${2:-0}"; shift 2 ;;
 		*) echo "未知参数: $1"; exit 2 ;;
 	esac
 done
 
 PATTERNS=("ERROR" "SCRIPT ERROR" "Parse Error" "Invalid call" "Invalid access" "Cannot open" "Cannot load" "Cannot find" "Cannot instantiate" "Cannot create" "Cannot parse")
 [ "$WARNINGS" -eq 1 ] && PATTERNS+=("WARNING")
+
+# 已知噪声白名单：tools/known_log_noise.txt 每行一条子串（# 注释），命中的错误行
+# 打印为 [known] 但不计失败——负路径单测（喂坏数据/错误装配）与测试台场景复用
+# 的报错是断言对象的一部分，不能让门禁永远红。新增白名单先定性来源（测试故意 vs 真回归）。
+NOISE_FILE="$SCRIPT_DIR/known_log_noise.txt"
+NOISE=()
+if [ -f "$NOISE_FILE" ]; then
+	while IFS= read -r nl; do
+		case "$nl" in ""|\#*) continue ;; esac
+		NOISE+=("$nl")
+	done <"$NOISE_FILE"
+fi
 
 total_errors=0
 
@@ -54,6 +71,16 @@ match_pattern() {
 	for p in "${PATTERNS[@]}"; do
 		case "$line" in
 			*"$p"*) return 0 ;;
+		esac
+	done
+	return 1
+}
+
+is_known_noise() {
+	local line="$1" nl
+	for nl in "${NOISE[@]}"; do
+		case "$line" in
+			*"$nl"*) return 0 ;;
 		esac
 	done
 	return 1
@@ -70,8 +97,12 @@ count_as_error() {
 # ───────────────────────────── 1. 日志扫描 ─────────────────────────────
 if [ -d "$LOG_DIR" ]; then
 	oldest=""
-	# 按修改时间取最近 MAX_FILES 个日志
+	# 按修改时间取最近 MAX_FILES 个日志；-Since 窗口外（mtime 更早）的不扫
 	while IFS= read -r f; do
+		if [ "$SINCE" -gt 0 ]; then
+			mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+			[ "$mtime" -lt "$SINCE" ] && continue
+		fi
 		hits=""
 		while IFS= read -r line; do
 			if match_pattern "$line"; then hits="$hits$line
@@ -83,6 +114,10 @@ if [ -d "$LOG_DIR" ]; then
 			echo "== [log] $(basename "$f") ($n hits) =="
 			while IFS= read -r line; do
 				[ -z "$line" ] && continue
+				if is_known_noise "$line"; then
+					echo "  [known] $line"
+					continue
+				fi
 				if count_as_error "$line"; then total_errors=$((total_errors + 1)); fi
 				echo "  $line"
 			done <<<"$hits"
@@ -120,6 +155,10 @@ if [ "$QUICK" -eq 0 ]; then
 	if [ -n "$hits" ]; then
 		while IFS= read -r line; do
 			[ -z "$line" ] && continue
+			if is_known_noise "$line"; then
+				echo "  [known] $line"
+				continue
+			fi
 			count_as_error "$line" && total_errors=$((total_errors + 1))
 			echo "  $line"
 		done <<<"$hits"

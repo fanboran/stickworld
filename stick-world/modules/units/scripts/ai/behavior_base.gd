@@ -16,6 +16,8 @@ var entity: CharacterBody2D = null
 var _finished: bool = false
 ## 是否已激活（enter 后 true，exit 后 false）
 var _active: bool = false
+## 压制锁步态标记（上一拍是否被压——解除沿用它做一次性收盾）
+var _suppression_pinned: bool = false
 
 
 # ─────────────────────────────── 生命周期回调 ────────────────────────────────
@@ -53,6 +55,39 @@ func is_active() -> bool:
 	return _active
 
 
+# ─────────────────────── 压制锁步（02 二-A.5，CoH pinned 直译）───────────────────────
+
+## 压制锁步消费段：被压 → 停滞 + 蜷缩举盾姿态（block_crouch 待命变体）——
+## 不追不打不挪窝不后撤，站桩吃伤害（根除避战裁决：无任何逃离通道），姿态是
+## 唯一反馈。盾单位举盾照常参与格挡判定（既有战斗真值），无盾单位纯姿态零数值。
+## 各行为 update 首段调用（attack 压制段同源）；压制结束在下一次调用时**一次性
+## 收盾**（防姿态粘死：如压制中目标死亡，attack 无目标路径不会再跑
+## _update_arrow_threat_block；attack 侧威胁/攻后举盾窗口下拍重算会自然再举）。
+## ai_stop/set_blocking 幂等重申无副作用。duck：组件缺失（测试桩）= 未被压，
+## 零回归。
+func pinned_by_suppression() -> bool:
+	if entity == null or not is_instance_valid(entity) \
+			or not entity.has_method("get_status_effects"):
+		return false
+	var se: Node = entity.get_status_effects()
+	var pinned: bool = se != null and is_instance_valid(se) \
+			and se.has_method("has_suppressed") and bool(se.has_suppressed())
+	if not pinned:
+		if _suppression_pinned:
+			_suppression_pinned = false
+			var w0: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+			if w0 != null and is_instance_valid(w0) and w0.has_method("set_blocking"):
+				w0.set_blocking(false)
+		return false
+	_suppression_pinned = true
+	if entity.has_method("ai_stop"):
+		entity.ai_stop()
+	var w: Node = entity.get_weapon() if entity.has_method("get_weapon") else null
+	if w != null and is_instance_valid(w) and w.has_method("set_blocking"):
+		w.set_blocking(true)
+	return true
+
+
 # ─────────────────────────────── 统一面向（SWL Ai.Face 直译）────────────────────────────────
 
 ## AI 统一面向入口（SWL Ai.Face(Unit u) 直译）：所有"面向目标/单位"的切换
@@ -72,6 +107,24 @@ func face_position(pos: Vector2) -> void:
 		return
 	if entity.has_method("face_towards"):
 		entity.face_towards(pos)
+
+
+## 战线朝向收口（批5 战线，SWL Team.direction 语义）：站定在战线槽位上的
+## 单位面向敌阵。移动朝向是"最后一步"的残影——倒退/横移归位的单位不收口
+## 就会背对战线站桩（创始人点正「有人不面对战线」）。查战线面向（无战线
+## 回落班战斗锚面向；都没有 = 0 不干预）；战斗朝向锁活跃时 try_set_facing
+## 自会拒绝，无需此处判断。
+func face_battle_dir() -> void:
+	if entity == null or not is_instance_valid(entity) \
+			or not entity.has_method("get_formation_system"):
+		return
+	var fs: Node = entity.get_formation_system()
+	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_face_dir"):
+		return
+	var dir: int = fs.get_unit_face_dir(entity)
+	if dir != 0 and entity.has_method("get_facing") and entity.has_method("try_set_facing") \
+			and entity.get_facing() != dir:
+		entity.try_set_facing(dir)
 
 
 # ─────────────────────────── 城墙门洞引导（gate_router 协议）──────────────────────────

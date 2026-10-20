@@ -45,6 +45,11 @@ func _ready() -> void:
 	resource_density = 0.0
 	super()
 	ground_bottom = walk_front_y + FRONT_MARGIN_Y
+	# 带前缘推入 3D 取景兜底锚（set_cam_zoom 战场分支）：行走带 85 格 + 前缘
+	# 余量在近缩放档超出半屏构图可见深——不推入则带前缘投到屏幕底沿外，
+	# 战线贴前缘时整团出界（2026-10-05 创始人实测）
+	if _hd != null and _hd.has_method("set_bf_band_front_z"):
+		_hd.set_bf_band_front_z((ground_bottom - depth_y_min) / CELL_PX)
 
 
 ## 出口链：左出回主街（东缘落）

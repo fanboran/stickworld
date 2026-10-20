@@ -49,7 +49,6 @@ static func stickman_to_dict(s: StickmanState) -> Dictionary:
 		"max_hp": s.max_hp,
 		"stamina": s.stamina,
 		"max_stamina": s.max_stamina,
-		"morale": s.morale,
 		"attack": s.attack,
 		"defense": s.defense,
 		"speed": s.speed,
@@ -77,7 +76,6 @@ static func stickman_from_dict(d: Dictionary) -> StickmanState:
 	s.max_hp = d.get("max_hp", 0.0)
 	s.stamina = d.get("stamina", 0.0)
 	s.max_stamina = d.get("max_stamina", 0.0)
-	s.morale = d.get("morale", 0.0)
 	s.attack = d.get("attack", 0.0)
 	s.defense = d.get("defense", 0.0)
 	s.speed = d.get("speed", 0.0)
@@ -112,7 +110,6 @@ static func organization_to_dict(o: OrganizationState) -> Dictionary:
 		"succession_rule": o.succession_rule,
 		"default_behavior": o.default_behavior.duplicate(),
 		"supply_priority": o.supply_priority,
-		"morale_threshold": o.morale_threshold,
 		"current_project": o.current_project,
 		"location": o.location,
 		"state": o.state,
@@ -135,7 +132,6 @@ static func organization_from_dict(d: Dictionary) -> OrganizationState:
 	o.succession_rule = int(d.get("succession_rule", 0)) as OrganizationState.SuccessionRule
 	o.default_behavior = d.get("default_behavior", {}).duplicate()
 	o.supply_priority = int(d.get("supply_priority", 1)) as OrganizationState.SupplyPriority
-	o.morale_threshold = d.get("morale_threshold", 0.0)
 	o.current_project = d.get("current_project", "")
 	o.location = d.get("location", "")
 	o.state = int(d.get("state", 0)) as OrganizationState.State

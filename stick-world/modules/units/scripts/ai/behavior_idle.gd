@@ -35,6 +35,9 @@ func enter(previous: String, params: Dictionary) -> void:
 
 
 func update(delta: float) -> void:
+	if pinned_by_suppression():
+		return  # 压制锁步：蜷缩举盾站桩（待命计时也停——停滞的是单位）
 	_timer += delta
+	face_battle_dir()  # 站定面向敌阵（无令待命单位的战线朝向收口）
 	if _timer >= _duration:
 		finish()

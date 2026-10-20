@@ -15,7 +15,7 @@ extends StickWindow
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay 槽，open()/close() 控制可见性。
 ##
 ## 子域拆分（同目录 RefCounted 助手，宿主 const preload 引用，状态留本类）：
-##   org_panel_vitals.gd —— 活数据聚合：子树人员/士气/统辖候选/群龙无首/树节点文案与提示/士气配色
+##   org_panel_vitals.gd —— 活数据聚合：子树人员/统辖候选/群龙无首/树节点文案与提示
 ##   org_panel_detail.gd —— 详情区视图：刷新分诊/字段与操作行/概览卡/成员列表/插入层级流程
 
 # ─────────────────────────────── 信号 ────────────────────────────────
@@ -96,12 +96,6 @@ var _insert_position: String = ""
 var _choosing_commander: bool = false
 ## 子树人员集合缓存（org_id -> Array[String]）：一次建树内复用，避免逐节点重复递归
 var _people_cache: Dictionary = {}
-## 单兵士气缓存（stickman_id -> float，-1 = 不可解析），同一次建树内复用
-var _morale_cache: Dictionary = {}
-## 当前地图在场实体索引（instance_id -> 实体）；建树/刷新详情时重建（索引构建逻辑在 org_panel_vitals.gd）
-@warning_ignore("unused_private_class_variable")
-var _unit_index: Dictionary = {}
-var _unit_index_built: bool = false
 ## 活数据聚合助手实例（org_panel_vitals.gd；setup 注入宿主回引）
 var vitals: RefCounted = null
 ## 详情区视图助手实例（org_panel_detail.gd）
@@ -309,10 +303,8 @@ func _refresh_quick_strip() -> void:
 func _refresh_tree() -> void:
 	if _tree == null:
 		return
-	# 建树前清聚合缓存（人员/士气随组织与实体状态变化，缓存只在单次建树内有效）
+	# 建树前清聚合缓存（人员随组织与实体状态变化，缓存只在单次建树内有效）
 	_people_cache.clear()
-	_morale_cache.clear()
-	_unit_index_built = false
 	_tree.clear()
 	# 选中组织可能已被解散/重组：失效则清空选中（并导出——装配层据此收起班组卡）
 	if not _selected_org.is_empty() \
@@ -342,18 +334,17 @@ func _insert_org_item(parent_item: TreeItem, org_id: String) -> void:
 
 
 ## 节点装扮（① 状态徽标增强，不改既有主干文案与 CRUD 能力）：
-## 图标 = 组织状态母题；文案 = 主干 + 状态/统辖/士气徽标（超宽逐项降级）；
+## 图标 = 组织状态母题；文案 = 主干 + 状态/统辖徽标（超宽逐项降级）；
 ## 「群龙无首」空缺态（架构 §4.3 ③）用危险色 + 空缺标记一眼可辨；补位候选序进悬停提示。
 func _decorate_org_item(item: TreeItem, d: Dictionary, org_id: String) -> void:
 	var people = vitals.org_people(org_id)
-	var morale = vitals.people_morale(people)
-	item.set_text(0, vitals.compose_node_text(d, people, morale))
+	item.set_text(0, vitals.compose_node_text(d, people))
 	var icon: Texture2D = StickIcons.tex(StringName(STATE_MOTIF.get(int(d.state), &"旗帜")))
 	if icon != null:
 		item.set_icon(0, icon)
 		item.set_icon_max_width(0, 18)
 	item.set_metadata(0, org_id)
-	item.set_tooltip_text(0, vitals.compose_node_tooltip(d, people, morale))
+	item.set_tooltip_text(0, vitals.compose_node_tooltip(d, people))
 	# 群龙无首 = 指挥官空缺且中间层（L1 可合法空架招兵，不算空缺）——红字压全行
 	if vitals.is_leaderless(d):
 		item.set_custom_color(0, StickTokens.DANGER)

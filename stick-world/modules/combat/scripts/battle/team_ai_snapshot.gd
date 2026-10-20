@@ -38,7 +38,10 @@ func refresh() -> void:
 	var own_wsum: float = 0.0
 	var enemy_wsum: float = 0.0
 	var threatened: bool = false
-	var now_real: float = Time.get_ticks_msec() / 1000.0
+	# arrow_threat_time 时基 = 物理帧钟（写入侧 weapon_ranged 同源；
+	# 暂停冻结、回放确定）
+	var now_real: float = float(Engine.get_physics_frames()) \
+			/ float(Engine.physics_ticks_per_second)
 	var window: float = float(_host._p["projectile_window"])
 	# A2 取数：敌方军事单位快照（C4 评分候选）+ 基地半径内敌军力量（C5 基地威胁）
 	var enemy_snapshot: Array = []
@@ -66,7 +69,7 @@ func refresh() -> void:
 		if weight > 0.0:
 			own_military += 1
 			own_wsum += weight
-			# 投射物来袭登记（现实秒）：窗口内被瞄准即真（暂停期 TeamAi 不 tick，混源影响可忽略）
+			# 投射物来袭登记（物理帧钟秒）：窗口内被瞄准即真（暂停期物理帧不推进，时钟同冻）
 			if not threatened and "arrow_threat_time" in u \
 					and now_real - float(u.get("arrow_threat_time")) < window:
 				threatened = true

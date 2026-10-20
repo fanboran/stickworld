@@ -50,7 +50,6 @@ var hp: float = 0.0
 var max_hp: float = 0.0
 var stamina: float = 0.0
 var max_stamina: float = 0.0
-var morale: float = 0.0
 var attack: float = 0.0
 var defense: float = 0.0
 var speed: float = 0.0

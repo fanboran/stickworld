@@ -33,6 +33,13 @@ const OUTLINE_WIDTH: float = 2.0
 ## "线太显眼"），故回校准值 1.0：与历史验收观感一致且体型间等宽。
 const OUTLINE_SCREEN_PX: float = 1.0
 
+## 头部圆挂 head 骨、圆心高出骨基点 HEAD_ORBIT（=头圆半径，即颈根到圆心）：
+## head:rotation 绕颈根公转产生可见仰俯（SWL 附件式挂法——头骨"从颈根到头顶"，
+## 头附件沿骨向上偏置）。旧实现圆心恰钉在 head 骨原点且挂颈骨，旋转绕自身圆心
+## 转 = 视觉死码（拉弓低头批次实锤，~40 动画的 head 轨道全数无效）。骨 y 同步
+## 下移同值，静止姿势逐位不变。
+const HEAD_ORBIT := 23.0
+
 # ===== 武器挂载骨骼 =====
 const WEAPON_ATTACH_R := 23
 const WEAPON_ATTACH_L := 24
@@ -128,7 +135,7 @@ const SKELETON_DATA: Dictionary = {
 	15: {"parent": 14, "x": 33.8,   "y": 35.2,   "length": 49,  "thickness": 23, "type": TYPE_ROUND_SEG},
 	23: {"parent": 15, "x": 0.0,    "y": 0.0,    "length": 1,   "thickness": 0,  "type": -1},
 	9:  {"parent": 7,  "x": 10.4,   "y": -29.2,  "length": 50,  "thickness": 23, "type": -1},
-	10: {"parent": 9,  "x": 4.8,    "y": -11.1,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
+	10: {"parent": 9,  "x": 4.8,    "y": 11.9,   "length": 38,  "thickness": 23, "type": TYPE_CIRCLE},
 }
 
 ## 纯视觉附加肢体（无对应骨骼，仅渲染；旧 stickman_test.tscn 的 sprite_8 胸段收编于此）
@@ -219,6 +226,10 @@ static func build_limbs(skeleton: Skeleton2D, bones: Dictionary, thickness_scale
 		if not bones.has(pid):
 			continue
 		var parent_bone: Node2D = bones[pid]
+		# CIRCLE 型（头）挂本骨骼自身而非父骨：圆心沿骨向上偏 HEAD_ORBIT，
+		# head 骨旋转才带动圆公转（见 HEAD_ORBIT 注释）
+		if node_type == TYPE_CIRCLE and bones.has(id):
+			parent_bone = bones[id]
 		sprites[id] = _build_limb(parent_bone, id,
 			data["length"], data["thickness"], node_type,
 			data["x"], data["y"], thickness_scale, colors)
@@ -237,8 +248,9 @@ static func collect_nodes(skeleton: Skeleton2D) -> Dictionary:
 # ============================================================
 
 ## 在 parent_bone 上创建矢量肢体段，表示从 parent 到子骨骼的肢体段。
-## px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
+## 矩段：px, py = 子骨骼相对 parent 的偏移；容器放段的中点、旋转对齐方向，
 ## 内含描边 + 填充两层（几何跨度 = length + thickness，与旧位图一致）。
+## CIRCLE 型（头）：挂 head 骨自身、圆心上偏 HEAD_ORBIT（px/py 不参与）。
 ## 全局两遍渲染：描边层 z=-1 压底、填充层 z=0 置顶——肢体重叠处填充
 ## 无缝融合，描边只在剪影外轮廓出线。
 ## z_index 用相对值（祖先全部 z=0；单位带 EntityHost z=3，全局 0~9 < 前景层 10）。
@@ -253,7 +265,7 @@ static func _build_limb(
 	var w: float = max(thickness * thickness_scale, 1.0)
 	var outline: Color = colors.get("outline", DEFAULT_OUTLINE)
 	if node_type == TYPE_CIRCLE:
-		container.position = Vector2(px, py)
+		container.position = Vector2(0.0, -HEAD_ORBIT)
 		container.rotation = 0.0
 		var r: float = max(float(length), w * 2.0) / 2.0
 		var st := _make_circle("stroke", r + OUTLINE_WIDTH, outline)

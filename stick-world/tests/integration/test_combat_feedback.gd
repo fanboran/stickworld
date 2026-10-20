@@ -35,9 +35,10 @@ func _register_tests() -> void:
 	# 顺序约束：分离测试在前（需要两个**活**单位），
 	# 血条死亡测试最后（会把 units[1] 打死——尸体不再参与分离/物理，P0-1 死亡收口）
 	_tests.append({"name": "血条: 组件已装配", "fn": Callable(self, "_test_bar_assembled"), "async": true})
-	_tests.append({"name": "分离: 贴近时 AI 方向被推开", "fn": Callable(self, "_test_separation_pushes"), "async": true})
+	_tests.append({"name": "分离: 不反转意图纯函数（零速顶住/前向偏航）", "fn": Callable(self, "_test_sep_no_reverse_fn")})
+	_tests.append({"name": "分离: 对顶不倒走", "fn": Callable(self, "_test_separation_pushes"), "async": true})
 	_tests.append({"name": "分离: 远处无影响", "fn": Callable(self, "_test_separation_far"), "async": true})
-	_tests.append({"name": "分离: 停住的单位被推开（防黏住）", "fn": Callable(self, "_test_static_separation"), "async": true})
+	_tests.append({"name": "固体: 移动方贴边停 站定方零位移", "fn": Callable(self, "_test_static_separation"), "async": true})
 	_tests.append({"name": "血条: 满血圆点/掉血展开横条/比例正确", "fn": Callable(self, "_test_bar_visibility"), "async": true})
 	_tests.append({"name": "血条: 死亡隐藏", "fn": Callable(self, "_test_bar_on_death"), "async": true})
 
@@ -188,7 +189,25 @@ func _place_x(u: Node, x: float) -> void:
 	u.global_position.x = clampf(x, m.map_left + 60.0, m.map_right - 60.0)
 
 
-## 群体分离：贴近时 AI 移动方向被推开
+## 分离不反转意图的纯函数契约（批3）：反向推力压过走力=零速顶住（ZERO），
+## 否则按横向分量偏航全速前进（单位长）；前向/顶住二值，永不倒走。
+func _test_sep_no_reverse_fn() -> void:
+	var motion: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
+	var dir_r := Vector2(1, 0)
+	# 纯对顶：意图(1,0)+逆推力(-1.6,0) → 零速顶住
+	_runner.assert_true(motion._sep_no_reverse(Vector2(-0.6, 0), dir_r) == Vector2.ZERO,
+			"反向推力压过走力应零速顶住")
+	# 横推（垂直分量，不逆意图）：保持单位长偏航
+	var lat: Vector2 = motion._sep_no_reverse(Vector2(1.0, 0.2), dir_r)
+	_runner.assert_true(is_equal_approx(lat.length(), 1.0) and lat.x > 0.9,
+			"横推应偏航不减速（单位长），实际 %s" % str(lat))
+	# 强横推弱逆推（净投影仍>0）：前向偏航
+	var weak_opp: Vector2 = motion._sep_no_reverse(Vector2(0.3, 0.9), dir_r)
+	_runner.assert_true(weak_opp.x > 0.0 and is_equal_approx(weak_opp.length(), 1.0),
+			"净前向推挤应保持前进（单位长），实际 %s" % str(weak_opp))
+
+
+## 群体分离：对顶不倒走（分离不反转意图）——批3 契约
 func _test_separation_pushes() -> void:
 	var a: Node = _helper.units[0]
 	var b: Node = _helper.units[1]
@@ -199,18 +218,21 @@ func _test_separation_pushes() -> void:
 	_place_x(a, 1000.0)
 	_place_x(b, a.global_position.x + 20.0)
 	await get_tree().physics_frame
-	# a 朝右移动（dir=+x），b 在右方应把 a 的移动方向推开（x 速度下降/y 偏离）
+	# a 朝右移动（dir=+x），b 在正右方对顶——批3 分离不反转意图（SWL PushApart
+	# 推位置不推意图）：对顶全程 vel.x 不取负（顶住/前进均可，倒走不可）。
+	# （纯函数契约另见"分离: 不反转意图纯函数"用例；重叠解开速率属整场动态，
+	# 由 --twitch 探针的待机漂移指标对账，不在此断言——AI 自治意图会盖掉
+	# 测试输入，多帧位置断言天生脆弱）
 	if not a.has_method("ai_move"):
 		_runner.assert_true(false, "实体缺 ai_move")
 		return
 	a.ai_move(Vector2(1, 0), false)
-	# 物理行为断言等物理帧（30Hz 物理 + headless 高渲染帧率下，
-	# process_frame 不保证物理帧已跑——分离修正在 _physics_process 里）
-	await get_tree().physics_frame
-	# 读 a 的 velocity（物理帧已应用分离修正）
+	# 等 12 物理帧：速度爬升 + 对顶失速进入稳态（物理行为断言等物理帧——
+	# 30Hz 物理 + headless 高渲染帧率下 process_frame 不保证物理帧已跑）
+	for i in 12:
+		await get_tree().physics_frame
 	var vel: Vector2 = a.velocity
-	# 纯右向 = (speed, 0)；被推开后应偏离 x 轴（y 分量非零或 x 速度低于全速）
-	_runner.assert_true(absf(vel.y) > 5.0 or vel.x < 100.0, "贴近友军时移动方向应被推开，vel=%s" % str(vel))
+	_runner.assert_true(vel.x >= -1.0, "对顶友军时不倒走（分离不反转意图），vel=%s" % str(vel))
 	a.ai_stop()
 
 
@@ -232,30 +254,43 @@ func _test_separation_far() -> void:
 	a.ai_stop()
 
 
-## 静态分离：两个停住的单位贴近放置（模拟射程边缘互停黏住），数帧后应被推开
+## 固体碰撞契约（裁决#40b，取代旧"静态分离防黏住"）：移动方撞站定方
+## 贴边停（不穿人、不推人），站定方**零位移**——SWL 同款语义
+##（Unit.PushApart 基类为空方法，翻译档 §7.1.2）。
 func _test_static_separation() -> void:
 	var a: Node = _helper.units[0]
 	var b: Node = _helper.units[1]
 	if a == null or b == null:
 		_runner.assert_true(false, "单位缺失")
 		return
-	# 贴近放置（相距 10px，碰撞体约 40px 宽，即"黏住"状态）
+	# a 站定；b 在 200px 外直线逼近（固体箱 40×48，贴边停于 40px 中心距）。
+	# 夹具单位默认无战斗实例（固体互撞层只在战斗期开启）——挂裸 Node 假战斗
+	# （无 is_active 方法即视为活跃）走真实的层切换路径。
+	var fake_battle := Node.new()
+	add_child(fake_battle)
+	a.set_battle_instance(fake_battle)
+	b.set_battle_instance(fake_battle)
 	_place_x(a, 1200.0)
-	_place_x(b, a.global_position.x + 10.0)
-	# 双方都不移动（静止）
-	if a.has_method("ai_stop"):
-		a.ai_stop()
-	if b.has_method("ai_stop"):
-		b.ai_stop()
-	await get_tree().process_frame
-	# 放置后第一帧内物理去重叠 + 静态分离就可能已把两者弹到接近分离半径
-	# （实测 before 采样时已 41.6/42），相对位移断言对时序敏感。
-	# 防黏住的本质：停住单位不会被永久卡在重叠状态 → 断言"达到分离半径"。
-	var dist_after: float = a.global_position.distance_to(b.global_position)
-	for i in range(40):
-		await get_tree().create_timer(0.05).timeout
-		dist_after = a.global_position.distance_to(b.global_position)
-		if dist_after >= 40.0:
-			break
-	_runner.assert_true(dist_after >= 40.0,
-		"贴近停住的单位应被推开到分离半径（~42），最终间距=%.1f" % dist_after)
+	_place_x(b, a.global_position.x + 200.0)
+	# 清上一用例残余速度（否则 a 带速滑行污染"零位移"采样），落定后再快照
+	_helper.reset_units([a, b])
+	for i in 3:
+		await get_tree().physics_frame
+	var a_pos_before: Vector2 = a.global_position
+	if not b.has_method("ai_move"):
+		_runner.assert_true(false, "实体缺 ai_move")
+		return
+	b.ai_move(Vector2(-1, 0), false)
+	# 40 物理帧：b 加速逼近并撞上 a 的固体箱
+	for i in 40:
+		await get_tree().physics_frame
+	var a_delta: float = a.global_position.distance_to(a_pos_before)
+	_runner.assert_true(a_delta < 2.0,
+			"站定单位不被移动方位移（固体语义），位移=%.1f" % a_delta)
+	var gap: float = absf(b.global_position.x - a.global_position.x)
+	_runner.assert_true(gap >= 36.0 and gap <= 60.0,
+			"移动方应贴固体箱边界停（半和 40px），间距=%.1f" % gap)
+	b.ai_stop()
+	a.set_battle_instance(null)
+	b.set_battle_instance(null)
+	fake_battle.queue_free()

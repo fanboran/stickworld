@@ -155,8 +155,9 @@ def mode_diff(spine, godot, tol_angle, tol_pos):
     每骨常数（W_godot ≈ b(骨) - W_spine，负号模型，discover 模式可验证）。该常数是
     结构性骨架差异、不是翻译误差——动作保真度的正确判据是**增量**：
     负号模型下两侧增量互为相反数，残差 = |wrap((g(t)-g(0)) + (a(t)-a(0)))|。
-    静态偏移全部消除后，剩余残差 = 真实翻译误差（未映射骨缺口 / unwrap 分歧 /
-    KEYFRAME_FIXES 手工修正）。位置对比同理：相对 t=0 的位移增量。
+    静态偏移全部消除后，剩余残差 = 真实翻译误差（未映射骨缺口 / unwrap 分歧）。
+    位置对比同理：相对 t=0 的位移增量（仅 root/髋 通道——逐骨 translate 不导入，见
+    dump_spine_pose.py 模块 docstring）。
     """
     scale = godot['skeleton_height'] / spine['skeleton_height'] \
         if spine['skeleton_height'] else 1.0

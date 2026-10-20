@@ -4,7 +4,7 @@ extends StickScreen
 ##
 ## 布局（docs/设计/系统/14-背包与装备系统.md §2.4）：
 ##   左栏：装备 5 槽（头/胸/腿竖排 + 主/副手横排）+ 角色卡
-##         （HP/五属性/战场情绪/伤痕状态——吸收原 StatsScreen）
+##         （HP/五属性/伤痕状态——吸收原 StatsScreen）
 ##   右栏：背包分类列表（列表制：按 类别→名称 排序的条目行，滚动）
 ## 交互（点击制，无拖拽）：
 ##   左键条目 = 智能装备（装备类）/使用（消耗品）
@@ -20,8 +20,6 @@ const CATEGORY_NAMES: Array[String] = [
 const ATTR_NAMES: Dictionary = {
 	"str": "力量", "int": "智力", "agi": "敏捷", "cft": "工艺", "cmd": "指挥",
 }
-## 情绪 → 中文（战场导演标签）
-const MOOD_NAMES: Array[String] = ["稳定", "犹豫", "亢奋", "恐慌"]
 ## 状态效果 → 中文（伤痕状态）
 const EFFECT_NAMES: Dictionary = {
 	0: "燃烧", 1: "中毒", 2: "迟缓", 3: "眩晕", 4: "治疗中",
@@ -47,7 +45,6 @@ var _list_scroll: ScrollContainer = null
 var _hp_label: Label = null
 var _hp_bar: SketchProgress = null
 var _attr_labels: Dictionary = {}
-var _mood_label: Label = null
 var _effects_box: VBoxContainer = null
 var _no_entity_hint: Label = null
 var _refresh_timer: float = 0.0
@@ -112,7 +109,7 @@ func _make_equip_widget(slot: int, cap: String) -> ItemSlotWidget:
 	return w
 
 
-## 角色卡（吸收原 StatsScreen：生命/属性/情绪/伤痕状态）
+## 角色卡（吸收原 StatsScreen：生命/属性/伤痕状态）
 func _build_stats_card(parent: VBoxContainer) -> void:
 	parent.add_child(SketchSeparator.new())
 	_no_entity_hint = StickKit.label(parent, "未附身任何火柴人", StickKit.LabelKind.HINT)
@@ -126,9 +123,6 @@ func _build_stats_card(parent: VBoxContainer) -> void:
 		var r := StickKit.row(parent)
 		StickKit.label(r, ATTR_NAMES[key], StickKit.LabelKind.TINY).custom_minimum_size.x = 48
 		_attr_labels[key] = StickKit.label(r, "10", StickKit.LabelKind.TINY)
-	var mood_row := StickKit.row(parent)
-	StickKit.label(mood_row, "情绪", StickKit.LabelKind.TINY).custom_minimum_size.x = 48
-	_mood_label = StickKit.label(mood_row, "稳定", StickKit.LabelKind.TINY)
 	_effects_box = VBoxContainer.new()
 	_effects_box.add_theme_constant_override("separation", 1)
 	parent.add_child(_effects_box)
@@ -266,7 +260,6 @@ func _refresh_stats_card() -> void:
 		(_attr_labels[key] as Label).visible = has_entity
 	_hp_bar.visible = has_entity
 	_hp_label.visible = has_entity
-	_mood_label.visible = has_entity
 	if not has_entity:
 		return
 	var health: Node = entity.get_node_or_null("HealthComponent")
@@ -278,9 +271,6 @@ func _refresh_stats_card() -> void:
 	var attrs: Dictionary = entity.attributes if "attributes" in entity else {}
 	for key in _attr_labels:
 		(_attr_labels[key] as Label).text = str(int(attrs.get(key, 10)))
-	var wm: Node = entity.get_node_or_null("WeaponMount")
-	var mood: int = int(wm.get_mood()) if wm != null and wm.has_method("get_mood") else 0
-	_mood_label.text = MOOD_NAMES[clampi(mood, 0, MOOD_NAMES.size() - 1)]
 	for child in _effects_box.get_children():
 		_effects_box.remove_child(child)
 		child.queue_free()

@@ -238,6 +238,27 @@ func get_muzzle_pos(entity: Node) -> Vector2:
 	return _body_pos(entity) + Vector2(0, -70)
 
 
+## 拉弓瞄准俯仰角（SWL Archer.Aim/_currentAim 的射角源）：按与 fire_arrow 同源
+## 的弹道解算取发射仰角，转 rig 域弧度（负=仰头后仰）。钳到 [−0.65, 0.15]——
+## SWL AimAngle 抛物线解（v=15）实用射程角域 ~10°..45°，极端弧线不过倾、
+## 俯射不明显低头。纯表现量（射击真值仍由箭矢弹道自走）。
+func get_aim_pitch(target: Node) -> float:
+	if target == null or not is_instance_valid(target):
+		return 0.0
+	var owner_entity: CharacterBody2D = _mount.get_owner_entity()
+	if owner_entity == null:
+		return 0.0
+	var from: Vector2 = get_muzzle_pos(owner_entity)
+	var aim_point: Vector2 = _body_pos(target)
+	var target_vel: Vector2 = (target as CharacterBody2D).velocity if target is CharacterBody2D else Vector2.ZERO
+	var solution: Dictionary = ArrowBallistics.solve(from, aim_point, target_vel,
+			_mount.ARROW_VX, _mount.ARROW_LEAD_FACTOR, _mount.ARROW_GRAVITY)
+	var vel: Vector2 = solution["vel"]
+	# y-down 世界：vel.y 负 = 上仰；elevation 正=仰，rig 旋转负=仰 → 取负号
+	var elevation: float = -atan2(vel.y, absf(vel.x))
+	return clampf(-elevation, -0.65, 0.15)
+
+
 ## 实体身体位置（Collider 世界坐标，缺省回落 global + 典型偏移）
 func _body_pos(entity: Node) -> Vector2:
 	var collider: Node = entity.get_node_or_null("Collider")
@@ -295,6 +316,9 @@ func fire_arrow(target: Node) -> void:
 	if target != null and is_instance_valid(target) and "incoming_arrow_damage" in target:
 		target.incoming_arrow_damage += _mount.effective_damage()
 	# 箭矢威胁标记（SWL SpeartonAi.IsAnyArrowThreat 感知源）：出弓瞬间通知目标，
-	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾
+	# 举盾兵种（档案 arrow_threat_block）在威胁窗口内举盾。时基 = 物理帧钟
+	# （消费侧 behavior_attack/team_ai_snapshot/squad_phase_plan 同源；
+	# 暂停冻结、回放确定，禁墙钟）
 	if target != null and is_instance_valid(target) and "arrow_threat_time" in target:
-		target.arrow_threat_time = Time.get_ticks_msec() / 1000.0
+		target.arrow_threat_time = float(Engine.get_physics_frames()) \
+				/ float(Engine.physics_ticks_per_second)

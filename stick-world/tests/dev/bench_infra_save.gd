@@ -113,7 +113,6 @@ func _make_stickman(id: String, i: int) -> StickmanState:
 	s.max_hp = 100.0
 	s.stamina = 70.0
 	s.max_stamina = 100.0
-	s.morale = 0.8
 	s.attack = 10.0 + i % 5
 	s.defense = 5.0
 	s.speed = 60.0

@@ -10,7 +10,7 @@ extends Node
 ##   1. C2 默认语义回归：player_faction 未传（=攻方），攻方胜 → victory=true
 ##   2. C2 守方语义：player_faction=2，守方胜 → victory=true（攻城战场景语义）
 ##   3. C3 撤仗：守军 TeamAi 注入撤退阈值，伤亡率超限 → ROUT → 全军撤离边缘
-##      departed → battle_ended(victory=true)（据点攻陷）——场景双方满士气
+##      departed → battle_ended(victory=true)（据点攻陷）
 ##      （避战打分不被触发，撤仗决策不被 C6 调制搅局）
 ##   4. C3 零回归：enable_team_ai 不注入撤退阈值 → 不撤仗，全灭/超时收敛判定照常
 ##   （裁决【删溃逃、立避战】：9k 溃散收敛随溃逃退役删除——战斗收束 ∈
@@ -167,7 +167,7 @@ func _scenario_retreat_on_casualty(units: Dictionary) -> void:
 	_runner.assert_true(reason == "annihilation" or reason == "timeout",
 			"守军应撤离离场/全灭或超时收敛（实际 reason=%s）" % reason)
 	# 撤仗路径验证：至少 1 名守军以 departed 离场（非死亡）
-	# （满士气下 C6 避战调制不触发，撤离路径由 TeamAi ROUT 号令独立驱动）
+	# （撤离路径由 TeamAi ROUT 号令独立驱动；C6 调制行为有专项单测）
 	var departed_count: int = 0
 	for e in defenders:
 		if is_instance_valid(e) and not (e.has_method("is_dead") and e.is_dead()) \
@@ -303,7 +303,7 @@ func _unpossess_player() -> void:
 			e.set_possessed(false)
 
 
-## 生成一个战斗单位（低 HP 加速战斗；士气保持满值——收敛类测试不看避战，
+## 生成一个战斗单位（低 HP 加速战斗；收敛类测试不看避战，
 ## C6 调制行为有专项单测；hp 可覆盖，撤仗场景守军用高体质）
 func _spawn_battle_unit(map: Node2D, pos: Vector2, hp_value: float = BATTLE_HP) -> Node:
 	var e: Node2D = map.spawn_entity(STICKMAN_SCENE, pos)
@@ -315,7 +315,7 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2, hp_value: float = BATTLE_HP) 
 	# 取消附身（AI 接管）
 	if e.has_method("set_possessed"):
 		e.set_possessed(false)
-	# 设置低 HP（士气保持组件默认满值）
+	# 设置低 HP
 	if e.has_method("get_health"):
 		var h: Node = e.get_health()
 		if h != null:

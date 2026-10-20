@@ -2,69 +2,76 @@ class_name BehaviorAttack
 extends BehaviorBase
 ## 攻击行为 -- 找最近敌人 -> 接近到射程内 -> 攻击（命中帧->伤害事件）。
 ##
-## 详见 docs/技术/架构/场景与战斗架构.md §7.2 / §7.4 / §8。
-## 包含概率钩子（§7.4 第一层）：擅自冲锋、犹豫。
+## SWL 攻击行为口径（裁决#32，对照 legacy dump Ai 基类方法表逐项核对）：
+## 真货保留 = 跑走切换（DetermineXRunPower）/ 贴身判定（IsTargetReallyClose）/
+## 攻击槽位（GetTargetAttackSpot）/ y 纵深对齐（6 函数族）/ 风筝（ArcherAi.ShouldKite）/
+## 持瞄节奏（isAiming/GenerateNextShotRandomness）/ 脱靶容忍（MissingArrowsTolerance）/
+## 站桩间距（PushApartTolerance）；RWR/自创机制已删 = 犹豫 / 受击规避小跳 /
+## 包抄走位 / 围攻名额外圈等位 / 连射点射停顿 / 近战出手预判门（裁决#31-#32——
+## SWL/SW3 出手只有冷却门，命中帧自检射程，出手不做任何预判）。
 ##
 ## 完成条件（finish 后由 AIController 决策切换）：
 ##   - 无敌人 / 战斗结束
-##   - 自身重伤且附近有掩体 -> AIController 切 seek_cover
-##   （裁决【删溃逃、立避战】：低士气不再打断攻击——保持还击，去留由 C6 调制裁决）
+##   （裁决【删溃逃、立避战】：不因低血打断攻击——保持还击，去留由 C6 调制裁决）
 ##
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
 
-# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）；
-# TargetFinder 为 tactics 对外公共类型（tactics/api.gd 契约出口）
-const ScriptTargetFinder := preload("res://modules/tactics/api.gd").Finder
+# 显式 preload，避免 headless 模式下 class_name 全局注册未触发（惯例见 ai_controller.gd:16）。
+# TargetFinder 为 tactics 对外公共类型（tactics/api.gd 契约出口）——消费点已随
+# P1 找目标系统拆分迁 target_acquire.gd（该文件自持 preload）
 ## 兵种行为档案（RWR 式基线+覆盖，见 behavior_profiles.gd）
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
-## 攻击动画名映射（9s 出手预测读 Hit 事件真值用；stick_rig 为 L1，units L2 依赖方向合规）
-const ScriptAnims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
+## 找目标系统（SW3 FindTargetAiSystem 直译 P1：增量换靶/滞回/驻留时长/分层阈值）
+const ScriptTargetAcquire := preload("res://modules/units/scripts/ai/target_acquire.gd")
 
-# ─────────────────────────────── 常量 ────────────────────────────────
-## 目标刷新间隔（秒）
-const ACQUIRE_INTERVAL: float = 0.5
-## 犹豫检查间隔（秒）
-const HESITATE_CHECK_INTERVAL: float = 0.5
-## 低 HP 阈值（低于此值且附近有掩体触发找掩体）
-const LOW_HP_THRESHOLD: float = 0.3
-## 掩体查询范围（附近多少像素内有掩体算"附近"）
-const COVER_NEARBY_RANGE: float = 200.0
-## 追击范围倍数（行业最佳实践：目标超出攻击范围 × LEASH_MULT 则放弃追击，防追到天涯海角）
-const LEASH_MULT: float = 4.0
+# ─────────────────────────────── 常量
+
 ## y 对齐死区（px，dump 无真值 → 待实测校准）：|Δy| 小于此值视为已对齐不再走位
 const Y_ALIGN_DY_THRESHOLD: float = 16.0
-## IsTargetReallyClose 阈值倍数（半射程近似，dump 无真值 → 待实测校准）
-const REALLY_CLOSE_MULT: float = 0.5
-
-# ─────────────────────────────── @export（概率钩子，§7.4）────────────────────────────────
-## 擅自冲锋概率（每次接近时）
-@export var prob_aggressive_push: float = 0.05
-## 犹豫概率（每次检查时）
-@export var prob_hesitate: float = 0.03
-## 狂暴冲锋概率（反编译参考实装 E：狂暴时替代 prob_aggressive_push）
-const RAGE_PUSH_PROB: float = 0.35
+## 攻击槽位系数（SWL AttackFromRange 直译，翻译档 §7.1.2）：接近停步点 =
+## 预测目标位置 ± 0.7 × attackRange（全局系数 0.7 直读 .so 数据段）
+const ATTACK_SLOT_FRAC: float = 0.7
+## 出手门系数（SWL Ai.CanAttack 直译）：目标静止时 |Δx| < 0.8 × range 才可出手
+##（追击中目标在动为 0.5×range——本仓出手锁足后目标动时走槽位接近路径，
+## 不复刻 0.5 档）
+const ATTACK_GATE_FRAC: float = 0.8
+## 贴身判定阈值（SWL IsTargetReallyClose 直译）：|Δx| < 2.5u × 52 ≈ 130px——
+## 绕开攻击槽位直接压上（旧"半射程"近似作废）
+const REALLY_CLOSE_DX: float = 130.0
+## 弓手开火下限（SWL ArcherAi.CanAttack 直译）：|Δx| ≤ 0.8u(42px，DAT_015c1cb8
+## 直读) 不开火——贴脸弓切近战 attackRange 语义
+const ARCHER_MIN_FIRE_DX: float = 42.0
+## 弓手保距线（SWL GetTargetAttackSpot 直译）：射程内站桩最小间距 = 目标 ±3u
+## ≈156px——被贴脸退到此线（spot 保持距离语义，非风筝：AI 弓手不风筝，
+## ShouldKite 是 Pro 玩家操控专属）
+const ARCHER_HOLD_DIST: float = 156.0
+## 弓手停步线系数（SWL GetTargetAttackSpot 射程外分支直读 DAT_016c55a4）：
+## 射程外走向距目标 0.9×range 处（range 15u → 13.5u ≈ 702px，天然落在己方半场）
+const ARCHER_RANGE_FRAC: float = 0.9
+## 远程走位死区（px）：距停步/保距线 ≤ 此值不挪步（防贴线抖动）
+const RANGED_LINE_DEADZONE: float = 40.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
 var _battle: Node = null
-## 当前目标敌人
+## 当前目标敌人（每物理帧自 _acq 同步；下游消费与测试观测面——目标状态的
+## 唯一权威在 _acq，写侧经 target_acquire 的选举/强制目标通道）
 var _target: Node = null
-## 强制目标（遇阻接战"打通"态）：behavior_move/AIController 经 params 注入的
-## 拦路者——路径敌人未必是最近敌，目标选择优先于集火/自主寻敌。死亡/失效/
-## 超追击范围即失效回落正常选敌（打通态生命周期由 AIController 维护）。
-var _forced_target: Node = null
-## 目标刷新计时器
-var _acquire_timer: float = 0.0
-## 犹豫检查计时器
-var _hesitate_check_timer: float = 0.0
-## 犹豫持续计时器（>0 时停滞）
-var _hesitate_timer: float = 0.0
-## 狂暴标记（反编译参考实装 E）：低血狂暴/被围背墙时由 AIController 传入。
-## 狂暴时跳过"低血找掩体"、冲锋概率提升、不因士气波动收手。
-var _rage: bool = false
+## 找目标系统（SW3 FindTargetAiSystem 直译 P1）：目标状态/选举/驻留/滞回/
+## 分层阈值全在 helper——enter 装配 + update 懒装配兜底（测试直构不进 enter
+## 也能跑）
+var _acq: ScriptTargetAcquire = null
+## 行为累积钟（s）：update 每拍累加 delta，暂停/减速与物理帧同步冻结——
+## 禁墙钟（ai_decision_clock 纪律：暂停/hitstop 期实时钟空转破坏节拍契约）。
+## post_block/burst 等行为内窗口的时基
+var _clock: float = 0.0
+## 命运骰 RNG（单位种子隔离：首掷按实体实例 id 派生，测试可重掷 _rng.seed
+## 复现序列——P4 回放「每单位可注入种子」的前置收口）
+var _rng := RandomNumberGenerator.new()
+var _rng_seeded: bool = false
 ## 兵种行为档案（RWR 式基线+覆盖）：enter 时按武器类型解析，
-## 覆盖冲锋/犹豫/追击/保距等参数——兵种个性 = 参数差（见 behavior_profiles.gd）。
+## 覆盖风筝/持瞄/追击等参数——兵种个性 = 参数差（见 behavior_profiles.gd）。
 var _profile: Dictionary = {}
 ## 瞄准节奏状态（SWL ArcherAi.isAiming/GenerateNextShotRandomness 直译）：
 ## 当前持瞄目标与剩余持瞄时长——放箭时机 = 满弓节奏上叠高斯抖动
@@ -75,24 +82,17 @@ var _aim_target: Node = null
 ## （11a 改造：漂移从"独立随机游走"并入 y 对齐 6 函数的 goal_y，见 _adjust_goal_y）
 var _drift_offset: float = 0.0
 var _drift_timer: float = 0.0
-## 9u：y 对齐连续超容忍累计时长（s）——y_aim_grace 放行的计时源，对齐即清零
-var _y_misalign_time: float = 0.0
 ## 攻击后举盾截止时刻（s；SWL Ai.cooldownAfterAttackForBlock 直译——
 ## 矛兵攻击完举盾瞬间防反打，"盾墙"手感来源）
 var _post_block_until: float = 0.0
-# ── 灵动化（RWR 士兵的"不安分"，Demo P5）──
-## 战斗微移步：射程内站桩输出时的随机小步（横移计时/方向/持续时间）
-var _strafe_timer: float = 0.0
-var _strafe_dir: float = 0.0
-var _strafe_hold: float = 0.0
-## 受击规避：被打醒后小概率侧移一小步（边沿检测只在第一帧掷骰）
-var _in_stun_prev: bool = false
-var _evade_hold: float = 0.0
-var _evade_dir: float = 0.0
-## 点射节奏状态（A9 · R3，RWR burst 族直译）：连射计数与停顿截止时刻
-## （达 burst_shots 后插 burst_wait 停顿再射——"点射-停顿-点射"节奏）
-var _burst_count: int = 0
-var _burst_wait_until: float = -1.0e9
+## 挥砍锁足（米拉奇口径：出手=冷却窗全模停止，`Isometric2DEntity.as` 方法体
+## 直读——attack 期间 vx=vy=0 到 weaponSpeed 帧走完）：近战 perform_attack 置位，
+## 冷却好（can_attack 翻真）解锁。挥砍动画期带着走位 = 「边走边挥砍」滑行感
+## 的根治；远程不走此锁（边撤边射是 SWL 弓手真行为）
+var _melee_swing_lock: bool = false
+## 锁时限（_clock 时刻）：武器冷却 × 1.5——保险闸：低帧下动画结束回调若迟到
+## （_current_anim 卡在 attack 态），锁不会永久卡死单位
+var _melee_lock_until: float = 0.0
 
 # ── 实体能力位缓存（战斗性能优化）──
 ## update 每物理帧逐单位调用，链式 entity.has_method(...) 是纯重复开销：
@@ -135,8 +135,6 @@ func enter(previous: String, params: Dictionary) -> void:
 	_battle = params.get("battle", null)
 	if _battle == null and entity != null and entity.has_method("get_battle_instance"):
 		_battle = entity.get_battle_instance()
-	_rage = params.get("rage", false)
-	_forced_target = params.get("forced_target", null)
 	# 兵种档案解析（按主手武器类型；取不到武器回落空档案 = 全基线）
 	_profile = {}
 	if entity != null and is_instance_valid(entity) and entity.has_method("get_weapon"):
@@ -144,15 +142,16 @@ func enter(previous: String, params: Dictionary) -> void:
 		if w != null and "weapon_type" in w:
 			_profile = ScriptBehaviorProfiles.get_profile(int(w.weapon_type))
 	_target = null
-	_acquire_timer = 0.0
-	_hesitate_check_timer = 0.0
-	_hesitate_timer = 0.0
+	_ensure_acq()
+	# 强制目标（遇阻接战"打通"态）：params 注入的拦路者——路径敌人未必是最近敌，
+	# 目标选择最高优先；死亡/失效/超追击范围由 _acq 清除回落正常选敌
+	_acq.set_forced_target(params.get("forced_target", null))
 	_aiming = false
 	_aim_target = null
 	_aim_timer = 0.0
 	_drift_timer = 0.0
 	_drift_offset = 0.0
-	_y_misalign_time = 0.0
+	_melee_swing_lock = false
 
 
 func update(delta: float) -> void:
@@ -164,36 +163,28 @@ func update(delta: float) -> void:
 	if _cap_is_dead and entity.is_dead():
 		finish()
 		return
+	# 战斗朝向锁（AttackWhileRunning 语义）：有活跃攻击目标即锁——朝向归开火
+	# 瞄准管，移动翻面让位（边退边射倒退跑）；行为退出在 exit 解锁
+	if entity.has_method("set_combat_face_lock"):
+		entity.set_combat_face_lock(_target != null and is_instance_valid(_target))
+	# 行为累积钟（时基声明见字段注释）——先于一切早退路径累加：压制/硬直/
+	# 风筝停滞期窗口照常流逝（停滞的是单位不是时间）
+	_clock += delta
 	# 压制禁令消费段（A6 · C9）：压制期停滞——不追不打不调整，同受击硬直口径。
 	# 决策链已在 ai_controller 拦截新行为，此处兜底"压制发生在两拍之间的在途
 	# 攻击行为"（禁令立即生效，不等下一决策拍）。受击反馈/被推挤在物理层不受
 	# 禁令影响——惩罚来自模拟因果。duck 查询：组件缺失（测试桩）跳过 = 零回归。
-	var se: Node = entity.get_status_effects() if entity.has_method("get_status_effects") else null
-	if se != null and is_instance_valid(se) and se.has_method("has_suppressed") and se.has_suppressed():
-		# 避战还击窗口放行（诊断 B2 带打带跑）：决策层开窗（避战态+近身有敌）时
-		# 在途 attack 继续正常攻击流程——否则还击行为会被本段立即按停（决策放行
-		# 与兜底停滞打架）；窗口外维持压制停滞既有语义。
-		if not _counter_window_open():
-			if entity.has_method("ai_stop"):
-				entity.ai_stop()
-			return
-	# 受击硬直（行业最佳实践 hit stun）：被打瞬间短暂停滞，不追不打；
-	# 醒后小概率规避小跳（RWR 士兵被打了会挪窝，不站桩吃第二下）
+	# 压制锁步（02 二-A.5）：停滞 + 蜷缩举盾站桩吃伤害（根除避战裁决），
+	# 姿态反馈在共享口内（behavior_base.pinned_by_suppression）。
+	if pinned_by_suppression():
+		return
+	# 受击硬直（行业最佳实践 hit stun；SW3 Movement 帧表同源语义）：被打瞬间
+	# 短暂停滞，不追不打（裁决#32：受击规避小跳是 RWR 血统，SWL 无此机制——
+	# 硬直就是硬直，不侧移）
 	var stunned: bool = _cap_hit_stun and entity.is_in_hit_stun()
 	if stunned:
-		if not _in_stun_prev and _evade_hold <= 0.0:
-			if randf() < 0.30:
-				_evade_hold = 0.35
-				_evade_dir = 1.0 if randf() < 0.5 else -1.0
-		_in_stun_prev = true
 		if _cap_ai_stop:
 			entity.ai_stop()
-		return
-	_in_stun_prev = false
-	if _evade_hold > 0.0:
-		_evade_hold -= delta
-		if _cap_ai_move:
-			entity.ai_move(Vector2(0.0, _evade_dir), false)
 		return
 	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("is_active") or not _battle.is_active():
 		if _cap_ai_stop:
@@ -201,95 +192,66 @@ func update(delta: float) -> void:
 		finish()
 		return
 
-	# 刷新目标
-	_acquire_timer -= delta
-	if _target == null or not is_instance_valid(_target) or (_target.has_method("is_dead") and _target.is_dead()) or _is_beyond_leash() or _acquire_timer <= 0.0:
-		# 强制目标（打通态拦路者）：有效且未超追击范围则最高优先锁定——路径敌人
-		# 优先于集火/自主寻敌；失效（死亡/失效/超追击范围）清除回落正常选敌
-		if _refresh_forced_target():
-			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
-		else:
-			# 队伍级共享目标（反编译参考实装 D-B）：排长决策 → 队员执行（集火）。
-			# 所属小队有共享攻击目标时优先用它，否则回退各自寻敌。
-			var squad_target: Node = _get_squad_target()
-			if squad_target != null:
-				# 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：当前目标仍有效时
-				# 仅当集火目标显著更近才换过去——排长重选节拍（0.5s）与队员扫视节拍
-				# （0.4s）同量级，无条件跟随 = 全队追着排长的"最近敌"来回横跳
-				#（追逐振荡 + 每次换靶重置持瞄 = 弓手永远差一步不放箭）。
-				# 当前目标死亡/失效/超追击范围仍立即换（集火语义保持）。
-				if _should_accept_squad_target(squad_target):
-					_target = squad_target
-			elif _target != null and is_instance_valid(_target) and not (_target.has_method("is_dead") and _target.is_dead()) and not _is_beyond_leash():
-				# 目标切换滞后（行业最佳实践 sticky target）：当前目标仍有效且未超追击范围则锁定保留，
-				# 不因刷新周期重选（避免频繁换目标导致攻击输出丢失）
-				pass
-			else:
-				# 公共目标选择核心（反编译参考实装 A）：规则经 opts 扩展，见 ScriptTargetFinder。
-				# ignore_current_attackers = 防集火重叠；prefer_large = 大目标偏好
-				# （SWL ArcherAi.AttackLargeTarget：弓手优先射巨物，档案 prefer_large 控制）
-				_target = ScriptTargetFinder.find_target(entity, {
-					"battle": _battle,
-					"ignore_current_attackers": true,
-					"prefer_large": _p("prefer_large", 0.0),
-				})
-			# 指挥官守卫（斩首规则）：自主接战目标必须在追击 leash 内——find_target 是
-			# 全图最近，无此门无班的指挥官会跨越半个战场冲锋（留守失效）。超 leash 不选
-			# 不追 → finish 待命，敌人近身（进入 leash）后自然选中自卫。只作用指挥官，
-			# 普通单位的追击语义不变（leash 对他们仍只作换靶触发）。
-			if _target != null and entity != null and is_instance_valid(entity) \
-					and entity.has_method("is_commander") and entity.is_commander() \
-					and _is_beyond_leash():
-				_target = null
-			# 感知节奏按兵种档案（RWR 扫视轮询）：基线 0.5s，弓/剑 0.4s 等
-			_acquire_timer = _p("acquire_interval", ACQUIRE_INTERVAL)
-			if _target == null:
-				if _cap_ai_stop:
-					entity.ai_stop()
-				finish()
-				return
-
-	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
-	# 旧 is_routed/低士气 finish 自检随溃逃退役——低士气单位保持还击，去留由
-	# ai_controller 的 C6 概率调制裁决，避免逐拍 finish→重 travel 抖动）
-	var health: Node = entity.get_health() if _cap_get_health else null
-	if health != null:
-		# 狂暴时跳过"低血找掩体"（反编译参考实装 E）：背水一战不撤退
-		if not _rage and health.has_method("get_hp_ratio") and health.get_hp_ratio() < LOW_HP_THRESHOLD and _has_cover_nearby():
-			finish()
-			return
-
-	# 犹豫概率钩子（§7.4 第一层；A9 · R3：夜间反应更慢——犹豫时长 × 档案
-	# night_hesitate_mult，RWR day/night reaction_time 分段同构）
-	if _hesitate_timer > 0.0:
-		_hesitate_timer -= delta
+	# 找目标系统推进（裁决#35 米拉奇锁定到死：目标活着原样奉还，死亡/失效/
+	# 守位出界才重选；选举/强制目标/守位守卫全在 target_acquire.gd）。
+	# null = 无目标可打交还决策层
+	_ensure_acq()
+	_target = _acq.advance(delta)
+	if _target == null:
 		if _cap_ai_stop:
 			entity.ai_stop()
+		finish()
 		return
-	_hesitate_check_timer -= delta
-	if _hesitate_check_timer <= 0.0:
-		_hesitate_check_timer = HESITATE_CHECK_INTERVAL
-		if randf() < _p("hesitate_prob", prob_hesitate):
-			var ht: Vector2 = _p_v2("hesitate_time", Vector2(0.3, 0.8))
-			var night_mult: float = _p("night_hesitate_mult", 1.0)
-			if night_mult != 1.0 and _is_night():
-				ht *= night_mult
-			_hesitate_timer = randf_range(ht.x, ht.y)
-			if _cap_ai_stop:
-				entity.ai_stop()
-			return
+
+	# 自身状态检查：HP 过低 -> finish 让 AIController 决策（裁决【删溃逃、立避战】：
+	# 旧 is_routed finish 自检随溃逃退役——被打单位保持还击，去留由
+	# ai_controller 的 C6 概率调制裁决，避免逐拍 finish→重 travel 抖动）
+	# 低血找掩体/低血狂暴自检已删（裁决#31：两者此前已令删——被打单位保持还击）
+	# 犹豫概率钩子已删（裁决#32：两份 dump 均无此机制，RWR 血统——
+	# 随机站停是"接敌不打法"观感来源之一）
 
 	# 攻击 / 接近逻辑
 	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
 	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
 	var dist: float = entity.global_position.distance_to(_target.global_position)
+	# 拉弓瞄准俯仰（SWL Archer.UpdateAim：弓手逐拍把弹道仰角推给表现层；
+	# 非弓/无武器自然归零——风筝/锚定/接近各分支同享这一次推送）
+	if entity.has_method("set_aim_pitch"):
+		entity.set_aim_pitch(
+				weapon.get_aim_pitch(_target) if weapon != null and weapon.has_method("get_aim_pitch") else 0.0)
 	# 召唤护卫（SWL MagikillAi.ShouldCastSummon 直译）：敌人逼近施法距离且冷却
 	# 就绪时召唤脆皮护卫（minidon）挡脸——原版法师的生存方案，替代自创风筝
 	_update_summon(dist, delta)
 	# 姿态举盾聚合（SWL 直译）：推进/接敌/风筝全程生效
 	_update_arrow_threat_block(weapon)
-	# 风筝（兵种档案 kite_range > 0，ArcherAi/MagikillAi 保持距离）：敌人逼近时
-	# 背向撤离不贴脸输出——即使已在射程内也先拉开（远程兵种存活优先）
+	# 挥砍锁足（米拉奇口径 × SWL 可打断窗合取）：出手后挥砍动画没播完就全模
+	# 停止——目标走出射程也不追、新目标也不追，这一剑挥完再说（动画期带着走位
+	# = 「边走边挥砍」滑行感）。移动闸跟动画走；出手闸照常：命中帧已过进可打断
+	# 尾段（can_attack 翻真）时原地提前出下一手（SWL AnimationCancelFraction
+	# 真货，DPS 不掉）。受击硬直/压制在上方早退，优先级更高
+	if _melee_swing_lock:
+		if _clock >= _melee_lock_until or (
+				entity.has_method("is_attack_anim_active")
+				and not entity.is_attack_anim_active()):
+			_melee_swing_lock = false
+		else:
+			# 站桩中可打断窗开了且目标仍在出手门内 → 原地出手（不挪步）
+			if dist <= _melee_gate_dist(weapon) and weapon != null 					and weapon.has_method("can_attack") and weapon.can_attack() 					and not _arrows_wasted(_target, weapon):
+				weapon.perform_attack(_target)
+				_melee_lock_until = _clock + _swing_lock_duration(weapon)
+				if _cap_play_attack:
+					entity.play_attack()
+			if _cap_ai_stop:
+				entity.ai_stop()
+			_face_target()
+			# 站桩间距照常（SWL PushApartTolerance：锁足不当墙，人群仍自然松开）
+			if _p("push_apart", 0.0) > 0.0:
+				_apply_push_apart(_p("push_apart", 0.0), delta)
+			return
+	# 风筝分支（机制保留、数据全关）：SWL 真值——**AI 弓手不风筝**，
+	# ShouldKite 整段门在 IsBeingUserControlledByPro（Pro 玩家操控专属，
+	# 翻译档 §7.1.2）；AI 弓手被贴脸由站位 spot 的 3u 保距线应对（见
+	# _ranged_update）。三档兵种 kite_range 已归零，本分支为死路兜底。
 	var kite_range: float = _p("kite_range", 0.0)
 	if kite_range > 0.0 and dist < kite_range:
 		var away: Vector2 = (entity.global_position - _target.global_position).normalized()
@@ -298,93 +260,143 @@ func update(delta: float) -> void:
 		# 风筝还击（SWL 弓手边撤边射）：前摇/弹道与移动解耦（延迟结算计时独立），
 		# 冷却好就边跑边放——不再被追着跑还不还手（远程弹道解算自带目标预判，
 		# 不做 9s 出手预测门槛——那道门只拦近战空挥）
-		if dist <= attack_range and _burst_gate() and weapon != null and weapon.has_method("can_attack") \
+		if dist <= attack_range and weapon != null and weapon.has_method("can_attack") \
 				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			_face_target()  # 回头面向目标开火（否则背身拉弓）
 			weapon.perform_attack(_target)
-			_register_burst_shot()
 			_aiming = false
-	elif dist <= attack_range:
-		# 在射程内：停止移动并攻击。弓手先进瞄准节奏（SWL ShouldAim）：持瞄随机
-		# 时长再放箭，放箭瞬间重掷（GenerateNextShotRandomness），节奏不再是卡冷却平A
+	elif _is_ranged_weapon(weapon):
+		# 远程二线驻射（SWL 停驻语义）：停驻线/槽位锚定/开火全在此分支
+		_ranged_update(dist, delta, weapon, attack_range)
+	elif dist <= _melee_gate_dist(weapon):
+		# 近战出手门内（SWL CanAttack：0.8×range，矛兵前排有友军遮挡时放宽到
+		# 0.8×二线 130=104 隔排刺击）：站定出手。SWL 出手链 = 冷却好即打，命中帧
+		# 自检射程（SW3 MeleeAttackSystem.HitUpdate→InRangeForHit），出手端无任何
+		# 预判门——近战预判门/连射点射/y 对齐拦射已随裁决#32 删（射程内站桩不打的
+		# 三道闸）。
 		if _cap_ai_stop:
 			entity.ai_stop()
 		_face_target()  # 开火面向目标（走位/漂移后可能侧身）
-		# 9p（SWL ShouldAim/CanAttack 的 y 门槛，档案 y_aim_tolerance）：|Δy| 超容忍时
-		# 先 y 走位保证接近水平持平、距离以水平为主导——否则横轴观感=故意射空。
-		# 9u 修正：连续超容忍超过 y_aim_grace 必放行开火——混战中目标被推挤/换靶后
-		# y 差可能永不收敛，原"超容忍不出手"会退化成永久禁射（抛物线弹道解算本身
-		# 吸收 y 差，放行的观感代价远小于"弓手站桩不放箭"）
-		var aim_tol: float = _p("y_aim_tolerance", 0.0)
-		var dy_align: float = _target.global_position.y - entity.global_position.y
-		var y_misaligned: bool = aim_tol > 0.0 and absf(dy_align) > aim_tol \
-				and _can_adjust_y_position_only(attack_range)
-		if y_misaligned:
-			_y_misalign_time += delta
-		else:
-			_y_misalign_time = 0.0
-		if y_misaligned and _y_misalign_time < _p("y_aim_grace", 1.5):
-			if _cap_ai_move:
-				entity.ai_move(Vector2(0.0, signf(dy_align)), false)
-			_update_aim_rhythm(delta)  # 持瞄节奏照常走，y 对齐即放箭
-			return
-		# 9s：出手前命中帧落点预测（"挥刀必有人挨"不变式的出手端门槛，**仅近战**——
-		# 弓/杖弹道解算自带移动预判不拦）：预测点出了射程就不浪费这次出手，
-		# 交回外层接近逻辑追近后再打
-		if not _is_ranged_weapon(weapon) and not _strike_will_land(_target, attack_range):
-			_strafe_timer -= delta
-			return
-		if _burst_gate() and _update_aim_rhythm(delta) and weapon != null and weapon.has_method("can_attack") \
+		# 持瞄节奏（SWL ArcherAi.isAiming/ShouldAim）：近战无档案直接放行；
+		# 脱靶容忍拦"箭已够杀还射"（远程专属门）
+		var aim_ready: bool = _update_aim_rhythm(delta)
+		if aim_ready and weapon != null and weapon.has_method("can_attack") \
 				and weapon.can_attack() and not _arrows_wasted(_target, weapon):
 			weapon.perform_attack(_target)
-			_register_burst_shot()
 			_aiming = false
+			# 近战挥砍锁足（米拉奇口径）：本剑挥完前不追不挪
+			_melee_swing_lock = true
+			_melee_lock_until = _clock + _swing_lock_duration(weapon)
 			# 攻击后举盾（cooldownAfterAttackForBlock）：矛兵攻击完一拍盾防反打
 			if _p("block_after_attack", 0.0) > 0.0:
-				_post_block_until = Time.get_ticks_msec() / 1000.0 + _p("block_after_attack", 0.0)
+				_post_block_until = _clock + _p("block_after_attack", 0.0)
 			# 攻击命中帧触发攻击动画（反编译参考实装 C）：播完由 rig.animation_finished 回切
 			if _cap_play_attack:
 				entity.play_attack()
-		# 战斗微移步（RWR"不安分"感）：站桩输出时随机小步横移，活着的感觉
-		_strafe_timer -= delta
-		if _strafe_timer <= 0.0:
-			_strafe_timer = randf_range(1.5, 3.5)
-			if randf() < 0.35:
-				_strafe_dir = 1.0 if randf() < 0.5 else -1.0
-				_strafe_hold = 0.30
-		if _strafe_hold > 0.0:
-			_strafe_hold -= delta
-			if _cap_ai_move:
-				entity.ai_move(Vector2(0.0, _strafe_dir), false)
 		# 射手容错间距（SWL PushApartTolerance）：站桩输出时与友军保持间距
 		if _p("push_apart", 0.0) > 0.0:
 			_apply_push_apart(_p("push_apart", 0.0), delta)
 	else:
+		# 近战接敌推进 = 追最近敌（裁决#32 创始人口径）：直奔目标攻击槽位，远跑近走
+		#（DetermineXRunPower）。围攻名额外圈等位/包抄侧向/冲锋掷骰已删——
+		# SWL 无此三件，人堆靠分离椭圆自然展开（SW3 同款：ComputeAttackerZStagger
+		# 只做纵深错位不做名队排队）。槽位锚定仅产线战线在役时生效（观察场无战线）。
+		if _approach_via_slot():
+			return
 		var to_target: Vector2 = _target.global_position - entity.global_position
-		# IsTargetReallyClose（SWL 直译）：贴身目标绕开攻击槽位外圈等位，直接压上
-		var really_close: bool = _is_target_really_close(dist, attack_range)
-		# 攻击槽位（SWL GetTargetAttackSpot/NumberOfUnitsThatCanHit）：目标贴身名额
-		# 已满时在**外圈等位**（射程 1.25 倍处徘徊），不硬挤进人堆——"后排无所事事
-		# 硬挤"的解法；等位期间远程照常输出，近战等前排空位
-		var attack_radius: float = maxf(attack_range * 0.85, 24.0)
-		if not really_close and _battle != null and _battle.has_method("get_attacker_count") \
-				and _battle.get_attacker_count(_target) >= 3:
-			attack_radius = maxf(attack_range * 1.25, 100.0)
+		# IsTargetReallyClose（SWL 直译，翻译档 §7.1.2）：|Δx| < 2.5u（130px）——
+		# 贴身目标绕开攻击槽位外圈，直接压上
+		var really_close: bool = _is_target_really_close()
+		# 攻击槽位（SWL GetTargetAttackSpot）：停在 0.7×射程的攻击位
+		#（AttackFromRange = 0.7 × attackRange 全局系数直译）
+		var attack_radius: float = maxf(attack_range * ATTACK_SLOT_FRAC, 24.0)
 		var desired_pos: Vector2 = _target.global_position if really_close \
 				else _target.global_position + to_target.normalized() * attack_radius
 		var dir: Vector2 = (desired_pos - entity.global_position).normalized()
 		# y 轴纵深走位（SWL y 对齐 6 函数直译）：接敌途中朝目标 y（带个性漂移带）对齐，
 		# 人群自然铺开不挤一条横线
 		dir = _apply_y_walk(dir, delta)
-		# 9i+ 包抄走位（P6 批次 7c，design §2.1.3.6 #5，档案开关默认关 = 零回归）：
-		# 侧翼单位（相对本方存活质心 y 偏移超阈值）接近方向叠加侧向分量，形成绕击取向
-		dir = _apply_flank(dir)
-		# DetermineXRunPower（SWL 直译）：远跑近走；近身爆发交给冲锋掷骰
+		# DetermineXRunPower（SWL 直译）：远跑近走
 		var run: bool = _determine_x_run_power(desired_pos, attack_range) >= 1.0
-		if not run and randf() < (RAGE_PUSH_PROB if _rage else _p("aggressive_push_prob", prob_aggressive_push)):
-			run = true
 		if _cap_ai_move:
 			entity.ai_move(dir, run)
+
+
+# ─────────────────────────────── 远程站位与开火（SWL 真值）────────────────────────────────
+
+## 远程站位与开火（SWL ArcherAi.GetTargetAttackSpot/CanAttack 真值直译，翻译档
+## §7.1.2）：站位只相对**目标**——射程外走向距目标 0.9×range 处（停步线），
+## 射程内保持 ≥3u（156px）站桩射（被贴脸自然退开到 3u，非风筝）；开火门 =
+## 0.8u(42px) < |Δx| < 全射程（贴脸不射——近战 attackRange 1.5 语义的弓手版），
+## y 不参与任何判定。AI 弓手**不风筝**（ShouldKite 是 Pro 玩家操控专属）。
+## 槽位锚定优先（产线战线班槽齐射），无锚回落本真值站位。
+func _ranged_update(dist: float, delta: float, weapon: Node, attack_range: float) -> void:
+	# 槽位锚定优先（产线：接战后按班槽原地成排齐射 / 射程外走槽不压敌）
+	if _hold_formation_slot(dist) or _approach_via_slot():
+		_ranged_fire(delta, weapon, attack_range)
+		if _p("push_apart", 0.0) > 0.0:
+			_apply_push_apart(_p("push_apart", 0.0), delta)
+		return
+	var dx: float = absf(_target.global_position.x - entity.global_position.x)
+	var moved: bool = false
+	if dx >= attack_range:
+		# 射程外：奔向距目标 0.9×range 的停步线（GetTargetAttackSpot 射程外分支
+		# DAT_016c55a4=0.9 直读）
+		var to_t: float = signf(_target.global_position.x - entity.global_position.x)
+		if to_t == 0.0:
+			to_t = 1.0
+		var hold_x: float = _target.global_position.x - to_t * attack_range * ARCHER_RANGE_FRAC
+		var step: float = hold_x - entity.global_position.x
+		if absf(step) > RANGED_LINE_DEADZONE:
+			var dir: Vector2 = _apply_y_walk(Vector2(signf(step), 0.0), delta)
+			if _cap_ai_move:
+				entity.ai_move(dir, absf(step) > SLOT_RUN_DIST)
+			moved = true
+	elif dx < ARCHER_HOLD_DIST:
+		# 射程内但贴太近（<3u）：退开到保距线（spot 的 target±3u 语义，非风筝）
+		var away: float = signf(entity.global_position.x - _target.global_position.x)
+		if away == 0.0:
+			away = 1.0
+		if _cap_ai_move:
+			entity.ai_move(Vector2(away, 0.0), false)
+		moved = true
+	if not moved:
+		# 保距带内（3u ≤ dx < 射程）：站桩成排射（SWL 弓手常态）
+		if _cap_ai_stop:
+			entity.ai_stop()
+	_ranged_fire(delta, weapon, attack_range)
+	if _p("push_apart", 0.0) > 0.0:
+		_apply_push_apart(_p("push_apart", 0.0), delta)
+
+
+## 远程开火门（ArcherAi.CanAttack 真值直译）：**|Δx|** < 全射程 且 |Δx| > 0.8u
+## （42px，DAT_015c1cb8 直读——贴脸不射）；持瞄节奏/脱靶容忍同构，无挥砍锁足。
+func _ranged_fire(delta: float, weapon: Node, attack_range: float) -> void:
+	var dx: float = absf(_target.global_position.x - entity.global_position.x)
+	if dx > attack_range or dx <= ARCHER_MIN_FIRE_DX or weapon == null \
+			or not weapon.has_method("can_attack") or not weapon.can_attack() \
+			or _arrows_wasted(_target, weapon):
+		return
+	if not _update_aim_rhythm(delta):
+		return
+	_face_target()
+	weapon.perform_attack(_target)
+	_aiming = false
+
+
+## 己方近战体后缘参照（二线驻射 v2）已随 SWL 真值站位退役：弓手站位只相对
+## 目标（射程外 0.9×range 停步线），无自创参照体（翻译档 §7.1.2）。
+
+
+## 无线可守时的常态接近（压向目标攻击环，y 对齐照旧）——近战 approach 的
+## 远程精简版（远程免 IsTargetReallyClose 压上：压上 = 脱离二线钻人堆）
+func _approach_target(delta: float, attack_range: float) -> void:
+	var to_target: Vector2 = _target.global_position - entity.global_position
+	var attack_radius: float = maxf(attack_range * ATTACK_SLOT_FRAC, 24.0)
+	var desired_pos: Vector2 = _target.global_position + to_target.normalized() * attack_radius
+	var dir: Vector2 = _apply_y_walk((desired_pos - entity.global_position).normalized(), delta)
+	if _cap_ai_move:
+		entity.ai_move(dir, _determine_x_run_power(desired_pos, attack_range) >= 1.0)
 
 
 func exit(next: String) -> void:
@@ -394,59 +406,92 @@ func exit(next: String) -> void:
 		var weapon: Node = entity.get_weapon()
 		if weapon != null and weapon.has_method("set_blocking"):
 			weapon.set_blocking(false)
+	# 清战斗朝向锁（否则单位永久朝向锁死——锁只在本行为活跃期有效）
+	if entity != null and is_instance_valid(entity) and entity.has_method("set_combat_face_lock"):
+		entity.set_combat_face_lock(false)
+	# 清拉弓瞄准俯仰（表现态归零，防切行为后残留仰角）
+	if entity != null and is_instance_valid(entity) and entity.has_method("set_aim_pitch"):
+		entity.set_aim_pitch(0.0)
 	super.exit(next)
 
 
 # ─────────────────────────────── 兵种机制（legacy 直译）────────────────────────────────
 
-## RWR 点射停顿（ai_burst_wait_time[_variance] 语义适配）：连射散布过热时
-## 下一箭前插入长停顿（持瞄 ×1.8~3.2 随机倍）等散布恢复——"会点射不无脑扫射"
-const BURST_HEAT_THRESHOLD := 0.8
-const BURST_WAIT_MULT := Vector2(1.8, 3.2)
+# ─────────────────────── 槽位锚定驻防（批5 远程部分）─────────────────────────
 
+## 槽位锚定死区（px）：距槽位 ≤ 此值站定不追（SWL FormationPositionIsStable 防抖同源）
+const SLOT_HOLD_DEADZONE: float = 48.0
+## 距槽位超此值转奔跑归位（方阵重排/危险重冻结后的整队追赶）
+const SLOT_RUN_DIST: float = 240.0
 
-## 点射门禁（A9 · R3，RWR burst 族直译）：档案 burst_shots = 连射点数，
-## 达数后强制插 burst_wait 区间随机停顿再射——"点射-停顿-点射"的节奏模拟。
-## 0 = 关（零回归；停顿期间走位/持瞄照常，只禁出手）。
-func _burst_gate() -> bool:
-	var shots: int = int(_p("burst_shots", 0.0))
-	if shots <= 0:
+## 槽位锚定驻防：射程内远程单位的站位目标 = 编队槽位（formation_system 的班
+## 战斗锚方阵，get_unit_combat_slot）。距槽位超死区且不在近身危险带 → 走向槽位
+## （边走边射——本分支后续开火逻辑照常执行，战斗朝向锁保证倒退归位不翻面）；
+## 死区内站定。锚定期间 y 对齐游走/随机微移步由调用方跳过（槽位是 y 权威）。
+## 返回是否处于锚定态（无班/无锚/无编队系统 = false，回落原站桩语义零回归）。
+func _hold_formation_slot(dist: float) -> bool:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_formation_system"):
+		return false
+	var fs: Node = entity.get_formation_system()
+	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_combat_slot"):
+		return false
+	var slot: Vector2 = fs.get_unit_combat_slot(entity)
+	if is_inf(slot.x):
+		return false
+	# 保距带（SWL 真值口径，翻译档 §7.1.2）：敌进 3u（ARCHER_HOLD_DIST）内不
+	# 迎敌回槽——槽位在敌远侧（后撤归位）才走（危险重冻结会把锚整体后移，
+	# 后撤方向的槽位永远合法 → 方阵整体有序后撤）；保距带内站定还击。
+	#（旧 kite×1.5 危险带随风筝退役——AI 弓手不风筝，保距线就是 spot 的 3u）
+	if dist < ARCHER_HOLD_DIST:
+		var slot_farther: bool = _target.global_position.distance_to(slot) > dist + 20.0
+		if not slot_farther:
+			if _cap_ai_stop:
+				entity.ai_stop()
+			return true
+	var d_slot: float = entity.global_position.distance_to(slot)
+	if d_slot <= SLOT_HOLD_DEADZONE:
+		if _cap_ai_stop:
+			entity.ai_stop()
 		return true
-	return Time.get_ticks_msec() / 1000.0 >= _burst_wait_until
+	var dir: Vector2 = (slot - entity.global_position).normalized()
+	if _cap_ai_move:
+		entity.ai_move(dir, d_slot > SLOT_RUN_DIST)
+	return true
 
 
-## 出手成功登记（R3）：连射计数 +1，达 burst_shots 重掷停顿窗口。
-func _register_burst_shot() -> void:
-	var shots: int = int(_p("burst_shots", 0.0))
-	if shots <= 0:
-		return
-	_burst_count += 1
-	if _burst_count >= shots:
-		_burst_count = 0
-		var wait: Vector2 = _p_v2("burst_wait", Vector2(1.2, 1.8))
-		_burst_wait_until = Time.get_ticks_msec() / 1000.0 + randf_range(wait.x, wait.y)
-
-
-## 夜间判定（R3 昼/夜反应分段消费）：环境光照亮度 < 0.55——与 fx 视觉层
-## （fireflies/SkyStars 的 day_factor）同源同分界（EnvironmentSystem
-## get_current_light_color）。查询不可用（测试桩/未装配）→ 白天（保守零回归）。
-func _is_night() -> bool:
-	if entity == null or not is_instance_valid(entity):
+## 锚定期接敌改道（批5，approach 分支消费）：有槽位时射程外成员走向自身槽位
+## （远处奔跑归位）。到槽死区内站定待敌——不追敌不空走，SWL 接战常态：站在
+## 方阵里等敌人进射程。远程查战线槽或班战斗锚（get_unit_combat_slot 战线优先），
+## 近战只查战线槽（get_unit_line_slot）；无槽位返回 false 走原接敌。
+func _approach_via_slot() -> bool:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_formation_system"):
 		return false
-	var tree: SceneTree = entity.get_tree()
-	if tree == null:
+	var fs: Node = entity.get_formation_system()
+	if fs == null or not is_instance_valid(fs):
 		return false
-	var env: Node = tree.root.get_node_or_null("GameRoot/EnvironmentSystem")
-	if env == null or not env.has_method("get_current_light_color"):
+	var slot: Vector2 = Vector2.INF
+	if _is_ranged_weapon(entity.get_weapon() if _cap_get_weapon else null) \
+			and fs.has_method("get_unit_combat_slot"):
+		slot = fs.get_unit_combat_slot(entity)
+	elif fs.has_method("get_unit_line_slot"):
+		slot = fs.get_unit_line_slot(entity)
+	if is_inf(slot.x):
 		return false
-	return env.get_current_light_color().get_luminance() < 0.55
+	var d_slot: float = entity.global_position.distance_to(slot)
+	if d_slot <= SLOT_HOLD_DEADZONE:
+		if _cap_ai_stop:
+			entity.ai_stop()
+		return true
+	if _cap_ai_move:
+		entity.ai_move((slot - entity.global_position).normalized(), d_slot > SLOT_RUN_DIST)
+	return true
 
 
 ## 拉弓瞄准节奏（SWL ArcherAi.ShouldAim/isAiming/GenerateNextShotRandomness 直译）。
 ## 档案 aim_hold 有值时：进入射程先"持瞄"高斯随机时长再放箭。
-## 9u 对拍根因修正：换目标只重绑准星、**不重置持瞄进度**——排长共享目标重选节拍
-## （0.5s）短于持瞄均值（BOW 0.25~0.9s），原"换靶即重掷"让持瞄永远差一步到点
-## = 弓手站桩不放箭。重置只发生在行为重入（enter）与出手后（_aiming=false）。
+## 对拍根因修正：换目标只重绑准星、**不重置持瞄进度**——目标重选节拍短于
+## 持瞄均值时，原"换靶即重掷"让持瞄永远差一步到点 = 弓手站桩不放箭。
+## 重置只发生在行为重入（enter）与出手后（_aiming=false）。
 ## 返回 true = 持瞄结束可放箭（无瞄准档案的兵种直接放行）。
 func _update_aim_rhythm(delta: float) -> bool:
 	var hold: Vector2 = _profile.get("aim_hold", Vector2.ZERO)
@@ -461,10 +506,6 @@ func _update_aim_rhythm(delta: float) -> bool:
 		# PRO 更果断（默认中位 ×1.0 零回归）
 		_aim_timer *= float(ScriptBehaviorProfiles.SKILL_AIM_HOLD_MULT.get(
 				int(_profile.get("user_control_skill", 1)), 1.0))
-		var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
-		if weapon != null and weapon.has_method("get_sustained_fire_heat") \
-				and weapon.get_sustained_fire_heat() >= BURST_HEAT_THRESHOLD:
-			_aim_timer *= randf_range(BURST_WAIT_MULT.x, BURST_WAIT_MULT.y)
 	_aim_timer -= delta
 	return _aim_timer <= 0.0
 
@@ -503,11 +544,12 @@ func _update_arrow_threat_block(weapon: Node) -> void:
 		return
 	var want: bool = false
 	if bool(_profile.get("arrow_threat_block", false)):
-		var now: float = Time.get_ticks_msec() / 1000.0
+		# 威胁账本时基 = 物理帧钟（weapon_ranged 写入侧同源，暂停冻结、回放确定）
+		var now: float = _frame_now()
 		var last: float = float(entity.get("arrow_threat_time")) if "arrow_threat_time" in entity else -999.0
 		want = now - last < _p("arrow_block_hold", 0.8)
 	if not want and _p("block_after_attack", 0.0) > 0.0:
-		want = Time.get_ticks_msec() / 1000.0 < _post_block_until
+		want = _clock < _post_block_until
 	weapon.set_blocking(want)
 
 
@@ -530,44 +572,6 @@ func _apply_y_walk(dir: Vector2, delta: float) -> Vector2:
 	if absf(y_comp) <= 0.0:
 		return dir
 	return (dir + Vector2(0.0, y_comp)).normalized()
-
-
-## 9i+ 包抄走位（P6 批次 7c，design §2.1.3.6 #5，档案开关默认关 = 零回归）。
-## 侧翼单位（相对本方存活质心 y 偏移绝对值 ≥ flank_y_offset）接近方向叠加侧向分量，
-## 符号由侧翼侧决定，形成绕击取向；开关关或非侧翼 → 原方向不变。
-func _apply_flank(dir: Vector2) -> Vector2:
-	if dir == Vector2.ZERO or not bool(_p_b("flank_enabled", false)):
-		return dir
-	if _battle == null or not is_instance_valid(_battle) or not _battle.has_method("get_allies_of"):
-		return dir
-	if not entity.has_method("get_faction"):
-		return dir
-	# 本方存活质心 y
-	var sum_y: float = 0.0
-	var n: int = 0
-	for u in _battle.get_allies_of(entity.get_faction()):
-		if u == null or not is_instance_valid(u):
-			continue
-		if u.has_method("is_dead") and u.is_dead():
-			continue
-		sum_y += u.global_position.y
-		n += 1
-	if n <= 1:
-		return dir
-	var mid_y: float = sum_y / float(n)
-	var dy: float = entity.global_position.y - mid_y
-	var threshold: float = float(_p("flank_y_offset", 120.0))
-	if absf(dy) < threshold:
-		return dir
-	# 侧向分量符号：单位偏上 → 向下绕（+y），偏下 → 向上绕（−y），形成包抄
-	var side_sign: float = signf(dy)
-	var strength: float = float(_p("flank_side_strength", 0.40))
-	return (dir + Vector2(0.0, side_sign * strength)).normalized()
-
-
-## 档案布尔字段读取（_p 只读 float，布尔单独入口）
-func _p_b(key: String, fallback: bool) -> bool:
-	return bool(_profile.get(key, fallback))
 
 
 ## ShouldAdjustYPositionTowardsTarget（dump L181）：目标 y 未对齐（超死区）且
@@ -600,13 +604,8 @@ func _can_walk_towards_target() -> bool:
 			and not (_target.has_method("is_dead") and _target.is_dead())
 
 
-## CanAdjustYPositionOnly（dump L175）：x 已在攻击半径内但 y 未对齐 → 纯 y 走位
-## （水平已到位不再横移，只补纵深）。9p 射程内分支消费者。
-func _can_adjust_y_position_only(attack_radius: float) -> bool:
-	if not _can_walk_towards_target() or entity == null:
-		return false
-	var dx: float = absf(_target.global_position.x - entity.global_position.x)
-	return dx <= attack_radius
+## CanAdjustYPositionOnly（dump L175）已随裁决#32 失去消费者（射程内 y 对齐
+## 拦射门删除——弹道解算吸收 y 差，y 对齐只在接敌途中生效）
 
 
 ## DetermineYComponentWhenRunningToTarget（dump L157）：跑向目标时的 y 分量
@@ -616,8 +615,8 @@ func _determine_y_component(delta: float) -> float:
 	_drift_timer -= delta
 	if _drift_timer <= 0.0:
 		var iv: Vector2 = _profile.get("y_drift_interval", Vector2(0.5, 1.2))
-		_drift_timer = randf_range(iv.x, iv.y)
-		_drift_offset = randf_range(-_p("y_drift_band", 0.0), _p("y_drift_band", 0.0))
+		_drift_timer = _roll_range(iv.x, iv.y)
+		_drift_offset = _roll_range(-_p("y_drift_band", 0.0), _p("y_drift_band", 0.0))
 	var dy: float = _adjust_goal_y() - entity.global_position.y
 	if absf(dy) < 10.0:
 		return 0.0
@@ -635,10 +634,10 @@ func _adjust_goal_y() -> float:
 	return ty
 
 
-## Box-Muller 高斯采样（SWL NextGaussian 对齐）
+## Box-Muller 高斯采样（SWL NextGaussian 对齐；单位种子 RNG 驱动）
 func _gauss(mean: float, sigma: float) -> float:
-	var u1: float = maxf(randf(), 0.0001)
-	return mean + sqrt(-2.0 * log(u1)) * cos(TAU * randf()) * sigma
+	var u1: float = maxf(_roll(), 0.0001)
+	return mean + sqrt(-2.0 * log(u1)) * cos(TAU * _roll()) * sigma
 
 
 # ─────────────────────────────── 召唤护卫（SWL MagikillAi 直译）────────────────────────────────
@@ -785,27 +784,10 @@ func _spawn_minidons(count: int) -> Array:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 避战还击窗口查询（duck ai_controller.is_counter_attack_window，先例
-## behavior_retreat._set_disengaging 的 duck 姿态；组件缺失/查询不可用返回
-## false = 既有压制停滞语义零回归）
-func _counter_window_open() -> bool:
-	if entity == null or not is_instance_valid(entity) or not entity.has_method("get_ai_controller"):
-		return false
-	var ai: Node = entity.get_ai_controller()
-	if ai == null or not is_instance_valid(ai) or not ai.has_method("is_counter_attack_window"):
-		return false
-	return bool(ai.is_counter_attack_window())
-
 
 ## 读取兵种档案参数（缺省回落 fallback——对应原硬编码常量）。
 func _p(key: String, fallback: float) -> float:
 	return float(_profile.get(key, fallback))
-
-
-## 读取兵种档案 Vector2 参数（区间键：hesitate_time/burst_wait 等）。
-func _p_v2(key: String, fallback: Vector2) -> Vector2:
-	var v: Variant = _profile.get(key, fallback)
-	return v if v is Vector2 else fallback
 
 
 ## 开火前面向目标（横向翻转）——统一 Face 入口（SWL Ai.Face 直译，
@@ -815,10 +797,52 @@ func _face_target() -> void:
 	face_target(_target)
 
 
-## IsTargetReallyClose（SWL Ai 直译）：目标贴身（≈半射程内）——绕开攻击槽位
-## 外圈等位直接压上。
-func _is_target_really_close(dist: float, attack_range: float) -> bool:
-	return dist <= maxf(attack_range * REALLY_CLOSE_MULT, 40.0)
+## IsTargetReallyClose（SWL 直译，翻译档 §7.1.2）：目标贴身 = **|Δx| < 2.5u**
+## （130px 真值；非"半射程"近似）——绕开攻击槽位外圈等位直接压上。
+func _is_target_really_close() -> bool:
+	return absf(_target.global_position.x - entity.global_position.x) <= REALLY_CLOSE_DX
+
+
+## 近战出手门（SWL Ai.CanAttack 直译）：默认 0.8 × attackRange（目标静止档；
+## 追击动目标 SWL 收 0.5——本仓锁足后目标动时走槽位接近，不复刻该档）。
+## 矛兵（有二线射程）且**前排有友军遮挡**时放宽到 0.8 × attackRangeSecondLine
+## = 104px 隔排刺击——SWL colInFormation==1 用 2.5u 的编队列位语义在无战线
+## 场景下的等价物：自己与目标 x 之间（同纵深带 |Δy| < 48）有存活友军。
+func _melee_gate_dist(weapon: Node) -> float:
+	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
+	var gate: float = attack_range * ATTACK_GATE_FRAC
+	var second_line: float = float(weapon.attack_range_second_line) if weapon != null and "attack_range_second_line" in weapon else 0.0
+	if second_line > 0.0 and _ally_blocks_front():
+		gate = maxf(gate, second_line * ATTACK_GATE_FRAC)
+	return gate
+
+
+## 前排遮挡判定（二线刺击前提）：任一同阵营存活友军落在我与目标的 x 区间内、
+## 且纵深带相近（|Δy| < 48 = 固体箱深，同排语义）。
+func _ally_blocks_front() -> bool:
+	if not _cap_get_faction or not _cap_get_battle:
+		return false
+	var bi: Node = entity.get_battle_instance()
+	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_allies_of"):
+		return false
+	var sx: float = entity.global_position.x
+	var sy: float = entity.global_position.y
+	var tx: float = _target.global_position.x
+	var toward: float = signf(tx - sx)
+	if toward == 0.0:
+		return false
+	for a in bi.get_allies_of(entity.get_faction()):
+		if a == null or not is_instance_valid(a) or a == entity:
+			continue
+		if a.has_method("is_dead") and a.is_dead():
+			continue
+		var ax: float = (a as Node2D).global_position.x
+		# 友军在我方与目标之间（同向且不越过目标）
+		if signf(ax - sx) != toward or absf(ax - tx) < 1.0:
+			continue
+		if absf((a as Node2D).global_position.y - sy) < 48.0:
+			return true
+	return false
 
 
 ## DetermineXRunPower（SWL Ai 直译）：水平推进强度 0~1——远处全速逼近（run），
@@ -828,132 +852,62 @@ func _determine_x_run_power(desired_pos: Vector2, attack_range: float) -> float:
 	return clampf(dx / maxf(attack_range * 1.5, 1.0), 0.0, 1.0)
 
 
-## 队伍级共享攻击目标（反编译参考实装 D-B）：本兵所属小队的排长决策目标。
-## 无 formation / 无小队 / 无共享目标时返回 null（回退各自寻敌）。
-func _get_squad_target() -> Node:
-	if entity == null or not entity.has_method("get_formation_system"):
-		return null
-	var fs: Node = entity.get_formation_system()
-	if fs == null or not is_instance_valid(fs) or not fs.has_method("get_unit_squad"):
-		return null
-	var squad_id: String = fs.get_unit_squad(entity)
-	if squad_id.is_empty() or not fs.has_method("get_squad_target"):
-		return null
-	return fs.get_squad_target(squad_id)
-
-
-## 集火目标接受滞回（9u/观察场"疲于奔命追逐"修复）：当前目标无效（死亡/失效/
-## 超追击范围）→ 立即接受排长目标（集火语义保持）；当前目标还活着 → 仅当集火
-## 目标显著更近（距离 < 当前目标距离 × target_switch_ratio）才换——排长重选节拍
-## 与队员扫视节拍同量级，无条件跟随 = 全队追着排长的"最近敌"来回横跳。
-## target_switch_ratio <= 0 = 关闭滞回（回旧"始终换"语义）。
-func _should_accept_squad_target(candidate: Node) -> bool:
-	if candidate == null or not is_instance_valid(candidate):
-		return false
-	if _target == null or not is_instance_valid(_target):
-		return true
-	if _target.has_method("is_dead") and _target.is_dead():
-		return true
-	if _is_beyond_leash():
-		return true
-	var ratio: float = _p("target_switch_ratio", 0.6)
-	if ratio <= 0.0:
-		return true
-	return entity.global_position.distance_to(candidate.global_position) \
-			< entity.global_position.distance_to(_target.global_position) * ratio
-
-
 ## 是否远程武器（弓/杖——弹道延迟结算且解算自带移动目标预判）。
 func _is_ranged_weapon(weapon: Node) -> bool:
 	var wt: int = int(weapon.weapon_type) if weapon != null and "weapon_type" in weapon else 0
 	return wt == ScriptBehaviorProfiles.BOW or wt == ScriptBehaviorProfiles.STAFF
+## 近战出手预判门（9s _strike_will_land/_hit_frame_seconds）已随裁决#32 删：
+## SWL/SW3 出手只有冷却门，命中帧自检射程（weapon_mount._do_strike 的
+## 结算帧检查即 SW3 HitUpdate.InRangeForHit 等价物），出手不做移动预判——
+## 预判门在追击混战里退化成"目标在动就永不出手"= 射程内站桩不打的主闸
 
 
-## 9s 出手预测：按命中帧时长外推目标位置，预测点仍在射程内才值得出手。
-## 背景（缺陷表 9s）：结算帧二次确认（weapon_mount._do_strike 的 1.25×射程检查）
-## 只拦"出手后目标跑掉"——出手瞬间就能预见打不中的挥砍照样进冷却全款浪费，
-## 近战由此陷入"追-挥空-再追"的疲于奔命循环。预测打不中就不出手（交回接近逻辑），
-## 空挥只剩"出手后目标变向"的结算帧兜底（收招帧语义，目标刚死同此）。
-func _strike_will_land(target: Node, attack_range: float) -> bool:
-	if target == null or not is_instance_valid(target):
-		return false
-	if target.has_method("is_dead") and target.is_dead():
-		return false
-	var t_hit: float = _hit_frame_seconds()
-	var vel: Vector2 = (target as CharacterBody2D).velocity if target is CharacterBody2D else Vector2.ZERO
-	var predicted: Vector2 = (target as Node2D).global_position + vel * t_hit
-	return entity.global_position.distance_to(predicted) <= attack_range
+## 挥砍锁时长 = 武器冷却 × 1.5（动画时长的上界近似；冷却读不到回退 1.2s）。
+## 常规解锁路径是动画播完（is_attack_anim_active 翻假），本时限只是卡死保险
+func _swing_lock_duration(weapon: Node) -> float:
+	if weapon != null and "cooldown" in weapon:
+		return float(weapon.cooldown) * 1.5
+	return 1.2
 
 
-## 命中帧时长（s）：镜像 weapon_mount._resolve_hit_seconds 的解析序（Hit 事件真值 →
-## 动画全长 × 0.45 兜底比例 → 0）——0 = 无动画计时（billboard 图/sim 即时结算），
-## 预测窗随环境自适应：观察场（无 rig）门槛自然退化为不拦截，带骨架的地图
-## （village 等真命中帧延迟）才启用预测。跨环境共用一档，无待校准自由数值。
-func _hit_frame_seconds() -> float:
-	if entity == null or not is_instance_valid(entity) or not "rig" in entity:
-		return 0.0
-	var rig: Node = entity.get("rig")
-	if rig == null:
-		return 0.0
-	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
-	var wt: int = int(weapon.weapon_type) if weapon != null and "weapon_type" in weapon else 0
-	var t: float = -1.0
-	if rig.has_method("get_anim_event_time"):
-		t = rig.get_anim_event_time(ScriptAnims.anim_for_weapon(wt), "Hit")
-	if t >= 0.0:
-		return t
-	if rig.has_method("get_anim_length"):
-		var anim_len: float = rig.get_anim_length(ScriptAnims.anim_for_weapon(wt))
-		if anim_len > 0.0:
-			return anim_len * 0.45
-	return 0.0
-
-
-## 追击范围检查（行业最佳实践）：当前目标是否已超出攻击范围 × 追击倍数（兵种档案 leash_mult）。
-## 超范围视为"追丢了"，触发重新选目标（避免追杀单个敌人到天涯海角）。
-func _is_beyond_leash() -> bool:
-	return _target_leashed(_target)
-
-
-## 追击范围检查（任意目标版，_refresh_forced_target 消费）。
-func _target_leashed(t: Node) -> bool:
-	if t == null or not is_instance_valid(t) or entity == null:
-		return false
-	var weapon: Node = entity.get_weapon() if _cap_get_weapon else null
-	var attack_range: float = weapon.attack_range if weapon != null and "attack_range" in weapon else 100.0
-	return entity.global_position.distance_to(t.global_position) > attack_range * _p("leash_mult", LEASH_MULT)
-
-
-## 强制目标（打通态）有效性维护：死亡/失效/超追击范围 → 清除并返回 false；
-## 有效 → 锁定为当前目标并返回 true。
-func _refresh_forced_target() -> bool:
-	if _forced_target == null:
-		return false
-	var valid: bool = is_instance_valid(_forced_target) \
-			and not (_forced_target.has_method("is_dead") and _forced_target.is_dead())
-	if valid and _target_leashed(_forced_target):
-		valid = false
-	if not valid:
-		_forced_target = null
-		return false
-	_target = _forced_target
-	return true
-
-## 检查附近是否有掩体（用于"重伤找掩体"决策）
-func _has_cover_nearby() -> bool:
-	if _battle == null or not _battle.has_method("get_cover"):
-		return false
-	var cover = _battle.get_cover()
-	if cover == null or not cover.has_method("has_covers") or not cover.has_covers():
-		return false
-	if cover.has_method("is_in_cover") and cover.is_in_cover(entity.global_position):
-		return true
-	if cover.has_method("find_nearest_cover"):
-		var nearest: Vector2 = cover.find_nearest_cover(entity.global_position)
-		return entity.global_position.distance_to(nearest) < COVER_NEARBY_RANGE
-	return false
-
-
-## 获取当前目标（供测试/调试）
+## 获取当前目标（供测试/调试；目标状态权威在 _acq）
 func get_target() -> Node:
-	return _target
+	return _acq.get_target() if _acq != null else _target
+
+
+# ─────────────────────────────── 时钟与命运骰 ────────────────────────────────
+
+## 找目标系统装配（enter 显式 + update 懒兜底；幂等——重入重绑宿主引用）
+func _ensure_acq() -> void:
+	if _acq == null:
+		_acq = ScriptTargetAcquire.new()
+	_acq.setup(entity, _battle, _profile)
+	# 班级集火接线已删（裁决#31：排长不指定具体目标——个体各自最近敌）
+
+
+## 物理帧钟（s）：Engine.get_physics_frames / ticks_per_second——跨模块共享账本
+## （arrow_threat_time 的写入侧 weapon_ranged / 消费侧 team_ai_snapshot、
+## squad_phase_plan）的统一时基：暂停冻结、回放确定。与行为内 _clock 并存
+## （_clock = 本行为视角的累积秒，帧钟 = 全局物理时刻，两者速率同源不同零点）
+func _frame_now() -> float:
+	return float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second)
+
+
+## 命运骰掷点（单位种子 RNG；首掷按实体实例 id 派生种子 = 每单位不同序列，
+## 对齐 ai_controller._resolve_jitter_seed 惯例；测试重掷 _rng.seed 可复现）
+func _roll() -> float:
+	_seed_rng_once()
+	return _rng.randf()
+
+
+func _roll_range(from: float, to: float) -> float:
+	_seed_rng_once()
+	return _rng.randf_range(from, to)
+
+
+func _seed_rng_once() -> void:
+	if _rng_seeded:
+		return
+	_rng_seeded = true
+	_rng.seed = int(entity.get_instance_id()) \
+			if entity != null and is_instance_valid(entity) else 20261006

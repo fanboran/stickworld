@@ -64,8 +64,6 @@ var _minimap_rebaking := false
 var _minimap_bake_size := Vector2i.ZERO
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
-## 上次广播描边补偿的世界 zoom（变化才广播）
-var _last_outline_zoom := -1.0
 
 ## resource_gen 算法对接（野外资源分布）：算法只认"硬化地面不长资源"，
 ## 这里把 ±墙线内算硬化（城内无资源点），墙外算野外——林区梯度（近墙净空
@@ -100,20 +98,20 @@ var depth_y_max: float = 970.5
 const DEPTH_SCALE_MIN := 0.92
 const DEPTH_SCALE_MAX := 1.10
 
-## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_sprite_3d 尺寸
+## billboard 视觉身高（canvas px，悬浮框/选中框锚定用）：char_rig_3d 尺寸
 ## 契约——rig 原生 ~274px × RIG_SCALE 0.475 = 130 SV px（§0.3 比例锚 130px=
 ## 1.70m）× SIZE_K 1.2（2026-09-14 偏小反馈的占位放大，纹理随 quad 同步放大
 ## = 视觉身高）= 156；PX(1/32 格/SV px) 与"1 格=32 canvas px"相抵，故 130×1.2
-## 直接就是 canvas px。⚠ 改 char_sprite_3d 的 RIG_SCALE/SIZE_K 时同步本值。
+## 直接就是 canvas px。⚠ 改 char_rig_3d 的 RIG_SCALE/SIZE_K 时同步本值。
 ## billlboard 不随 body_scale 缩放（set_world_pos 无此参），本值亦不乘。
 const BILLBOARD_BODY_H_PX := 156.0
 
-## billboard 髋高（canvas px）：视觉脚线以上到髋 = char_sprite_3d 的脚底锚
+## billboard 髋高（canvas px）：视觉脚线以上到髋 = char_rig_3d 的脚底锚
 ## FOOT_ANCHOR.y 141 × RIG_SCALE 0.35625 = 50.23（billboard 按脚墨迹落 FOOT_ROW，
 ## 故量到脚墨迹而非脚骨 marker；24px 换轨下 1 SubViewport px = 1 canvas px、
 ## SIZE_K=1，直接用 canvas px 量纲）。随身特效（命中飘字/挥砍弧/箭矢）锚点
 ## 从视觉脚线抬到身体高度用本值（身体纵向不压缩，见视觉域协议铁律 2）。
-## ⚠ 改 char_sprite_3d 的 RIG_SCALE/FOOT_ANCHOR 时同步本值
+## ⚠ 改 char_rig_3d 的 RIG_SCALE/FOOT_ANCHOR 时同步本值
 ## （tests/unit/test_hd2d_projection.gd 有同步断言）。
 const BILLBOARD_HIP_H_PX := 50.23
 
@@ -173,9 +171,7 @@ func _ready() -> void:
 	# 偏多少（1080p 下曾差 95px 致 F3 碰撞箱全体错位；推导见 HD-2D街景系统.md §屏幕映射）
 	ground_ratio = (walk_front_y - ground_y) / 1080.0
 	# 角色（玩家/NPC）渲染进 3D 场景：逻辑仍在 2D（物理/输入/AI 不动），
-	# 视觉走 proto 的 billboard 通道——写深度、可被前景遮挡、自带接地影
-	if _hd.has_method("enable_play_characters"):
-		_hd.enable_play_characters()
+	# 视觉走关节烘焙通道（spawn_character 按需装配）——写深度、可被前景遮挡、自带接地影
 	_build_solid_bodies(_hd)
 	_spawn_resource_nodes()
 	_build_gate_portals()
@@ -223,14 +219,6 @@ func _process(_delta: float) -> void:
 			var base: float = float(cam2d.get("base_zoom")) if "base_zoom" in cam2d else 1.0
 			var z: float = cam2d.zoom.x / maxf(base, 0.001)
 			_hd.set_cam_zoom(z)   # 滚轮缩放同步，防两套相机脱钩
-			# 描边 zoom 补偿广播（变化才推；billboard 纹理在变焦后描边会等比变粗，
-			# 武器薄刃上尤其刺眼——SubViewport 无相机，rig 自动补偿恒按 zoom=1 烘）
-			if not is_equal_approx(z, _last_outline_zoom):
-				_last_outline_zoom = z
-				for id in _char_map:
-					var ch: Node3D = _char_map[id]
-					if ch != null and is_instance_valid(ch) and ch.has_method("set_outline_zoom"):
-						ch.set_outline_zoom(z)
 	_sync_character_render()
 	_apply_time_of_day(false)
 
@@ -306,15 +294,36 @@ func _sync_character_render() -> void:
 					flipped,
 					depth_scale_at(body.position.y),
 					lift)
+			# 探针对账口：喂入时刻的原始 2D 坐标（零公式同空间比对用）
+			ch.last_fed_xz = Vector2(body.position.x, body.position.y)
+		# 动画镜像（战场观感重构批1 #8/#9）：优先走 visual_controller 镜像观测口
+		# ——单次变体（攻击/受击变体名）、同名重播序号（连续第二刀可见）、循环
+		# 速率（防脚底滑步）都从这出；无观测口（旧实体/桩）回落 _current_anim。
+		# 播完回切由实体侧软件计时驱动（visual_controller._physics_process），
+		# 回切后镜像自然换动画。
+		var visual: Variant = body.get("_visual")
+		var has_visual: bool = visual != null and is_instance_valid(visual)
 		if ch.has_method("set_anim"):
-			# 动画镜像读实体真实状态：walk/run/idle + 劳作 attack 全放行。
-			# attack 是 oneshot——播完实体侧自动回切 idle/walk，逐拍重触发由
-			# set_anim 的变更检测天然完成（此前 attack 被强制降级 walk/idle，
-			# 挥镐/挥锤在街上不可见 = 干活与罚站无法区分，创始人 2026-09-15）
 			var anim: String = str(body.get("_current_anim"))
+			var seq: int = -1
+			var swap := ""
+			if has_visual and visual.has_method("get_mirror_anim_state"):
+				var ms: Dictionary = visual.get_mirror_anim_state()
+				anim = str(ms.get("anim", anim))
+				seq = int(ms.get("seq", -1))
+				swap = str(ms.get("swap", ""))
+				if ch.has_method("set_anim_speed"):
+					ch.set_anim_speed(float(ms.get("speed", 1.0)))
+				# 拉弓瞄准俯仰（SWL Archer._currentAim 镜像；rig 侧平滑追踪）
+				if ch.has_method("set_aim_pitch"):
+					ch.set_aim_pitch(float(ms.get("aim_pitch", 0.0)))
 			if anim.is_empty():
 				anim = "walk" if moving else "idle"
-			ch.set_anim(anim)
+			ch.set_anim(anim, seq, swap)
+		# 尸体渐隐（#8）：实体死亡后自身 modulate.a 由淡出 tween 逐帧压低，
+		# 镜像整卡透明度同步跟值——实体 queue_free 那帧卡已近全透明，无瞬删跳变
+		if ch.has_method("set_master_alpha") and body.has_method("is_dead") and body.is_dead():
+			ch.set_master_alpha(float((body as CanvasItem).modulate.a))
 		# 劳作进度镜像：2D 进度条挂 RigHost 已随街景隐藏，billboard 用自带
 		# 3D 头顶条（-1 = 隐藏）。采集/派工/搬运同源（set_action_progress 通道）
 		if ch.has_method("set_work_progress") and body.has_method("get_action_progress"):
@@ -332,8 +341,7 @@ func _sync_character_render() -> void:
 		# 盾姿态镜像（盾姿态分层，计划 5）：2D 侧换装依赖 rig（billboard 图为 null
 		# 不生效），经 VisualController 观测口拿当前生效 walk/idle 动画名，镜像层
 		# 自行换装（举盾行军 block_walk / 举盾待命 block_crouch 在 billboard 可见）
-		var visual: Variant = body.get("_visual")
-		if visual != null and is_instance_valid(visual) \
+		if has_visual \
 				and visual.has_method("get_stance_anims") and ch.has_method("set_stance_anims"):
 			var stance: Dictionary = visual.get_stance_anims()
 			ch.set_stance_anims(str(stance.get("walk", "")), str(stance.get("idle", "")))
@@ -348,7 +356,9 @@ func _sync_character_render() -> void:
 	# 清理已消失实体（死亡/切图）
 	for id in _char_map.keys():
 		if not alive.has(id):
-			var ch: Node3D = _char_map[id]
+			# 无类型取值：卡可能在场景切换等路径被释放，类型化赋值会炸
+			# "invalid previously freed instance"
+			var ch = _char_map[id]
 			if ch != null and is_instance_valid(ch):
 				ch.queue_free()
 			_char_map.erase(id)
@@ -393,14 +403,32 @@ func _configure_hd(_hd: Node3D) -> void:
 
 # ─────────────────────────────── 视觉域坐标协议（MapBase 覆写）────────────────────────────────
 
+## 视觉域压缩的活锚对：(世界锚 y, 视觉锚 y)。世界锚 = 3D 取景中心对应的
+## 地面世界 y；视觉锚 = 2D 相机 y——两锚随相机对实时取（Y 纵移跟随/滚轮缩放/
+## 构图档切换都会动）。旧实现锚死 walk_front（假设 2D 相机纵移不改变 3D 取景），
+## 战场 Y 跟随态下锚对错位，2D 画布特效（伤害飘字/粒子/青箱）整体下沉
+## （实测偏移达半屏，2026-10-05）。取不到活锚（未入树/mock hd）回退
+## 锚对恒等 walk_front = 旧口径，离树单测零回归
+func _fx_anchor_pair() -> Vector2:
+	if _hd == null or not _hd.has_method("get_ground_squash") \
+			or not _hd.has_method("get_view_center_ground_z"):
+		return Vector2(walk_front_y, walk_front_y)
+	var cam := get_viewport().get_camera_2d() if is_inside_tree() else null
+	if cam == null:
+		return Vector2(walk_front_y, walk_front_y)
+	var world_anchor: float = depth_y_min + CELL_PX * float(_hd.get_view_center_ground_z())
+	return Vector2(world_anchor, cam.global_position.y)
+
+
 ## 2D 特效/坐标重映射（fx_pos_remapper 组协议 + MapBase 视觉域协议）：2D 世界
-## y → 3D 投影呈现的同一地面线。锚线 walk_front_y 不动，纵深越深压缩越多
-## （俯角前缩 k=sinθ，数学核 Hd2dProjection）——飘字/粒子由此与角色 feet 对齐。
+## y → 3D 投影呈现的同一地面线（俯角前缩 k=sinθ，数学核 Hd2dProjection，
+## 活锚对见 _fx_anchor_pair）——飘字/粒子由此与角色 feet 对齐。
 func remap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	var ry: float = Hd2dProjection.ground_to_visual_y(pos.y, k, walk_front_y)
+	var anchor := _fx_anchor_pair()
+	var ry: float = Hd2dProjection.compress_y(pos.y, k, anchor.x, anchor.y)
 	# 台面/台后地面抬升（2D 画布域）：与角色 billboard 脚底抬升同源同值——
 	# 角色走上台面后，青箱/FX/选中框等一切锚 origin 的画布元素跟着贴到抬升后的地面
 	if _hd.has_method("get_ground_lift_px"):
@@ -415,7 +443,8 @@ func unmap_fx_pos(pos: Vector2) -> Vector2:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return pos
 	var k: float = float(_hd.get_ground_squash())
-	return Vector2(pos.x, Hd2dProjection.visual_to_ground_y(pos.y, k, walk_front_y))
+	var anchor := _fx_anchor_pair()
+	return Vector2(pos.x, Hd2dProjection.expand_y(pos.y, k, anchor.x, anchor.y))
 
 
 ## 随身特效锚点抬升（MapBase 协议覆写）：HD-2D 图实体原点=视觉脚线，
@@ -437,20 +466,27 @@ func entity_hover_rect(range_center: Vector2, range_size: Vector2, entity: Node2
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return super(range_center, range_size, entity)
 	var k: float = float(_hd.get_ground_squash())
+	var anchor := _fx_anchor_pair()
 	var box_size := Vector2(range_size.x, BILLBOARD_BODY_H_PX)
-	return Hd2dProjection.billboard_hover_rect(
-			entity.global_position, box_size, k, walk_front_y, depth_scale_at(entity.global_position.y))
+	var foot_v: float = Hd2dProjection.compress_y(entity.global_position.y, k,
+			anchor.x, anchor.y)
+	var depth: float = depth_scale_at(entity.global_position.y)
+	var w := box_size.x * depth
+	var h := box_size.y * depth
+	return Rect2(entity.global_position.x - w * 0.5, foot_v - h, w, h)
 
 
 ## 屏幕 y → 行走带世界 y（remap_fx_pos 的屏幕域逆变换，F3 鼠标世界坐标用）。
-## 3D 取景垂直固定（不随 2D 相机纵移）：屏幕底沿 = 锚线 walk_front_y，
-## 每格纵深在屏幕上占 32×压缩率×缩放 px（公式推导见 HD-2D街景系统.md §屏幕映射）
+## 活锚对口径：屏幕中心 = 世界锚（3D 取景中心的地面 y），向下每 k×zoom px
+## 对应 1px 世界纵深（公式推导见 HD-2D街景系统.md §屏幕映射；锚对取法同
+## remap_fx_pos——2D 相机纵移跟随态下旧"屏幕底沿恒=walk_front"假设不成立）
 func screen_y_to_ground_y(screen_y: float, effective_zoom: float) -> float:
 	if _hd == null or not _hd.has_method("get_ground_squash"):
 		return screen_y
 	var k: float = float(_hd.get_ground_squash())
+	var anchor := _fx_anchor_pair()
 	var vp_h: float = get_viewport_rect().size.y
-	return walk_front_y - (vp_h - screen_y) / (k * maxf(effective_zoom, 0.001))
+	return anchor.x + (screen_y - vp_h * 0.5) / (k * maxf(effective_zoom, 0.001))
 
 
 # ─────────────────────────────── 设施/村民覆盖点 ────────────────────────────────

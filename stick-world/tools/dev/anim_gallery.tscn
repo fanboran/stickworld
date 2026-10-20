@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://animgaldev001"]
+
+[ext_resource type="Script" path="res://tools/dev/anim_gallery.gd" id="1"]
+
+[node name="AnimGallery" type="Node2D"]
+script = ExtResource("1")

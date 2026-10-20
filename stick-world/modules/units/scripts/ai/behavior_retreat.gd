@@ -1,6 +1,6 @@
 class_name BehaviorRetreat
 extends BehaviorBase
-## 撤退/避战行为 -- 向远离最近敌人的方向移动，拉开距离或恢复士气后 finish。
+## 撤退/避战行为 -- 向远离最近敌人的方向移动，拉开距离后 finish。
 ##
 ## 详见 docs/技术/架构/场景与战斗架构.md §7.2。
 ## 裁决【删溃逃、立避战】：本行为的 fallback 档即**避战**（RA 压制式脱离——
@@ -8,10 +8,10 @@ extends BehaviorBase
 ## （受击硬直且最近敌进射程 → finish 交还决策还手）；**绝不走向地图边缘**。
 ## 避战行为态在 enter/exit 置位/清位（AIController.is_disengaging，外部查询口）。
 ##
-## 撤退中士气缓慢恢复；士气恢复到安全水平或拉开足够距离后 finish（回 attack）。
+## 拉开足够距离或超时后 finish（回 attack）。
 ##
 ## 战役撤离模式（C3 敌将撤仗，出征与领地架构 §4.2）：params 带 evacuate=true 时
-## 方向固定为己方出生侧地图边缘，不因士气恢复/安全距离/超时收束（战役级撤退不回头）；
+## 方向固定为己方出生侧地图边缘，不因安全距离/超时收束（战役级撤退不回头）；
 ## 抵达边缘带登记 entity.departed（BattleInstance._count_alive 计非存活）后收束。
 ## **仅 evacuate/withdraw 命令路径走向边缘/锚点**——自主避战绝不复用该路径。
 ##
@@ -34,10 +34,6 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const RETREAT_DURATION: float = 4.0
 ## 安全距离（拉开此距离后可停止撤退）
 const SAFE_DISTANCE: float = 320.0
-## 撤退中士气恢复速度（每秒）
-const MORALE_RECOVER_PER_SEC: float = 8.0
-## 士气恢复到此比例后停止撤退
-const SAFE_MORALE_RATIO: float = 0.6
 ## 战役撤离：判定抵达边缘带的内收余量（px；阵营锚点 margin 260，正常布阵不误触）
 const DEPART_EDGE_EPSILON: float = 50.0
 
@@ -118,29 +114,18 @@ func update(delta: float) -> void:
 		_finish_with_block_restore()
 		return
 
-	# 战役撤离：独立通道（不查敌、不因士气/距离/超时收束）
+	# 战役撤离：独立通道（不查敌、不因距离/超时收束）
 	if _evacuate:
 		_update_evacuate()
 		return
 
-	# A3 撤退（withdraw）：回锚点独立通道（方向固定锚点，不因士气/安全距离提前
+	# A3 撤退（withdraw）：回锚点独立通道（方向固定锚点，不因安全距离提前
 	# 收束；抵达锚点带或超时收束；不登记 departed——自主撤退是战术行为，非战役离场）
 	if _withdraw:
 		_update_withdraw(delta)
 		return
 
 	_timer -= delta
-
-	# 撤退中士气恢复
-	var health: Node = entity.get_health() if entity.has_method("get_health") else null
-	if health != null and health.has_method("restore_morale"):
-		health.restore_morale(MORALE_RECOVER_PER_SEC * delta)
-		# 士气恢复到安全水平 -> 停止撤退
-		if health.has_method("get_morale_ratio") and health.get_morale_ratio() >= SAFE_MORALE_RATIO:
-			if entity.has_method("ai_stop"):
-				entity.ai_stop()
-			_finish_with_block_restore()
-			return
 
 	# 检查安全距离
 	var enemy: Node = _battle.get_nearest_enemy(entity) if _battle.has_method("get_nearest_enemy") else null
@@ -239,13 +224,10 @@ func _update_evacuate() -> void:
 		entity.ai_move(move_dir, true)
 
 
-## 撤退档主循环（A3 · C6 withdraw）：固定朝己方锚点/集结点行军，途中士气恢复
-## （"重整"分量，不因士气收束）；抵达锚点带或超时（档案 retreat_mod_withdraw_*
-## 参数）收束。方向不因敌人重算（脱离接触语义），不叠加游走，不登记 departed。
+## 撤退档主循环（A3 · C6 withdraw）：固定朝己方锚点/集结点行军；
+## 抵达锚点带或超时（档案 retreat_mod_withdraw_* 参数）收束。
+## 方向不因敌人重算（脱离接触语义），不叠加游走，不登记 departed。
 func _update_withdraw(delta: float) -> void:
-	var health: Node = entity.get_health() if entity.has_method("get_health") else null
-	if health != null and health.has_method("restore_morale"):
-		health.restore_morale(MORALE_RECOVER_PER_SEC * delta)
 	_withdraw_timer += delta
 	var arrive: float = float(_profile.get("retreat_mod_withdraw_arrive", 80.0))
 	var max_time: float = float(_profile.get("retreat_mod_withdraw_max_time", 12.0))

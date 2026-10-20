@@ -1,5 +1,6 @@
 class_name UnitLodDirector
 extends Node
+const StickProf := preload("res://core/services/stick_prof.gd")
 ## 战斗级单位 LOD 调度器 —— 按相机距离给参战单位分档节流表现层。
 ##
 ## 背景：48v48 混战的主渲染成本在每单位的动画处理（AnimationTree 采样 ~21 条
@@ -46,6 +47,12 @@ const MID_DIST: float = 2600.0
 const HYSTERESIS: float = 0.15
 ## 重新分档节拍（s）：单位数 ≤128 时遍历成本可忽略
 const RETIER_INTERVAL: float = 0.1
+## 自适应物理刻率带（P0 帧成本治理）：刻率 = 当前实测帧率，钳 [20,30]——
+## 恒「一帧至多一步」：低帧不下螺旋（帧时含多物理步 → 更低帧的正反馈），
+## 步进又永不低于 20Hz（旧 panic 阶梯 10Hz 底的 3 倍步进粗糙度是「移动
+## 不自然」放大器；实测 30→10Hz 只省 ~0.8ms/帧，得不偿失——本机制取两者平
+## 衡：每 ~1s 收敛一次刻率，恢复工程档在 fps≥30 自然发生）
+const TICKS_FLOOR: int = 20
 
 ## T0 密度自适应分档（存活跟踪单位数 N → T0 动画频率，hz 策略唯一真相源）
 const HZ_T0_SPARSE: float = 60.0  ## N ≤ 24：全速（与未接入 LOD 等价）
@@ -59,13 +66,8 @@ const DENSITY_MASS: int = 96
 const HZ_T1: float = 15.0
 const HZ_T2: float = 5.0
 
-## 物理刻恐慌降级（fps 持续走低时收敛每帧物理刻数，切断「低帧→每帧多刻→更低帧」
 ## 螺旋）。这不是慢动作：低帧下游戏时间本就按 min(fps, ticks)/ticks 膨胀（30Hz
 ## 刻在 9fps 下游戏时间只有墙钟 0.3 倍），降刻反而让游戏时间更接近墙钟。
-const PANIC_CHECK_EVERY: int = 10      ## 每 N 个重拍节拍评估一次（≈1s，防抖）
-const PANIC_TICKS_HI: int = 15         ## fps < 15 → 15Hz 刻
-const PANIC_TICKS_LO: int = 10         ## fps < 8 → 10Hz 刻
-const PANIC_RECOVER_FPS: float = 25.0  ## fps ≥ 25 才回升 30Hz（滞回）
 
 ## 性能档位（与 StickmanEntity.set_perf_tier 对齐）
 enum Tier {
@@ -84,12 +86,12 @@ var _host: Node = null
 var _units: Array = []
 ## 分档计时器
 var _timer: float = 0.0
-## 恐慌降级评估节拍计数（每 PANIC_CHECK_EVERY 个重拍 ≈1s 评估一次）
-var _panic_beat: int = 0
 ## 工程原始物理刻率（setup 时快照；panic 降级在此基础上只降不升超）
 var _ticks_default: int = 30
 ## 当前生效的物理刻率（避免重复 set 触发引擎重排）
 var _ticks_applied: int = 30
+## 刻率收敛节拍（×RETIER_INTERVAL ≈1s，防逐帧抖档）
+var _rate_beat: int = 0
 ## 每单位当前档位（instance_id -> Tier）
 var _tiers: Dictionary = {}
 ## 每单位当前下发频率（instance_id -> hz；T0 频率随密度 N 变化需重新下发）
@@ -105,44 +107,30 @@ func setup(game_root: Node) -> void:
 	_tiers.clear()
 	_hzs.clear()
 	_timer = 0.0
-	_panic_beat = 0
 	## 记录工程原始物理刻率，panic 降级/退出时以此为准还原
 	_ticks_default = int(ProjectSettings.get_setting(
 			"physics/common/physics_ticks_per_second", 30))
 
 
 func _physics_process(delta: float) -> void:
+	var _pt := StickProf.t0()
+	_physics_tick(delta)
+	StickProf.t1("LOD导演", _pt)
+
+
+func _physics_tick(delta: float) -> void:
 	_timer -= delta
 	if _timer > 0.0:
 		return
 	_timer = RETIER_INTERVAL
 	_retier()
-	_panic_beat += 1
-	if _panic_beat >= PANIC_CHECK_EVERY:
-		_panic_beat = 0
-		_apply_panic_ticks()
+	_rate_beat += 1
+	if _rate_beat >= 10:
+		_rate_beat = 0
+		_apply_tick_rate()
 
 
-## 物理刻恐慌降级：每 ~1s 按实测帧率收敛刻率（15Hz/10Hz），fps 回升到
-## PANIC_RECOVER_FPS 以上才还原工程刻率（滞回防 15 附近来回振荡）。
 ## 只在帧率撑不住刻率时生效——健康场景（fps ≥ 25）恒为工程刻率，零行为变化。
-func _apply_panic_ticks() -> void:
-	var fps := Engine.get_frames_per_second()
-	var current := Engine.get_physics_ticks_per_second()
-	if current == _ticks_default:
-		# 健康态：只在撑不住时降档
-		var target := _ticks_default
-		if fps < 8.0:
-			target = mini(PANIC_TICKS_LO, _ticks_default)
-		elif fps < 15.0:
-			target = mini(PANIC_TICKS_HI, _ticks_default)
-		if target != current:
-			Engine.physics_ticks_per_second = target
-			_ticks_applied = target
-	elif fps >= PANIC_RECOVER_FPS:
-		# 降级态：帧率充分回升才还原（滞回）
-		Engine.physics_ticks_per_second = _ticks_default
-		_ticks_applied = _ticks_default
 
 
 ## 退出时把存活单位全部置回近景全速档（rig 可见性/血条显示还原，hz 缺省=全速）。
@@ -166,6 +154,16 @@ func _exit_tree() -> void:
 # ─────────────────────────────── 自动发现 ────────────────────────────────
 
 ## 一轮自动发现 + 分档：相机 → 地图换绑 → 单位集刷新 → 密度定频 → 逐单位分档。
+## 自适应刻率：刻率 = 实测帧率钳带。健康（fps≥30）= 工程档 30Hz 零变化；
+## 低帧收敛到「一帧一步」，帧时不再被多物理步放大（P0 实测：13fps×30Hz =
+## 2.3 步/帧，物理 19ms/帧的螺旋源）。
+func _apply_tick_rate() -> void:
+	var target := clampi(int(Engine.get_frames_per_second()), TICKS_FLOOR, _ticks_default)
+	if target != _ticks_applied:
+		Engine.physics_ticks_per_second = target
+		_ticks_applied = target
+
+
 func _retier() -> void:
 	if _game_root == null or not is_instance_valid(_game_root):
 		return

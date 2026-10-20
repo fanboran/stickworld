@@ -18,7 +18,7 @@
 | P5 | 2 | 数值校准（对表解包/wiki；含 11d 射速系） | 2 | **已完成 ✅**（2026-09-02，wiki 真值落表 + 9d + 11d；录屏实测抽查待用户验收） |
 | P6 | 7c+11c | TeamAi 逐函数直译（21 函数，含 9i+ 溃逃增强） | 2.5 | **已完成 ✅**（2026-09-03，21 函数直译 + 9i+ 五项增强 + 3 套件 30 用例） |
 | P7 | 7b | 祭司 Meric 兵种+治疗 | 1.5 | **已完成 ✅**（2026-09-03，MericAi 3 函数直译 + HEAL 持续回复 + 后排站位 + L2 降级通用动画 + 12 用例套件） |
-| P8 | 7a | 巨人兵种+抓掷（含 GutSpinner 投射物） | — | 删批（创始人 2026-10-21 裁决） |
+| P8 | 7a | 巨人兵种+抓掷（含 GutSpinner 投射物） | — | 删批 |
 | P9 | 10 | 物品栏系统（BG3/MC 式；热键核心已落地） | 2~3 | 核心 ✅，UI 待开工 |
 | P10 | 12 | 特效扩容（血溅/焦痕/震地/天气，对齐原版 Effects 16 类） | 1 | 待开工（伤害数字/伤亡播报属 UI 系，已移交 `temp/UI手绘化交接-2026-09-05.md` §8） |
 | P11 | 4 | 法术一部分（**Spell 基类先行**；建议 ArrowVolley + HealSpell） | 1~2 | 用户确认范围后做 |
@@ -31,7 +31,7 @@
 
 **合计约 14.5~17 轮**（不含 P12/P13）。执行顺序 = 表中 P1 → P13 自上而下。
 
-> **🔻 下一上下文开工指引（2026-09-03 P7 收尾）**：P7（批次 7b 祭司 Meric 兵种+治疗）已完成——MericAi 3 函数（Update/CanAttack/UpdateTarget）逐函数直译落 `behavior_heal.gd`（无桩），WeaponMount 治疗 3 方法（can_cast_heal/cast_heal/is_casting_heal）+ 3 字段直译，StatusEffects HEAL 类型 + `_apply_hot` 正向结算（禁入 DamagePipeline），TargetFinder.find_weakest_ally 血量最低友军筛选（含自身），后排站位（is_rear_line + FormationSystem 尾列取向），kite 撤而不打，施法停移。**L2 降级**：Spine 源数据 `[meric].txt` 缺失，祭司用通用动画（治疗功能不受阻），weapon_mericstaff.tscn 复用 magicstaff 贴图。12 用例单元套件全过（test_meric_heal），既有 25 套件零回归，battle_sim 扩展 2 场景 + heal_cast 指标采样。覆盖率 53%→**55%**（MericAi 0%→**100%**，见 §三）。**关键 BUG 修复**：ai_controller `_try_combat` 缩进错位致全单位 idle（已修）。P8（批次 7a 巨人）已删批（创始人 2026-10-21 裁决）。**每轮改完更新 §三 覆盖数**。
+> **🔻 下一上下文开工指引（2026-09-03 P7 收尾）**：P7（批次 7b 祭司 Meric 兵种+治疗）已完成——MericAi 3 函数（Update/CanAttack/UpdateTarget）逐函数直译落 `behavior_heal.gd`（无桩），WeaponMount 治疗 3 方法（can_cast_heal/cast_heal/is_casting_heal）+ 3 字段直译，StatusEffects HEAL 类型 + `_apply_hot` 正向结算（禁入 DamagePipeline），TargetFinder.find_weakest_ally 血量最低友军筛选（含自身），后排站位（is_rear_line + FormationSystem 尾列取向），kite 撤而不打，施法停移。**L2 降级**：Spine 源数据 `[meric].txt` 缺失，祭司用通用动画（治疗功能不受阻），weapon_mericstaff.tscn 复用 magicstaff 贴图。12 用例单元套件全过（test_meric_heal），既有 25 套件零回归，battle_sim 扩展 2 场景 + heal_cast 指标采样。覆盖率 53%→**55%**（MericAi 0%→**100%**，见 §三）。**关键 BUG 修复**：ai_controller `_try_combat` 缩进错位致全单位 idle（已修）。P8（批次 7a 巨人）已删批。**每轮改完更新 §三 覆盖数**。
 
 ---
 
@@ -216,7 +216,7 @@
 ### 结论
 
 - **AI 行为层真实覆盖率 ≈ 55%（严格）/ 59%（含近似）**（P7 完成后：MericAi 3 函数逐函数直译 3✅ 无桩，HEAL 持续回复 + 后排站位 + kite 撤而不打 + L2 降级通用动画；P6 TeamAi 21 函数 17✅+4 桩◐，9i+ 五项增强全开关默认关零回归）——缺口集中在**整类**（Giant/Zombie）与**簇**（绕障），不是零散函数。
-- 消解路径：P8（Giant 整类）已删批（创始人 2026-10-21 裁决），GiantAi 维持缺口。
+- 消解路径：P8（Giant 整类）已删批，GiantAi 维持缺口。
 
 ---
 

@@ -1,0 +1,231 @@
+# Godot
+# stick-world/docs 是指向 ../../docs 的本地 symlink（core.symlinks=false 无法追踪）
+stick-world/docs
+.import/
+# 忽略导出产物，保留说明文档（export_presets 输出到 export/stick-world/ 子目录）
+export/**
+!export/**/
+!export/*.md
+!export/.gitkeep
+*.translation
+**/.godot/
+.godot/
+
+# Godot 4 GDExtension 构建输出
+# 但保留 godot-sqlite 插件的预编译二进制
+*.so
+*.dll
+*.dylib
+!stick-world/addons/godot-sqlite/bin/*.dll
+!stick-world/addons/godot-sqlite/bin/*.so
+!stick-world/addons/godot-sqlite/bin/*.dylib
+# godot-sqlite iOS 静态库体积巨大（~254MB），整个 xcframework 剔除入库（移动端导出时从插件源还原）
+stick-world/addons/godot-sqlite/bin/*.ios.*.xcframework/
+# 忽略 godot-sqlite 的临时/备份文件（~ 前缀）
+stick-world/addons/godot-sqlite/bin/~*
+gdextension_crash_on_quit.txt
+
+# AI 助手记忆 / 本地状态
+.workbuddy/
+.mcp/
+.codebuddy/
+.zcode/
+.arts/
+.codegraph/
+
+# AI 工具本地运行时产物
+**/__pycache__/
+**/*.pyc
+tools/godot_ai_repo/.venv/
+tools/godot_ai_repo/venv/
+tools/vector_db/chroma_db/
+tools/volc_image_gen/output/
+tools/volc_image_gen/.env
+stick-world/assets/_raw/
+
+# 项目根 tools/ 下的一次性辅助脚本（抠图实验、边缘清理等）
+tools/clean_*.py
+tools/reextract_*.py
+tools/sam_*.py
+tools/trim_*.py
+tools/extract_*.py
+tools/filter_*.py
+
+# 世界生成可再生产物（保留 locked/ 金标准；运行时数据在 submodule stickworld-mapdata，不经主库历史）
+tools/worldgen/output/**
+!tools/worldgen/output/locked/
+!tools/worldgen/output/locked/**
+# Demo 工作量展示素材（创始人指示入库留档，见 tools/worldgen/README.md §Demo）
+!tools/worldgen/output/l3_terrain.png
+# ―― 平铺验收图已归入一级子目录（feedback/audit/rework/blob/arcs/road/preview）：
+#    子目录须先放行目录本身再放行文件（父目录被上方 output/** 压住会短路白名单）――
+!tools/worldgen/output/feedback/
+# feedback1 创始人验收第一批修复预览（去抖动/掉色修复/新字号，见交接档 feedback1）
+!tools/worldgen/output/feedback/feedback1_*.png
+# feedback3 创始人第三批观感返工验收预览（C19 界线 / C20 都城标记 / C21 全屏海洋 /
+# C22 裁剪 / C23 政权配色 / C24 标注文字，见交接档「创始人第三批观感反馈」）
+!tools/worldgen/output/feedback/feedback3_*.png
+!tools/worldgen/output/audit/
+# 数据对齐审计验收图（audit4 湖双几何裁决材料等，见交接档「数据对齐」专节）
+!tools/worldgen/output/audit/audit*_*.png
+!tools/worldgen/output/rework/
+# R4 三模式并排验收预览（地形/政治/交通，见交接档 R 系列 R4 批3）
+!tools/worldgen/output/rework/r4_modes_*.png
+# R8 标注体系验收预览（三级视图标注效果，见交接档 R 系列 R8 层3）
+!tools/worldgen/output/rework/r8_label_*.png
+!tools/worldgen/output/blob/
+# R5 建成区场叠加管线验收图（特写/贫瘠抽查/分形自检，见交接档 R 系列 R5）
+!tools/worldgen/output/blob/blob_v2_*.png
+!tools/worldgen/output/arcs/
+# 边界超分 S2/S3 验收预览（共享弧拓扑全景+出生特写+新色板，见交接档「边界超分 S2/S3」）
+!tools/worldgen/output/arcs/arcs_preview_*.png
+!tools/worldgen/output/road/
+# R6 道路自然化新旧对比图（观感验收素材，见交接档 R 系列 R6 批3）
+!tools/worldgen/output/road/road_v2_*.png
+!tools/worldgen/output/preview/
+# F8 缩略窗全景 preview（候选底图素材 + 坐标映射 sidecar，见交接档 Flash 队列 F8）
+!tools/worldgen/output/preview/l1_panorama_preview.png
+!tools/worldgen/output/preview/l1_panorama_preview.json
+# R3 地块边缘平滑特写对比图（观感验收素材，见交接档 R 系列 R3）
+!tools/worldgen/output/preview/smooth_closeup_*.png
+# R9 L1 地形烘焙对比预览图（观感验收素材，见交接档 R 系列 R9 批2）
+!tools/worldgen/output/preview/l1_terrain_preview_*.png
+!tools/worldgen/output/preview/l2_preview_*.png
+!tools/worldgen/output/preview/palette_v3_preview_2048.png
+# npy 是超大中间数据（高度场/mask，256MB+），locked/ 内也一律不提交
+tools/worldgen/output/**/*.npy
+# 世界生成诊断输出（生成产物，不提交）
+tools/worldgen/output/diag/
+# 地区划分中间态备份（留档不提交，最终数据在 output/regions/ 定稿）
+tools/worldgen/output/regions_backup_v*/
+.tmp/
+
+# 本地预览截图/内嵌 HTML（tests/dev/preview_* 渲染产物，可随时重生成）
+stick-world/.preview/
+
+# 调试 / 日志
+debug.log
+*.log
+
+# IDE
+.vs/
+.vscode/*
+!.vscode/settings.json
+*.swp
+*.swo
+*.sublime-workspace
+.idea/
+
+# 编辑器缓存（Godot 自动生成文件）
+# 注：*.uid 不忽略 —— Godot 4.4+ 官方推荐提交 .uid 文件（资源 UID 持久化，
+#     保证 tscn 引用跨机器稳定），项目已有 20 个被跟踪
+*.ctex
+*.md5
+*.res-folding-*.cfg
+
+# Godot 导出 / 构建产物
+build/
+dist/
+*.exe
+*.pck
+*.zip
+
+# 测试报告
+test-reports/
+test-results/
+coverage/
+*.xml
+# 测试输出临时文件
+test_*.txt
+stick-world/test_*.txt
+# 战斗模拟诊断输出（tests/dev/battle_sim 的 headless 运行日志，可随时重生成）
+battle_sim_*.txt
+stick-world/stderr.txt
+stick-world/stdout.txt
+
+# OS
+.DS_
+# 第三方开源库（本地参考用，不入 Git）
+external/
+!external/.gitkeep
+# 保留已存在的 swl_extracted 特例（已在上一行 external/ 中被忽略，这里仅作记录）
+
+node_modules/.package-lock.json
+node_modules/sticknodes-js/LICENSE
+node_modules/sticknodes-js/package.json
+node_modules/sticknodes-js/README.docs.md
+node_modules/sticknodes-js/README.md
+node_modules/sticknodes-js/sticknodes_js_bg.js
+node_modules/sticknodes-js/sticknodes_js_bg.wasm
+node_modules/sticknodes-js/sticknodes_js_bg.wasm.d.ts
+node_modules/sticknodes-js/sticknodes_js_nodejs_bg.js
+node_modules/sticknodes-js/sticknodes_js_nodejs_bg.wasm
+node_modules/sticknodes-js/sticknodes_js_nodejs.js
+node_modules/sticknodes-js/sticknodes_js_web_bg.wasm
+node_modules/sticknodes-js/sticknodes_js_web.js
+node_modules/sticknodes-js/sticknodes_js.d.ts
+node_modules/sticknodes-js/sticknodes_js.js
+
+tools/mocap/references/
+
+# Godot 自定义用户数据目录（--user-data-dir 调试残留，不入库）
+stick-world/Godot/
+
+# freebuff 工具本地产物
+.freebuff/
+
+# git worktree（F:\VSCode\game-2\.worktrees\ 与 .temp\ 下的多分支工作区，不入库）
+.worktrees/
+.temp/
+# 音乐管线的中间产物（分轨 WAV / 母带 WAV / MIDI / 报告，体积极大）
+# 交付件在 stick-world/assets/audio/bgm/ 与 ambience/，那些要进版本库
+tools/music/out/
+
+# 导出构建产物（export/ 下的说明文档仍入库，只忽略二进制产物）
+export/**/*.exe
+export/**/*.pck
+export/**/*.dll
+export/**/*.zip
+
+# 诊断截图等临时产物（不入库）
+temp/
+external/swl_apk/
+.tmp_shots/
+docs/.obsidian/
+
+.trae/
+简历*.md
+面试*
+# tests/dev 顶层渲染输出图（diag/探针脚本每次运行重生成，不入库；proto_hd2d 等子目录输入贴图不受影响）
+stick-world/tests/dev/*.png
+stick-world/tests/dev/*.jpg
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+node_modules/
+bower_components/
+jspm_packages/
+__pycache__/
+site-packages/
+venv/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）

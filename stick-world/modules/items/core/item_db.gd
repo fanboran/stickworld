@@ -113,5 +113,3 @@ static func _build_defs() -> void:
 			{"weight": 3}, -1, false, "冶炼成型的铁，锻造的原料。")
 	_def("mat_silk", "丝绸", ItemDef.Category.MATERIAL, 20, "",
 			{"weight": 1}, -1, false, "轻软华贵的高档织物。")
-	_def("mat_asphalt", "沥青", ItemDef.Category.MATERIAL, 20, "",
-			{"weight": 4}, -1, false, "黏黑的天然胶脂，铺路密封。")

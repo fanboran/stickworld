@@ -43,7 +43,7 @@ GlobalHUD (Control)
 │   │   ├── ResourceSlot[res_stone]      ← 石料图标 + 数量
 │   │   ├── ResourceSlot[res_metal_ore]  ← 铁矿图标 + 数量
 │   │   ├── ResourceSlot[res_gold]       ← 黄金图标 + 数量
-│   │   └── ResourceSlot[res_diamond]    ← 钻石图标 + 数量（沥青已根除待清退，不在 HUD）
+│   │   └── ResourceSlot[res_diamond]    ← 钻石图标 + 数量
 │   └── CenteredButton                   ← 居中模式按钮
 ├── NotificationLabel                    ← 通知文字（淡入淡出）
 └── ClockWidget                          ← 圆形表盘（详见现有实现）
@@ -53,7 +53,7 @@ GlobalHUD (Control)
 
 | 属性 | 设计 |
 |------|------|
-| 显示资源 | 现行 5 种（木/石/铁/金/钻，见 `resource_bar.gd`；沥青已根除待清退，不在 HUD） |
+| 显示资源 | 现行 5 种（木/石/铁/金/钻，见 `resource_bar.gd`） |
 | 数据来源 | `resources_api.get_stock(resource_id, "player_territory")` |
 | 更新方式 | 信号驱动：订阅 `resources_api.resource_changed` 信号，非每帧轮询 |
 | 显示格式 | `[图标] 数量`（如 `🪵 150`），数量变化时短暂高亮（0.5s 黄色闪烁） |

@@ -65,7 +65,7 @@ var lakes: Array = []
 ## [{"pts": PackedVector2Array(context 坐标), "w": float(地图单位宽)}]
 var rivers: Array = []
 
-## 资源点（资源层数据源）：[{"id": String(wood/stone/iron/diamond/gold/black_pitch),
+## 资源点（资源层数据源）：[{"id": String(wood/stone/iron/diamond/gold),
 ## "pos": Vector2(context 坐标)}]；包内无该字段 = 空数组（资源层自然不画，不报错）
 var resources: Array = []
 

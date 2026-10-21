@@ -208,12 +208,6 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 	var last_pos: Dictionary = {}       # iid -> Vector2
 	var sim_time: float = 0.0
 	var stance_seq: Array = []          # P6 姿态序列采样 [{t, l, r}]
-	var heal_cast_count: Array = [0]   # P7 heal_cast 信号计数（lambda 捕获按值，须容器承载写回）
-	var eb: Node = get_node_or_null("/root/EventBus")
-	var heal_handler: Callable = func(_bid: String, _caster: int, _target: int, _anim: String) -> void:
-		heal_cast_count[0] += 1
-	if eb != null and eb.has_signal("heal_cast"):
-		eb.heal_cast.connect(heal_handler)
 	while sim_time < SCENARIO_TIMEOUT:
 		await get_tree().create_timer(0.25).timeout
 		sim_time += 0.25
@@ -290,14 +284,11 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 		"daze_units": dazed.size(),
 		"ranged_engage_avg": snappedf(dist_avg, 1.0),
 		"ranged_engage_median": snappedf(dist_median, 1.0),
-		"heal_casts": heal_cast_count[0],
 	}
 	if team_ai_on:
 		result["stance_seq"] = stance_seq
 		result["stance_summary"] = _summarize_stance_seq(stance_seq)
 	# 清场
-	if eb != null and eb.has_signal("heal_cast") and eb.heal_cast.is_connected(heal_handler):
-		eb.heal_cast.disconnect(heal_handler)
 	for u in left + right:
 		if is_instance_valid(u):
 			u.queue_free()

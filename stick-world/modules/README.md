@@ -969,7 +969,7 @@ config/
 | 类别 | 信号 |
 | -- | -- |
 | 生命周期 | `game_started` / `game_loaded(slot_index)` / `game_saving(slot_index)` / `game_saved(slot_index)` / `game_paused` / `game_resumed` |
-| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` / `team_ai_stance_changed(battle_id, faction, from_stance, to_stance, reason)` / `heal_cast(battle_id, caster_id, target_id, anim_name)` |
+| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` / `team_ai_stance_changed(battle_id, faction, from_stance, to_stance, reason)` |
 | 编队 | `selection_changed(unit_ids)` / `squad_created(squad_id, unit_ids)` / `order_issued(order_type, target_squad_id, source_tier)` / `commander_assigned(squad_id, unit_id)` |
 | 指挥中继 | `relay_started(relay_id, order_type, from_org, to_org, hop_index, eta)` / `relay_arrived(relay_id, order_type, from_org, to_org, hop_index, outcome)` |
 | 场景/旅行 | `travel_requested(map_id, travel_mode)` / `travel_started(from_id, to_id, mode)` / `travel_completed(to_id)` / `map_loaded(map_id, map_type)` / `map_unloaded(map_id)` |

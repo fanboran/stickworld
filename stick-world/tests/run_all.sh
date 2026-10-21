@@ -93,6 +93,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
 	"tests/integration/test_save_completeness.tscn"
+	"tests/integration/test_save_migration.tscn"
 	"tests/integration/test_anim_finished.tscn"
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
@@ -146,6 +147,8 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_debug_api.tscn"]=90
 	# 三次全链 save→load（每次含整图重载），boot 一次约 10s、每次读档换图数秒
 	["tests/integration/test_save_completeness.tscn"]=240
+	# 存储层专项（无 GameRoot boot）：迁移链 + fixture 全量回归，数秒完成
+	["tests/integration/test_save_migration.tscn"]=90
 )
 DEFAULT_TIMEOUT=90
 

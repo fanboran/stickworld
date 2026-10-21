@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/save/generate_save_fixtures.gd" id="1_genfix"]
+
+[node name="GenerateSaveFixtures" type="Node"]
+script = ExtResource("1_genfix")

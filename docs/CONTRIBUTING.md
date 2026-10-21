@@ -119,6 +119,14 @@ modules/player_control/
 
 - 新功能要有单元测试
 
+### 存档格式变更必须新增 fixture
+
+改存档 schema（`save_manager.gd` 的 `CURRENT_SCHEMA_VERSION` 增一）时，三步走全：
+
+1. `_migration_steps` 登记升档函数（迁移链口径见 `docs/技术/架构/数据与契约/存储架构设计.md` §版本迁移链）；
+2. 重跑 `godot --headless --path stick-world res://tools/save/generate_save_fixtures.tscn`，新增一份当前版 fixture 入 `tests/fixtures/saves/`；
+3. `tests/integration/test_save_migration.gd` 会自动把全部 fixture 纳入回归（加载不崩 + 版本升到当前版 + 字段齐全），无需改测试。
+
 ### 改脚本后必须 --import 重建类缓存
 
 新增/移动/删除带 `class_name` 的脚本后，headless 跑测试前必须先执行：

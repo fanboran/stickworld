@@ -392,7 +392,7 @@ func _test_time_slow() -> void:
 	TimeManager.auto_slow_on_user_control = original_auto_slow
 
 
-func _test_dead_unit_control() -> void:
+func _test_dead_unit_user_control() -> void:
 	if _user_control == null or _test_units.size() < 4:
 		_runner.assert_true(false, "系统未就绪")
 		return

@@ -98,8 +98,8 @@ func _spawn_unit(x: float, faction: int) -> Node2D:
 		return null
 	if e.get("foot_offset") != null:
 		e.global_position.y = _spawn_y() - e.foot_offset
-	if e.has_method("set_possessed"):
-		e.set_possessed(false)
+	if e.has_method("set_user_controlled"):
+		e.set_user_controlled(false)
 	if e.has_method("set_faction"):
 		e.set_faction(faction)
 	return e

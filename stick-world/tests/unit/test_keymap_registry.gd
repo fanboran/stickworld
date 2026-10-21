@@ -108,7 +108,7 @@ func _test_inputmap_register() -> void:
 	var data: Dictionary = Registry.load_default()
 	var n: int = Bindings.register_all(data)
 	_runner.assert_gt(n, 40, "注册绑定事件数应 ≥40（实测 %d）" % n)
-	_runner.assert_true(InputMap.has_action("possess/move_up"), "possess/move_up 应已注册")
+	_runner.assert_true(InputMap.has_action("user_control/move_up"), "user_control/move_up 应已注册")
 	# 幂等：重复注册不翻倍不报错
 	var n2: int = Bindings.register_all(data)
 	_runner.assert_equal(n2, n, "重复注册应幂等")
@@ -118,19 +118,19 @@ func _test_inputmap_register() -> void:
 	var ev_phys := InputEventKey.new()
 	ev_phys.physical_keycode = KEY_W
 	ev_phys.pressed = true
-	_runner.assert_true(ev_phys.is_action_pressed("possess/move_up"),
-			"physical_keycode=W 应命中 possess/move_up")
+	_runner.assert_true(ev_phys.is_action_pressed("user_control/move_up"),
+			"physical_keycode=W 应命中 user_control/move_up")
 	var ev_label := InputEventKey.new()
 	ev_label.keycode = KEY_W
 	ev_label.pressed = true
-	_runner.assert_false(ev_label.is_action_pressed("possess/move_up"),
+	_runner.assert_false(ev_label.is_action_pressed("user_control/move_up"),
 			"仅 keycode 的 W 不应命中 physical 绑定（位置语义）")
 	# echo 默认过滤（切换型热键无按住连发）
 	var ev_echo := InputEventKey.new()
 	ev_echo.physical_keycode = KEY_Q
 	ev_echo.pressed = true
 	ev_echo.echo = true
-	_runner.assert_false(ev_echo.is_action_pressed("possess/toggle_combat"),
+	_runner.assert_false(ev_echo.is_action_pressed("user_control/toggle_combat"),
 			"echo 事件默认不命中（allow_echo=false）")
 	# 组合键：Ctrl+S 命中 save_panel，裸 S 不命中
 	var ev_ctrl_s := InputEventKey.new()
@@ -146,7 +146,7 @@ func _test_inputmap_register() -> void:
 	var ev_lmb := InputEventMouseButton.new()
 	ev_lmb.button_index = MOUSE_BUTTON_LEFT
 	ev_lmb.pressed = true
-	_runner.assert_true(ev_lmb.is_action_pressed("possess/attack"), "左键应命中 possess/attack")
+	_runner.assert_true(ev_lmb.is_action_pressed("user_control/attack"), "左键应命中 user_control/attack")
 
 
 # ─────────────────────────────── 键盘布局 ────────────────────────────────
@@ -195,7 +195,7 @@ func _test_key_index() -> void:
 	_runner.assert_true(idx.has(KEY_W), "W（移动）应在键索引中")
 	var w_annots: Array = idx.get(KEY_W, [])
 	_runner.assert_gt(w_annots.size(), 0, "W 标注非空")
-	_runner.assert_equal(String(w_annots[0]["domain"]), "possess", "W 标注域 = possess")
+	_runner.assert_equal(String(w_annots[0]["domain"]), "user_control", "W 标注域 = user_control")
 	# 同一动作的多键绑定各自落键：1 与 KP_1 都索引到 strategy/layer_political
 	var one_annots: Array = idx.get(KEY_1, [])
 	var has_strategy := false
@@ -208,9 +208,9 @@ func _test_key_index() -> void:
 	var strat: Dictionary = Registry.key_index(data, PackedStringArray(["strategy"]))
 	_runner.assert_false(strat.has(KEY_W), "过滤战略图后 W 不在索引")
 	_runner.assert_true(strat.has(KEY_KP_2), "过滤战略图后 KP_2（城市层）仍在")
-	# 修饰键绑定：Ctrl+S 存档（common）与 S 移动（possess）并存于同一键
+	# 修饰键绑定：Ctrl+S 存档（common）与 S 移动（user_control）并存于同一键
 	var s_annots: Array = idx.get(KEY_S, [])
-	_runner.assert_equal(s_annots.size(), 2, "S 键应有 2 条标注（possess 移动 + common Ctrl+S）")
+	_runner.assert_equal(s_annots.size(), 2, "S 键应有 2 条标注（user_control 移动 + common Ctrl+S）")
 	var has_ctrl_mods := false
 	for a: Dictionary in s_annots:
 		if String(a["domain"]) == "common":
@@ -227,8 +227,8 @@ func _test_mouse_index() -> void:
 	var domains: Array = []
 	for a: Dictionary in left:
 		domains.append(String(a["domain"]))
-	_runner.assert_true(domains.has("possess") and domains.has("command"),
-			"左键标注应含 possess 与 command 域")
+	_runner.assert_true(domains.has("user_control") and domains.has("command"),
+			"左键标注应含 user_control 与 command 域")
 	var wheel: Array = idx.get(MOUSE_BUTTON_WHEEL_UP, [])
 	_runner.assert_equal(wheel.size(), 2, "滚轮上应有 2 条标注（世界缩放 + 战略图缩放）")
 
@@ -255,11 +255,11 @@ func _test_conflicts() -> void:
 # ─────────────────────────────── 提示文案 ────────────────────────────────
 
 func _test_action_hints() -> void:
-	_runner.assert_equal(Registry.action_key_hint("possess/interact"), "F",
+	_runner.assert_equal(Registry.action_key_hint("user_control/interact"), "F",
 			"interact 首绑展示 = F")
 	_runner.assert_equal(Registry.action_key_hint("common/save_panel"), "Ctrl+S",
 			"save_panel 展示 = Ctrl+S")
-	_runner.assert_equal(Registry.action_key_hint("possess/attack"), "左键",
+	_runner.assert_equal(Registry.action_key_hint("user_control/attack"), "左键",
 			"attack 展示 = 左键")
 	_runner.assert_equal(Registry.action_label("common/toggle_world_map"), "战略图",
 			"toggle_world_map 标注 = 战略图")

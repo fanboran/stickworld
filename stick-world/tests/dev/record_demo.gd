@@ -68,6 +68,6 @@ func _find_player() -> Node2D:
 		return null
 	for e in m.get_entities():
 		var ent := e as Node2D
-		if ent != null and ent.has_method("is_possessed") and ent.is_possessed():
+		if ent != null and ent.has_method("is_user_controlled") and ent.is_user_controlled():
 			return ent
 	return null

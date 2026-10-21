@@ -275,10 +275,10 @@ func _sync_character_render() -> void:
 			ch = _hd.spawn_character()
 			_char_map[id] = ch
 		alive[id] = ch
-		# possessed 玩家：脚下四角框走 3D（与 billboard 同空间同相机，
+		# user_controlled 玩家：脚下四角框走 3D（与 billboard 同空间同相机，
 		# 速度位置天然一致；2D 画布框在 HD-2D 图上会与角色脱钩）
 		if ch.has_method("set_bracket_visible"):
-			ch.set_bracket_visible(e.has_method("is_possessed") and e.is_possessed())
+			ch.set_bracket_visible(e.has_method("is_user_controlled") and e.is_user_controlled())
 		# y 行走带 → 3D 纵深 z（道具/树的 z 同一映射，遮挡关系自动正确）；
 		# 线性格 1 格 = 32px——行走带前端即 3D 屏幕底沿锚线（z_near）
 		var z: float = (body.position.y - depth_y_min) / CELL_PX
@@ -894,7 +894,7 @@ func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> vo
 		return
 	# 玩家不走静默瞬移：走近城门由 hd2d_gate_prompt 弹选项框（2D 村图同款
 	# "靠近城门蹦出弹窗"口径，创始人 2026-09-15）；村民采集走静默带
-	if body.has_method("is_possessed") and body.is_possessed():
+	if body.has_method("is_user_controlled") and body.is_user_controlled():
 		return
 	# 方向判定：只传送"朝着墙走"的身体（沿街横穿/闲逛蹭进带子不触发）
 	var toward: float = signf(wx - body.global_position.x)

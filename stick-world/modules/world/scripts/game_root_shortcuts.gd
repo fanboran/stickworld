@@ -32,7 +32,7 @@ func handle_shortcuts(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and (event.button_index == MOUSE_BUTTON_WHEEL_UP \
 			or event.button_index == MOUSE_BUTTON_WHEEL_DOWN):
-		if _is_possess_mode() and not event.shift_pressed:
+		if _is_user_control_mode() and not event.shift_pressed:
 			var dir: int = 1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
 			if _host.inventory_service != null \
 					and _host.inventory_service.has_method("cycle_weapon"):
@@ -115,9 +115,9 @@ func handle_shortcuts(event: InputEvent) -> void:
 
 
 ## 是否处于附身模式（滚轮切武器的门禁）
-func _is_possess_mode() -> bool:
+func _is_user_control_mode() -> bool:
 	return _host.input_dispatcher != null \
-			and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS
+			and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.USER_CONTROL
 
 
 ## 打开/关闭设置菜单（左上角齿轮按钮 / 暂停菜单「设置」调用）。
@@ -181,7 +181,7 @@ func _open_placeholder_panel(preset_id: String) -> void:
 ## 占位面板→关面板，逐层返回）；无模态 → 开暂停菜单。附身模式返回 false
 ## （ESC 留给退出附身，不消费）。返回是否已消费事件。
 func _handle_escape() -> bool:
-	if _host.input_dispatcher != null and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.POSSESS:
+	if _host.input_dispatcher != null and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.USER_CONTROL:
 		return false
 	# 模态栈统一退栈（强弱分级/战略图层键都归栈：强模态屏蔽、战略图自带下钻语义）
 	var stack := _get_modal_stack()

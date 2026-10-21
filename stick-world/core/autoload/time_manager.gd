@@ -23,8 +23,8 @@ enum Speed {
 
 var current_speed: Speed = Speed.X1
 
-## 附身（possess）时是否自动降速为 X1。
-var auto_slow_on_possess: bool = true
+## 附身（user_control）时是否自动降速为 X1。
+var auto_slow_on_user_control: bool = true
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -44,8 +44,8 @@ func _ready() -> void:
 	# 兜底下界），2026-10-05 观感重构批0
 	Engine.max_physics_steps_per_frame = 4
 	if ConfigManager:
-		if ConfigManager.has_key("game/slow_on_possess"):
-			auto_slow_on_possess = bool(ConfigManager.get_value("game/slow_on_possess"))
+		if ConfigManager.has_key("game/slow_on_user_control"):
+			auto_slow_on_user_control = bool(ConfigManager.get_value("game/slow_on_user_control"))
 	if EventBus and EventBus.has_signal("battle_started"):
 		EventBus.battle_started.connect(_on_battle_started)
 

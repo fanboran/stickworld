@@ -7,7 +7,7 @@ extends Node2D
 ##
 ## 纯 _draw 自绘（ProgressPainter/HealthBarIndicator 同款惯例），
 ## 2D 画布域直绘（箭矢同层 z=900——预览的就是箭矢将要飞的弹道域），
-## 默认隐藏，拉弓态由 entity_possession 每帧 set_trajectory 刷新。
+## 默认隐藏，拉弓态由 entity_user_control 每帧 set_trajectory 刷新。
 
 ## 预测点数与间隔（原版同语义：点数 × 间隔 = 预览时长窗口）
 const DOT_COUNT: int = 12

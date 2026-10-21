@@ -154,7 +154,7 @@ func add_unit(unit: Node, faction: int) -> void:
 	# HD-2D billboard 图跳过（单位 2D 骨架已删——crowd 槽会持已删 rig 引用，
 	# 渲染由地图宿主的 billboard 通道承担）
 	var _on_billboard: bool = unit.has_method("is_on_billboard_map") and unit.is_on_billboard_map()
-	if _crowd != null and not _on_billboard 			and not (unit.has_method("is_possessed") and unit.is_possessed()):
+	if _crowd != null and not _on_billboard 			and not (unit.has_method("is_user_controlled") and unit.is_user_controlled()):
 		var slot: Dictionary = _crowd.register_unit(unit)
 		if not slot.is_empty():
 			unit.set_meta("crowd_slot", slot)

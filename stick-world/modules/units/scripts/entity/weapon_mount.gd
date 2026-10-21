@@ -244,7 +244,7 @@ var _aim_visual_active: bool = false
 ## 表现窗截止时刻（_now() 秒）。AI 路径 = 瞄准开始 + 超时兜底（点射停顿 +
 ## 冷却残段最长 ~4.9s，超时收弓防行为切换后残窗把人钉在拉满姿态）；
 ## 玩家蓄力路径 = 无穷大（松手才收弓）+ 附身丢失守卫（cancel_charge 不经过
-## 本挂载，附身退出/死亡时靠 _process 的 is_possessed 检查收弓）。
+## 本挂载，附身退出/死亡时靠 _process 的 is_user_controlled 检查收弓）。
 var _aim_visual_until: float = -1.0e9
 ## 表现窗来源：true = 玩家蓄力路径（无超时，靠附身守卫收口）；false = AI 持瞄（超时兜底）
 var _aim_visual_player: bool = false
@@ -862,7 +862,7 @@ func effective_damage() -> float:
 ## 玩家主控出手节奏 ×1.3；非主控 1.0）
 func _user_controlled_speed_mult() -> float:
 	var e := get_owner_entity()
-	if e != null and e.has_method("is_possessed") and e.is_possessed():
+	if e != null and e.has_method("is_user_controlled") and e.is_user_controlled():
 		return 1.3
 	return 1.0
 

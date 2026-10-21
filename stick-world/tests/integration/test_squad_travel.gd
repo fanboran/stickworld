@@ -160,8 +160,8 @@ func _test_battle_started() -> void:
 			continue
 		if e.get("foot_offset") != null:
 			e.global_position.y = spawn_y - e.foot_offset
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		enemies.append(e)
 	_runner.assert_equal(enemies.size(), ENEMY_COUNT, "敌方应刷出 %d 人" % ENEMY_COUNT)
 	# 攻方 = 玩家 + 随行编队（跨图重建后的编队成员）

@@ -523,7 +523,7 @@ func _layout_work_bar() -> void:
 	_wp_fill.position = Vector3(anchor.x - WP_SIZE.x * 0.5 * (1.0 - r) * d, anchor.y, anchor.z + 0.02)
 
 
-## 附身四角框（possessed 玩家专用，贴地 quad）
+## 附身四角框（user_controlled 玩家专用，贴地 quad）
 static var _bracket_tex: ImageTexture = null
 
 static func _get_bracket_tex() -> ImageTexture:

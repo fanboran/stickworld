@@ -10,7 +10,7 @@ extends RefCounted
 ##
 ## 落点取舍（为何择班评估在 formation_system 而不在 ai_controller / team_ai）：
 ##   择班是"编制成员构成"的变化，权威值的三个计价项（班长 / 组织指挥官 / 玩家光环）
-##   全部由宿主持有（_squads.leader、_org_api、is_possessed），迁移动作也只有宿主
+##   全部由宿主持有（_squads.leader、_org_api、is_user_controlled），迁移动作也只有宿主
 ##   能一次做全（org 分配 + 槽位重算）。放 L1 控制器会让每个单位各自查班、各自迁移，
 ##   产生重复迁移动线与组织侧失步。
 ##
@@ -185,7 +185,7 @@ func prune_registry() -> void:
 ##   4. 接战中（主手射程内有敌）：交还战斗行为，不当场换班
 ##   5. 玩家手动号令保护期内（复用 TeamAi 既有保护期状态）
 func may_switch(u: Node, squad_id: String) -> bool:
-	if u.has_method("is_possessed") and u.is_possessed():
+	if u.has_method("is_user_controlled") and u.is_user_controlled():
 		return false
 	if is_leader_or_commander(u, squad_id):
 		return false
@@ -246,11 +246,11 @@ func is_player_squad(squad_id: String) -> bool:
 		return false
 	var leader: Node = squad.get("leader", null)
 	if leader != null and is_instance_valid(leader) \
-			and leader.has_method("is_possessed") and leader.is_possessed():
+			and leader.has_method("is_user_controlled") and leader.is_user_controlled():
 		return false
 	if bool(squad.get("follow_player", false)):
 		return true
 	for u in squad.get("units", []):
-		if is_instance_valid(u) and u.has_method("is_possessed") and u.is_possessed():
+		if is_instance_valid(u) and u.has_method("is_user_controlled") and u.is_user_controlled():
 			return true
 	return false

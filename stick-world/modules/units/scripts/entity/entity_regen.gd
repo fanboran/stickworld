@@ -9,13 +9,13 @@ extends RefCounted
 ##
 ## 结算共用口径：小数累积、凑满整数 HP 一口 heal——避免高频小数 heal 信号刷屏。
 ##
-## 纪律：possessed / health_component / _last_hit_ms 全留宿主，经 _entity 回引
+## 纪律：user_controlled / health_component / _last_hit_ms 全留宿主，经 _entity 回引
 ## 只读；本类自持的只有两个小数累积器（回血结算私有，无外部消费）。
 
 ## 实体回引（构造注入；Node 不参与引用计数，无循环持有）
 var _entity: Node = null
 ## 附身回血小数累积器（凑满 1 HP 才结算）
-var _possess_regen_accum: float = 0.0
+var _user_control_regen_accum: float = 0.0
 ## 脱战回血小数累积器（与附身回血同款）
 var _rest_regen_accum: float = 0.0
 
@@ -27,7 +27,7 @@ func _init(entity: Node) -> void:
 # ─────────────────────────────── 回血常量 ────────────────────────────────
 ## 附身回血速率（HP/s；SWL 字段名真值 healthRegenPerSecondWhenUserControlled，
 ## 数值无 dump 真值为语义推断，待实测校准）
-const POSSESS_REGEN_PER_SECOND: float = 0.5
+const USER_CONTROL_REGEN_PER_SECOND: float = 0.5
 ## 脱战回血延迟（s）：距上次受击超过此秒数才开始回（9j；缺陷表口径"脱战 5s 后回"）
 const OUT_OF_COMBAT_HP_REGEN_DELAY: float = 5.0
 ## 脱战回血速率（HP/s，整十口径；待实测校准）
@@ -37,17 +37,17 @@ const OUT_OF_COMBAT_HP_REGEN_CAP_RATIO: float = 0.25
 
 
 ## 附身期间缓慢回血。满血/死亡不结算；每累积满 1 HP 调一次 HealthComponent.heal。
-func tick_possess_regen(delta: float) -> void:
+func tick_user_control_regen(delta: float) -> void:
 	var health: Node = _entity.get_node_or_null("HealthComponent")
 	if health == null or not is_instance_valid(health):
 		return
 	if health.is_dead() or health.hp >= health.max_hp:
-		_possess_regen_accum = 0.0
+		_user_control_regen_accum = 0.0
 		return
-	_possess_regen_accum += delta * POSSESS_REGEN_PER_SECOND
-	if _possess_regen_accum >= 1.0:
-		var whole: int = int(_possess_regen_accum)
-		_possess_regen_accum -= float(whole)
+	_user_control_regen_accum += delta * USER_CONTROL_REGEN_PER_SECOND
+	if _user_control_regen_accum >= 1.0:
+		var whole: int = int(_user_control_regen_accum)
+		_user_control_regen_accum -= float(whole)
 		health.heal(float(whole))
 
 
@@ -55,7 +55,7 @@ func tick_possess_regen(delta: float) -> void:
 ##（走 SWL 真值附身慢回）。
 func tick_rest_hp_recovery(delta: float) -> void:
 	var health: Node = _entity.health_component
-	if _entity.possessed or health == null:
+	if _entity.user_controlled or health == null:
 		return
 	if health.is_dead() or health.hp >= health.max_hp:
 		_rest_regen_accum = 0.0

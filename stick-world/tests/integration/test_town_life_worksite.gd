@@ -143,7 +143,7 @@ func _villagers() -> Array:
 	for u in host.get_children():
 		if u is Node2D and is_instance_valid(u) \
 				and u.has_method("get_profession") and not String(u.get_profession()).is_empty() \
-				and u.has_method("is_possessed") and not u.is_possessed():
+				and u.has_method("is_user_controlled") and not u.is_user_controlled():
 			result.append(u)
 	return result
 

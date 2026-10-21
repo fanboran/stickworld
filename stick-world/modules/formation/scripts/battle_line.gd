@@ -25,7 +25,7 @@ extends RefCounted
 ##     战斗行为；line_order 标记，玩家/上级号令不覆盖）——SWL 阵线跟走的等价通道。
 ##
 ## 依赖纪律：纯 RefCounted，宿主（FormationSystem）注入；对单位只做 duck 查询
-##（get_weapon/get_faction/get_battle_instance/get_ai_controller/is_possessed/is_dead），
+##（get_weapon/get_faction/get_battle_instance/get_ai_controller/is_user_controlled/is_dead），
 ## 接战判定复用宿主 _member_enemy_in_range（squad_follow_director 同款回引）。
 
 # ─────────────────────── 常量 ───────────────────────
@@ -369,7 +369,7 @@ func _issue_march_orders() -> void:
 
 func _march_group(units: Array, slots: Dictionary, base_x: float, upc: int) -> void:
 	for u in units:
-		if u.has_method("is_possessed") and u.is_possessed():
+		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			continue
 		if _engaged(u):
 			continue  # 接战成员：战斗行为接管

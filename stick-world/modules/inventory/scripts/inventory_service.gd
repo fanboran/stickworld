@@ -58,8 +58,8 @@ func setup(game_root: Node) -> void:
 	# 与 bag 成 RefCounted 引用环致进程退出泄漏；挂在树节点上环断在生命周期）
 	inventory.bag.contents_changed.connect(_on_bag_contents_changed)
 	if EventBus != null:
-		EventBus.possession_started.connect(_on_possession_started)
-		EventBus.possession_ended.connect(_on_possession_ended)
+		EventBus.user_control_started.connect(_on_user_control_started)
+		EventBus.user_control_ended.connect(_on_user_control_ended)
 		if EventBus.has_signal("game_saving"):
 			EventBus.game_saving.connect(_on_game_saving)
 		if EventBus.has_signal("game_loaded"):
@@ -95,7 +95,7 @@ func _on_bag_contents_changed() -> void:
 
 # ─────────────────────────────── 附身边界 ────────────────────────────────
 
-func _on_possession_started(entity: Node) -> void:
+func _on_user_control_started(entity: Node) -> void:
 	_entity = entity
 	var wm: Node = _get_weapon_mount(entity)
 	if wm != null:
@@ -104,7 +104,7 @@ func _on_possession_started(entity: Node) -> void:
 	_apply_equipment_to_entity()
 
 
-func _on_possession_ended(entity: Node) -> void:
+func _on_user_control_ended(entity: Node) -> void:
 	# 恢复实体原武器状态（背包装备只属于玩家）
 	var wm: Node = _get_weapon_mount(entity)
 	if wm != null and _orig_weapon_type >= 0:
@@ -146,7 +146,7 @@ func _apply_equipment_to_entity() -> void:
 			if "equip_speed_mult" in wm:
 				wm.equip_speed_mult = 1.0
 		# 附身期间兵种默认盾让位装备语义（否则矛兵卸盾后模型还在）；
-		# 脱离时 _on_possession_ended 恢复原 shield_enabled
+		# 脱离时 _on_user_control_ended 恢复原 shield_enabled
 		wm.shield_enabled = false
 		wm.equipped_shield = inventory.has_shield()
 	if "armor_speed_factor" in _entity:

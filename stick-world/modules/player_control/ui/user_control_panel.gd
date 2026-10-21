@@ -1,6 +1,6 @@
-class_name PossessPanel
+class_name UserControlPanel
 extends Control
-## 附身面板 -- POSSESS 模式下的底部 HUD。
+## 附身面板 -- USER_CONTROL 模式下的底部 HUD。
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.1、§7.5。
 ## 显示附身单位的状态信息：
@@ -20,7 +20,7 @@ extends Control
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
-var _possession: Node = null
+var _user_control: Node = null
 
 # ─────────────────────────────── UI 元素 ────────────────────────────────
 var _info_label: Label = null
@@ -43,7 +43,7 @@ const CONTINUOUS_REFRESH_SEC := 0.2
 ## 由 GameRoot 调用，注入系统引用并构建 UI。
 func setup(game_root: Node) -> void:
 	_game_root = game_root
-	_possession = game_root.get_possession_interface() if game_root.has_method("get_possession_interface") else null
+	_user_control = game_root.get_user_control_interface() if game_root.has_method("get_user_control_interface") else null
 	_build_ui()
 	_connect_signals()
 
@@ -107,21 +107,21 @@ func _build_ui() -> void:
 
 func _connect_signals() -> void:
 	if EventBus != null:
-		if EventBus.has_signal("possession_started"):
-			EventBus.possession_started.connect(_on_possession_started)
-		if EventBus.has_signal("possession_ended"):
-			EventBus.possession_ended.connect(_on_possession_ended)
+		if EventBus.has_signal("user_control_started"):
+			EventBus.user_control_started.connect(_on_user_control_started)
+		if EventBus.has_signal("user_control_ended"):
+			EventBus.user_control_ended.connect(_on_user_control_ended)
 
 
 # ─────────────────────────────── 信号回调 ────────────────────────────────
 
-func _on_possession_started(_entity) -> void:
+func _on_user_control_started(_entity) -> void:
 	_bind_entity_signals()
 	_refresh_info()
 	_refresh_timer.start()
 
 
-func _on_possession_ended(_entity) -> void:
+func _on_user_control_ended(_entity) -> void:
 	_unbind_entity_signals()
 	_refresh_timer.stop()
 	_info_label.text = "未附身"
@@ -161,9 +161,9 @@ func _on_health_changed(_a = null, _b = null, _c = null) -> void:
 
 ## 当前附身实体（含失效防护；不在附身态返回 null）
 func _current_entity() -> Node2D:
-	if _possession == null or not _possession.has_method("get_possessed_entity"):
+	if _user_control == null or not _user_control.has_method("get_user_controlled_entity"):
 		return null
-	var entity: Node2D = _possession.get_possessed_entity()
+	var entity: Node2D = _user_control.get_user_controlled_entity()
 	if entity == null or not is_instance_valid(entity):
 		return null
 	return entity
@@ -171,7 +171,7 @@ func _current_entity() -> Node2D:
 
 # ─────────────────────────────── 刷新 ────────────────────────────────
 
-## 隐藏期跳过刷新（不可见刷了也看不见）；补「显示即刷」：possession_started
+## 隐藏期跳过刷新（不可见刷了也看不见）；补「显示即刷」：user_control_started
 ## 信号先于 ModePanel 面板切换到达时，信号当拍的刷新会被隐藏守卫吞掉——
 ## 不补这一笔，首屏信息停在"未附身"直到 0.2s 兜底节拍。
 func _notification(what: int) -> void:
@@ -214,5 +214,5 @@ func _refresh_info() -> void:
 # ─────────────────────────────── 按钮回调 ────────────────────────────────
 
 func _on_release_pressed() -> void:
-	if _possession != null and _possession.has_method("release"):
-		_possession.release()
+	if _user_control != null and _user_control.has_method("release"):
+		_user_control.release()

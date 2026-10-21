@@ -202,7 +202,7 @@ func _save_entities(db, slot_id: int, map_id: String, map: Node2D) -> Dictionary
 	for entity in map.get_entities():
 		if not is_instance_valid(entity):
 			continue
-		var is_player: int = 1 if (entity.has_method("is_possessed") and entity.is_possessed()) else 0
+		var is_player: int = 1 if (entity.has_method("is_user_controlled") and entity.is_user_controlled()) else 0
 		var facing: int = int(entity.get("_facing")) if "_facing" in entity else 1
 		var extra: Dictionary = {}
 		if "faction_id" in entity:
@@ -359,8 +359,8 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 		if player != null:
 			if player.get("foot_offset") != null:
 				player.global_position.y = spawn_y - player.foot_offset
-			if player.has_method("set_possessed"):
-				player.set_possessed(true)
+			if player.has_method("set_user_controlled"):
+				player.set_user_controlled(true)
 			if player.has_method("set_construction_manager") and _root._construction_api != null:
 				player.set_construction_manager(_root._construction_api)
 			if player.has_method("set_formation_system") and _root._formation_system != null:
@@ -395,16 +395,16 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> Diction
 		if "_facing" in entity:
 			entity.set("_facing", int(row["facing"]))
 		# 玩家附身
-		if int(row["is_player"]) == 1 and entity.has_method("set_possessed"):
-			entity.set_possessed(true)
+		if int(row["is_player"]) == 1 and entity.has_method("set_user_controlled"):
+			entity.set_user_controlled(true)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
 				_root.camera_rig.set_follow_target(entity)
 			# 读档进入即对准玩家（水平居中）
 			if _root.camera_rig != null and _root.camera_rig.has_method("snap_to_follow_target"):
 				_root.camera_rig.snap_to_follow_target()
 		else:
-			if entity.has_method("set_possessed"):
-				entity.set_possessed(false)
+			if entity.has_method("set_user_controlled"):
+				entity.set_user_controlled(false)
 		# AI 决策时钟族（WB2）：档内有 ai_timing 才导入——相位（错峰）保真且不再重掷；
 		# 老存档无该字段（或字段损坏）→ 保持 spawn 时装配语义，不报错
 		var timing: Variant = _parse_extra_field(row, "ai_timing")

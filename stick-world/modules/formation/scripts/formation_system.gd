@@ -603,7 +603,7 @@ func get_squad_authority(squad_id: String) -> float:
 	var leader: Node = squad.get("leader", null)
 	if leader != null and is_instance_valid(leader):
 		score += AUTHORITY_LEADER_BASE
-		if leader.has_method("is_possessed") and leader.is_possessed():
+		if leader.has_method("is_user_controlled") and leader.is_user_controlled():
 			score += AUTHORITY_PLAYER_BONUS
 	var org: Dictionary = _org_data(squad_id)
 	if not org.is_empty() and str(org.get("commander_id", "")) != "":

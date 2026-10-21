@@ -227,8 +227,8 @@ func _org_commander_position(org_id: String) -> Variant:
 func _player_command_position() -> Vector2:
 	var root: GameRoot = _host._root
 	var map: Node = root.get_current_map() if root.has_method("get_current_map") else null
-	if map != null and map.has_method("get_possessed_entity"):
-		var p: Node2D = map.get_possessed_entity()
+	if map != null and map.has_method("get_user_controlled_entity"):
+		var p: Node2D = map.get_user_controlled_entity()
 		if p != null and is_instance_valid(p):
 			return p.global_position
 	if root.camera_rig != null:

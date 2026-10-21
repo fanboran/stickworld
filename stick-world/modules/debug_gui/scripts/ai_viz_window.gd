@@ -421,7 +421,7 @@ func _detail_bbcode(d: Dictionary) -> String:
 		states.append("近身被威胁")
 	if bool(d.get("hit_stun", false)):
 		states.append("受击硬直")
-	if bool(d.get("possessed", false)):
+	if bool(d.get("user_controlled", false)):
 		states.append("玩家附身（AI 暂停）")
 	if not states.is_empty():
 		lines.append("特殊态: %s" % " · ".join(states))

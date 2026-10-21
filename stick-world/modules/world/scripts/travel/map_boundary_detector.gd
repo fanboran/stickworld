@@ -44,10 +44,10 @@ func _physics_process(delta: float) -> void:
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
 	# 获取当前附身实体
-	var pi: Node = _game_root.get_possession_interface() if _game_root.has_method("get_possession_interface") else null
-	if pi == null or not pi.has_method("get_possessed_entity"):
+	var pi: Node = _game_root.get_user_control_interface() if _game_root.has_method("get_user_control_interface") else null
+	if pi == null or not pi.has_method("get_user_controlled_entity"):
 		return
-	var player: Node2D = pi.get_possessed_entity()
+	var player: Node2D = pi.get_user_controlled_entity()
 	if player == null or not is_instance_valid(player):
 		return
 	var px: float = player.global_position.x

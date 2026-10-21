@@ -2,24 +2,24 @@ extends Node
 ## 集成测试：玩家附身（原 test_stage_07 迁移）。
 ##
 ## 运行：
-##   godot --headless --path stick-world res://tests/integration/test_possession.tscn -- --fresh-start
+##   godot --headless --path stick-world res://tests/integration/test_user_control.tscn -- --fresh-start
 ##
 ## 退出码：0 全部通过，1 有失败
 ##
 ## 测试覆盖：
-##   - PossessionInterface 装配（注册为 POSSESS handler）
-##   - PossessPanel 装配（脚本挂载 + UI 构建）
-##   - 从 BATTLE 模式进入 POSSESS：选中单位被附身
-##   - 附身后实体 is_possessed() == true
+##   - UserControlInterface 装配（注册为 USER_CONTROL handler）
+##   - UserControlPanel 装配（脚本挂载 + UI 构建）
+##   - 从 BATTLE 模式进入 USER_CONTROL：选中单位被附身
+##   - 附身后实体 is_user_controlled() == true
 ##   - 附身后相机居中跟随
-##   - EventBus possession_started 信号发射
+##   - EventBus user_control_started 信号发射
 ##   - release() 释放附身
-##   - 释放后实体 is_possessed() == false
+##   - 释放后实体 is_user_controlled() == false
 ##   - 释放后模式恢复为 BATTLE
-##   - EventBus possession_ended 信号发射
-##   - PossessPanel 显示单位信息
-##   - 直接 possess(entity) API
-##   - 附身时时间降速（auto_slow_on_possess）
+##   - EventBus user_control_ended 信号发射
+##   - UserControlPanel 显示单位信息
+##   - 直接 control(entity) API
+##   - 附身时时间降速（auto_slow_on_user_control）
 ##   - 鼠标左键攻击（_player_attack + _find_nearest_enemy_in_range）
 ##   - 死亡单位不可附身
 
@@ -39,8 +39,8 @@ var _runner: TestRunner
 var _game_root: Node
 var _tests: Array = []
 var _selection: Node = null
-var _possession: Node = null
-var _possess_panel: Control = null
+var _user_control: Node = null
+var _user_control_panel: Control = null
 var _map: Node2D = null
 var _test_units: Array = []
 ## 信号捕获
@@ -57,21 +57,21 @@ func _ready() -> void:
 # ─────────────────────────────── 测试注册 ────────────────────────────────
 
 func _register_tests() -> void:
-	_tests.append({"name": "装配: PossessionInterface 已注册", "fn": Callable(self, "_test_possession_assembled"), "async": false})
-	_tests.append({"name": "装配: PossessPanel 已注册", "fn": Callable(self, "_test_possess_panel_assembled"), "async": false})
-	_tests.append({"name": "附身: 从 BATTLE 进入 POSSESS 附身选中单位", "fn": Callable(self, "_test_possess_from_battle"), "async": true})
-	_tests.append({"name": "附身: entity.is_possessed() == true", "fn": Callable(self, "_test_entity_possessed"), "async": true})
-	_tests.append({"name": "信号: possession_started 发射", "fn": Callable(self, "_test_started_signal"), "async": true})
-	_tests.append({"name": "UI: PossessPanel 显示单位信息", "fn": Callable(self, "_test_panel_shows_info"), "async": true})
+	_tests.append({"name": "装配: UserControlInterface 已注册", "fn": Callable(self, "_test_user_control_assembled"), "async": false})
+	_tests.append({"name": "装配: UserControlPanel 已注册", "fn": Callable(self, "_test_user_control_panel_assembled"), "async": false})
+	_tests.append({"name": "附身: 从 BATTLE 进入 USER_CONTROL 附身选中单位", "fn": Callable(self, "_test_user_control_from_battle"), "async": true})
+	_tests.append({"name": "附身: entity.is_user_controlled() == true", "fn": Callable(self, "_test_entity_user_controlled"), "async": true})
+	_tests.append({"name": "信号: user_control_started 发射", "fn": Callable(self, "_test_started_signal"), "async": true})
+	_tests.append({"name": "UI: UserControlPanel 显示单位信息", "fn": Callable(self, "_test_panel_shows_info"), "async": true})
 	_tests.append({"name": "攻击: _find_nearest_enemy_in_range 找到敌人", "fn": Callable(self, "_test_find_enemy"), "async": false})
 	_tests.append({"name": "攻击: _player_attack 对敌人造成伤害", "fn": Callable(self, "_test_player_attack"), "async": true})
 	_tests.append({"name": "释放: release() 释放附身", "fn": Callable(self, "_test_release"), "async": true})
-	_tests.append({"name": "释放: entity.is_possessed() == false", "fn": Callable(self, "_test_entity_released"), "async": true})
+	_tests.append({"name": "释放: entity.is_user_controlled() == false", "fn": Callable(self, "_test_entity_released"), "async": true})
 	_tests.append({"name": "释放: 模式恢复为 BATTLE", "fn": Callable(self, "_test_mode_restored"), "async": true})
-	_tests.append({"name": "信号: possession_ended 发射", "fn": Callable(self, "_test_ended_signal"), "async": true})
-	_tests.append({"name": "API: possess(entity) 直接附身", "fn": Callable(self, "_test_possess_api"), "async": true})
+	_tests.append({"name": "信号: user_control_ended 发射", "fn": Callable(self, "_test_ended_signal"), "async": true})
+	_tests.append({"name": "API: control(entity) 直接附身", "fn": Callable(self, "_test_user_control_api"), "async": true})
 	_tests.append({"name": "降速: 附身时时间降速到 X1", "fn": Callable(self, "_test_time_slow"), "async": true})
-	_tests.append({"name": "限制: 死亡单位不可附身", "fn": Callable(self, "_test_dead_unit_possess"), "async": true})
+	_tests.append({"name": "限制: 死亡单位不可附身", "fn": Callable(self, "_test_dead_unit_user_control"), "async": true})
 
 
 # ─────────────────────────────── 异步执行 ────────────────────────────────
@@ -88,7 +88,7 @@ func _run_tests_async() -> void:
 	for i in 8:
 		await get_tree().process_frame
 	# 取消玩家附身（避免干扰）
-	_unpossess_player()
+	_release_user_control_player()
 	# 切到 BATTLE 模式激活 SelectionSystem
 	var dispatcher: Node = _game_root.input_dispatcher
 	if dispatcher != null:
@@ -96,8 +96,8 @@ func _run_tests_async() -> void:
 	for i in 2:
 		await get_tree().process_frame
 	_selection = _game_root.get_selection_system()
-	_possession = _game_root.get_possession_interface()
-	_possess_panel = _game_root.get_possess_panel()
+	_user_control = _game_root.get_user_control_interface()
+	_user_control_panel = _game_root.get_user_control_panel()
 	_map = _game_root.get_current_map()
 	# 生成测试单位
 	_spawn_test_units()
@@ -126,12 +126,12 @@ func _run_tests_async() -> void:
 
 # ─────────────────────────────── 辅助 ────────────────────────────────
 
-func _unpossess_player() -> void:
+func _release_user_control_player() -> void:
 	if _map == null:
 		return
 	for e in _map.get_entities():
-		if e is ScriptStickmanEntity and e.has_method("is_possessed") and e.is_possessed():
-			e.set_possessed(false)
+		if e is ScriptStickmanEntity and e.has_method("is_user_controlled") and e.is_user_controlled():
+			e.set_user_controlled(false)
 
 
 func _spawn_test_units() -> void:
@@ -143,38 +143,38 @@ func _spawn_test_units() -> void:
 			continue
 		if e.get("foot_offset") != null:
 			e.global_position.y = spawn_y - e.foot_offset
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		_test_units.append(e)
 
 
 # ─────────────────────────────── 同步测试 ────────────────────────────────
 
-func _test_possession_assembled() -> void:
-	_runner.assert_true(_possession != null, "PossessionInterface 应已装配")
-	if _possession != null:
-		_runner.assert_true(_possession.get_parent() != null, "PossessionInterface 应在场景树中")
-		# 验证已注册为 POSSESS handler
+func _test_user_control_assembled() -> void:
+	_runner.assert_true(_user_control != null, "UserControlInterface 应已装配")
+	if _user_control != null:
+		_runner.assert_true(_user_control.get_parent() != null, "UserControlInterface 应在场景树中")
+		# 验证已注册为 USER_CONTROL handler
 		var dispatcher: Node = _game_root.input_dispatcher
 		if dispatcher != null and dispatcher.has_method("get_handler"):
-			var handler: Node = dispatcher.get_handler(PlayerControlAPI.Mode.POSSESS)
-			_runner.assert_true(handler == _possession, "应注册为 POSSESS handler")
+			var handler: Node = dispatcher.get_handler(PlayerControlAPI.Mode.USER_CONTROL)
+			_runner.assert_true(handler == _user_control, "应注册为 USER_CONTROL handler")
 
 
-func _test_possess_panel_assembled() -> void:
-	_runner.assert_true(_possess_panel != null, "PossessPanel 应已装配")
-	if _possess_panel == null:
+func _test_user_control_panel_assembled() -> void:
+	_runner.assert_true(_user_control_panel != null, "UserControlPanel 应已装配")
+	if _user_control_panel == null:
 		return
-	_runner.assert_true(_possess_panel.get_parent() != null, "PossessPanel 应在场景树中")
+	_runner.assert_true(_user_control_panel.get_parent() != null, "UserControlPanel 应在场景树中")
 	# 验证 setup 已调用（HBox 应存在）
-	var hbox: Node = _possess_panel.find_child("HBox", true, false)  # 底栏质感包装层之下，递归找
-	_runner.assert_true(hbox != null, "PossessPanel UI 应已构建（HBox 存在）")
+	var hbox: Node = _user_control_panel.find_child("HBox", true, false)  # 底栏质感包装层之下，递归找
+	_runner.assert_true(hbox != null, "UserControlPanel UI 应已构建（HBox 存在）")
 
 
 # ─────────────────────────────── 异步测试 ────────────────────────────────
 
-func _test_possess_from_battle() -> void:
-	if _selection == null or _possession == null:
+func _test_user_control_from_battle() -> void:
+	if _selection == null or _user_control == null:
 		_runner.assert_true(false, "系统未装配")
 		return
 	# 选中 unit 0
@@ -183,51 +183,51 @@ func _test_possess_from_battle() -> void:
 	_runner.assert_equal(_selection.get_selected_count(), 1, "应选中 1 个单位")
 	# 连接信号
 	_started_signal_entity = null
-	var conn: Callable = Callable(self, "_on_possession_started")
-	EventBus.possession_started.connect(conn)
-	# 设置 pending entity 并切换到 POSSESS 模式
-	_possession.set_pending_entity(_test_units[0])
-	_game_root.input_dispatcher.enter_possess_mode()
+	var conn: Callable = Callable(self, "_on_user_control_started")
+	EventBus.user_control_started.connect(conn)
+	# 设置 pending entity 并切换到 USER_CONTROL 模式
+	_user_control.set_pending_entity(_test_units[0])
+	_game_root.input_dispatcher.enter_user_control_mode()
 	await get_tree().process_frame
 	await get_tree().process_frame
 	# 验证
-	var entity: Node2D = _possession.get_possessed_entity()
+	var entity: Node2D = _user_control.get_user_controlled_entity()
 	_runner.assert_true(entity != null, "应有附身实体")
 	_runner.assert_true(entity == _test_units[0], "应附身 unit 0")
-	EventBus.possession_started.disconnect(conn)
+	EventBus.user_control_started.disconnect(conn)
 
 
-func _on_possession_started(entity) -> void:
+func _on_user_control_started(entity) -> void:
 	_started_signal_entity = entity
 
 
-func _test_entity_possessed() -> void:
-	if _possession == null:
-		_runner.assert_true(false, "PossessionInterface 为空")
+func _test_entity_user_controlled() -> void:
+	if _user_control == null:
+		_runner.assert_true(false, "UserControlInterface 为空")
 		return
-	var entity: Node2D = _possession.get_possessed_entity()
+	var entity: Node2D = _user_control.get_user_controlled_entity()
 	if entity == null:
 		_runner.assert_true(false, "无附身实体")
 		return
-	_runner.assert_true(entity.is_possessed(), "entity.is_possessed() 应为 true")
+	_runner.assert_true(entity.is_user_controlled(), "entity.is_user_controlled() 应为 true")
 
 
 func _test_started_signal() -> void:
-	_runner.assert_true(_started_signal_entity != null, "应已收到 possession_started 信号")
+	_runner.assert_true(_started_signal_entity != null, "应已收到 user_control_started 信号")
 	if _started_signal_entity != null:
 		_runner.assert_true(_started_signal_entity == _test_units[0], "信号实体应为 unit 0")
 
 
 func _test_panel_shows_info() -> void:
-	if _possess_panel == null:
-		_runner.assert_true(false, "PossessPanel 为空")
+	if _user_control_panel == null:
+		_runner.assert_true(false, "UserControlPanel 为空")
 		return
 	await get_tree().process_frame
 	await get_tree().process_frame
 	# 验证信息标签不为"未附身"
-	var label: Label = _possess_panel.get("_info_label") if _possess_panel.get("_info_label") != null else null
+	var label: Label = _user_control_panel.get("_info_label") if _user_control_panel.get("_info_label") != null else null
 	if label != null:
-		_runner.assert_true(label.text != "未附身", "PossessPanel 应显示单位信息（非'未附身'）")
+		_runner.assert_true(label.text != "未附身", "UserControlPanel 应显示单位信息（非'未附身'）")
 		_runner.assert_true(label.text.findn("HP") >= 0, "信息应包含 HP")
 
 
@@ -279,12 +279,12 @@ func _test_player_attack() -> void:
 		_runner.assert_true(false, "目标无 HealthComponent")
 		return
 	# 主控伤害 ×2（SWL userControlledDamageMultiplier 真值）后 3 击不再保证
-	# 存活——抬满血防死亡影响后续 possess_api 用例（伤害验证只看 hp 变化）
+	# 存活——抬满血防死亡影响后续 user_control_api 用例（伤害验证只看 hp 变化）
 	var max_hp: float = maxf(float(target_health.get("max_hp")), 400.0)
 	target_health.set("max_hp", max_hp)
 	target_health.set("hp", max_hp)
 	var hp_before: float = target_health.hp
-	# 执行攻击（3 次即可验证伤害，避免杀死目标影响后续 possess_api 测试）
+	# 执行攻击（3 次即可验证伤害，避免杀死目标影响后续 user_control_api 测试）
 	for i in 3:
 		# 每次循环前重置冷却，确保 can_attack() 返回 true
 		if weapon != null and "_cooldown_timer" in weapon:
@@ -305,21 +305,21 @@ func _test_player_attack() -> void:
 
 
 func _test_release() -> void:
-	if _possession == null:
-		_runner.assert_true(false, "PossessionInterface 为空")
+	if _user_control == null:
+		_runner.assert_true(false, "UserControlInterface 为空")
 		return
 	_ended_signal_entity = null
-	var conn: Callable = Callable(self, "_on_possession_ended")
-	EventBus.possession_ended.connect(conn)
+	var conn: Callable = Callable(self, "_on_user_control_ended")
+	EventBus.user_control_ended.connect(conn)
 	# 释放
-	_possession.release()
+	_user_control.release()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	EventBus.possession_ended.disconnect(conn)
-	_runner.assert_true(_ended_signal_entity != null, "应收到 possession_ended 信号")
+	EventBus.user_control_ended.disconnect(conn)
+	_runner.assert_true(_ended_signal_entity != null, "应收到 user_control_ended 信号")
 
 
-func _on_possession_ended(entity) -> void:
+func _on_user_control_ended(entity) -> void:
 	_ended_signal_entity = entity
 
 
@@ -331,7 +331,7 @@ func _test_entity_released() -> void:
 	if entity == null or not is_instance_valid(entity):
 		_runner.assert_true(false, "unit 0 无效")
 		return
-	_runner.assert_true(not entity.is_possessed(), "释放后 entity.is_possessed() 应为 false")
+	_runner.assert_true(not entity.is_user_controlled(), "释放后 entity.is_user_controlled() 应为 false")
 
 
 func _test_mode_restored() -> void:
@@ -343,57 +343,57 @@ func _test_mode_restored() -> void:
 
 
 func _test_ended_signal() -> void:
-	_runner.assert_true(_ended_signal_entity != null, "应已收到 possession_ended 信号")
+	_runner.assert_true(_ended_signal_entity != null, "应已收到 user_control_ended 信号")
 
 
-func _test_possess_api() -> void:
-	if _possession == null or _test_units.size() < 2:
+func _test_user_control_api() -> void:
+	if _user_control == null or _test_units.size() < 2:
 		_runner.assert_true(false, "系统未就绪")
 		return
-	# 直接调用 possess(entity) API
+	# 直接调用 control(entity) API
 	var target: Node = _test_units[1]
-	_possession.possess(target)
+	_user_control.control(target)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	# 验证
-	var entity: Node2D = _possession.get_possessed_entity()
+	var entity: Node2D = _user_control.get_user_controlled_entity()
 	_runner.assert_true(entity == target, "应附身 unit 1")
-	_runner.assert_true(target.is_possessed(), "unit 1 is_possessed() 应为 true")
+	_runner.assert_true(target.is_user_controlled(), "unit 1 is_user_controlled() 应为 true")
 	# 释放
-	_possession.release()
+	_user_control.release()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_runner.assert_true(not target.is_possessed(), "释放后 unit 1 is_possessed() 应为 false")
+	_runner.assert_true(not target.is_user_controlled(), "释放后 unit 1 is_user_controlled() 应为 false")
 
 
 func _test_time_slow() -> void:
-	if _possession == null or _test_units.size() < 3:
+	if _user_control == null or _test_units.size() < 3:
 		_runner.assert_true(false, "系统未就绪")
 		return
 	# 保存原设置
-	var original_auto_slow: bool = TimeManager.auto_slow_on_possess
+	var original_auto_slow: bool = TimeManager.auto_slow_on_user_control
 	# 开启自动降速
-	TimeManager.auto_slow_on_possess = true
+	TimeManager.auto_slow_on_user_control = true
 	# 设速度为 X2
 	TimeManager.set_speed(TimeManager.Speed.X2)
 	# 附身
-	_possession.possess(_test_units[2])
+	_user_control.control(_test_units[2])
 	await get_tree().process_frame
 	# 验证速度降为 X1
 	var current_speed: int = TimeManager.current_speed
 	_runner.assert_equal(current_speed, TimeManager.Speed.X1, "附身后速度应为 X1")
 	# 释放
-	_possession.release()
+	_user_control.release()
 	await get_tree().process_frame
 	# 验证速度恢复
 	current_speed = TimeManager.current_speed
 	_runner.assert_equal(current_speed, TimeManager.Speed.X2, "释放后速度应恢复为 X2")
 	# 恢复原设置
-	TimeManager.auto_slow_on_possess = original_auto_slow
+	TimeManager.auto_slow_on_user_control = original_auto_slow
 
 
-func _test_dead_unit_possess() -> void:
-	if _possession == null or _test_units.size() < 4:
+func _test_dead_unit_control() -> void:
+	if _user_control == null or _test_units.size() < 4:
 		_runner.assert_true(false, "系统未就绪")
 		return
 	# 杀死 unit 3
@@ -404,17 +404,17 @@ func _test_dead_unit_possess() -> void:
 		return
 	health.take_damage(99999.0)
 	_runner.assert_true(unit.is_dead(), "unit 3 应已死亡")
-	# 尝试直接 possess 死亡单位
-	_possession.possess(unit)
+	# 尝试直接 user_control 死亡单位
+	_user_control.control(unit)
 	await get_tree().process_frame
-	# 死亡单位不应被附身（set_possessed 可能仍然设置，但 _on_possession_changed 会处理）
-	# 更重要的验证：get_possessed_entity 不应是死亡单位
-	var entity: Node2D = _possession.get_possessed_entity()
+	# 死亡单位不应被附身（set_user_controlled 可能仍然设置，但 _on_user_control_changed 会处理）
+	# 更重要的验证：get_user_controlled_entity 不应是死亡单位
+	var entity: Node2D = _user_control.get_user_controlled_entity()
 	if entity == unit:
 		_runner.assert_true(false, "不应附身死亡单位")
 	else:
 		_runner.assert_true(true, "死亡单位未被附身")
 	# 清理：如果有错误的附身，释放它
 	if entity != null:
-		_possession.release()
+		_user_control.release()
 		await get_tree().process_frame

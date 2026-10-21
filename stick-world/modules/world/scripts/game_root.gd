@@ -133,10 +133,10 @@ var observer_view: bool = false
 @warning_ignore("unused_private_class_variable")
 
 # ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
-## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
-var _possession_interface: Node = null
-## PossessPanel 实例引用（运行时由 SystemSetup 装配）
-var _possess_panel: Control = null
+## UserControlInterface 实例引用（运行时由 SystemSetup 装配）
+var _user_control_interface: Node = null
+## UserControlPanel 实例引用（运行时由 SystemSetup 装配）
+var _user_control_panel: Control = null
 
 # ─────────────────────────────── 资源系统（P0-9）────────────────────────────────
 ## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
@@ -455,14 +455,14 @@ func get_minimap() -> Control:
 	return _minimap
 
 
-## 获取 PossessionInterface 引用（供测试和 Building 调用）
-func get_possession_interface() -> Node:
-	return _possession_interface
+## 获取 UserControlInterface 引用（供测试和 Building 调用）
+func get_user_control_interface() -> Node:
+	return _user_control_interface
 
 
-## 获取 PossessPanel 引用（供测试用）
-func get_possess_panel() -> Control:
-	return _possess_panel
+## 获取 UserControlPanel 引用（供测试用）
+func get_user_control_panel() -> Control:
+	return _user_control_panel
 
 
 ## 获取 BattleDirector 引用（供测试用）

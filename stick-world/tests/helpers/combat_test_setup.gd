@@ -53,7 +53,7 @@ func start(host: Node) -> void:
 	for i in 8:
 		await host.get_tree().process_frame
 	# 取消玩家附身（避免干扰）
-	_unpossess_player()
+	_release_user_control_player()
 	# 切到 BATTLE 模式激活 SelectionSystem
 	var dispatcher: Node = game_root.input_dispatcher
 	if dispatcher != null:
@@ -81,18 +81,18 @@ func spawn_test_units(count: int) -> void:
 			continue
 		# 不再修 Y：HD-2D 图 origin 即视觉脚线（_origin_space_walk_band），
 		# 旧 2D 图"origin=髋部、spawn_y-foot_offset 对脚"的语义已随 2D 链路退役
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		units.append(e)
 
 
 ## 取消玩家附身（避免输入干扰测试）
-func _unpossess_player() -> void:
+func _release_user_control_player() -> void:
 	if map == null:
 		return
 	for e in map.get_entities():
-		if e is ScriptStickmanEntity and e.has_method("is_possessed") and e.is_possessed():
-			e.set_possessed(false)
+		if e is ScriptStickmanEntity and e.has_method("is_user_controlled") and e.is_user_controlled():
+			e.set_user_controlled(false)
 
 
 ## 重置单位瞬态（用例边界防残留）：清残余速度 / AI 移动分量，取消附身。
@@ -113,8 +113,8 @@ func reset_units(list: Array = []) -> void:
 		if "velocity" in u:
 			u.velocity = Vector2.ZERO
 		# 取消附身（附身单位不受 AI 驱动，会改变后一用例的跟随/攻击前提）
-		if u.has_method("set_possessed"):
-			u.set_possessed(false)
+		if u.has_method("set_user_controlled"):
+			u.set_user_controlled(false)
 
 
 ## 单位选择判定锚点（视觉域，与 SelectionSystem._unit_anchor 走同一公开地图

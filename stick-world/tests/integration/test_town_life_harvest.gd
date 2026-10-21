@@ -86,7 +86,7 @@ func _test_harvest_economy() -> void:
 	_runner.assert_true(miner != null, "矿工 spawn")
 	if miner != null:
 		miner.global_position.y = spawn_y - miner.foot_offset
-		miner.set_possessed(false)
+		miner.set_user_controlled(false)
 		var got: String = TownLifeAPI.assign_village_job(miner, 2)
 		_runner.assert_equal(got, "miner", "轮转 index2 应得矿工")
 
@@ -150,6 +150,6 @@ func _villagers(map: Node2D) -> Array:
 	for u in host.get_children():
 		if u is Node2D and is_instance_valid(u) \
 				and u.has_method("get_profession") and not String(u.get_profession()).is_empty() \
-				and u.has_method("is_possessed") and not u.is_possessed():
+				and u.has_method("is_user_controlled") and not u.is_user_controlled():
 			result.append(u)
 	return result

@@ -17,41 +17,41 @@ func bind(host: Node) -> void:
 
 # ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
 
-## 实例化 PossessionInterface，注册为 POSSESS 模式 handler。
-func _setup_possession_interface() -> void:
+## 实例化 UserControlInterface，注册为 USER_CONTROL 模式 handler。
+func _setup_user_control_interface() -> void:
 	var pi := Node.new()
-	pi.set_script(_host._PossessionInterfaceScript)
-	pi.name = "PossessionInterface"
+	pi.set_script(_host._UserControlInterfaceScript)
+	pi.name = "UserControlInterface"
 	_host._root.add_child(pi)
-	_host._root._possession_interface = pi
+	_host._root._user_control_interface = pi
 	# 注入 GameRoot（替代父链反查）
 	if pi.has_method("setup"):
 		pi.setup(_host._root)
-	# 注册为 POSSESS handler
+	# 注册为 USER_CONTROL handler
 	if _host._root.input_dispatcher != null and _host._root.input_dispatcher.has_method("register_handler"):
-		_host._root.input_dispatcher.register_handler(PlayerControlAPI.Mode.POSSESS, pi)
+		_host._root.input_dispatcher.register_handler(PlayerControlAPI.Mode.USER_CONTROL, pi)
 
 
-## 给场景中已存在的 PossessPanel 占位节点挂脚本，并调用 setup。
-func _setup_possess_panel() -> void:
+## 给场景中已存在的 UserControlPanel 占位节点挂脚本，并调用 setup。
+func _setup_user_control_panel() -> void:
 	if _host._root.ui_root == null:
 		return
 	var mp: Control = _host._root.ui_root.get_node_or_null("ModePanel")
 	if mp == null:
 		return
-	var pp: Control = mp.get_node_or_null("PossessPanel")
+	var pp: Control = mp.get_node_or_null("UserControlPanel")
 	if pp == null:
 		return
-	pp.set_script(_host._PossessPanelScript)
-	_host._root._possess_panel = pp
-	_host.call_deferred("_setup_possess_panel_deferred")
+	pp.set_script(_host._UserControlPanelScript)
+	_host._root._user_control_panel = pp
+	_host.call_deferred("_setup_user_control_panel_deferred")
 
 
-func _setup_possess_panel_deferred() -> void:
-	if _host._root._possess_panel == null:
+func _setup_user_control_panel_deferred() -> void:
+	if _host._root._user_control_panel == null:
 		return
-	if _host._root._possess_panel.has_method("setup"):
-		_host._root._possess_panel.setup(_host._root)
+	if _host._root._user_control_panel.has_method("setup"):
+		_host._root._user_control_panel.setup(_host._root)
 
 
 ## 注册 EXPLORE 模式 handler（不立即激活，等地图加载完再 set_mode）。
@@ -71,7 +71,7 @@ func _register_explore_handler() -> void:
 # ─────────────────────────────── 游玩 UI ────────────────────────────────
 
 func _setup_game_ui() -> void:
-	# （possessed 玩家白四角框已归并入 SelectionSystem._draw，2026-09-14）
+	# （user_controlled 玩家白四角框已归并入 SelectionSystem._draw，2026-09-14）
 	# 鼠标悬停方框
 	_host._root._hover_indicator = UIKit.widget(_host._HoverIndicatorScript, "HoverIndicator")
 	_host._root._hover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE

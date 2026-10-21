@@ -161,7 +161,7 @@ func _test_insufficient_and_soldier() -> void:
 		soldiers += 1
 		_runner.assert_false(bool(u.get_meta("garrison_unit", false)), "士兵不应带守军 meta")
 		_runner.assert_true(not u.is_dead(), "士兵应存活")
-		_runner.assert_false(u.is_possessed(), "士兵不应是附身态")
+		_runner.assert_false(u.is_user_controlled(), "士兵不应是附身态")
 	_runner.assert_true(soldiers >= 1, "应有可出征士兵（实得 %d）" % soldiers)
 
 
@@ -175,7 +175,7 @@ func _villager_count() -> int:
 			continue
 		if bool(u.get_meta("garrison_unit", false)):
 			continue
-		if u.is_possessed():
+		if u.is_user_controlled():
 			continue
 		if u.is_dead():
 			continue

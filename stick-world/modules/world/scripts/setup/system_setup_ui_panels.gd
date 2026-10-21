@@ -43,8 +43,8 @@ func _mode_to_panel_type(mode: int) -> int:
 			return UIAPI.PanelType.VILLAGE
 		PlayerControlAPI.Mode.BATTLE:
 			return UIAPI.PanelType.BATTLE
-		PlayerControlAPI.Mode.POSSESS:
-			return UIAPI.PanelType.POSSESS
+		PlayerControlAPI.Mode.USER_CONTROL:
+			return UIAPI.PanelType.USER_CONTROL
 		_:
 			return UIAPI.PanelType.VILLAGE
 

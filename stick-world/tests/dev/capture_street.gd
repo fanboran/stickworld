@@ -105,7 +105,7 @@ func _ready() -> void:
 	if sl_dbg != null:
 		var map_dbg: Node2D = sl_dbg.get_current_map()
 		if map_dbg != null:
-			var p: Node2D = map_dbg.get_possessed_entity()
+			var p: Node2D = map_dbg.get_user_controlled_entity()
 			if p != null:
 				print("[capture] player pos=", p.position, " foot_off=", p.get("foot_offset"))
 	await _wait_frames(5)

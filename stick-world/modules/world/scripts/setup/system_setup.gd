@@ -39,8 +39,8 @@ const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/mi
 const _MinimapWindowScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap_window.gd")
 const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thumbnail.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
-const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
-const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
+const _UserControlInterfaceScript: GDScript = preload("res://modules/player_control/scripts/user_control_interface.gd")
+const _UserControlPanelScript: GDScript = preload("res://modules/player_control/ui/user_control_panel.gd")
 const _FxPoolScript: GDScript = preload("res://modules/fx/scripts/fx_pool.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
@@ -218,8 +218,8 @@ func _step_table() -> Array:
 		["战略图 L3", _setup_l3_strategic_map],
 		["地图缩略窗", _open_tab_map_default],
 		["背包", _setup_inventory],
-		["附身界面", _setup_possession_interface],
-		["附身面板", _setup_possess_panel],
+		["附身界面", _setup_user_control_interface],
+		["附身面板", _setup_user_control_panel],
 		["探索交互", _register_explore_handler],
 		["边界检测", _setup_boundary_detector],
 		["游戏 UI", _setup_game_ui],
@@ -392,16 +392,16 @@ func _setup_boundary_detector() -> void:
 
 # ─────────────────── 壳方法：玩家交互与环境域（转发 system_setup_extras.gd） ───────────────────
 
-func _setup_possession_interface() -> void:
-	_extras()._setup_possession_interface()
+func _setup_user_control_interface() -> void:
+	_extras()._setup_user_control_interface()
 
 
-func _setup_possess_panel() -> void:
-	_extras()._setup_possess_panel()
+func _setup_user_control_panel() -> void:
+	_extras()._setup_user_control_panel()
 
 
-func _setup_possess_panel_deferred() -> void:
-	_extras()._setup_possess_panel_deferred()
+func _setup_user_control_panel_deferred() -> void:
+	_extras()._setup_user_control_panel_deferred()
 
 
 func _register_explore_handler() -> void:

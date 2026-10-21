@@ -218,7 +218,7 @@ func register_unit(entity: Node) -> Dictionary:
 		"band": band,
 		"band_idx": band_idx,
 		"weapons": _adopt_weapons(entity, rig),
-		"renderer": weakref(self),  # 实体 _exit_tree/_on_possession_changed 经此注销
+		"renderer": weakref(self),  # 实体 _exit_tree/_on_user_control_changed 经此注销
 	}
 	_slots[slot["slot"]] = slot
 	# 阴影进 crowd 桶：原 ContactShadow Sprite 停用（注销/回退时恢复）

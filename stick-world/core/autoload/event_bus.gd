@@ -129,10 +129,10 @@ extends Node
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)
-# 附身开始：PossessionInterface -> UI、Units、TimeManager
-@warning_ignore("unused_signal") signal possession_started(entity)
-# 附身结束：PossessionInterface -> UI、Units、TimeManager
-@warning_ignore("unused_signal") signal possession_ended(entity)
+# 附身开始：UserControlInterface -> UI、Units、TimeManager
+@warning_ignore("unused_signal") signal user_control_started(entity)
+# 附身结束：UserControlInterface -> UI、Units、TimeManager
+@warning_ignore("unused_signal") signal user_control_ended(entity)
 
 # ─────────────────────────────── 调试可见性（debug_gui → 生产解耦）──────────────────────────────
 # 调试覆盖层显隐广播：生产代码（如 resource_node 调试标签）订阅此信号，

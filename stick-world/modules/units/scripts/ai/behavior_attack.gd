@@ -750,8 +750,8 @@ func _spawn_minidons(count: int) -> Array:
 		var e_foot: float = float(e.get("foot_offset")) if "foot_offset" in e else 0.0
 		e.global_position = Vector2(entity.global_position.x + facing * 72.0,
 				feet_y + lateral_y - e_foot)
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		if e.has_method("set_faction") and entity.has_method("get_faction"):
 			e.set_faction(entity.get_faction())
 		# 参战注册（BattleInstance.add_unit：内部会回填 battle_instance 引用）

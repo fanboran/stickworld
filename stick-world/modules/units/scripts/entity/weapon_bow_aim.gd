@@ -39,10 +39,10 @@ func process_tick(_delta: float) -> void:
 	# 玩家蓄力窗的收口守卫：附身取消（cancel_charge 不经过本挂载）/ 附身丢失 /
 	# 死亡，都会让"按住全程"的无限窗失去归属——立刻收弓回站姿，别钉在拉满
 	if _mount._aim_visual_player:
-		var possessed: bool = owner_entity != null \
-				and owner_entity.has_method("is_possessed") and owner_entity.is_possessed() \
+		var user_controlled: bool = owner_entity != null \
+				and owner_entity.has_method("is_user_controlled") and owner_entity.is_user_controlled() \
 				and not (owner_entity.has_method("is_dead") and owner_entity.is_dead())
-		if not possessed:
+		if not user_controlled:
 			end_bow_aim_visual(true)
 			return
 	# 超时收弓（玩家蓄力路径无超时）：窗残而行为已切走时，别把人钉在拉满姿态

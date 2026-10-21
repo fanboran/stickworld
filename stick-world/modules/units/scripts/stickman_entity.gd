@@ -7,7 +7,7 @@ extends CharacterBody2D
 ## 承担物理移动、碰撞、附身接口。
 ##
 ## 移动与驱动：
-##   - 玩家附身时 WASD 控制移动/攻击（entity_possession）
+##   - 玩家附身时 WASD 控制移动/攻击（entity_user_control）
 ##   - 未附身时由 AIController 决策驱动（战斗/工作/采集/闲逛行为全量在役）
 ##
 ## 子节点结构：
@@ -22,7 +22,7 @@ extends CharacterBody2D
 ## 子域助手（方法体所在，_init 注入回引，跨域状态字段全留本类）：
 ##   entity/entity_motion.gd     —— 移动/分离/加减速（WALK_ANIM_BASE/ANIM_SPEED_MULT/
 ##                                  IDLE_THRESHOLD/SEPARATION_* 运动常量随迁）
-##   entity/entity_possession.gd —— 玩家附身输入（移动/攻击/举盾/模式切换；
+##   entity/entity_user_control.gd —— 玩家附身输入（移动/攻击/举盾/模式切换；
 ##                                  引擎回调 _input/_unhandled_input 薄壳留本类）
 ##   entity/entity_scale_rig.gd  —— 渲染判定缩放/markers 同步/接触阴影/碰撞基准
 ##   entity/entity_regen.gd      —— 生命恢复（附身慢回/脱战回血，回血常量随迁）
@@ -62,7 +62,7 @@ const _AimPreviewScript: GDScript = preload("res://modules/units/scripts/entity/
 ## 运动助手脚本（移动/分离/加减速，方法体所在）
 const _MotionScript: GDScript = preload("res://modules/units/scripts/entity/entity_motion.gd")
 ## 附身输入助手脚本（玩家控制，方法体所在）
-const _PossessionScript: GDScript = preload("res://modules/units/scripts/entity/entity_possession.gd")
+const _UserControlScript: GDScript = preload("res://modules/units/scripts/entity/entity_user_control.gd")
 ## 缩放/骨架同步助手脚本（渲染判定缩放/markers 同步，方法体所在）
 const _ScaleRigScript: GDScript = preload("res://modules/units/scripts/entity/entity_scale_rig.gd")
 ## 回血助手脚本（附身慢回/脱战回血，方法体所在）
@@ -81,10 +81,10 @@ const ScriptBattleSim := preload("res://modules/combat/api.gd").BATTLE_SIM_SCRIP
 
 # ─────────────────────────────── @export ────────────────────────────────
 ## 是否被玩家附身（true=玩家控制，false=AI 控制）
-@export var possessed: bool = false:
+@export var user_controlled: bool = false:
 	set(v):
-		possessed = v
-		_on_possession_changed(v)
+		user_controlled = v
+		_on_user_control_changed(v)
 
 ## 兵种数据 ID（对齐 config/units/stickmen.tres 的行 id；默认平原步兵）
 @export var stickman_def_id: String = "stm_plain_001"
@@ -285,7 +285,7 @@ var _interaction: Node = null
 ## 运动助手（移动/分离/加减速方法体所在）
 var _motion: RefCounted = null
 ## 附身输入助手（玩家控制方法体所在）
-var _possession: RefCounted = null
+var _user_control: RefCounted = null
 ## 蓄力轨迹预览（拉弓/投矛期间的抛物线预测点；_ready 装配，隐藏待命）
 var _aim_preview: Node2D = null
 ## 缩放/骨架同步助手（渲染判定缩放/markers 同步方法体所在）
@@ -305,7 +305,7 @@ var _tuning: RefCounted = null
 func _init() -> void:
 	# 子域助手注入（_init 注入防 spawn 侧 add_child 前调用撞 null）
 	_motion = _MotionScript.new(self)
-	_possession = _PossessionScript.new(self)
+	_user_control = _UserControlScript.new(self)
 	_scale_rig = _ScaleRigScript.new(self)
 	_regen = _RegenScript.new(self)
 	_facing_helper = _FacingScript.new(self)
@@ -330,19 +330,19 @@ func _enter_tree() -> void:
 ## 鼠标攻击/举盾在 _unhandled_input（GUI 优先：点 UI 控件的事件到不了游戏侧，
 ## 无需 hovered 让路补丁——该补丁依赖 hover 缓存时序，建造菜单按钮曾被误吞）
 func _input(event: InputEvent) -> void:
-	if not possessed:
+	if not user_controlled:
 		return
-	if event.is_action_pressed("possess/toggle_walk_run"):
+	if event.is_action_pressed("user_control/toggle_walk_run"):
 		_walk_only = not _walk_only
 		if _walk_only and _is_running:
 			_is_running = false
 			_current_speed = WALK_SPEED
 			_visual.play("walk")
-	elif event.is_action_pressed("possess/toggle_combat"):
+	elif event.is_action_pressed("user_control/toggle_combat"):
 		_toggle_combat_mode()
-	elif event.is_action_pressed("possess/swing"):
+	elif event.is_action_pressed("user_control/swing"):
 		# 空挥（复刻原版 User Control）：无目标也出攻击动作，纯动作无伤害
-		_possession._player_swing()
+		_user_control._player_swing()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
 
@@ -495,9 +495,9 @@ func _physics_tick(delta: float) -> void:
 		if zi != z_index:
 			z_index = zi
 	# 仅在被附身时处理玩家输入
-	if possessed:
-		_possession._handle_player_input(delta)
-		_regen.tick_possess_regen(delta)
+	if user_controlled:
+		_user_control._handle_player_input(delta)
+		_regen.tick_user_control_regen(delta)
 	else:
 		# AI 控制：先让 AIController 决策（设置 _ai_move_dir），再处理移动。
 		# 战斗性能优化：AI 决策与行为状态机降到 30Hz（隔物理帧、传倍增 delta
@@ -582,39 +582,39 @@ func _physics_tick(delta: float) -> void:
 	# 玩家交互提示（靠近仓库/工地时显示）
 	_interaction.update_hint()
 	# 按住 E 连续采集（动作锁解除后自动续作）
-	if possessed:
+	if user_controlled:
 		_interaction.try_hold_interact()
 
 
 # ─────────────────────────────── 玩家输入（按F / H 由交互控制器处理）────────────────────────────────
 
 ## 玩家附身时按F：交互（取放材料 / 敲击建造，实现见 InteractionController）。
-## 按H：脱离卡死。键位走 InputMap action（possess/interact / possess/escape_stuck）。
+## 按H：脱离卡死。键位走 InputMap action（user_control/interact / user_control/escape_stuck）。
 ## 鼠标左键攻击（§7.5；按下/松开两态走蓄力状态机）、右键举盾同在此层：
 ## GUI（mf=STOP 控件）优先消费鼠标——点建造菜单/编制按钮的事件到不了这里，
 ## 不再需要 hovered 让路补丁。攻击消费后 set_input_as_handled，挡住同层的
 ## 相机拖动（world/drag 同为左键，"空地拖移"注释本就要求攻击优先消费）。
 func _unhandled_input(event: InputEvent) -> void:
-	if not possessed:
+	if not user_controlled:
 		return
-	if event.is_action_pressed("possess/interact"):
+	if event.is_action_pressed("user_control/interact"):
 		_interaction.try_interact()
-	elif event.is_action_pressed("possess/escape_stuck"):
+	elif event.is_action_pressed("user_control/escape_stuck"):
 		escape_stuck()
-	elif event is InputEventMouseButton and event.is_action_pressed("possess/attack"):
+	elif event is InputEventMouseButton and event.is_action_pressed("user_control/attack"):
 		# 玩家按下：按武器分流（弓/矛/杖蓄力，近战直接攻击）
-		_possession._player_attack_press()
+		_user_control._player_attack_press()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.is_action_released("possess/attack"):
+	elif event is InputEventMouseButton and event.is_action_released("user_control/attack"):
 		# 玩家松开：蓄力收口（放箭/投矛/施法；非蓄力态静默）
-		_possession._player_attack_release()
+		_user_control._player_attack_release()
 		if get_viewport() != null:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton \
-			and (event.is_action_pressed("possess/block") or event.is_action_released("possess/block")):
+			and (event.is_action_pressed("user_control/block") or event.is_action_released("user_control/block")):
 		# 副手盾：按住右键举盾、松开放下
-		_possession._set_player_blocking(event.pressed)
+		_user_control._set_player_blocking(event.pressed)
 		if event.pressed:
 			get_viewport().set_input_as_handled()
 
@@ -638,7 +638,7 @@ func get_health_bar() -> Node:
 	return _health_bar
 
 
-## 统一移动处理（方法体在 entity_motion.gd；possession 经实体回引共用的入口）。
+## 统一移动处理（方法体在 entity_motion.gd；user_control 经实体回引共用的入口）。
 func _apply_movement(delta: float, dir: Vector2, run: bool, allow_run: bool) -> void:
 	_motion._apply_movement(delta, dir, run, allow_run)
 
@@ -712,9 +712,9 @@ func get_current_anim() -> String:
 
 # ─────────────────────────────── 玩家战斗模式（Q 键切换）────────────────────────────────
 
-## 切换建造/战斗模式（方法体在 entity_possession.gd；test_combat_control.gd 无守卫直呼）。
+## 切换建造/战斗模式（方法体在 entity_user_control.gd；test_combat_control.gd 无守卫直呼）。
 func _toggle_combat_mode() -> void:
-	_possession._toggle_combat_mode()
+	_user_control._toggle_combat_mode()
 
 
 ## 获取所在地图引用（可能为 null，供 AI 行为查询玩家等）。
@@ -724,22 +724,22 @@ func get_map() -> Node2D:
 
 # ─────────────────────────────── 玩家攻击（§7.5）────────────────────────────────
 
-## 玩家鼠标左键攻击（方法体在 entity_possession.gd；test_possession.gd 守卫调用）。
+## 玩家鼠标左键攻击（方法体在 entity_user_control.gd；test_user_control.gd 守卫调用）。
 func _player_attack() -> void:
-	_possession._player_attack()
+	_user_control._player_attack()
 
 
-## 找最近敌人在武器射程内（方法体在 entity_possession.gd；test_possession.gd 守卫调用）。
+## 找最近敌人在武器射程内（方法体在 entity_user_control.gd；test_user_control.gd 守卫调用）。
 func _find_nearest_enemy_in_range() -> Node:
-	return _possession._find_nearest_enemy_in_range()
+	return _user_control._find_nearest_enemy_in_range()
 
 
-## 玩家蓄力瞄准中查询（方法体在 entity_possession.gd；hitstop 互斥/轨迹预览消费）。
+## 玩家蓄力瞄准中查询（方法体在 entity_user_control.gd；hitstop 互斥/轨迹预览消费）。
 func is_aim_charging() -> bool:
-	return _possession.is_aim_charging()
+	return _user_control.is_aim_charging()
 
 
-## 蓄力轨迹预览刷新（方法体在 entity_possession.gd 每帧调用；按武器分流：
+## 蓄力轨迹预览刷新（方法体在 entity_user_control.gd 每帧调用；按武器分流：
 ## 弓/矛=抛物线预测点列，杖=鼠标落点 AOE 圈）。
 func update_charge_preview(origin: Vector2, velocity: Vector2) -> void:
 	if _aim_preview == null or not is_instance_valid(_aim_preview):
@@ -847,12 +847,12 @@ func escape_stuck() -> void:
 
 
 ## 切换附身状态
-func set_possessed(p: bool) -> void:
-	possessed = p
+func set_user_controlled(p: bool) -> void:
+	user_controlled = p
 
 
-func is_possessed() -> bool:
-	return possessed
+func is_user_controlled() -> bool:
+	return user_controlled
 
 
 ## BattleSim 注册注入（BattleInstance.add_unit 调用；sid<0 = 注册失败/未启用）。
@@ -884,7 +884,7 @@ func is_on_billboard_map() -> bool:
 	return _billboard_visual
 
 
-func _on_possession_changed(p: bool) -> void:
+func _on_user_control_changed(p: bool) -> void:
 	# 附身接管时交还 sim（玩家输入直驱旧实体链——sim 只服务 AI 单位）
 	if p and _sim != null and _sim_sid >= 0:
 		_sim.unregister_unit(self)
@@ -906,7 +906,7 @@ func _on_possession_changed(p: bool) -> void:
 		_is_running = false
 		velocity = Vector2.ZERO
 		# 退出附身强制收口蓄力态
-		_possession.cancel_charge()
+		_user_control.cancel_charge()
 		hide_charge_preview()
 	# 取消附身时也清除 AI 移动方向，避免残留
 	_ai_move_dir = Vector2.ZERO

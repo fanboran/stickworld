@@ -680,8 +680,8 @@ func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node, face: int = 0)
 	if e.get("foot_offset") != null \
 			and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 		e.global_position.y = pos.y - e.foot_offset
-	if e.has_method("set_possessed"):
-		e.set_possessed(false)
+	if e.has_method("set_user_controlled"):
+		e.set_user_controlled(false)
 	# 开局朝向：先于一切行为/移动意图落定（战列对峙的第一眼）
 	if face != 0 and e.has_method("try_set_facing"):
 		e.try_set_facing(face)

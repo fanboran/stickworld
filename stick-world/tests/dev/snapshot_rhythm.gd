@@ -55,7 +55,7 @@ func _run() -> void:
 	var miner: Node2D = map.spawn_entity(UnitsAPI.STICKMAN_ENTITY_SCENE, Vector2(1150.0, spawn_y))
 	if miner != null:
 		miner.global_position.y = spawn_y - miner.foot_offset
-		miner.set_possessed(false)
+		miner.set_user_controlled(false)
 		TownLifeAPI.assign_village_job(miner, 2)
 
 	# 时钟归正午（工作时段）并保持：等待/摆点期间自然推进（60s=1 游戏日）
@@ -133,7 +133,7 @@ func _find_player(map: Node2D) -> Node2D:
 	if host == null:
 		return null
 	for u in host.get_children():
-		if u.has_method("is_possessed") and u.is_possessed():
+		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			return u
 	return null
 
@@ -156,7 +156,7 @@ func _villagers(map: Node2D) -> Array:
 	for u in host.get_children():
 		if u is Node2D and is_instance_valid(u) \
 				and u.has_method("get_profession") and not String(u.get_profession()).is_empty() \
-				and u.has_method("is_possessed") and not u.is_possessed():
+				and u.has_method("is_user_controlled") and not u.is_user_controlled():
 			result.append(u)
 	return result
 

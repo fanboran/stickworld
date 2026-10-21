@@ -118,7 +118,7 @@ func set_bounds(p_left: float, p_right: float, p_gy: float, p_gb: float) -> void
 func register_unit(unit: Node, p_faction: int) -> int:
 	if unit == null or not is_instance_valid(unit):
 		return -1
-	if unit.has_method("is_possessed") and unit.is_possessed():
+	if unit.has_method("is_user_controlled") and unit.is_user_controlled():
 		return -1
 	var sid: int = entities.size()
 	entities.append(unit)

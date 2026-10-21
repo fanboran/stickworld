@@ -21,8 +21,8 @@ func _ready() -> void:
 		var e: Node2D = EntityScene.instantiate()
 		e.position = Vector2(500 + i * 120, 500)
 		add_child(e)
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		var slot: Dictionary = _crowd.register_unit(e)
 		if slot.is_empty():
 			push_error("[crowd_probe] register 失败 unit=%d" % i)

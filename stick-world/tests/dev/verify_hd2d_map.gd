@@ -28,7 +28,7 @@ func _ready() -> void:
 		return
 	print("[verify_hd2d] 地图=%s" % map.name)
 	# 玩家生成（附身实体）
-	var player: Node2D = map.get_possessed_entity()
+	var player: Node2D = map.get_user_controlled_entity()
 	_check(player != null, "玩家附身实体已生成")
 	# 资源点（树/矿采集交互）：resource_node 组
 	var nodes := get_tree().get_nodes_in_group("resource_node")

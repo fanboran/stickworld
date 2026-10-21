@@ -89,7 +89,7 @@ func _force_facing(new_facing: int) -> bool:
 
 func _set_facing_rate_limited(new_facing: int) -> bool:
 	var pf := Engine.get_physics_frames()
-	if not _entity.is_possessed() and _last_direction_change_frame >= 0 \
+	if not _entity.is_user_controlled() and _last_direction_change_frame >= 0 \
 			and pf - _last_direction_change_frame < FACING_RATE_LIMIT_FRAMES:
 		return false
 	_last_direction_change_frame = pf
@@ -103,7 +103,7 @@ func _set_facing_rate_limited(new_facing: int) -> bool:
 ## 附身豁免（手控直给）；face_battle_dir 等稳定朝向源不经本闸（直接走
 ## try_set_facing 的节流），站定收口不被移动滞回卡住。
 func note_move_facing(side: int, delta: float) -> bool:
-	if _entity.is_possessed() or side == 0 or side == _entity._facing:
+	if _entity.is_user_controlled() or side == 0 or side == _entity._facing:
 		_facing_desire_acc = 0.0
 		return true
 	if _first_move_facing_frame < 0:

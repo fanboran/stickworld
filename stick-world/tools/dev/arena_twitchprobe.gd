@@ -181,7 +181,7 @@ func _phase_twitch_sample(secs: int) -> void:
 			var dir: Vector2 = e.get("_ai_move_dir")
 			var face: int = e.get_facing() if e.has_method("get_facing") else 1
 			var ts: float = float(e.get("_last_direction_change_frame")) if "_last_direction_change_frame" in e else -99.0
-			var poss: bool = bool(e.get("possessed")) if "possessed" in e else false
+			var poss: bool = bool(e.get("user_controlled")) if "user_controlled" in e else false
 			(rec["data"] as Array).append([body.position.x, body.position.y,
 					vel.x, vel.y, anim, seq, stance, shield,
 					0.0 if dir == null else dir.x, face, ts, poss])

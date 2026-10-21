@@ -105,7 +105,7 @@ func update_follow(squad_id: String, follow_default_gap: float, catchup_run_dist
 		anchor = front_centroid - dir.normalized() * float(squad.get("follow_gap", follow_default_gap))
 	# 成员号令下发（接战/撤退/找掩体/被附身成员不打断；玩家号令不覆盖）
 	for u in members:
-		if u.has_method("is_possessed") and u.is_possessed():
+		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			continue
 		var ai: Node = u.get_ai_controller() if u.has_method("get_ai_controller") else null
 		if ai == null:

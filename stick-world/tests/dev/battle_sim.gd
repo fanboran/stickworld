@@ -304,8 +304,8 @@ func _spawn_unit(pos: Vector2, wtype: int) -> Node2D:
 		return null
 	if e.get("foot_offset") != null:
 		e.global_position.y = pos.y - e.foot_offset
-	if e.has_method("set_possessed"):
-		e.set_possessed(false)
+	if e.has_method("set_user_controlled"):
+		e.set_user_controlled(false)
 	var wm: Node = e.get_node_or_null("WeaponMount")
 	if wm != null:
 		wm.weapon_type = wtype

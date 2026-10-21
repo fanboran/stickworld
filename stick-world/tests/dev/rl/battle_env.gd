@@ -652,8 +652,8 @@ func _spawn_side(comp: Dictionary, faction: int, is_defender: bool) -> Array:
 			if e == null:
 				continue
 			# HD-2D 图 origin 即视觉脚线，无需脚部校正（口径同 battle_arena）
-			if e.has_method("set_possessed"):
-				e.set_possessed(false)
+			if e.has_method("set_user_controlled"):
+				e.set_user_controlled(false)
 			var wm: Node = e.get_node_or_null("WeaponMount")
 			if wm != null:
 				wm.set("weapon_type", int(weapons[k]))

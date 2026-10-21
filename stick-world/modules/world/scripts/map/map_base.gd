@@ -177,9 +177,9 @@ func _invalidate_entity_cache(_node: Node) -> void:
 
 
 ## 获取玩家附身的实体（如有）
-func get_possessed_entity() -> Node2D:
+func get_user_controlled_entity() -> Node2D:
 	for e in get_entities():
-		if e is CharacterBody2D and e.has_method("is_possessed") and e.is_possessed():
+		if e is CharacterBody2D and e.has_method("is_user_controlled") and e.is_user_controlled():
 			return e
 	return null
 

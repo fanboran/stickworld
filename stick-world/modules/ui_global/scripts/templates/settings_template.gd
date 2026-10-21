@@ -19,7 +19,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 			{"key": "autosave_min", "label": "自动存档间隔（分钟）", "type": "slider",
 				"min": 1, "max": 30, "step": 1, "default": 5},
 			{"key": "auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
-			{"key": "slow_on_possess", "label": "附身微操时自动减速", "type": "toggle", "default": true},
+			{"key": "slow_on_user_control", "label": "附身微操时自动减速", "type": "toggle", "default": true},
 			{"key": "ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true},
 		],
 	},

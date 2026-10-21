@@ -72,8 +72,8 @@ func _test_q_toggle_mode() -> void:
 	if player == null:
 		_runner.assert_true(false, "单位缺失")
 		return
-	if player.has_method("set_possessed"):
-		player.set_possessed(true)
+	if player.has_method("set_user_controlled"):
+		player.set_user_controlled(true)
 	await get_tree().process_frame
 	# 初始为 BATTLE（CombatTestSetup 已切）：第一次 Q 切回 EXPLORE
 	# 白盒标注（2026-08 审计）：私有方法直接驱动，重构时同步
@@ -81,16 +81,16 @@ func _test_q_toggle_mode() -> void:
 		player._toggle_combat_mode()
 	await get_tree().process_frame
 	_runner.assert_equal(dispatcher.get_mode(), PlayerControlAPI.Mode.EXPLORE, "第一次 Q 应切回 EXPLORE 模式")
-	_runner.assert_true(player.is_possessed(), "EXPLORE 模式下玩家应保持附身")
+	_runner.assert_true(player.is_user_controlled(), "EXPLORE 模式下玩家应保持附身")
 	# 第二次 Q 进入 BATTLE（战斗姿态）
 	player._toggle_combat_mode()
 	await get_tree().process_frame
 	_runner.assert_equal(dispatcher.get_mode(), PlayerControlAPI.Mode.BATTLE, "第二次 Q 应切换到 BATTLE 模式")
-	_runner.assert_true(player.is_possessed(), "BATTLE 模式下玩家应保持附身（可左键挥砍）")
+	_runner.assert_true(player.is_user_controlled(), "BATTLE 模式下玩家应保持附身（可左键挥砍）")
 	# 还原：切回 EXPLORE 并取消附身
 	player._toggle_combat_mode()
 	await get_tree().process_frame
-	player.set_possessed(false)
+	player.set_user_controlled(false)
 	# 恢复 CombatTestSetup 的基线模式（BATTLE）：_toggle_combat_mode 是无状态转发
 	# （读 dispatcher 现值取反），本用例结束时停在 EXPLORE，不还原会把模式残留
 	# 带进后续用例的运行前提
@@ -111,9 +111,9 @@ func _test_follow_behavior() -> void:
 	# 开启跟随
 	_runner.assert_true(_formation.set_squad_follow(squad_id, true), "开启跟随应成功")
 	_runner.assert_true(_formation.is_squad_following(squad_id), "跟随状态应生效")
-	# 有玩家（possessed 实体）时成员应进入 follow
-	if player.has_method("set_possessed"):
-		player.set_possessed(true)
+	# 有玩家（user_controlled 实体）时成员应进入 follow
+	if player.has_method("set_user_controlled"):
+		player.set_user_controlled(true)
 	await get_tree().process_frame
 	# 等待 AI 决策周期（0.3s）
 	await get_tree().create_timer(0.8).timeout
@@ -124,10 +124,10 @@ func _test_follow_behavior() -> void:
 	var behavior: String = ai.get_current_behavior()
 	_runner.assert_equal(behavior, "follow", "成员行为应为 follow，实际: %s" % behavior)
 	# 清理：关闭跟随、解散小队、取消附身——小队/附身残留会改变后续用例前提
-	# （BehaviorFollow 按 map.get_possessed_entity() 找跟随目标，依赖 possessed 实体）
+	# （BehaviorFollow 按 map.get_user_controlled_entity() 找跟随目标，依赖 user_controlled 实体）
 	_formation.set_squad_follow(squad_id, false)
-	if player.has_method("set_possessed"):
-		player.set_possessed(false)
+	if player.has_method("set_user_controlled"):
+		player.set_user_controlled(false)
 	_formation.disband_squad(squad_id)
 
 
@@ -140,8 +140,8 @@ func _test_follow_moves() -> void:
 	# 用例前置自足：自行附身 + 自建小队（不复用上一用例的"随行队"——
 	# 那是隐式顺序依赖：上一用例不建队/已解散时本用例直接"找不到随行队"）
 	_helper.reset_units([player, _helper.units[1]])
-	if player.has_method("set_possessed"):
-		player.set_possessed(true)
+	if player.has_method("set_user_controlled"):
+		player.set_user_controlled(true)
 	var squad_id: String = _formation.create_squad([_helper.units[1]], "随行队-移动", "fp_worker_crew")
 	_runner.assert_true(not squad_id.is_empty(), "小队应创建成功")
 	if squad_id.is_empty():
@@ -158,8 +158,8 @@ func _test_follow_moves() -> void:
 	_runner.assert_true(dist_after < dist_before, "成员应向玩家靠近，before=%.0f after=%.0f" % [dist_before, dist_after])
 	# 清理：跟随/附身/小队全撤，不把移动中状态留给展开用例
 	_formation.set_squad_follow(squad_id, false)
-	if player.has_method("set_possessed"):
-		player.set_possessed(false)
+	if player.has_method("set_user_controlled"):
+		player.set_user_controlled(false)
 	_formation.disband_squad(squad_id)
 
 

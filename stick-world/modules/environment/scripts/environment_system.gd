@@ -135,11 +135,11 @@ func _find_player_entity() -> Node2D:
 	var gr := get_tree().root.get_node_or_null("GameRoot")
 	if gr == null:
 		return null
-	# 1. 附身实体（最常用路径）：GameRoot → PossessionInterface.get_possessed_entity
-	if gr.has_method("get_possession_interface"):
-		var pi = gr.get_possession_interface()
-		if pi != null and pi.has_method("get_possessed_entity"):
-			var p = pi.get_possessed_entity()
+	# 1. 附身实体（最常用路径）：GameRoot → UserControlInterface.get_user_controlled_entity
+	if gr.has_method("get_user_control_interface"):
+		var pi = gr.get_user_control_interface()
+		if pi != null and pi.has_method("get_user_controlled_entity"):
+			var p = pi.get_user_controlled_entity()
 			if p != null and is_instance_valid(p):
 				return p as Node2D
 	# 2. 兜底：玩家实体

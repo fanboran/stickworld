@@ -290,5 +290,5 @@ func _test_mode_panel_switch() -> void:
 	mp.switch_to(UIAPI.PanelType.BATTLE)
 	_runner.assert_equal(mp.get_active_panel_type(), UIAPI.PanelType.BATTLE, "应显示战斗面板")
 	# 切换到附身
-	mp.switch_to(UIAPI.PanelType.POSSESS)
-	_runner.assert_equal(mp.get_active_panel_type(), UIAPI.PanelType.POSSESS, "应显示附身面板")
+	mp.switch_to(UIAPI.PanelType.USER_CONTROL)
+	_runner.assert_equal(mp.get_active_panel_type(), UIAPI.PanelType.USER_CONTROL, "应显示附身面板")

@@ -3,7 +3,7 @@ extends Control
 ## 模式面板 —— 根据当前游戏模式整体替换。
 ##
 ## P0 阶段：通过 switch_to(panel_type) 切换子面板占位。
-## 子面板需要：VillagePanel / BattlePanel / PossessPanel
+## 子面板需要：VillagePanel / BattlePanel / UserControlPanel
 ## 当前阶段仅切换可见性，不实例化（场景里预置占位 Control）。
 
 # UIAPI 是全局 class_name，无需 preload
@@ -12,7 +12,7 @@ extends Control
 ## 三种模式面板占位（在 .tscn 中预置）
 @onready var village_panel: Control = get_node_or_null("VillagePanel")
 @onready var battle_panel: Control = get_node_or_null("BattlePanel")
-@onready var possess_panel: Control = get_node_or_null("PossessPanel")
+@onready var user_control_panel: Control = get_node_or_null("UserControlPanel")
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
@@ -27,9 +27,9 @@ func switch_to(panel_type: int) -> void:
 		UIAPI.PanelType.BATTLE:
 			if battle_panel:
 				battle_panel.visible = true
-		UIAPI.PanelType.POSSESS:
-			if possess_panel:
-				possess_panel.visible = true
+		UIAPI.PanelType.USER_CONTROL:
+			if user_control_panel:
+				user_control_panel.visible = true
 
 
 ## 获取当前显示的面板类型（P0 阶段简化为查询可见性）
@@ -38,8 +38,8 @@ func get_active_panel_type() -> int:
 		return UIAPI.PanelType.VILLAGE
 	if battle_panel and battle_panel.visible:
 		return UIAPI.PanelType.BATTLE
-	if possess_panel and possess_panel.visible:
-		return UIAPI.PanelType.POSSESS
+	if user_control_panel and user_control_panel.visible:
+		return UIAPI.PanelType.USER_CONTROL
 	return UIAPI.PanelType.VILLAGE
 
 
@@ -50,8 +50,8 @@ func _hide_all() -> void:
 		village_panel.visible = false
 	if battle_panel:
 		battle_panel.visible = false
-	if possess_panel:
-		possess_panel.visible = false
+	if user_control_panel:
+		user_control_panel.visible = false
 
 
 func _ready() -> void:

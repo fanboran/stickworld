@@ -77,11 +77,11 @@ func _run() -> void:
 		if not is_instance_valid(e):
 			continue
 		var p: Vector2 = (e as Node2D).global_position
-		print("  %-16s 世界(%.0f, %.0f) → 小地图(%.1f, %.1f)  possessed=%s" % [
+		print("  %-16s 世界(%.0f, %.0f) → 小地图(%.1f, %.1f)  user_controlled=%s" % [
 				e.name, p.x, p.y,
 				MinimapPainter.world_to_x(p.x, rect, poly),
 				MinimapPainter.world_to_y(p.y, rect, poly),
-				e.has_method("is_possessed") and e.is_possessed()])
+				e.has_method("is_user_controlled") and e.is_user_controlled()])
 	# 相机可视范围 → 小地图
 	var rig: Node = _gr.camera_rig
 	if rig != null and rig.has_method("get_viewport_rect_world"):

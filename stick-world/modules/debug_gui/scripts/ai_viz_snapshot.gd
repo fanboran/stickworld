@@ -129,7 +129,7 @@ static func flag_glyphs(e: Node, ai: Node) -> String:
 		g += "避"
 	if e.has_method("is_in_hit_stun") and e.is_in_hit_stun():
 		g += "晕"
-	if e.has_method("is_possessed") and e.is_possessed():
+	if e.has_method("is_user_controlled") and e.is_user_controlled():
 		g += "附"
 	return g
 
@@ -146,7 +146,7 @@ static func unit_detail(e: Node) -> Dictionary:
 		"pos": e.global_position if e is Node2D else Vector2.ZERO,
 		"facing": int(e.get_facing()) if e.has_method("get_facing") else 0,
 		"speed": e.velocity.length() if "velocity" in e else 0.0,
-		"possessed": bool(e.is_possessed()) if e.has_method("is_possessed") else false,
+		"user_controlled": bool(e.is_user_controlled()) if e.has_method("is_user_controlled") else false,
 		"hit_stun": bool(e.is_in_hit_stun()) if e.has_method("is_in_hit_stun") else false,
 		"hp": hp_pair(e),
 	}
@@ -355,7 +355,7 @@ static func _order_params_brief(params: Dictionary) -> String:
 
 ## 切换原因推断（**须在 ai_behavior_switched 信号到达时点调用**——看门狗推力/
 ## 附身恢复是瞬时态，事后补推不准）。只读 AIController 公开面 + 两个私有观测
-## 字段（_wd_nudge_until/_was_possessed，调试读先例 _squad_phase_plans）。
+## 字段（_wd_nudge_until/_was_user_controlled，调试读先例 _squad_phase_plans）。
 ## 返回短句（详情日志行用）。
 static func describe_switch_reason(e: Node, ai: Node, to: String, params: Dictionary) -> String:
 	if e == null or not is_instance_valid(e):

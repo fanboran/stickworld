@@ -32,7 +32,7 @@ func find_player_entity() -> Node2D:
 	if map == null:
 		return null
 	for e in map.get_entities():
-		if e is CharacterBody2D and e.has_method("is_possessed") and e.is_possessed():
+		if e is CharacterBody2D and e.has_method("is_user_controlled") and e.is_user_controlled():
 			return e
 	return null
 

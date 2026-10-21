@@ -39,7 +39,7 @@ func _on_body_entered(body: Node) -> void:
 	# 只响应被附身的实体（玩家控制的角色）
 	if not body is CharacterBody2D:
 		return
-	if not body.has_method("is_possessed") or not body.is_possessed():
+	if not body.has_method("is_user_controlled") or not body.is_user_controlled():
 		return
 	_triggered = true
 	# 通过 GameRoot 发起地图切换

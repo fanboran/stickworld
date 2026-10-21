@@ -72,8 +72,8 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 			if npc.get("foot_offset") != null \
 					and not (npc.has_method("is_on_billboard_map") and npc.is_on_billboard_map()):
 				npc.global_position.y = y - npc.foot_offset
-			if npc.has_method("set_possessed"):
-				npc.set_possessed(false)  # NPC 不被附身，AIController 自动接管
+			if npc.has_method("set_user_controlled"):
+				npc.set_user_controlled(false)  # NPC 不被附身，AIController 自动接管
 			# 注入 ConstructionAPI 引用（统一走 api，2026-08 审计收敛），使 NPC 可被派工（§15 阶段 0.4）
 			if npc.has_method("set_construction_manager") and _root.get_construction_api() != null:
 				npc.set_construction_manager(_root.get_construction_api())
@@ -153,8 +153,8 @@ func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Ar
 				and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 			e.global_position.y = spawn_y - e.foot_offset
 		# 不附身（AI 接管）
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		enemies.append(e)
 	# 启动战斗：玩家方（进攻）vs 敌方（防守）
 	if not enemies.is_empty():
@@ -176,8 +176,8 @@ func _spawn_ally_unit(map: Node2D, idx: int) -> Node2D:
 	if e.get("foot_offset") != null \
 			and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 		e.global_position.y = spawn_y - e.foot_offset
-	if e.has_method("set_possessed"):
-		e.set_possessed(false)
+	if e.has_method("set_user_controlled"):
+		e.set_user_controlled(false)
 	if e.has_method("set_construction_manager") and _root.get_construction_api() != null:
 		e.set_construction_manager(_root.get_construction_api())
 	if e.has_method("set_formation_system") and _root._formation_system != null:

@@ -143,8 +143,8 @@ func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Arr
 			if f.get("foot_offset") != null:
 				f.global_position.y = spawn_y - f.foot_offset
 			# 不附身（AI 接管），注入系统引用
-			if f.has_method("set_possessed"):
-				f.set_possessed(false)
+			if f.has_method("set_user_controlled"):
+				f.set_user_controlled(false)
 			if f.has_method("set_construction_manager") and _host._construction_api != null:
 				f.set_construction_manager(_host._construction_api)
 			if f.has_method("set_formation_system") and _host._formation_system != null:
@@ -213,8 +213,8 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		if player.get("foot_offset") != null:
 			player.global_position.y = spawn_y - player.foot_offset
 			# 附身玩家实体（地图切换时需重新附身新实体）
-		if player.has_method("set_possessed"):
-			player.set_possessed(true)
+		if player.has_method("set_user_controlled"):
+			player.set_user_controlled(true)
 		# 玩家也注入 ConstructionManager（按F搬运/建造交互需要）
 		if player.has_method("set_construction_manager") and _host._construction_api != null:
 			player.set_construction_manager(_host._construction_api)

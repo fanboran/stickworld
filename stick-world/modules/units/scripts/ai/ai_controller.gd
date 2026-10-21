@@ -86,7 +86,7 @@ var _jitter_rng := RandomNumberGenerator.new()
 var _dice_rng := RandomNumberGenerator.new()
 var _dice_seeded: bool = false
 ## 上一帧是否被附身（用于检测附身状态变化）
-var _was_possessed: bool = false
+var _was_user_controlled: bool = false
 # ── 9h 卡死看门狗（O(1)：只记上次采样位置 + 累计计时，不扫描不查询邻居）──
 ## 有移动意图（实体速度 > 档案阈值）但窗口内净位移 ≈ 0 → 强制重决策。
 var _wd_timer: float = 0.0
@@ -159,15 +159,15 @@ func physics_update_inner(delta: float) -> void:
 		return
 
 	# 附身检测
-	var possessed: bool = _entity.is_possessed()
-	if possessed:
-		if not _was_possessed:
-			_was_possessed = true
+	var user_controlled: bool = _entity.is_user_controlled()
+	if user_controlled:
+		if not _was_user_controlled:
+			_was_user_controlled = true
 		return  # 附身时暂停 AI
 
-	if _was_possessed:
+	if _was_user_controlled:
 		# 刚取消附身，恢复 AI 从 idle 开始
-		_was_possessed = false
+		_was_user_controlled = false
 		_state_machine.travel("idle")
 
 	# 状态机调度

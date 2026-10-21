@@ -57,13 +57,13 @@ func _handle_player_input(delta: float) -> void:
 	if _charge_active:
 		_update_aim()
 	var dir := Vector2.ZERO
-	if Input.is_action_pressed("possess/move_left"):
+	if Input.is_action_pressed("user_control/move_left"):
 		dir.x -= 1.0
-	if Input.is_action_pressed("possess/move_right"):
+	if Input.is_action_pressed("user_control/move_right"):
 		dir.x += 1.0
-	if Input.is_action_pressed("possess/move_up"):
+	if Input.is_action_pressed("user_control/move_up"):
 		dir.y -= 1.0
-	if Input.is_action_pressed("possess/move_down"):
+	if Input.is_action_pressed("user_control/move_down"):
 		dir.y += 1.0
 	_entity._apply_movement(delta, dir, false, not _entity._walk_only)
 
@@ -126,7 +126,7 @@ func _is_ranged_weapon() -> bool:
 
 # ─────────────────────────────── 攻击按下/松开（按武器分流）────────────────
 
-## 左键按下分流（InputMap possess_attack）：
+## 左键按下分流（InputMap user_control_attack）：
 ## - 弓/矛/杖：进入蓄力态（拉弓动画 + 朝向跟随），冷却门在此判；
 ## - 剑/镐等近战：保持"按下即攻击"（旧行为，零延迟）。
 ## 搬运材料时双手被占用（放下前不可攻击）。

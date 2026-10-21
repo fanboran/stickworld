@@ -152,7 +152,7 @@ func do_strike() -> void:
 			p.amount *= _mount.splash_modifier
 			p.type = DamagePipeline.DAMAGE_TYPE.SPLASH
 			p.is_blockable = false
-			if owner_entity.has_method("is_possessed") and owner_entity.is_possessed():
+			if owner_entity.has_method("is_user_controlled") and owner_entity.is_user_controlled():
 				p.amount *= _mount.USER_CONTROLLED_SPLASH_MODIFIER / maxf(_mount.splash_modifier, 0.01)
 		DamagePipeline.apply(victim, p)
 		if owner_entity.has_method("get_battle_instance"):
@@ -194,10 +194,10 @@ func collect_strike_targets(owner_entity: Node, main_target: Node) -> Array:
 		return [main_target] if main_target != null else []
 	# 附身溅射（SWL USER_CONTROLLED_SPLASH_HIT_LIMIT）：玩家附身挥击扇形
 	# 额外多收 4 个溅射目标
-	var possessed_bonus: int = _mount.USER_CONTROLLED_SPLASH_HIT_LIMIT \
-			if owner_entity.has_method("is_possessed") and owner_entity.is_possessed() else 0
+	var user_controlled_bonus: int = _mount.USER_CONTROLLED_SPLASH_HIT_LIMIT \
+			if owner_entity.has_method("is_user_controlled") and owner_entity.is_user_controlled() else 0
 	var max_count: int = _mount.number_of_units_that_can_hit \
-			+ _mount.number_of_units_that_can_hit_with_splash + possessed_bonus
+			+ _mount.number_of_units_that_can_hit_with_splash + user_controlled_bonus
 	if max_count <= 1:
 		return [main_target]
 	var facing: Vector2 = _owner_facing(owner_entity, main_target)

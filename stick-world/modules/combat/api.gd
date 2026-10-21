@@ -7,7 +7,7 @@ extends Node
 ## ⚠️ 契约说明（2026-08-22 修正）：模块API契约.md §六 的"战略级"接口拆解如下——
 ##   - initiate_battle：由 start_battle（实体级）承接，战略图触发属阶段 1+ 设计空间；
 ##   - issue_order：已实现（委托 TacticalOrders，经 CommandChain 逐层下达）；
-##   - possess_commander：本属 player_control 职责（PossessionInterface），不在本模块。
+##   - user_control_commander：本属 player_control 职责（UserControlInterface），不在本模块。
 ## 以本文件实际签名为准。
 ##
 ## 公共类型契约：TargetFinder（公共目标选择核心，反编译参考实装 A）为对外公共类，

@@ -30,7 +30,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="PossessPanel" type="Control" parent="." unique_id=550243692]
+[node name="UserControlPanel" type="Control" parent="." unique_id=550243692]
 visible = false
 layout_mode = 1
 anchors_preset = 15

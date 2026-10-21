@@ -18,7 +18,7 @@ func try_trigger(owner_entity: CharacterBody2D, tree: SceneTree,
 		time_scale: float, duration: float, min_interval: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	if owner_entity == null or not owner_entity.is_possessed():
+	if owner_entity == null or not owner_entity.is_user_controlled():
 		return
 	if owner_entity.has_method("is_aim_charging") and owner_entity.is_aim_charging():
 		return

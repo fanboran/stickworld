@@ -15,10 +15,11 @@
 |------|------|--------|--------|---------|
 | `map_loaded` | map_id, map_type | SceneLoader | UI、Environment | 地图加载完成 |
 | `map_unloaded` | map_id | SceneLoader | UI | 地图卸载 |
-| `chunk_loaded` | chunk_idx | SceneLoader | MapInstance | Chunk 加载完成 |
-| `chunk_unloaded` | chunk_idx | SceneLoader | MapInstance | Chunk 卸载 |
+| `chunk_loaded` | chunk_idx | SceneLoader | MapInstance（设计接收方，现零订户——生产消费方连 SceneLoader 本地信号，见 AR-4 死信号清单） | Chunk 加载完成 |
+| `chunk_unloaded` | chunk_idx | SceneLoader | MapInstance（设计接收方，现零订户，同上） | Chunk 卸载 |
 | `travel_started` | from_id, to_id, mode | SceneLoader | UI、WorldClock | 开始旅行 |
 | `travel_completed` | to_id | SceneLoader | UI | 旅行完成 |
+| `strategic_map_level_requested` | level: String | world_map（l3_zoom_indicator） | system_setup_strategic_map（装配方统一分派） | HUD 层级按钮请求切换战略图层级（L1/L2/L3） |
 
 ### 14.2 输入模式/附身事件
 
@@ -46,6 +47,7 @@
 |------|------|--------|--------|---------|
 | `battle_started` | battle_id | BattleDirector | UI | 战斗开始 |
 | `battle_ended` | battle_id, victory | BattleDirector | UI | 战斗结束 |
+| `battle_settled` | battle_id, summary: Dictionary | BattleInstance（`_end`，先于 `battle_ended` 发射） | 据点战监听方（现役订户 = dev 诊断场景） | 战斗结算载荷先行下发（summary 携带 result/reason/duration/player_wins/player_faction/casualties/alive），监听方免回查已释放的 BattleInstance |
 | `selection_changed` | unit_ids: Array | SelectionSystem | UI | 框选/选择变化 |
 | `squad_created` | squad_id, unit_ids | FormationSystem | UI、Organization | 编队创建 |
 | `order_issued` | order_type, target_squad_id, source_tier | TacticalOrders | UI、Units | 下达号令。两条路径共用：`issue`（target=L1 小队 id，现场指挥零延迟）与 `issue_to_org`（target=组织根 id，逐层传播接力）——target 字段按下达路径分别为 squad_id / org_id（3-F2） |

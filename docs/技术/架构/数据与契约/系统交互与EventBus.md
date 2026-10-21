@@ -44,7 +44,7 @@
 
 ## 二、EventBus 事件目录（现行）
 
-> 与 `core/autoload/event_bus.gd` 逐条对齐。共 39 个信号。
+> 与 `core/autoload/event_bus.gd` 逐条对齐，信号总数与参数以该文件为准。
 
 ### 2.1 生命周期事件
 
@@ -74,6 +74,7 @@
 |------|------|--------|--------|----------|
 | `battle_started` | battle_id: String | 战斗系统 | UI、扩张系统 | 战斗开始 |
 | `battle_ended` | battle_id: String, victory: bool | 战斗系统 | UI、扩张系统 | 战斗结束 |
+| `battle_settled` | battle_id: String, summary: Dictionary | BattleInstance（`_end`，先于 `battle_ended` 发射） | 据点战监听方（现役订户 = dev 诊断场景 arena_one_screen_check） | 战斗结算载荷先行下发（summary 携带 result/reason/duration/player_wins/player_faction/casualties/alive，监听方免回查已 queue_free 的 BattleInstance）；二元胜负仍由 `battle_ended` 承担 |
 | `team_ai_stance_changed` | battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String | TeamAi | 调试 HUD、测试断言 | 阵营 AI 姿态切换（单向广播，暂无生产订户；0=GARRISON/1=DEFEND/2=ATTACK） |
 | `heal_cast` | battle_id: String, caster_id: int, target_id: int, anim_name: String | WeaponMount | battle_sim 采样 | 治疗施放（单向广播，可观测性通道；anim_name ∈ {heal_meric_1, heal_meric_2}） |
 
@@ -99,15 +100,16 @@
 
 | 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
 |------|------|--------|--------|----------|
-| `travel_requested` | map_id: String | world_map | SceneLoader | 玩家点击聚落进入场景图 |
+| `travel_requested` | map_id: String, travel_mode: int | world_map | SceneLoader | 玩家点击聚落进入场景图（travel_mode 取 WorldAPI.TravelMode） |
 | `map_loaded` | map_id: String, map_type: int | SceneLoader | UI / Environment | 地图加载完成 |
 | `map_unloaded` | map_id: String | SceneLoader | UI | 地图卸载完成 |
-| `chunk_loaded` | chunk_idx: int | SceneLoader | MapInstance | Chunk 加载完成 |
-| `chunk_unloaded` | chunk_idx: int | SceneLoader | MapInstance | Chunk 卸载完成 |
+| `chunk_loaded` | chunk_idx: int | SceneLoader | MapInstance（设计接收方，现零订户——生产消费方连 SceneLoader 本地信号，见 AR-4 死信号清单） | Chunk 加载完成 |
+| `chunk_unloaded` | chunk_idx: int | SceneLoader | MapInstance（设计接收方，现零订户，同上） | Chunk 卸载完成 |
 | `travel_started` | from_id, to_id, mode: int | SceneLoader | UI / WorldClock | 旅行开始 |
 | `travel_completed` | to_id: String | SceneLoader | UI | 旅行完成 |
 | `strategic_map_opened` | - | world_map | UI / InputDispatcher | 战略图打开 |
 | `strategic_map_closed` | - | world_map | UI / InputDispatcher | 战略图关闭 |
+| `strategic_map_level_requested` | level: String | world_map（l3_zoom_indicator HUD 层级按钮） | system_setup_strategic_map（装配方统一分派视图互斥与场景图输入暂停） | HUD 请求切换战略图层级（level ∈ L1/L2/L3） |
 | `settlement_updated` | settlement_id: String, population_score: float | 暂无发射方（全仓零 emit） | world_map api（订阅更新聚落规模 + L1 视图 blob 单城重算） | 聚落规模变化触发建成区 blob 重算（建设系统接线前为死订阅） |
 
 ### 2.7 领地归属 / 解锁事件

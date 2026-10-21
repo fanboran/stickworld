@@ -766,7 +766,7 @@ func _validate_preset_data(data: Dictionary) -> String:
 		if String(e.get("key", "")) == "":
 			return "预设条目缺少 key"
 		if int(e.get("level", 0)) < TIER_MIN or int(e.get("level", 0)) > TIER_MAX:
-			return "预设条目 %s 层级 %s 超出 %d-%d 范围" % [String(e.get("key")), String(e.get("level")), TIER_MIN, TIER_MAX]
+			return "预设条目 %s 层级 %s 超出 %d-%d 范围" % [String(e.get("key", "")), String(e.get("level", 0)), TIER_MIN, TIER_MAX]
 	return ""
 
 

@@ -113,7 +113,7 @@ static func check_cooldown_vs_anim(mount) -> void:
 	var rig: Node = owner_entity.get("rig")
 	if rig == null or not rig.has_method("get_anim_length"):
 		return
-	mount._resolve_hit_event_time()
+	mount._strike.resolve_hit_event_time()
 	var anim_name: String = mount._attack_anim_name()
 	var anim_len: float = rig.get_anim_length(anim_name)
 	if anim_len <= 0.0:

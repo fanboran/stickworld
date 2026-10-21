@@ -77,7 +77,7 @@
 | 查场景图（卷轴地图）架构 | `docs/技术/架构/场景与战斗/场景与战斗架构.md`（导读，索引各子系统）<br>↳ 宿主: [`场景宿主架构.md`](docs/技术/架构/场景与战斗/场景宿主架构.md)<br>↳ 地图/室内/旅行: [`地图与场景图.md`](docs/技术/架构/场景与战斗/地图与场景图.md)<br>↳ 建筑/定居点: [`建筑与定居点.md`](docs/技术/架构/场景与战斗/建筑与定居点.md)<br>↳ 火柴人AI/战斗: [`战斗与AI.md`](docs/技术/架构/场景与战斗/战斗与AI.md)<br>↳ UI/环境: [`UI.md`](docs/技术/架构/场景与战斗/UI.md)<br>↳ 事件信号: [`EventBus信号契约.md`](docs/技术/架构/场景与战斗/EventBus信号契约.md) |
 | 查数据流与存储方案      | `docs/技术/架构/数据与契约/数据流全景.md` |
 | 查程序化世界生成       | `docs/设计/系统/08-程序化世界生成.md` |
-| 游戏数据表           | `config/excel/` 目录 + `docs/技术/教程/Excel数据管线.md` |
+| 游戏数据表           | `stick-world/config/**/*.tres` 直接编辑（Excel 管线已冻结归档至 `stick-world/tools/pipeline/archive/excel_pipeline/`，口径见 `docs/技术/教程/Excel数据管线.md`） |
 | 查编辑器工具/插件    | `docs/技术/编辑器工具索引.md`（addons/ + tools/ 全部脚本） |
 | 查 Godot 引擎 API（类参考，项目外） | `F:\VSCode\godot-docs\doc\classes\<类名>.xml`（`--doctool` 生成，版本精准；查属性/方法/信号用） |
 | 查编辑器/运行时报错    | `stick-world/tools/check_godot_errors.sh`（扫描 `user://logs/`，日志机制见 `docs/技术/教程/Godot日志与报错检测.md`） |

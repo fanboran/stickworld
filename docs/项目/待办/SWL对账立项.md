@@ -6,5 +6,4 @@
 - [ ] **Spell 基类先行**（并入计划 4）：原版 15 法术 = Spell 基类（冷却/耗金/施放动画/效果统一结构）+ 14 具体法术；ArrowVolley/HealSpell 挂基类实现，其余按需
 - [ ] **InGameShop/HudInventory 并入批次 10 物品栏**：原版战场商店+物品条 UI 形态参考
 - [ ] **模式变体低成本低挂**（Alpha 后）：EndlessDeads 无尽尸潮 / SuperDeathMatch 超级乱斗 → 观察场变体
-- 缺失兵种实体决策（CastleArchers/Statue/King/GiantBoss/ConversionChannel）已与 AI 复刻 11e 玩法依赖簇并条，入口=[AI复刻批次.md](AI复刻批次.md) 11e 条
 - **不复刻**：平台服务（IAP/广告/云同步/成就/AB 测试 ≈40 类型）、Levels 关卡制（战略图路线替代）、UserInterface 159 类（UX 流程按需参考）

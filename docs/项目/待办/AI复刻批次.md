@@ -5,7 +5,6 @@
 
 - [x] P8 巨人（批次 7a）：删批（恢复走 git 历史）
 - [ ] **观察场缺陷余项**（计划 §二 P1）：9h 卡死复验 / 9j 脱战回血（MOBA 延迟血条）/ 9k 群体避让+空挥保真（含 9s）
-- [ ] **11e 玩法依赖簇挂总账缓**：ZombieAi（Pounce/Kai 召唤）、StatueAi/BarricadeAi、CastleArcher 簇、MinerAi 路障/互殴——依赖对应玩法实装
 - [ ] **P7 祭司翻译缺口与已知限制**（2026-09-03 登记）：
   - [ ] MericHeal / MericDeath 特效资源名（P10 消费）：本批治疗表现 = 动画 + 血条回升，待 P10 特效扩容时补
   - [ ] meric-staff 贴图裁剪工具链：`extract_weapons.gd` 未覆盖 meric 图集 → 首版复用 Magicstaff 贴图占位，待裁剪工具链扩展后换真贴图

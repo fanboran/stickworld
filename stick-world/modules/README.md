@@ -930,6 +930,8 @@ L1 排长 AI 检测到前方有大量敌军
 | **运行时状态** | WorldState（⚠️ 冻结预留：仅 game_time 生产使用，实体容器零调用） | RefCounted/Resource | 内存              |
 | **存档**    | 游戏进度（建筑实例/组织/单位/资源）               | SQLite `save_<slot>.db` | SaveManager 持久化 |
 
+存档带 schema 版本（`PRAGMA user_version` 门禁 + registry 式迁移链 + fixture 回归库），口径见 [`docs/技术/架构/数据与契约/存储架构设计.md` §版本迁移链](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/存储架构设计.md)。
+
 **配置目录**：
 
 ```

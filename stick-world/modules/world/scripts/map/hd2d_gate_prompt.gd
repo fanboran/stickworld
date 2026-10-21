@@ -1,9 +1,9 @@
 extends Node
 ## 主街城门选项框 —— 玩家走近 ±城门触发线时弹在头顶的按钮组（2D 村图同款
 ## "靠近城门蹦出弹窗"口径，创始人 2026-09-15：城墙即传送门指的是弹窗确认，
-## 不是静默瞬移）。选项：资源图直达（出口表）+ 附近村庄（战略图出生 L1 直连
+## 不是静默瞬移）。选项：资源图直达（出口表）+ 附近聚落（战略图出生 L1 直连
 ## 邻村，暂时直接传送——创始人）/ 收起；弹出时同步在城外上空展开城外舆图
-## （hd2d_sky_region_map.gd，Tab 战略图同源数据），悬浮村庄项 → 舆图对应
+## （hd2d_sky_region_map.gd，Tab 战略图同源数据），悬浮聚落项 → 舆图对应
 ## 地块高亮。
 ## UI 挂 UIRoot HudOverlay 槽（AGENTS 核心指令 5），每帧跟随玩家屏幕坐标；
 ## 村民不经过本组件——采集 AI 走静默传送带（gate_router 协议）。
@@ -151,7 +151,7 @@ func _exit_tree() -> void:
 	_sky_map = null
 
 
-# ──────────────────────────── 战略图 Api 对接（附近村庄）────────────────────────
+# ──────────────────────────── 战略图 Api 对接（附近聚落）────────────────────────
 
 ## 战略图 Api（GameRoot 常驻装配 _strategic_map/Content/Api；未装配/未初始化返回 null）
 func _strategic_api() -> Node:
@@ -176,7 +176,7 @@ func _anchor_settlement_id(api: Node) -> String:
 	return ""
 
 
-## 附近村庄 = 锚聚落的路网直连邻村（TravelPlanner 邻接表），按路程升序。
+## 附近聚落 = 锚聚落的路网直连邻村（TravelPlanner 邻接表），按路程升序。
 ## 项：{ref: SettlementRef, length: float, open: bool(map_id 已开放)}
 func _nearby_villages(api: Node, anchor: String) -> Array:
 	var out: Array = []
@@ -241,7 +241,7 @@ func _follow_sky() -> void:
 	_sky_map.position = Vector2(x, SKY_TOP_Y)
 
 
-## 目的地悬浮 → 舆图对应地块高亮（村庄传 settlement_id，资源图无舆图地块不亮）
+## 目的地悬浮 → 舆图对应地块高亮（聚落传 settlement_id，资源图无舆图地块不亮）
 func _on_dest_hover(dest_id: String) -> void:
 	if _sky_map != null and is_instance_valid(_sky_map):
 		_sky_map.set_highlight(dest_id)
@@ -282,7 +282,7 @@ func _build_panel(side: int) -> Control:
 	title.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
 	col.add_child(title)
 	# 动态项：本方向出口表的资源图直达（§5.5.5 一方向多条可选）；道路目标
-	# 跳过——「去附近村庄」改走战略图数据（村间道路入口撤下，创始人）
+	# 跳过——「去附近聚落」改走战略图数据（村间道路入口撤下，创始人）
 	if _map_id.is_empty():
 		_map_id = _owner_map_id()
 	var sl: Node = _root.scene_loader if _root != null else null
@@ -297,13 +297,13 @@ func _build_panel(side: int) -> Control:
 			btn.text = "去 %s（传送）" % _title_or_id(target)
 			btn.pressed.connect(_on_choice.bind("travel:%d:%s" % [entry, target]))
 			col.add_child(btn)
-	# 动态项：附近村庄（战略图出生 L1 路网的直连邻村，按路程升序）——
+	# 动态项：附近聚落（战略图出生 L1 路网的直连邻村，按路程升序）——
 	# 暂时直接传送（创始人）；悬浮项 → 舆图对应地块高亮
 	var api := _strategic_api()
 	var villages := _nearby_villages(api, _anchor_settlement_id(api))
 	if not villages.is_empty():
 		var cap := Label.new()
-		cap.text = "—— 附近村庄 ——"
+		cap.text = "—— 附近聚落 ——"
 		cap.add_theme_font_size_override("font_size", 12)
 		cap.add_theme_color_override("font_color", Color(0.75, 0.70, 0.60, 0.9))
 		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -381,7 +381,7 @@ func _travel(map_id: String, entry_side: int = WorldAPI.EntrySide.LEFT) -> void:
 	_root.scene_loader.travel_to_map(map_id, WorldAPI.TravelMode.TELEPORT, entry_side)
 
 
-## 村庄直达（创始人：暂时直接传送）：走战略图 api.enter_settlement 统一入口
+## 聚落直达（创始人：暂时直接传送）：走战略图 api.enter_settlement 统一入口
 ## （发射 travel_requested + 关战略图），TELEPORT 与城门传送同语义
 func _enter_village(settlement_id: String) -> void:
 	_hide_panel()

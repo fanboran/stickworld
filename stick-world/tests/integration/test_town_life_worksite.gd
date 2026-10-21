@@ -63,7 +63,7 @@ func _ready() -> void:
 
 func _setup_world() -> void:
 	_game_root = GameRootScene.instantiate()
-	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 村庄玩法，声明以村A为初始图
+	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 聚落玩法，声明以村A为初始图
 	_game_root.set("boot_map_id_override", "village_testbed")
 	add_child(_game_root)
 	for i in 10:
@@ -169,7 +169,7 @@ func _poll_until(seconds: float, check: Callable) -> bool:
 
 func _test_real_slot() -> void:
 	var map := _map()
-	_runner.assert_true(map != null, "村庄地图加载")
+	_runner.assert_true(map != null, "聚落地图加载")
 	if map == null:
 		return
 	var api: Node = _game_root.get_resources_api()

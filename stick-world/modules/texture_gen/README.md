@@ -1,7 +1,7 @@
 # texture_gen：程序化纹理生成模块
 
-> 本模块从 `building_gen` 解耦而来，负责所有程序化纹理/材质的生成。
-> 建筑生成模块（`building_gen`）单向依赖本模块，本模块不依赖 building_gen。
+> 程序化纹理/材质生成模块：HD-2D 叠画视觉链的引擎侧材质环节（GPU Shader 实时渲染 + CPU 合成）。
+> 建筑模块（`building_gen`）单向依赖本模块，本模块不依赖 building_gen。
 
 ## 目录结构
 

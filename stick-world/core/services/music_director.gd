@@ -274,7 +274,7 @@ func _resolve_base_cue() -> String:
 	var mt: int = int(_context["map_type"])
 	if mt >= 0 and CUE_FOR_MAP_TYPE.has(mt):
 		var cue: String = CUE_FOR_MAP_TYPE[mt]
-		# 村落也有夜曲（与野外同一套昼夜手法：同主题级数、换调式）
+		# 聚落也有夜曲（与野外同一套昼夜手法：同主题级数、换调式）
 		if bool(_context["night"]):
 			if cue == "field_day":
 				return "field_night"

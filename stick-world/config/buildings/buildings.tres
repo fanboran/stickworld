@@ -229,7 +229,7 @@ variables = {
 			"workers_required": 1,
 			"interior_mode": 0,
 			"mega_interior_map_id": null,
-			"description": "村子级别的低矮小墙，不能站人",
+			"description": "村级的低矮小墙，不能站人",
 			"unlocked_by_tech": null,
 			"wall_tier": 1,
 			"can_stand_on": false,

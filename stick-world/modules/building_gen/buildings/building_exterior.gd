@@ -738,7 +738,7 @@ func _mullion_window(parent: Node2D, node_name: String, cx: float, cy_bottom: fl
 
 
 ## 茅草双坡屋顶通用件（批次 5）：后坡露头条（暗）→ 前坡大梯形 → 脊梁 → 檐口 → 阴影线。
-## 结构同 manor._build_roof，参数化后供多建筑复用（timber_cottage/grand_hall、批次 6 村庄配比）。
+## 结构同 manor._build_roof，参数化后供多建筑复用（timber_cottage/grand_hall、批次 6 聚落配比）。
 ## roof_l/roof_r 檐口左右缘；wall_top_y 屋墙顶（檐口高度）；ridge_y 脊高；
 ## tint 茅草乘色（红棕/金自定）；opts 透传 make_thatch_layered v12 笔触参数
 ## （缺省 = 旧坡面观感）。脊宽随屋宽自适应（0.38 倍，钳 150..260）。

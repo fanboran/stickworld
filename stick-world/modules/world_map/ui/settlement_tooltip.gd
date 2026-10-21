@@ -15,13 +15,14 @@ class_name SettlementTooltip
 ## 鼠标指针到面板左上角的偏移（面板出现在指针右下侧）
 const CURSOR_OFFSET := Vector2(18.0, 18.0)
 
+<<<<<<< HEAD
 ## 同地块悬停期间的内容重算周期（秒）：战斗开始/结束、到访、玩家位置变化
 ## 都会改旅行提示文案；get_travel_status 含路网寻路，逐帧重算太浪费，按周期轮询
 const REFRESH_INTERVAL := 0.5
 
-## 聚落级别中文名（SettlementRef.Level：1 村落 2 镇 3 城市 4 中心城市 5 帝国首都）
+## 聚落级别中文名（SettlementRef.Level：1 聚落 2 镇 3 城市 4 中心城市 5 帝国首都）
 const LEVEL_NAMES := {
-	1: "村落",
+	1: "聚落",
 	2: "镇",
 	3: "城市",
 	4: "中心城市",

@@ -26,7 +26,7 @@ const RECRUIT_COST := {"res_wood": 12.0, "res_stone": 9.0}
 const RECRUIT_REGION := "test_region"
 ## 兵营建筑 def_id（config/buildings/buildings.tres；场景注册归 building_gen）
 const BARRACKS_DEF_ID := "barracks"
-## 村庄人口上限（村民实体数，不含玩家与士兵；住宅化归 C 线）
+## 聚落人口上限（村民实体数，不含玩家与士兵；住宅化归 C 线）
 const POP_CAP_DEFAULT := 8
 ## 人口再生默认间隔（游戏秒；TimeManager 暂停不计时）
 const POP_GROWTH_DEFAULT := 45.0

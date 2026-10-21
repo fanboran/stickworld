@@ -5,7 +5,7 @@ extends Node
 ##   godot --headless --path stick-world res://tests/dev/verify_harvest.tscn
 ##
 ## 验证内容：
-## 1. 村庄加载后 resource_node 组非空（程序化生成正常）
+## 1. 聚落加载后 resource_node 组非空（程序化生成正常）
 ## 2. 直接调用玩家交互控制器的采集方法 → 对应资源库存增加
 ## 3. 采空一个资源点 → 节点自毁（is_depleted / queue_free）
 

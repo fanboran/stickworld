@@ -22,7 +22,7 @@ variables = {
 			"damage_reduction": 5,
 			"speed_penalty": 0,
 			"weight": 1,
-			"asphalt_cost": 10,
+			"mana_cost": 10,
 			"icon_path": "res://assets/icons/armors/cloth_robe.png"
 		},
 		{
@@ -32,7 +32,7 @@ variables = {
 			"damage_reduction": 15,
 			"speed_penalty": 2,
 			"weight": 4,
-			"asphalt_cost": 25,
+			"mana_cost": 25,
 			"icon_path": "res://assets/icons/armors/leather_vest.png"
 		},
 		{
@@ -42,7 +42,7 @@ variables = {
 			"damage_reduction": 30,
 			"speed_penalty": 5,
 			"weight": 8,
-			"asphalt_cost": 50,
+			"mana_cost": 50,
 			"icon_path": "res://assets/icons/armors/chain_mail.png"
 		},
 		{
@@ -52,7 +52,7 @@ variables = {
 			"damage_reduction": 50,
 			"speed_penalty": 10,
 			"weight": 15,
-			"asphalt_cost": 80,
+			"mana_cost": 80,
 			"icon_path": "res://assets/icons/armors/plate_armor.png"
 		},
 		{
@@ -62,7 +62,7 @@ variables = {
 			"damage_reduction": 20,
 			"speed_penalty": 0,
 			"weight": 0,
-			"asphalt_cost": 60,
+			"mana_cost": 60,
 			"icon_path": "res://assets/icons/armors/magic_shield.png"
 		}
 	]

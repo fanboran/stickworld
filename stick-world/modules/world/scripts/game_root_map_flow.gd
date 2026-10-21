@@ -222,8 +222,8 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 进入即对准玩家（水平居中；1/4 跟随机制下不 snap 会在触发线偏移）
 		if _host.camera_rig != null and _host.camera_rig.has_method("snap_to_follow_target"):
 			_host.camera_rig.snap_to_follow_target()
-		# 仅初始加载时 spawn 村庄仓库、土路资源与 NPC（出生村专属）。
-		# 地图可通过 supports_village_facilities()=false 声明无 2D 村庄设施
+		# 仅初始加载时 spawn 聚落仓库、土路资源与 NPC（出生村专属）。
+		# 地图可通过 supports_village_facilities()=false 声明无 2D 聚落设施
 		# （HD-2D 主街：树/矿走自然物卡+资源点，无运营仓库/工位，NPC 暂不开）。
 		var has_facilities: bool = (not map.has_method("supports_village_facilities")) \
 				or map.supports_village_facilities()
@@ -234,12 +234,12 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 			var wants_npcs: bool = has_facilities \
 					or (map.has_method("wants_villager_npcs") and map.wants_villager_npcs())
 			if has_facilities:
-				await _host._world_sub_phase("村庄设施")
-				# 预置村庄仓库（搬运系统取货点，放在出生点右侧土路区）
+				await _host._world_sub_phase("聚落设施")
+				# 预置聚落仓库（搬运系统取货点，放在出生点右侧土路区）
 				_host._worldgen.spawn_initial_warehouse()
-				# 阶段 F：村庄土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
+				# 阶段 F：聚落土路区（出生点±40格）+ 程序化生成自然资源点（土路外，含负坐标侧）
 				var spawn_cell: int = int(_host.PLAYER_SPAWN_X / 24.0)  # 24px 换轨
-				var safe_radius: int = 40  # 出生点±40格内为村庄土路区
+				var safe_radius: int = 40  # 出生点±40格内为聚落土路区
 				if map.has_method("set_dirt_road_range"):
 					map.set_dirt_road_range(spawn_cell - safe_radius, spawn_cell + safe_radius)
 				if map.has_method("generate_resource_nodes_chunked"):

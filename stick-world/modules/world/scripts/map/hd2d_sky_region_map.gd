@@ -5,7 +5,7 @@ extends Control
 ## 数据 = GameRoot 常驻战略图 Api 的 L1WorldData（与 Tab 缩略窗 l1_thumbnail.gd
 ## 同源同视觉语言）：l1_base.png 底图 + 八城邦 + MST 路网。相比 120px 缩略窗
 ## 放大到可交互尺寸并叠加：路网折线（土路/铺装分色）、城邦名字牌、地块描边；
-## 选项框悬浮某村庄项 → set_highlight 金框点亮对应地块；出生城沿用缩略窗的
+## 选项框悬浮某聚落项 → set_highlight 金框点亮对应地块；出生城沿用缩略窗的
 ## 白点 + 蓝脉冲扩散环标记。
 ##
 ## 纯展示组件：mouse_filter IGNORE 不接输入（交互在选项框按钮上），位置由

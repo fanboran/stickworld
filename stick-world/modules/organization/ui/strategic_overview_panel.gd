@@ -87,18 +87,15 @@ const TABS: Array = [
 	{"id": "RESEARCH", "label": "科研"},
 	{"id": "ENGINEERING", "label": "工程"},
 	{"id": "ADMINISTRATION", "label": "行政"},
-	{"id": "COMMERCE", "label": "商业"},
-	{"id": "LABOR", "label": "劳工"},
 	{"id": "LOGISTICS", "label": "运输"},
 ]
 
 ## Tag 枚举 int ↔ 中文 / 字符串（镜像 OrgPanel，过滤比较用）
 const TAG_INT_TO_ZH := {
-	0: "军事", 1: "科研", 2: "工程", 3: "行政", 4: "商业", 5: "劳工", 6: "运输",
+	0: "军事", 1: "科研", 2: "工程", 3: "行政", 4: "运输",
 }
 const TAG_STR_TO_INT := {
-	"MILITARY": 0, "RESEARCH": 1, "ENGINEERING": 2, "ADMINISTRATION": 3,
-	"COMMERCE": 4, "LABOR": 5, "LOGISTICS": 6,
+	"MILITARY": 0, "RESEARCH": 1, "ENGINEERING": 2, "ADMINISTRATION": 3, "LOGISTICS": 4,
 }
 
 ## 组织状态枚举 → 中文 / 图标母题（镜像 OrgPanel.STATE_*，母题名 = 图标库文件名）

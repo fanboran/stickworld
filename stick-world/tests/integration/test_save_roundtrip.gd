@@ -67,10 +67,10 @@ func _ensure_setup() -> void:
 	add_child(_map)
 	var ok: bool = await TestHelpers.await_condition(
 		func(): return _map.get("placement_grid") != null and _map.get("building_host") != null,
-		5.0, "村落地图就绪"
+		5.0, "聚落地图就绪"
 	)
 	if not ok:
-		_runner.assert_true(false, "村落地图未就绪")
+		_runner.assert_true(false, "聚落地图未就绪")
 		return
 	_cm = ScriptConstructionManager.new()
 	_cm.name = "TestConstructionManager"

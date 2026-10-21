@@ -8,7 +8,7 @@ extends Control
 ## 直启 game_root（编辑器 F5/测试）没有跳板，game_root 自建兜底。
 ##
 ## ⚠ 主动放弃的优化（2026-09-11，防重踩）：menu 闲时 `load_threaded_request`
-## 预热 game_root.tscn/村庄图。收益被全屏加载层盖住，风险实测三次事故——
+## 预热 game_root.tscn/聚落图。收益被全屏加载层盖住，风险实测三次事故——
 ## 线程加载会后台编译 game_root.gd，编译期十几条地图 `preload` 与主线程资源
 ## 操作竞态（同步加载相撞=主线程死锁；编译竞态=preload 资源风暴、场景切空壳）。
 ## 资源线程化预热只对「无脚本 preload 闭包的纯数据资源」安全。

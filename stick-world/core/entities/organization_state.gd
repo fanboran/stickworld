@@ -9,14 +9,13 @@ enum State {
 	DISBANDED,  ## 已解散（终态）
 }
 
+## 组织标签五种（设计口径：军事/科研/工程/行政/运输；工程含劳工/建造，运输含商运）
 enum Tag {
 	MILITARY,       ## 军队
 	RESEARCH,       ## 科学院
-	ENGINEERING,    ## 工程队
+	ENGINEERING,    ## 工程队（建造/劳工同一职责域）
 	ADMINISTRATION, ## 行政
-	COMMERCE,       ## 商队
-	LABOR,          ## 劳工队
-	LOGISTICS,      ## 运输队（跨城市运输/物资运往前线）
+	LOGISTICS,      ## 运输队（唯一的运输职责：跨城市运输/物资运往前线）
 }
 
 enum AutonomyLevel {

@@ -137,7 +137,7 @@ GameRoot
 
 | 类型              | 用途        | 关键特性                                |
 | --------------- | --------- | ----------------------------------- |
-| `VILLAGE`       | 村落/定居点    | 水平卷轴 + PlacementGrid + BuildingHost |
+| `VILLAGE`       | 聚落          | 水平卷轴 + PlacementGrid + BuildingHost |
 | `BATTLEFIELD`   | 战场        | 同 VILLAGE，地形更空旷，BattleAnchor 挂战斗实例  |
 | `ROAD`          | 村落间道路     | 双向 ChunkTrigger 出口                  |
 | `INDOOR`        | 室内（铁匠铺等）  | 墙面透明化（INDOOR 模式）                    |

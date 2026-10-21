@@ -2,7 +2,7 @@ extends Node
 ## 开发调试场景（dev_playtest）-- 一键直达任意测试状态，不进入正式游戏入口。
 ##
 ## 为什么存在：自动化测试（tests/）验证逻辑，但手动体验战斗要走完整流程
-## （启动→村庄→编队→跨图→遭遇战）。本场景用启动参数直接组装目标状态，
+## （启动→聚落→编队→跨图→遭遇战）。本场景用启动参数直接组装目标状态，
 ## GameRoot 零改动（战场图已退役自动刷敌，遭遇战经 InitialContent 直达组织）。
 ##
 ## 用法（命令行）：
@@ -69,11 +69,11 @@ func _run(args: Dictionary) -> void:
 	# 实例化 GameRoot（正式主场景，含全部系统装配）
 	_game_root = GameRootScene.instantiate()
 	add_child(_game_root)
-	# 等待初始村庄加载与实体生成
+	# 等待初始聚落加载与实体生成
 	for i in 10:
 		await get_tree().process_frame
 
-	# 在村庄生成随行战斗班（编队 + 可选跟随）
+	# 在聚落生成随行战斗班（编队 + 可选跟随）
 	if int(args["party"]) > 0:
 		_spawn_party(int(args["party"]), bool(args["follow"]))
 
@@ -105,7 +105,7 @@ func _run(args: Dictionary) -> void:
 		get_tree().quit(0)
 
 
-## 在村庄生成 N 个火柴人，编成战斗班（fp_combat_squad），可选开启跟随玩家。
+## 在聚落生成 N 个火柴人，编成战斗班（fp_combat_squad），可选开启跟随玩家。
 func _spawn_party(count: int, follow: bool) -> void:
 	var map: Node2D = _game_root.get_current_map()
 	if map == null or not map.has_method("spawn_entity"):

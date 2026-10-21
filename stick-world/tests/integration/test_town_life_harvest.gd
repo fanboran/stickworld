@@ -3,7 +3,7 @@ extends Node
 ## res_wood / res_metal_ore / res_iron_ingot 库存增长。
 ##
 ## 验收门（交接档批次 2）：
-##   1. 村庄加载后，铁匠（真实 NPC index0）走到占位工位打铁：consume 矿 produce 锭；
+##   1. 聚落加载后，铁匠（真实 NPC index0）走到占位工位打铁：consume 矿 produce 锭；
 ##   2. 伐木工（真实 NPC index1）寻树砍木入库；
 ##   3. 补 spawn 矿工（轮转 index2，照 snapshot_professions 先例）寻矿挖矿入库；
 ##   4. 无人干预等待后三类库存均增长，且至少一名村民处于 harvest 行为。
@@ -51,10 +51,10 @@ func _ready() -> void:
 	get_tree().quit(0 if _runner.all_passed() else 1)
 
 
-## 世界搭建：村庄加载 + 补矿工 + 摆树/矿 + 预置铁匠原料
+## 世界搭建：聚落加载 + 补矿工 + 摆树/矿 + 预置铁匠原料
 func _setup_world() -> void:
 	_game_root = GameRootScene.instantiate()
-	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 村庄玩法，声明以村A为初始图
+	# 启动直连后默认开局图是 HD-2D 主街；本套件测 2D 聚落玩法，声明以村A为初始图
 	_game_root.set("boot_map_id_override", "village_testbed")
 	add_child(_game_root)
 	for i in 10:
@@ -70,7 +70,7 @@ func _setup_world() -> void:
 
 func _test_harvest_economy() -> void:
 	var map: Node2D = _game_root.get_current_map()
-	_runner.assert_true(map != null, "村庄地图加载")
+	_runner.assert_true(map != null, "聚落地图加载")
 	if map == null:
 		return
 	var api: Node = _game_root.get_resources_api()

@@ -54,8 +54,8 @@ const HOP_STALE_AFTER := 3.0
 const FLASH_DUR := 0.9
 
 ## 组织 tag（OrganizationState.Tag int）→ CONTENT_PALETTE 索引：
-## 军事=砖红 / 科研=天蓝 / 工程=陶土 / 行政=沙 / 商业=琥珀 / 劳工=土 / 运输=青碧
-const TAG_PALETTE_INDEX := {0: 17, 1: 7, 2: 14, 3: 12, 4: 9, 5: 13, 6: 4}
+## 军事=砖红 / 科研=天蓝 / 工程=陶土 / 行政=沙 / 运输=青碧
+const TAG_PALETTE_INDEX := {0: 17, 1: 7, 2: 14, 3: 12, 4: 4}
 
 ## 结局中文（在途留痕与闪示文案）
 const OUTCOME_ZH := {

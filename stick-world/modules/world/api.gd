@@ -22,7 +22,7 @@ const PATH_UI_ROOT := "UIRoot"
 const PATH_BATTLE_DIRECTOR := "BattleDirector"
 
 # ─────────────────────────────── MapInstance 节点路径 ────────────────────────────────
-## MapInstance（村落/战场）下各子节点的相对路径
+## MapInstance（聚落/战场）下各子节点的相对路径
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §3.4
 const PATH_MAP_PLACEMENT_GRID := "PlacementGrid"
 const PATH_MAP_DECORATION_LAYER := "DecorationLayer"
@@ -49,7 +49,7 @@ const META_MAP_ID := "map_id"
 
 # ─────────────────────────────── 地图类型 ────────────────────────────────
 enum MapType {
-	VILLAGE,        ## 村落地图
+	VILLAGE,        ## 聚落地图
 	BATTLEFIELD,    ## 战场地图
 	ROAD,           ## 道路地图
 	INDOOR,         ## 室内地图（小建筑）

@@ -9,11 +9,11 @@ extends Node
 ## 测试内容：
 ##   1. SceneLoader 多地图注册 + 出口配置
 ##   2. 初始主街（hd2d_street）加载
-##   3. 旅行到村落 B（EventBus 信号转发）
+##   3. 旅行到聚落 B（EventBus 信号转发）
 ##   4. HD-2D 村图结构与 API
 ##   5. 反向旅行回主街
 ##   6. ChunkTrigger 配置验证
-## （2026-09-16 旧 2D 图清退：道路图 road_a_b 删除，跨图链改为主街↔村落B 直达）
+## （2026-09-16 旧 2D 图清退：道路图 road_a_b 删除，跨图链改为主街↔聚落B 直达）
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -54,7 +54,7 @@ func _run_tests_async() -> void:
 	# ── Phase 1: 初始状态测试 ──
 	_run_phase_1_tests()
 
-	# ── Phase 2: 旅行到村落 B ──
+	# ── Phase 2: 旅行到聚落 B ──
 	var sl := _get_scene_loader()
 	sl.travel_to_map(ScriptGameRoot.VILLAGE_B_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.RIGHT)
 	await _await_current_map(ScriptGameRoot.VILLAGE_B_MAP_ID)
@@ -154,7 +154,7 @@ func _run_phase_1_tests() -> void:
 	_runner.end_test()
 
 
-# ─────────────────────────────── Phase 2: 村落 B ────────────────────────────────
+# ─────────────────────────────── Phase 2: 聚落 B ────────────────────────────────
 
 func _run_phase_2_tests() -> void:
 	_runner.begin_test("旅行信号: EventBus 转发正确")
@@ -163,27 +163,27 @@ func _run_phase_2_tests() -> void:
 	_runner.assert_true(_event_bus_signals.has("map_loaded"), "应收到 EventBus.map_loaded")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: 已加载")
+	_runner.begin_test("聚落B: 已加载")
 	var sl := _get_scene_loader()
 	_runner.assert_equal(sl.get_current_map_id(), ScriptGameRoot.VILLAGE_B_MAP_ID, "当前应为 village_b")
 	_runner.assert_equal(sl.get_current_map_type(), WorldAPI.MapType.VILLAGE, "类型应为 VILLAGE")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: HD-2D 村实例")
+	_runner.begin_test("聚落B: HD-2D 村实例")
 	var map := _get_current_map()
 	_runner.assert_true(map != null, "地图应存在")
 	if map:
 		_runner.assert_true(map.has_method("get_spawn_point"), "村B 应为 HD-2D 布局村（get_spawn_point）")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: 子节点齐全")
+	_runner.begin_test("聚落B: 子节点齐全")
 	if map:
 		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST) != null, "EntityHost 应存在")
 		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_CHUNK_TRIGGERS) != null, "ChunkTriggers 应存在")
 		_runner.assert_true(map.get_node_or_null(WorldAPI.PATH_MAP_BUILDING_HOST) != null, "BuildingHost 应存在")
 	_runner.end_test()
 
-	_runner.begin_test("村落B: 玩家已生成（出生点附近）")
+	_runner.begin_test("聚落B: 玩家已生成（出生点附近）")
 	if map:
 		var player: Node2D = map.get_possessed_entity()
 		_runner.assert_true(player != null, "应有玩家附身实体")

@@ -1,10 +1,9 @@
-# building_gen：程序化建筑生成系统
+# building_gen：建筑实体与场景宿主
 
-> 本模块负责程序化生成建筑实体：
-> - `buildings/`：程序化建筑定义（草棚外壳 + 城墙等，核心）
-> - 纹理/材质生成已迁移至 [`modules/texture_gen/`](../texture_gen/README.md)，本模块单向依赖之。
+> HD-2D 建筑的实体与场景模块：`building.gd`（Building 基类：WorkSlots/PassageBarrier/建筑存档）、`api.gd`（def→场景注册表与管线 def 映射单源）、`buildings/`（建筑场景与外观装配；内景规格在 building_exterior.gd/interior_props.gd）。
+> 消费方：`construction`（建造/物化）、`town_life`（工位寻位）。纹理/材质生成在 [`modules/texture_gen/`](../texture_gen/README.md)（单向依赖）。
 >
-> 系统级设计规范见 [docs/技术/教程/程序化材质系统.md](file:///f:/VSCode/game-2/stick-world/docs/技术/教程/程序化材质系统.md)。
+> 系统级设计规范见 [程序化材质系统.md](../../docs/技术/教程/程序化材质系统.md)。
 
 ---
 

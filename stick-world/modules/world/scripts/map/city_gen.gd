@@ -572,7 +572,7 @@ static func generate(tier: String, seed_v: int, prop_set: Dictionary = {}) -> Di
 				4.6, false, 8.0)
 	add_prop_free.call("banner", float(zone_x.call("core")) - 2.0,
 			FURNITURE_Z_PLAT + 0.2, true, 4.0)
-	# 喷泉：镇起的广场位（市场锚点侧翼，+9 侧放不下试 −9 侧；小村落没喷泉）
+	# 喷泉：镇起的广场位（市场锚点侧翼，+9 侧放不下试 −9 侧；小聚落没喷泉）
 	if pools.has("market") and tier in ["townlet", "town", "burgh", "city",
 			"capital", "metropolis"]:
 		var fx := float(add_prop_free.call("fountain_small",

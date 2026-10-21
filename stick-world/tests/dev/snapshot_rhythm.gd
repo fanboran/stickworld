@@ -5,7 +5,7 @@ extends Node
 ## 用法（不要 --headless，真渲染）：
 ##   godot --path stick-world res://tests/dev/snapshot_rhythm.tscn
 ##
-## 内容：村庄加载后摆树/矿在村民旁（白天三职业各有活干）；白天 12 点截
+## 内容：聚落加载后摆树/矿在村民旁（白天三职业各有活干）；白天 12 点截
 ## rhythm_day_0..2.png（在岗劳作：铁匠工位打铁/伐木挥斧/矿工挥镐）；
 ## 调 23 点截 rhythm_night_0..2.png（休息态：收工 idle/概率 wander 散逛，
 ## 画面呈夜色）。stdout 打印每帧时间/村民职业/行为/位置作程序化证据。

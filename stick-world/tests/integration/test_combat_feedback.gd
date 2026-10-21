@@ -180,7 +180,7 @@ class InCombatStub extends Node:
 
 
 ## 图内安全放置：x 钳制到地图边界内（越界点会被活体每帧夹回边界，测量失真——
-## 曾用 x=3000 超出村庄图右边界导致静态分离误报）；y 不动，单位出生时已按
+## 曾用 x=3000 超出聚落图右边界导致静态分离误报）；y 不动，单位出生时已按
 ## 脚底对齐到地面带，活体每帧也会把 y 夹回带内。
 func _place_x(u: Node, x: float) -> void:
 	var m: Node2D = _helper.map

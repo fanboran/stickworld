@@ -53,7 +53,7 @@ variables = {
 			"category": "summon",
 			"prerequisites": null,
 			"unlocks": "召唤低级单位",
-			"description": "消耗沥青召唤临时作战单位"
+			"description": "消耗法力召唤临时作战单位"
 		}
 	]
 }

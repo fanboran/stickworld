@@ -28,33 +28,29 @@ signal org_selection_changed(org_id: String)
 const OrgPanelVitals := preload("res://modules/organization/ui/org_panel_vitals.gd")
 const OrgPanelDetail := preload("res://modules/organization/ui/org_panel_detail.gd")
 
-## 标签栏（"" = 全部；顺序照架构 §3.2：军事/科研/工程/行政/商业/劳工/运输）
+## 标签栏（"" = 全部；顺序照架构 §3.2：军事/科研/工程/行政/运输）
 const TABS: Array = [
 	{"id": "", "label": "全部"},
 	{"id": "MILITARY", "label": "军事"},
 	{"id": "RESEARCH", "label": "科研"},
 	{"id": "ENGINEERING", "label": "工程"},
 	{"id": "ADMINISTRATION", "label": "行政"},
-	{"id": "COMMERCE", "label": "商业"},
-	{"id": "LABOR", "label": "劳工"},
 	{"id": "LOGISTICS", "label": "运输"},
 ]
 
 ## OrganizationState.Tag 枚举序（int 序列化值 → 中文）
 const TAG_INT_TO_ZH := {
-	0: "军事", 1: "科研", 2: "工程", 3: "行政", 4: "商业", 5: "劳工", 6: "运输",
+	0: "军事", 1: "科研", 2: "工程", 3: "行政", 4: "运输",
 }
 
 ## Tag 枚举 int → API 字符串（create_organization 透传用）
 const TAG_INT_TO_STR := {
-	0: "MILITARY", 1: "RESEARCH", 2: "ENGINEERING", 3: "ADMINISTRATION",
-	4: "COMMERCE", 5: "LABOR", 6: "LOGISTICS",
+	0: "MILITARY", 1: "RESEARCH", 2: "ENGINEERING", 3: "ADMINISTRATION", 4: "LOGISTICS",
 }
 
 ## 标签字符串 → 枚举 int（树过滤比较用）
 const TAG_STR_TO_INT := {
-	"MILITARY": 0, "RESEARCH": 1, "ENGINEERING": 2, "ADMINISTRATION": 3,
-	"COMMERCE": 4, "LABOR": 5, "LOGISTICS": 6,
+	"MILITARY": 0, "RESEARCH": 1, "ENGINEERING": 2, "ADMINISTRATION": 3, "LOGISTICS": 4,
 }
 
 ## OrganizationState.State 枚举序（int → 中文）

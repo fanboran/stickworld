@@ -204,7 +204,7 @@ func _build_fx_tab(parent: VBoxContainer) -> void:
 func _attach_all_sparkles() -> void:
 	var nodes: Array = get_tree().get_nodes_in_group("resource_node")
 	if nodes.is_empty():
-		EventBus.ui_notification.emit("水晶闪光", "无资源点节点（resource_node 组为空）——请走到村落地图再试", "warn")
+		EventBus.ui_notification.emit("水晶闪光", "无资源点节点（resource_node 组为空）——请走到聚落地图再试", "warn")
 		return
 	var attached := 0
 	var count := 0

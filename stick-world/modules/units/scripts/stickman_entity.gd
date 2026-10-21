@@ -161,10 +161,6 @@ var faction_id: int = 0
 ##   2 = 排长（编制最高现役层；旧 rank 3 战场指挥官随摆场件根除，2026-10-14）
 ## 消费方：血条军衔点渲染（set_rank 已做转发挂点，渲染侧未接线时静默跳过）。
 var rank: int = 0
-## 战役撤离离场标记（C3 敌将撤仗）：RETREAT 号令撤至地图边缘时置位，
-## BattleInstance._count_alive 计非存活（守军全部离场 = 据点攻陷）。
-## 实体保留不销毁（溃兵视觉）；BattleInstance add_unit/_end 复位。
-var departed: bool = false
 ## 所属战斗实例引用（null=未参战）
 var _battle_instance: Node = null
 ## 固体互撞层脏标记（set_battle_instance 时强制下一拍重算一次）

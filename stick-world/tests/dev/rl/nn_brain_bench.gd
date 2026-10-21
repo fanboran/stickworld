@@ -174,8 +174,6 @@ func _strength_of(battle_v: Variant, faction: int) -> int:
 		var hp_v: Variant = u.get_health() if u.has_method("get_health") else null
 		if hp_v != null and is_instance_valid(hp_v) and hp_v.is_dead():
 			continue
-		if bool(u.get("departed")):
-			continue
 		n += 1
 	return n
 

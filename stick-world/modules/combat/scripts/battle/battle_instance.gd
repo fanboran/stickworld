@@ -13,10 +13,8 @@ extends Node
 ##
 ## victory 语义（C2 征服循环）：battle_ended(battle_id, victory) 的 victory = **玩家阵营胜**
 ## （_player_faction 与胜方一致），非攻方胜。未 set_player_faction 时默认攻方 = 旧测试兼容。
-## 战役撤离（C3）：单位带 departed 标记（撤至地图边缘离场）计非存活——
-## 守军全部离场或全灭同样触发战斗收束。
-## 溃散收敛（9k）：有效战力（未死且未溃逃）归零即结束——全员溃逃的残局
-## 不再悬挂，溃兵留在战场（战斗引用解除，不再重开）。
+## 收敛口径（裁决【删溃逃、立避战】）：打到一方失去作战能力（全灭）或相持超时
+## 兵力判收束；避战是战术行为不改变有效战力，不参与收束判定。
 
 const ScriptCoverSystem := preload("res://modules/combat/scripts/battle/cover_system.gd")
 const StickProf := preload("res://core/services/stick_prof.gd")
@@ -76,12 +74,11 @@ var _casualties_attacker: int = 0
 ## 防守方伤亡数（死亡）
 var _casualties_defender: int = 0
 ## 相持超时上限（秒；<= 0 = 不限）——超时按剩余兵力判（多者胜，平局按守方胜），
-## 防"溃逃—恢复—再战"长期相持永不收敛（结束判定补全；由开战调用方按需设置）
+## 防长期相持永不收敛（结束判定补全；由开战调用方按需设置）
 var duration_limit: float = 0.0
-## 收束原因（"annihilation" / "rout" / "mutual" / "timeout"；
-## 结算摘要与测试用）：annihilation=全灭（含撤离离场）、rout=有效战力溃散归零
-## （9k 溃逃收敛，已退役）、mutual=双方同时归零、timeout=相持超时。
-## 输赢口径 = 全面战争式打到一方失去作战能力（全灭/撤离/超时兵力判；
+## 收束原因（"annihilation" / "mutual" / "timeout"；结算摘要与测试用）：
+## annihilation=全灭、mutual=双方同时归零、timeout=相持超时。
+## 输赢口径 = 全面战争式打到一方失去作战能力（全灭/超时兵力判；
 ## 旧"斩首即败"为 AI 线自立开发态规则，已整体退役）
 var _end_reason: String = ""
 ## 收束瞬间双方存活数（_end 清空列表前快照，供结算摘要；监听方不必回查已释放实例）
@@ -143,9 +140,6 @@ func setup(map: Node2D) -> void:
 func add_unit(unit: Node, faction: int) -> void:
 	if not is_instance_valid(unit):
 		return
-	# 离场标记复位（单位实体跨战斗存活，上一场的 departed 不带入本场）
-	if "departed" in unit:
-		unit.set("departed", false)
 	if unit.has_method("set_faction"):
 		unit.set_faction(faction)
 	if unit.has_method("set_battle_instance"):
@@ -381,20 +375,18 @@ func _rebuild_alive_cache() -> void:
 	# 唯一消费方 target_finder 即时迭代、不跨帧持有，原地清空重建等价
 	_alive_attacker.clear()
 	for u in _units_attacker:
-		if u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()) and not _is_departed(u):
+		if u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
 			_alive_attacker.append(u)
 	_alive_defender.clear()
 	for u in _units_defender:
-		if u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()) and not _is_departed(u):
+		if u != null and is_instance_valid(u) and not (u.has_method("is_dead") and u.is_dead()):
 			_alive_defender.append(u)
 
 
 static func _is_alive_unit(u) -> bool:
 	if u == null or not is_instance_valid(u):
 		return false
-	if u.has_method("is_dead") and u.is_dead():
-		return false
-	return not _is_departed(u)
+	return not (u.has_method("is_dead") and u.is_dead())
 
 
 ## 获取所有参战单位
@@ -533,19 +525,18 @@ func get_player_faction() -> int:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 检查胜负条件（裁决【删溃逃、立避战】后三路收束）：一方全灭（含战役撤离
-## 离场）→ 歼灭；相持超时按剩余兵力判（兜底）。
-## 战斗收敛兜底 = TeamAi 指挥层撤退（C3：伤亡率超限 → ROUT → 全军撤离 departed）
-## + duration_limit 超时判——旧"溃散收敛"（有效战力含 is_routed 扣除）随溃逃
-## 退役删除：避战是战术行为不改变有效战力，避战中的单位被打仍还手，战斗照常
-## 由歼灭/撤离/超时收束。
+## 检查胜负条件（裁决【删溃逃、立避战】后两路收束）：一方全灭 → 歼灭；
+## 相持超时按剩余兵力判（兜底）。
+## 旧"溃散收敛"（有效战力含 is_routed 扣除）与"TeamAi 指挥层撤离 departed"
+## 兜底均已随裁决退役：避战是战术行为不改变有效战力，避战中的单位被打仍还手，
+## 战斗照常由歼灭/超时收束。
 func _check_victory() -> void:
 	# 存活快照先行（结算摘要 alive 字段任何收束路径都齐备）
 	var a_alive: int = _count_alive(_units_attacker)
 	var b_alive: int = _count_alive(_units_defender)
 	_final_alive_attacker = a_alive
 	_final_alive_defender = b_alive
-	# 收束 = 全灭（含撤离离场）/ 同归 / 相持超时兵力判——全面战争式打到一方
+	# 收束 = 全灭 / 同归 / 相持超时兵力判——全面战争式打到一方
 	# 失去作战能力（纪律线因子后续批次接部队自主避战，非收束判据）
 	if a_alive == 0 and b_alive == 0:
 		_end(State.DRAW, "mutual")
@@ -578,7 +569,7 @@ func get_summary() -> Dictionary:
 	}
 
 
-## 存活计数：死亡与离场（departed，撤至地图边缘）均计非存活
+## 存活计数：死亡计非存活
 func _count_alive(units: Array) -> int:
 	var n: int = 0
 	for u in units:
@@ -586,19 +577,13 @@ func _count_alive(units: Array) -> int:
 			continue
 		if u.has_method("is_dead") and u.is_dead():
 			continue
-		if _is_departed(u):
-			continue
 		n += 1
 	return n
 
 
-## （_count_effective 已随裁决【删溃逃、立避战】删除：有效战力=未死未离场，
+## （_count_effective 已随裁决【删溃逃、立避战】删除：有效战力=未死，
 ## 即 _count_alive 本身；避战是战术行为不再扣有效战力，战斗收敛走
-## TeamAi 撤离 departed / duration_limit 兜底）
-
-
-static func _is_departed(u) -> bool:
-	return u != null and "departed" in u and bool(u.get("departed"))
+## 歼灭 / duration_limit 兜底）
 
 
 func _end(result: State, reason: String = "annihilation") -> void:
@@ -607,8 +592,7 @@ func _end(result: State, reason: String = "annihilation") -> void:
 		return
 	_state = result
 	_end_reason = reason
-	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）。
-	# departed 保持置位（战后可查离场状态/溃兵视觉），下一场 add_unit 时复位；
+	# 清理单位身上的战斗引用（AI 依据 battle_instance 判参战，结束后应立即解除）；
 	# sim 注册同步解除（单位交还旧实体链自驱）
 	for unit in _units_attacker + _units_defender:
 		if is_instance_valid(unit) and unit.has_method("set_battle_instance"):

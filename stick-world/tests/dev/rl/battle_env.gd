@@ -609,14 +609,12 @@ func _squad_avg_hp(sq: Dictionary) -> float:
 	return s / float(maxi(n, 1))
 
 
-## 战斗在编判定：活着、未离场（溃逃布尔态已退役——避战是行为态，避战者没死
+## 战斗在编判定：活着（溃逃布尔态已退役——避战是行为态，避战者没死
 ## 就算存活/合法目标；与 battle_instance 的存活/有效战力判定同口径）
 func _is_fighting(u) -> bool:
 	if u == null or not is_instance_valid(u):
 		return false
 	if u.has_method("is_dead") and u.is_dead():
-		return false
-	if bool(u.get("departed")):
 		return false
 	return true
 
@@ -708,15 +706,14 @@ func _setup_flags() -> void:
 
 
 ## 结算素材收集（battle _end 后 roster 已清，存活数用 env 自己的口径重数——
-## 与 battle_instance 的判定一致：死亡/departed 均计非存活）
+## 与 battle_instance 的判定一致：死亡计非存活）
 func _collect_result() -> Dictionary:
 	var alive := {1: 0, 2: 0}
 	for f in [1, 2]:
 		for sq_v in _side.get(f, {}).get("squads", []):
 			for u in sq_v["units"]:
 				if u != null and is_instance_valid(u) \
-						and not (u.has_method("is_dead") and u.is_dead()) \
-						and not bool(u.get("departed")):
+						and not (u.has_method("is_dead") and u.is_dead()):
 					alive[f] += 1
 	var flags_owned := {1: 0, 2: 0}
 	for p in _flags:

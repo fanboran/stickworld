@@ -199,17 +199,17 @@ func _test_l1_title_legend() -> void:
 	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, false)
 	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 2,
 		"政治翻转后仍 2 条目：土路/官道（实测 %d）" % _l1_legend._entries_box.get_child_count())
-	# 再开城市层 + 资源层（城市 + 交通 + 资源）：条目 = 建成区 1 + 道路 2 + 资源 6 = 9；
+	# 再开城市层 + 资源层（城市 + 交通 + 资源）：条目 = 建成区 1 + 道路 2 + 资源 5 = 8；
 	# 标题 = 资源（最上层）。资源条目色点与地图资源点同源（MapRenderer.RESOURCE_COLORS）
 	MapModeManager.set_layer_on(MapModeManager.Layer.CITY, true)
 	MapModeManager.set_layer_on(MapModeManager.Layer.RESOURCE, true)
 	_runner.assert_true(_l1_legend._title_label.text == "图例 · 资源",
 		"城市+交通+资源图例标题 = 资源层（实测 %s）" % _l1_legend._title_label.text)
-	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 9,
-		"9 条目 = 建成区 1 + 道路 2 + 资源 6（实测 %d）" % _l1_legend._entries_box.get_child_count())
+	_runner.assert_true(_l1_legend._entries_box.get_child_count() == 8,
+		"8 条目 = 建成区 1 + 道路 2 + 资源 5（实测 %d）" % _l1_legend._entries_box.get_child_count())
 	var wood_row: HBoxContainer = _l1_legend._entries_box.get_child(3)
 	_runner.assert_true((wood_row.get_child(1) as Label).text == "木材",
-		"资源条目 = 六种资源 id 色点+名（实测首条 %s）" % (wood_row.get_child(1) as Label).text)
+		"资源条目 = 五种资源 id 色点+名（实测首条 %s）" % (wood_row.get_child(1) as Label).text)
 	_runner.assert_true((wood_row.get_child(0) as ColorRect).color.is_equal_approx(
 			MapRenderer.RESOURCE_COLORS["res_wood"]), "资源条目色点与地图资源点同源")
 	# 全关：仍给底图说明（海洋/湖泊 + 6 群系 = 8 条），标题回退底图
@@ -549,7 +549,7 @@ func _test_province_context() -> void:
 	# 箭头环：出生省三个邻省 → 三个箭头，方位与全球地理一致（#18 东北 / #67 西北 / #68 正西）
 	var cfg: Dictionary = _l1_content.call("_arrow_ring_config")
 	var ring_arrows: Array = cfg.get("arrows", [])
-	_runner.assert_eq(ring_arrows.size(), BIRTH_NEIGHBORS.size(),
+	_runner.assert_equal(ring_arrows.size(), BIRTH_NEIGHBORS.size(),
 			"每个相邻省份一个箭头（实测 %d 个）" % ring_arrows.size())
 	var got_labels: Array = []
 	var by_label := {}
@@ -599,9 +599,9 @@ func _test_province_context() -> void:
 	var probe: int = int(BIRTH_NEIGHBORS[BIRTH_NEIGHBORS.size() - 1])
 	var switched: bool = _l1_content.call("switch_province", probe)
 	_runner.assert_true(switched, "switch_province(#%d) 成功" % probe)
-	_runner.assert_eq(_l1_api.get_current_l1_label(), probe, "当前 L1 已切到 #%d" % probe)
+	_runner.assert_equal(_l1_api.get_current_l1_label(), probe, "当前 L1 已切到 #%d" % probe)
 	if _l1_indicator != null:
-		_runner.assert_eq(_l1_indicator._subtitle_label.text, "#%d" % probe,
+		_runner.assert_equal(_l1_indicator._subtitle_label.text, "#%d" % probe,
 				"指示器跟随切省（实测 %s）" % _l1_indicator._subtitle_label.text)
 	_runner.assert_true(not bool(_l1_content._drill_from_l2),
 			"切省不改下钻标志（ESC 仍关闭地图，不误返回 L2）")

@@ -52,7 +52,21 @@ variables = { "data": [ { "id": "...", ... }, ... ] } # 数据行
 - 数组字段写 JSON 方括号 `[1, 2, 3]`，字典字段写 JSON 花括号 `{"key": "value"}`。
 - 改完用文本编辑器检查一下 `.tres` 内容即可确认格式正确（Godot 加载失败会在启动时报错，可用 `tools/check_godot_errors.sh` 扫日志）。
 
-## 4. 游戏内读取数据（BalanceConfig）
+## 4. 数值快照与 diff（审计层）
+
+`.tres` 手编格式自由（缩进/键序/行宽随意），git diff 噪音大、不便逐值审计。`config/snapshots/` 是数值表的 **JSON 快照镜像**，由仓库根工具 [tools/export_tres_json_snapshot.sh](../../../tools/export_tres_json_snapshot.sh) 单向导出——**只出不进**：快照仅供 git diff / 审计，绝不回读生成 `.tres`。
+
+```bash
+tools/export_tres_json_snapshot.sh             # 改完数值后刷新快照（与数值改动一批提交）
+tools/export_tres_json_snapshot.sh --check     # 门禁：重算并与盘上快照比对，有漂移退出码 1
+```
+
+- 覆盖 `config/` 下全部数值表 `.tres`（`config/strategic_map/` 是 submodule 地图数据，不在内），镜像源文件相对路径 `.tres` → `.json`（如 `config/units/stickmen.tres` → `config/snapshots/units/stickmen.json`）。
+- **稳定序列化（幂等）**：字典键全层级排序、float 经 12 位有效数字规整（剔除二进制噪音）、数组保序、tab 缩进 + 文件尾换行、不含时间戳——连跑两次逐字节相同，快照 diff 里只有真实数值变化。
+- **同步义务**：改数值的提交必须随批刷新快照，`--check` 可挂门禁防漏；快照出现 diff 而对应 `.tres` 无改动，说明有提交漏刷（或工具报错停手——源表结构超出 JSON 兼容契约，序列化契约见工具头注释）。
+- 快照目录带 `.gdignore`：Godot 资源扫描完全跳过，不进编辑器索引、不进导出 pck，纯 git 审计层。
+
+## 5. 游戏内读取数据（BalanceConfig）
 
 游戏通过 `BalanceConfig` 全局 Autoload 读数据，路径规则 `config/<域>/<名>.tres` → 类型路径 `"<域>.<名>"`：
 
@@ -68,12 +82,12 @@ var attack = BalanceConfig.get_value("balance.variables.var_attack_base.value")
 
 > **注意**：`BalanceConfig` 的 `reload()` 热加载尚未实装，改 `.tres` 后需重启游戏生效。
 
-## 5. 新增数据类型
+## 6. 新增数据类型
 
 1. 在 `config/` 对应域目录下新建 `.tres`（或直接在现有表的 `variables.data` 里加行）。
 2. 新文件沿用 `balance_resource.gd` 基类与上面的结构约定。
 3. 消费侧按需 `load()` 或经 `BalanceConfig` 读取；无需任何注册步骤。
 
-## 6. Mod 支持（预留设计）
+## 7. Mod 支持（预留设计）
 
 Mod 作者可将修改后的 `.tres` 放入 Mod 目录，游戏加载时覆盖基础数据。当前 Mod 系统未完全实现，过渡方式 = 直接替换 `config/` 下的 `.tres` 文件。

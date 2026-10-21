@@ -37,6 +37,8 @@ rm -rf .godot/imported .godot/exported            # 陈旧 ctex 会原样打进 
 
 产物 = `stick-world.exe` + `stick-world.pck`（预设 `embed_pck=false`，两个都要进 zip）。
 
+数据核验建议：打包前在仓库根跑 `tools/export_tres_json_snapshot.sh --check`，确认数值快照与 `.tres` 零漂移（漂移 = 历史上有改数值的提交漏刷快照，先补刷新再打包）。口径见 [Excel数据管线.md §数值快照与 diff](Excel数据管线.md)。
+
 ## 3. 打 tag 与 zip
 
 ```bash

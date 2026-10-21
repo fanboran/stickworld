@@ -17,7 +17,6 @@ const RESOURCE_BY_ITEM: Dictionary = {
 	&"mat_iron": &"res_metal_ore",
 	&"mat_iron_ingot": &"res_iron_ingot",
 	&"mat_silk": &"res_silk",
-	&"mat_asphalt": &"res_black_asphalt",
 }
 
 

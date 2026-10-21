@@ -4,7 +4,7 @@ extends Resource
 ##
 ## 详见 docs/技术/架构/世界与战略图/战略图架构.md §3.4 MapTileData
 
-## 资源类型 ID（"iron" / "black_pitch" / "magic_source" / "wood" / "gold" ...）
+## 资源类型 ID（"iron" / "magic_source" / "wood" / "gold" ...）
 @export var resource_id: String = ""
 
 ## 资源点位置（地块多边形内归一化坐标 0-1）

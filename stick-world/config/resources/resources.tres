@@ -43,15 +43,6 @@ variables = {
 			"icon_path": "res://assets/icons/metal_ore.png"
 		},
 		{
-			"id": "res_black_asphalt",
-			"name_zh": "黑色沥青",
-			"category": "strategic",
-			"initial_price": 15,
-			"weight_per_unit": 6,
-			"perishable": false,
-			"icon_path": "res://assets/icons/black_asphalt.png"
-		},
-		{
 			"id": "res_iron_ingot",
 			"name_zh": "铁锭",
 			"category": "processed",

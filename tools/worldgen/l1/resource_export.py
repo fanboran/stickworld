@@ -10,7 +10,6 @@ L1 视图包顶层 `resources: [{"id": <资源表 id>, "pos": [x, y]}]`（pos = 
       iron 铁         = 山地（高海拔）
       gold 金         = 稀有山矿（更高海拔 + 陡坡）
       diamond 钻      = 稀有山矿（最高海拔 + 最陡坡，出现概率最低）
-      black_pitch 沥青 = 低地带（低海拔 + 平原/源流群系；黑色沥青是世界观着力点）
     金/钻在资源表（config/resources/resources.tres）暂无条目，id 先用
     res_gold_ore / res_diamond 占位（提案/待验收，接资源系统时补行或改名）。
 

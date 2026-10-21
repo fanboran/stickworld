@@ -9,7 +9,7 @@ class_name MapRenderer
 ##            本省 α=0.55 覆盖 + 邻省政权色暗一阶（半透明叠在地形上）
 ##   城市层 = 建成区三档贴图（blob，贴图未就绪回退包几何矢量）+ 城市常驻描边链
 ##   交通层 = 道路矢量折线（R6 实线分级：土路/官道两 tier）
-##   资源层 = 资源点矢量标记（wood/stone/iron/diamond/gold/black_pitch 材料本色圆点）
+##   资源层 = 资源点矢量标记（wood/stone/iron/diamond/gold 材料本色圆点）
 ## 交互层（全层保留）：城市中心点、hover/选中、当前城流动描边、玩家位置标记、
 ## 快速旅行路由高亮（琥珀虚线——虚线的正确语用位置，§7.2-4）、纸边框。
 ## 静态层贴图缺失时回退矢量管线（底图缺失期以政权色平涂垫底）。
@@ -169,7 +169,6 @@ const RESOURCE_LEGEND: Array[Dictionary] = [
 	{"id": "res_metal_ore", "text": "铁"},
 	{"id": "res_gold_ore", "text": "金"},
 	{"id": "res_diamond", "text": "钻"},
-	{"id": "res_black_asphalt", "text": "黑沥青"},
 ]
 
 

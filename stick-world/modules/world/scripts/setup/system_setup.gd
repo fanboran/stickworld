@@ -38,11 +38,6 @@ const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/mi
 const _MinimapWindowScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap_window.gd")
 const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thumbnail.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
-const _InventoryServiceScript: GDScript = preload("res://modules/inventory/scripts/inventory_service.gd")
-const _InventoryScreenScript: GDScript = preload("res://modules/inventory/ui/inventory_screen.gd")
-const _HotbarScript: GDScript = preload("res://modules/inventory/ui/hotbar.gd")
-const _ContainerScreenScript: GDScript = preload("res://modules/inventory/ui/container_screen.gd")
-const _BuildingMenuScript: GDScript = preload("res://modules/inventory/ui/building_menu_screen.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
 const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
@@ -63,6 +58,10 @@ const _RecruitManagerScript: GDScript = preload("res://modules/organization/scri
 const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
 const _SquadCardScene: PackedScene = preload("res://modules/formation/ui/squad_card.tscn")
+
+# 模块自装配器（AR-1 装配下沉）：各模块 setup.gd 自持实例化，本宿主只编排步骤
+# 时序与跨模块接线；懒初始化见各 _xxx_setup() getter
+const _InventorySetupScript: GDScript = preload("res://modules/inventory/setup.gd")
 
 # 域助手（同模块内 preload，非跨模块依赖；实例懒初始化见各 _xxx_part() getter）
 const _CorePartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_core_systems.gd")
@@ -100,6 +99,9 @@ var _panels_part = null
 var _map_part = null
 var _extras_part = null
 
+# 模块自装配器实例（AR-1 装配下沉，随迁随增）
+var _inventory_setup = null
+
 
 func _core():
 	if _core_part == null:
@@ -127,6 +129,13 @@ func _extras():
 		_extras_part = _ExtrasPartScript.new()
 		_extras_part.bind(self)
 	return _extras_part
+
+
+## inventory 模块自装配器（AR-1 下沉样板；RefCounted 无需 bind）
+func _inventory_assembler():
+	if _inventory_setup == null:
+		_inventory_setup = _InventorySetupScript.new()
+	return _inventory_setup
 
 
 func setup(root: GameRoot) -> void:
@@ -332,7 +341,7 @@ func _setup_zoom_bar() -> void:
 
 
 func _setup_inventory() -> void:
-	_panels()._setup_inventory()
+	_inventory_assembler().assemble(_root)
 
 
 # ─────────────────── 壳方法：战略图域（转发 system_setup_strategic_map.gd） ───────────────────

@@ -1,0 +1,65 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/战斗战术.xlsx → tactics sheet 自动生成",
+		"resource_name": "tactics",
+		"source_file": "config/excel/战斗战术.xlsx",
+		"source_sheet": "tactics",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/combat/tactics.tres",
+	"variables": {
+		"data": [
+			{
+				"autonomy": "high",
+				"cover_priority": "low",
+				"description": "主动冲击不惜代价",
+				"fire_discipline": "loose",
+				"flank_enabled": "yes",
+				"id": "tac_aggressive",
+				"name_zh": "猛攻",
+				"retreat_threshold": 0.2
+			},
+			{
+				"autonomy": "low",
+				"cover_priority": "high",
+				"description": "固守阵地寸步不退",
+				"fire_discipline": "tight",
+				"flank_enabled": "no",
+				"id": "tac_defensive",
+				"name_zh": "坚守",
+				"retreat_threshold": 0.5
+			},
+			{
+				"autonomy": "high",
+				"cover_priority": "low",
+				"description": "打了就跑骚扰为主",
+				"fire_discipline": "loose",
+				"flank_enabled": "yes",
+				"id": "tac_guerrilla",
+				"name_zh": "游击",
+				"retreat_threshold": 0.1
+			},
+			{
+				"autonomy": "medium",
+				"cover_priority": "medium",
+				"description": "灵活应对战场局势",
+				"fire_discipline": "medium",
+				"flank_enabled": "yes",
+				"id": "tac_balanced",
+				"name_zh": "均衡",
+				"retreat_threshold": 0.35
+			},
+			{
+				"autonomy": "low",
+				"cover_priority": "high",
+				"description": "远程优先避近战",
+				"fire_discipline": "tight",
+				"flank_enabled": "no",
+				"id": "tac_sniper",
+				"name_zh": "狙击",
+				"retreat_threshold": 0.3
+			}
+		]
+	}
+}

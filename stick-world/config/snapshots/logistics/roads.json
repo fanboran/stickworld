@@ -1,0 +1,55 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/运输数据.xlsx → roads sheet 自动生成",
+		"resource_name": "roads",
+		"source_file": "config/excel/运输数据.xlsx",
+		"source_sheet": "roads",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/logistics/roads.tres",
+	"variables": {
+		"data": [
+			{
+				"build_cost_stone": 9,
+				"build_cost_wood": 9,
+				"build_time": 5,
+				"id": "road_dirt",
+				"maintenance": 1,
+				"name_zh": "土路",
+				"speed_bonus": "1.2x",
+				"unlock_tech": null
+			},
+			{
+				"build_cost_stone": 18,
+				"build_cost_wood": 9,
+				"build_time": 15,
+				"id": "road_stone",
+				"maintenance": 2,
+				"name_zh": "石板路",
+				"speed_bonus": "1.5x",
+				"unlock_tech": "tech_stone_road"
+			},
+			{
+				"build_cost_stone": 38,
+				"build_cost_wood": 18,
+				"build_time": 30,
+				"id": "road_highway",
+				"maintenance": 5,
+				"name_zh": "帝国大道",
+				"speed_bonus": "2.0x",
+				"unlock_tech": "tech_imperial_road"
+			},
+			{
+				"build_cost_stone": 75,
+				"build_cost_wood": 0,
+				"build_time": 60,
+				"id": "canal",
+				"maintenance": 9,
+				"name_zh": "运河",
+				"speed_bonus": "3.0x",
+				"unlock_tech": "tech_canal"
+			}
+		]
+	}
+}

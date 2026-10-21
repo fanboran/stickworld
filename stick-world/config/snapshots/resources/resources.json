@@ -1,0 +1,60 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/资源数据.xlsx → resources sheet 自动生成",
+		"resource_name": "resources",
+		"source_file": "config/excel/资源数据.xlsx",
+		"source_sheet": "resources",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/resources/resources.tres",
+	"variables": {
+		"data": [
+			{
+				"category": "basic",
+				"icon_path": "res://assets/icons/wood.png",
+				"id": "res_wood",
+				"initial_price": 3,
+				"name_zh": "木材",
+				"perishable": false,
+				"weight_per_unit": 2
+			},
+			{
+				"category": "basic",
+				"icon_path": "res://assets/icons/stone.png",
+				"id": "res_stone",
+				"initial_price": 4,
+				"name_zh": "石料",
+				"perishable": false,
+				"weight_per_unit": 5
+			},
+			{
+				"category": "basic",
+				"icon_path": "res://assets/icons/metal_ore.png",
+				"id": "res_metal_ore",
+				"initial_price": 8,
+				"name_zh": "金属矿",
+				"perishable": false,
+				"weight_per_unit": 8
+			},
+			{
+				"category": "processed",
+				"icon_path": "res://assets/icons/iron_ingot.png",
+				"id": "res_iron_ingot",
+				"initial_price": 20,
+				"name_zh": "铁锭",
+				"perishable": false,
+				"weight_per_unit": 7
+			},
+			{
+				"category": "luxury",
+				"icon_path": "res://assets/icons/silk.png",
+				"id": "res_silk",
+				"initial_price": 50,
+				"name_zh": "丝绸",
+				"perishable": false,
+				"weight_per_unit": 0.5
+			}
+		]
+	}
+}

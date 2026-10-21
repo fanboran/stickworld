@@ -1,0 +1,203 @@
+{
+	"_meta": {},
+	"_source": "res://config/formations/presets.tres",
+	"variables": {
+		"data": [
+			{
+				"id": "tier_division",
+				"level": 5,
+				"name": "师",
+				"preset": "军事编制",
+				"tag": "MILITARY"
+			},
+			{
+				"id": "tier_regiment",
+				"level": 4,
+				"name": "团",
+				"parent_id": "tier_division",
+				"preset": "军事编制",
+				"tag": "MILITARY"
+			},
+			{
+				"id": "tier_battalion",
+				"level": 3,
+				"name": "营",
+				"parent_id": "tier_regiment",
+				"preset": "军事编制",
+				"tag": "MILITARY"
+			},
+			{
+				"id": "tier_company",
+				"level": 2,
+				"name": "连",
+				"parent_id": "tier_battalion",
+				"preset": "军事编制",
+				"tag": "MILITARY"
+			},
+			{
+				"id": "tier_platoon",
+				"level": 1,
+				"name": "排",
+				"parent_id": "tier_company",
+				"preset": "军事编制",
+				"tag": "MILITARY"
+			},
+			{
+				"id": "tier_academy",
+				"level": 5,
+				"name": "科学院",
+				"preset": "科研架构",
+				"tag": "RESEARCH"
+			},
+			{
+				"id": "tier_institute",
+				"level": 4,
+				"name": "研究院",
+				"parent_id": "tier_academy",
+				"preset": "科研架构",
+				"tag": "RESEARCH"
+			},
+			{
+				"id": "tier_research_center",
+				"level": 3,
+				"name": "研究所",
+				"parent_id": "tier_institute",
+				"preset": "科研架构",
+				"tag": "RESEARCH"
+			},
+			{
+				"id": "tier_lab",
+				"level": 2,
+				"name": "研究室",
+				"parent_id": "tier_research_center",
+				"preset": "科研架构",
+				"tag": "RESEARCH"
+			},
+			{
+				"id": "tier_research_group",
+				"level": 1,
+				"name": "课题组",
+				"parent_id": "tier_lab",
+				"preset": "科研架构",
+				"tag": "RESEARCH"
+			},
+			{
+				"id": "tier_engineering_academy",
+				"level": 5,
+				"name": "工程院",
+				"preset": "工程架构",
+				"tag": "ENGINEERING"
+			},
+			{
+				"id": "tier_engineering_institute",
+				"level": 4,
+				"name": "工程所",
+				"parent_id": "tier_engineering_academy",
+				"preset": "工程架构",
+				"tag": "ENGINEERING"
+			},
+			{
+				"id": "tier_project_team",
+				"level": 3,
+				"name": "项目组",
+				"parent_id": "tier_engineering_institute",
+				"preset": "工程架构",
+				"tag": "ENGINEERING"
+			},
+			{
+				"id": "tier_construction_crew",
+				"level": 2,
+				"name": "施工队",
+				"parent_id": "tier_project_team",
+				"preset": "工程架构",
+				"tag": "ENGINEERING"
+			},
+			{
+				"id": "tier_construction_squad",
+				"level": 1,
+				"name": "施工分队",
+				"parent_id": "tier_construction_crew",
+				"preset": "工程架构",
+				"tag": "ENGINEERING"
+			},
+			{
+				"id": "tier_empire",
+				"level": 5,
+				"name": "帝国",
+				"preset": "行政架构",
+				"tag": "ADMINISTRATION"
+			},
+			{
+				"id": "tier_region",
+				"level": 4,
+				"name": "地区",
+				"parent_id": "tier_empire",
+				"preset": "行政架构",
+				"tag": "ADMINISTRATION"
+			},
+			{
+				"id": "tier_province",
+				"level": 3,
+				"name": "省份",
+				"parent_id": "tier_region",
+				"preset": "行政架构",
+				"tag": "ADMINISTRATION"
+			},
+			{
+				"id": "tier_city",
+				"level": 2,
+				"name": "城市",
+				"parent_id": "tier_province",
+				"preset": "行政架构",
+				"tag": "ADMINISTRATION"
+			},
+			{
+				"id": "tier_tribe",
+				"level": 1,
+				"name": "部落",
+				"parent_id": "tier_city",
+				"preset": "行政架构",
+				"tag": "ADMINISTRATION"
+			},
+			{
+				"id": "tier_logistics_hq",
+				"level": 5,
+				"name": "总物流中心",
+				"preset": "运输架构",
+				"tag": "LOGISTICS"
+			},
+			{
+				"id": "tier_logistics_center",
+				"level": 4,
+				"name": "物流中心",
+				"parent_id": "tier_logistics_hq",
+				"preset": "运输架构",
+				"tag": "LOGISTICS"
+			},
+			{
+				"id": "tier_transfer_station",
+				"level": 3,
+				"name": "中转站",
+				"parent_id": "tier_logistics_center",
+				"preset": "运输架构",
+				"tag": "LOGISTICS"
+			},
+			{
+				"id": "tier_transport_convoy",
+				"level": 2,
+				"name": "运输队",
+				"parent_id": "tier_transfer_station",
+				"preset": "运输架构",
+				"tag": "LOGISTICS"
+			},
+			{
+				"id": "tier_transport_squad",
+				"level": 1,
+				"name": "运输分队",
+				"parent_id": "tier_transport_convoy",
+				"preset": "运输架构",
+				"tag": "LOGISTICS"
+			}
+		]
+	}
+}

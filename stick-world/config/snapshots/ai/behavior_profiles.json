@@ -1,0 +1,31 @@
+{
+	"_meta": {
+		"category": "ai",
+		"description": "R2 兵种人格覆盖档（A9 · 设计文档12号 §2.2 RWR 登记表）：个体 AI 参数的运行时可调层。合并序 = 代码基线（behavior_profiles.BASELINE）← 代码兵种覆盖（CLASS_PROFILES，SWL 直译真值宿主）← 本表行（baseline 行 + 兵种行，同 id 后行覆盖前行，行只写差异项 = RWR 职业文件语义）。本表 baseline 行镜像 A9 新键组代码默认（零回归基线）；调参先改这里（F9 热重载），兵种行按需补。全部数值语义推断初值，待实测校准。",
+		"resource_name": "behavior_profiles",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/ai/behavior_profiles.tres",
+	"variables": {
+		"data": [
+			{
+				"decision_interval": 0.3,
+				"decision_variance": 0.1,
+				"description": "R1 主决策间隔 0.3s ± 0.1 方差（逐拍重掷去同步）；R5 防扎堆治疗 60px（RWR consider_someone_already_healing_wounded_distance 10m 同构换算）；压制机制已整体删除（创始人裁决，键族清除）、卡死看门狗关（街道导航用，战场误判乱推源）；GK-3 开闸：出生错峰 + 域级失败冷却两键翻 true（读档相位回填走 ai_timing 存档链）；犹豫/点射/夜间犹豫键随裁决#31-#32 退役（SWL/SW3 dump 无此机制，残留键清除）",
+				"heal_buzz_distance": 60.0,
+				"id": "baseline",
+				"job_scan_interval": 0.5,
+				"probe_fail_cooldown_enabled": true,
+				"rout_strafe_enabled": true,
+				"spawn_jitter_enabled": true,
+				"spawn_jitter_ratio": 0.5,
+				"stuck_watchdog_enabled": false
+			},
+			{
+				"description": "灵动性开闸：法师保距（施法射程 600>480 无死锁；锚点弓手 500 档下浮，待实测校准）",
+				"id": "staff",
+				"kite_range": 480.0
+			}
+		]
+	}
+}

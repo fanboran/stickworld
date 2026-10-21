@@ -1,16 +1,26 @@
 [gd_scene load_steps=2 format=3]
 
-; 祭司法杖（Meric）——P7 批次 7b，结构照 weapon_magicstaff.tscn。
-; L2 降级：meric-staff 贴图工具链未覆盖（[meric.atlas].txt 缺），首版复用 Magicstaff 贴图占位。
-; 挂待办登记：贴图替换 + GripPoint 实测校准（待 meric 图集导出后）。
-[ext_resource type="Texture2D" path="res://modules/stick_rig/assets/textures/weapons/magicstaff.png" id="1_tex"]
+; 祭司法杖（Meric）——数值直译自解包附件数据，结构同 weapon_magicstaff.tscn：
+;   附件 = Meric 皮肤 weapon 槽唯一附件（slot/name=Meric/meric-staff → region "meric-staff"）：
+;           rot=-90.91  xy=(-16.24,5.41)  s=1（无 scale 字段）  wh=125x600（region 实际 55x269）
+;   数据源：external/decompiled/legacy/spine_raw/核心单位骨架/meric.txt skins
+;           + meric.atlas.atlas.txt（页 meric.png 512x512，实际位于 external/swl_apk/legacy_tex/）
+;   挂载骨世界角：Spine Meric/meric-staff @Stand t=0 = 90.0（杖竖直；口径同
+;           tools/dump_spine_pose.py——rotate 时间线=相对 setup 的增量）
+;           Godot weapon_hand @idle t=0 = 0.0
+;   Sprite.rotation = C − (90.0 + (-90.91)) − 0 = C + 0.91，C=0（同 magicstaff 标定）
+;   Sprite.scale  = K×1×(125/55, 600/269)，K=64/134.71=0.475 → (1.080, 1.059)
+;   GripPoint = ( q.x/(125×1)×55 , −q.y/(600×1)×269 )，q=R(90.91°)·(−xy)
+;               = (2.3, -7.3)：手握杖中段略偏上（杖长于人，握点近几何中心）。
+;   贴图：tools/baking/extract_weapons.gd 从 meric 图集裁出 mericstaff.png。
+[ext_resource type="Texture2D" path="res://modules/stick_rig/assets/textures/weapons/mericstaff.png" id="1_tex"]
 
 [node name="Mericstaff" type="Node2D"]
 
 [node name="Sprite" type="Sprite2D" parent="."]
-rotation = -0.026007
-scale = Vector2(0.48, 0.482)
+rotation = 0.015882
+scale = Vector2(1.08, 1.059)
 texture = ExtResource("1_tex")
 
 [node name="GripPoint" type="Marker2D" parent="."]
-position = Vector2(1.9, -26.9)
+position = Vector2(2.3, -7.3)

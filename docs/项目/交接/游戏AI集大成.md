@@ -7,8 +7,7 @@
 
 ## 快速恢复（新会话从这里开始）
 
-- **分支**：`agent/game-ai`（本任务独立 worktree/分支；A1 无依赖故自组织分支尖端切出提前执行，A2 起依赖组织批次 3-F2，待组织收线合 main 后按设计文档 12 号 §五 继任段推进）；跨任务总 DAG 与推进序唯一真相源 = 设计文档 12 号 §五「跨任务总 DAG」（本档不复制）
-- **工作区**：`.temp/game-ai`（CoH/RWR 逆向原件在组织 worktree `.temp/organization-deepening/temp/coh/` 等，gitignored）
+- **状态**：**已收官合入 main**（原独立分支 `agent/game-ai`、worktree `.temp/game-ai` 均已收线）；现处校准轮。跨任务总 DAG 与推进序唯一真相源 = 设计文档 12 号 §五「跨任务总 DAG」（本档不复制）
 - **自检**：`bash stick-world/tools/check_godot_errors.sh`；测试 `bash stick-world/tests/run_all.sh`
 - **开闸/校准入口**：设计文档 §七「机制开关总表」——全部机制开关（层/默认/开闸后可观测差异/观察入口）+ 开闸纪律，校准轮按表逐项开、逐项看
 - **当前阶段**：**任务主体全部收官、尾巴清零**——A 系列 + 观测接线批 + WorldBox WB1/WB2/WB6 + AI-GAPS + AUTHORITY-SWITCH + GK-1~GK-5 全部开闸 + UI-W1~W4 全套（观测接线/班组卡/上报流/指挥链视图/指挥链深化/战略总览）+ 权威值查询 bug 修复 + 跨组织调人原子接口与拖拽 + 择班种子派生 + 孤儿套件下沉 + 树文案定稿（创始人裁决「直属为 0 就不显示」）全部落地 main。**机制开关已全部按 §七 清单开闸**（唯一留位关：`vp_rule_enabled`）——进入**校准轮**：观测位 `TeamAi.get_default_behavior_choices()` / `FormationSystem.get_authority_switch_state()`（带档案实值镜像）就绪，等观感/分布数据调数值；**全部数值为逆向锚点/保守初值【提案/待定】**。剩余可选尾巴（均无阻塞）：①组织界面图标缺口母题立项（指挥链/补位/在途命令/权威值缺精确命中枚，走 `图标清单与缺口.md` 流程）；②battle_id 现为 `battle_<instance_id>` 不跨运行稳定——若要跨存档同战斗同相位需给 battle_instance 持久化 id；③`tests/dev` 段工作区首次 import 偶发段错误（借主工作区缓存可绕过）；④WB3~WB5/WB7~WB10 仍分流各任务线。

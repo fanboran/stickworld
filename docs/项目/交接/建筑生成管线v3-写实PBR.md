@@ -3,7 +3,7 @@
 > **一句话**：推翻旧 `building_gen`，自建"代码建模 → 渲染 → PNG + 元数据"的建筑生成管线。v2（Godot 2D 手绘）因材质天花板被创始人废弃，**现行 v3 = Blender 3D + PBR 材质 + 真实光照**（与 `tools/icon_pipeline` 同构的生产纪律）。
 > 设计文档：`docs/技术/架构/建筑管线/写实PBR规范.md`（**§8 修订决议、§9 品控结论 —— 当前最重要输入**）
 > 参考图：`stick-world/assets/_raw/建筑/smithy.png`（铁匠铺 Lv1~4，创始人给的风格与造型目标）
-> 分支 `agent/building-pipeline-v2`（名字沿用，实际做 v3），worktree `.temp/building-pipeline-v2`。
+> **main 单仓推进**（原 worktree `.temp/building-pipeline-v2` 已收线，现行工作区 = 主仓 main 单仓）。
 > **未完成任务清单不在本档**：建筑系统（运行时/资产/玩法/主线交织）的待办统一在 [`待办/建筑系统总账.md`](../待办/建筑系统总账.md)（编号 `ROOT`/`INT`/`DYN`/`FUN`/`AST`/`SPN`）。本档只记进度、决策与踩坑；下面各节出现的"下一步/待办"为当时快照，取最新状态看总账。
 
 ---

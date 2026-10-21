@@ -72,8 +72,6 @@ var state: State = State.PLANNED
 var _assigned_workers: Array = []
 ## 工人 -> 工作位索引映射（避免多名工人挤同一 slot）
 var _worker_slot_map: Dictionary = {}
-## 当前认领搬运工的工人（null=无搬运工）。同一项目最多一个搬运工。
-var _hauler: Node = null
 ## 每次搬运交付的材料进度增量（25%，4 次往返填满）
 const HAUL_PAYLOAD_FRACTION: float = 0.25
 ## 工地临时障碍（建造中阻挡通行，完工移除）
@@ -135,9 +133,9 @@ func assign_worker(worker: Node) -> bool:
 	if worker in _assigned_workers:
 		return true  # 已派工，幂等返回成功
 	_assigned_workers.append(worker)
-	# 分配工作位索引（循环复用）
-	var slot_index: int = (_assigned_workers.size() - 1) % _get_max_work_slots_hint()
-	_worker_slot_map[worker] = slot_index
+	# 全员工位重排（ROOT-8：成员变动后按在册序 0..n-1 循环重排，
+	# 保证任意时刻无两人共用同一工位索引）
+	_recompute_worker_slots()
 	worker_assigned.emit(self, worker)
 	# 第一个工人自动开工
 	if state == State.PLANNED:
@@ -152,9 +150,21 @@ func unassign_worker(worker: Node) -> void:
 	if not _assigned_workers.has(worker):
 		return
 	_assigned_workers.erase(worker)
-	_worker_slot_map.erase(worker)
+	# 全员工位重排（ROOT-8：删人后剩余工人收拢重排，后派工人的
+	# slot_index 不再与剩余工人冲突——旧实现只删不重算，同位站两人）
+	_recompute_worker_slots()
 	worker_unassigned.emit(self, worker)
 	# 工人全部离开：项目保留状态，可继续派工；P0 不自动取消
+
+
+## 全员工位重排：按在册顺序赋 0..n-1 循环取模的工位索引。
+## 成员（增/删）变动后统一调用；已就位工人的站位目标不回迁
+##（行为层 enter 时才读槽位），但槽位索引恒无冲突。
+func _recompute_worker_slots() -> void:
+	_worker_slot_map.clear()
+	var max_slots: int = maxi(1, _get_max_work_slots_hint())
+	for i in _assigned_workers.size():
+		_worker_slot_map[_assigned_workers[i]] = i % max_slots
 
 
 ## 获取已派工的工人列表（拷贝）
@@ -210,29 +220,13 @@ func get_material_progress() -> float:
 
 
 ## 是否需要搬运建材：材料未满且建造进度已追上材料进度。
+## Job 板（WorkCrewAssigner）以此派生项目的 haul 任务族。
 func needs_material() -> bool:
 	if total_work <= 0.0:
 		return false
 	if material_progress >= 1.0:
 		return false
 	return (current_work / total_work) >= material_progress - 0.001
-
-
-## 认领搬运工。同一项目最多一个搬运工，返回 true 表示认领成功。
-## 若该 worker 已认领则返回 true（幂等）。
-func try_claim_hauler(worker: Node) -> bool:
-	if _hauler == worker:
-		return true  # 已认领
-	if _hauler != null and is_instance_valid(_hauler):
-		return false
-	_hauler = worker
-	return true
-
-
-## 释放搬运工认领。
-func release_hauler(worker: Node) -> void:
-	if _hauler == worker:
-		_hauler = null
 
 
 ## 搬运工交付建材，推进材料进度。

@@ -7,7 +7,9 @@ extends Node2D
 ##
 ## BuildMenu 每帧更新字段后调用 queue_redraw()。
 
-const CELL_SIZE: int = 24   # 24px 换轨（旧 32）
+## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨只动彼处）
+const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
+const CELL_SIZE: float = ScriptPlacementMetrics.CELL_PX
 const CELL_INSET_X: float = 2.25
 const CELL_INSET_Y: float = 1.5
 const CORNER_ARM: float = 10.0

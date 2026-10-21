@@ -18,9 +18,11 @@ extends RefCounted
 ## 本模块不引用 units 内部类，避免 construction→units 编译期依赖）
 const BODY_COLLISION_LAYER: int = 2
 
-## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（construction 不 preload world 模块，
-## 换轨时两处同步——同 construction_manager 口径）
-const CELL_PX: float = 24.0
+## 放置度量常量库（模块内单一真相源：条带宽/基线回退/阻挡纵深）
+const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
+
+## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨只动彼处）
+const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
 
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 
@@ -337,17 +339,11 @@ func _remove_placeholder_visual() -> void:
 	_placeholder_visual = null
 
 
-## 落位基线（px，画布域）：地图支持逐格墙脚线（HD-2D，get_building_baseline_at）
-## 则按本项目格子范围取邻居楼线，否则 ground_y + building_baseline_offset
-## （旧 2D 图 duck 回退）。工地障碍/占位视觉/完工落位三处共用，保证同线不跳位。
+## 落位基线（px，画布域）：取值逻辑收敛在 placement_metrics.baseline_at
+##（HD-2D 逐格墙脚线 → 旧图 ground_y + building_baseline_offset 回退）。
+## 工地障碍/占位视觉/完工落位三处共用，保证同线不跳位。
 func _baseline_at() -> float:
-	if baseline_y > 0.0:
-		return baseline_y
-	if map != null and map.has_method("get_building_baseline_at"):
-		return float(map.call("get_building_baseline_at", cell_x, width))
-	var ground_y: float = float(map.get("ground_y") if map != null and "ground_y" in map else 810.0)
-	var off: float = float(map.get("building_baseline_offset") if map != null and "building_baseline_offset" in map else 96.0)
-	return ground_y + off
+	return ScriptPlacementMetrics.baseline_at(map, cell_x, width, baseline_y)
 
 
 ## 完工：UNDER_CONSTRUCTION → OPERATIONAL

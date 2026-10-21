@@ -57,7 +57,9 @@ var _confirm_btn: Button = null
 var _placing_baseline: float = -1.0
 ## ghost 预览高度（像素，向上，接近大多数建筑视觉高度）
 const _GHOST_HEIGHT: float = 280.0
-const _CELL_SIZE: int = 24  # 24px 换轨（旧 32）
+## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨只动彼处）
+const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
+const _CELL_SIZE: float = ScriptPlacementMetrics.CELL_PX
 ## 放置默认宽度（cell 数）
 const _DEFAULT_WIDTH_CELLS: int = 16
 
@@ -380,8 +382,8 @@ func _confirm_place() -> void:
 ## 钳制在行走带内（黄线 ~ 屏幕底沿上 1 格）；无深度语义的图（旧 2D）走 duck 偏移。
 func _placement_baseline(map: Node2D) -> float:
 	if not map.has_method("get_fg_bg_boundary_y"):
-		var ground_y: float = float(map.get("ground_y") if "ground_y" in map else 810.0)
-		return ground_y + float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+		# 旧 2D 图 duck 回退（回退值单一真相源 placement_metrics）
+		return ScriptPlacementMetrics.ground_y_of(map) + ScriptPlacementMetrics.baseline_offset_of(map)
 	var deep: float = float(map.get("walk_back_y") if "walk_back_y" in map else 516.0)
 	var front: float = float(map.get("walk_front_y") if "walk_front_y" in map else 970.5)
 	return clampf(_get_mouse_world_y(), deep, front - 24.0)

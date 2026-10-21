@@ -103,18 +103,35 @@ func set_map(map: Node2D) -> void:
 
 # ===== 工作委派 / 仓库查询（2026-08 收敛：AI 侧此前直调 manager 内部方法） =====
 
-## 查询某工人当前派工的项目（无派工返回 null）
+## 查询某工人当前派工的项目（无派工返回 null；build/haul 两族任务都绑定项目）
 func get_worker_project(worker: Node) -> RefCounted:
 	if not _is_initialized:
 		return null
 	return _manager.get_worker_project(worker)
 
 
-## 尝试自动派工（附近有空闲项目则指派，返回是否派工成功）
-func try_assign_worker(worker: Node) -> bool:
+## 尝试自动派工（Job 板认领：挑最近项目并按提示词定族，返回是否派工成功）。
+## hint = {"can_build": bool, "can_haul": bool, "has_warehouse": bool}，
+## 缺省两族皆可（与旧调用面兼容）。
+func try_assign_worker(worker: Node, hint: Dictionary = {}) -> bool:
 	if not _is_initialized:
 		return false
-	return _manager.try_assign_worker(worker)
+	return _manager.try_assign_worker(worker, hint)
+
+
+## 查询某工人当前持有的 Job 板任务（{kind: "build"/"haul", project}；未派工返回 {}）
+func get_worker_job(worker: Node) -> Dictionary:
+	if not _is_initialized:
+		return {}
+	return _manager.get_worker_job(worker)
+
+
+## 持有任务的族别刷新（材料到货/耗尽在 build ↔ haul 间换向）。
+## 返回刷新后的任务视图（无可领族/未持任务返回 {}）。
+func refresh_worker_job(worker: Node, hint: Dictionary = {}) -> Dictionary:
+	if not _is_initialized:
+		return {}
+	return _manager.refresh_worker_job(worker, hint)
 
 
 ## 查询距 pos 最近的仓库建筑（无则返回 null）

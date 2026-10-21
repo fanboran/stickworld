@@ -38,6 +38,21 @@ func demolish_building(building_id: String) -> Dictionary
 # 修理
 func repair_building(building_id: String, org_id: String) -> Dictionary
 # [P] building 状态=DAMAGED
+
+# 工作委派（Job 板消费面，units 侧 AIController 消费）
+func register_worker(worker: Node) -> void            # 实体注入 construction 引用时入池
+func unregister_worker(worker: Node) -> void          # 实体销毁时出池（防悬垂引用）
+func try_assign_worker(worker: Node, hint: Dictionary = {}) -> bool
+# [Q] Job 板认领：按（距离→挂板序）挑最近项目，按项目缺料状态与 hint 定族；
+#     hint = {can_build: bool, can_haul: bool, has_warehouse: bool}（编队职责过滤 +
+#     仓库可达性，调用方组装），缺省两族皆可；认领即项目成员化（首人自动开工）
+func get_worker_job(worker: Node) -> Dictionary        # {kind: "build"/"haul", project}；未派工 {}
+func refresh_worker_job(worker: Node, hint: Dictionary = {}) -> Dictionary
+# [Q] 持有任务族别刷新：材料耗尽 build→haul、材料到货 haul→build（原项目内原地换，
+#     不发射派工信号）；无可领族/未持任务返回 {}
+func get_worker_project(worker: Node) -> RefCounted    # 任务绑定的项目（两族同源）
+func get_available_workers() -> Array                  # 空闲工人名单（organization 域消费）
+func get_nearest_warehouse(pos: Vector2) -> Node2D     # 搬运取货点查询
 ```
 
 > **🔄 模块化重构后（B1+ 阶段，详见 [建筑模块化设计.md](../场景与战斗/建筑模块化设计.md)）**：

@@ -92,6 +92,7 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_placement_grid_units.tscn"
 	"tests/integration/test_tactical_orders.tscn"
 	"tests/integration/test_save_roundtrip.tscn"
+	"tests/integration/test_save_completeness.tscn"
 	"tests/integration/test_anim_finished.tscn"
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
@@ -143,6 +144,8 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_formation_system_assembly.tscn"]=90
 	["tests/integration/test_tactical_orders.tscn"]=90
 	["tests/integration/test_debug_api.tscn"]=90
+	# 三次全链 save→load（每次含整图重载），boot 一次约 10s、每次读档换图数秒
+	["tests/integration/test_save_completeness.tscn"]=240
 )
 DEFAULT_TIMEOUT=90
 
@@ -167,7 +170,7 @@ affected_suites() {
 				picked["tests/integration/test_battle_retreat.tscn"]=1
 				picked["tests/integration/test_recruit_flow.tscn"]=1
 				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
-			stick-world/modules/combat/*)
+			stick-world/modules/combat/*|stick-world/modules/formation/*)
 				picked["tests/integration/test_battle_lifecycle.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1
 				picked["tests/integration/test_formation_presets.tscn"]=1
@@ -178,7 +181,8 @@ affected_suites() {
 				picked["tests/integration/test_melee_combat.tscn"]=1
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
-				picked["tests/integration/test_battle_retreat.tscn"]=1 ;;
+				picked["tests/integration/test_battle_retreat.tscn"]=1
+				picked["tests/integration/test_save_completeness.tscn"]=1 ;;
 			stick-world/modules/construction/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1
 				picked["tests/integration/test_placement_grid_units.tscn"]=1
@@ -198,6 +202,7 @@ affected_suites() {
 				picked["tests/integration/test_modal_stack.tscn"]=1
 				picked["tests/integration/test_battle_ui.tscn"]=1
 				picked["tests/integration/test_recruit_flow.tscn"]=1
+				picked["tests/integration/test_save_completeness.tscn"]=1
 				picked["tests/smoke/test_new_game_smoke.tscn"]=1
 				picked["tests/smoke/test_cross_map_travel.tscn"]=1 ;;
 			stick-world/modules/debug_gui/*|stick-world/modules/debug_GUI/*)
@@ -219,7 +224,8 @@ affected_suites() {
 				picked["tests/integration/test_org_e2e.tscn"]=1
 				picked["tests/integration/test_org_report_narrator.tscn"]=1
 				picked["tests/integration/test_org_panel_badges.tscn"]=1
-				picked["tests/integration/test_recruit_flow.tscn"]=1 ;;
+				picked["tests/integration/test_recruit_flow.tscn"]=1
+				picked["tests/integration/test_save_completeness.tscn"]=1 ;;
 			stick-world/modules/player_control/*)
 				picked["tests/integration/test_possession.tscn"]=1
 				picked["tests/integration/test_selection_formation.tscn"]=1

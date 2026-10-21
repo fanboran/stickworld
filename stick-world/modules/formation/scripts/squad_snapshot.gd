@@ -84,6 +84,193 @@ func restore_squads(snapshots: Array, entity_map: Dictionary) -> int:
 	return restored
 
 
+# ──────────────── 存档导出/回读（读档完整性批次）────────────────
+
+## 存档行格式（与跨图快照的分野）：
+## - 跨图快照只带班（排/火力组是战斗域本地聚合）；存档是全量冻结——班 + 排
+##   （编制聚合层）都入档。火力组仍不入档（号令寻址粒度随班消亡，与跨图同口径）。
+## - 本助手导出以实体 iid（内存句柄）为键，由 save_handler 换算成 entities 表的
+##   entity_id 稳定键落档；回读时 save_handler 传回 entity_id → 活实体映射，
+##   本助手不解释键语义（跨图链传 iid、存档链传 ent id，同一套逻辑复用）。
+## - 班 id = 组织 id（create_squad 经 OrganizationApi 建组织），存档透传 org_id，
+##   回读时组织侧已由 save_handler 收编档内组织（id 不变），班在本体上原位重建。
+
+## 导出全部编队 + 编制（存档用，save_handler 经 CombatAPI 调用）。
+## 返回 {"squads": [{org_id, name, preset_id, work_types, leader_iid,
+##                   "members": [iid], follow_player, follow_front, follow_gap}],
+##        "platoons": [{platoon_id, name, squads, leader_iid, company_id}]}
+func export_for_save() -> Dictionary:
+	var squads: Array = []
+	for squad_id in _host._squads.keys():
+		var s: Dictionary = _host._squads[squad_id]
+		var members: Array = []
+		for u in s["units"]:
+			if is_instance_valid(u):
+				members.append(u.get_instance_id())
+		var leader_iid: int = 0
+		if s["leader"] != null and is_instance_valid(s["leader"]):
+			leader_iid = s["leader"].get_instance_id()
+		var follow: Dictionary = _host.get_squad_follow(String(squad_id))
+		squads.append({
+			"org_id": String(squad_id),
+			"name": s["name"],
+			"preset_id": s["preset_id"],
+			"work_types": (s["work_types"] as Array).duplicate(),
+			"leader_iid": leader_iid,
+			"members": members,
+			"follow_player": bool(s.get("follow_player", false)),
+			"follow_front": String(follow.get("front", "")),
+			"follow_gap": float(follow.get("gap", 0.0)),
+		})
+	var platoons: Array = []
+	for pid in _host._platoons.keys():
+		var p: Dictionary = _host._platoons[pid]
+		var leader_iid: int = 0
+		var pleader: Node = p.get("leader")
+		if pleader != null and is_instance_valid(pleader):
+			leader_iid = pleader.get_instance_id()
+		platoons.append({
+			"platoon_id": String(pid),
+			"name": String(p.get("name", "")),
+			"squads": (p.get("squads", []) as Array).duplicate(),
+			"leader_iid": leader_iid,
+			"company_id": String(p.get("company_id", "")),
+		})
+	return {"squads": squads, "platoons": platoons}
+
+
+## 从存档行重建编队 + 编制（save_handler._restore_from_save 调用，编排前置：
+## 宿主旧班已解散、档内组织已收编进组织模块——本方法只在既有组织上重建班本体）。
+## data = save_handler 落档的 formation 行（members/leader_ent 为存档键）；
+## entity_map = 存档键 → 活实体。返回成功恢复的班数。
+func restore_from_save(data: Dictionary, entity_map: Dictionary) -> int:
+	var restored := 0
+	var built: Array = []
+	for s_v in data.get("squads", []):
+		var snap: Dictionary = s_v
+		var org_id := String(snap.get("org_id", ""))
+		if org_id.is_empty():
+			continue
+		# 组织侧必须有该组织（档内组织已收编）；缺 = 组织链断，跳过不硬造
+		if not _org_exists(org_id):
+			push_warning("[SquadSnapshot] 编队恢复跳过 %s：组织侧无此组织" % org_id)
+			continue
+		var members: Array = []
+		for key_v in snap.get("members", []):
+			var e: Node = entity_map.get(String(key_v))
+			if e != null and is_instance_valid(e):
+				members.append(e)
+		if members.is_empty():
+			push_warning("[SquadSnapshot] 编队恢复跳过 %s：无有效成员" % org_id)
+			continue
+		_build_squad_on_org(org_id, snap, members, entity_map)
+		built.append(snap)
+		restored += 1
+	# 跟队锚定统一恢复（全部班就位后前队引用才必然有效；前队缺失时宿主 API 自拒）
+	for snap_v in built:
+		var front := String(snap_v.get("follow_front", ""))
+		if not front.is_empty():
+			_host.set_squad_follow_squad(String(snap_v.get("org_id", "")), front,
+					float(snap_v.get("follow_gap", 0.0)))
+		elif bool(snap_v.get("follow_player", false)):
+			_host.set_squad_follow(String(snap_v.get("org_id", "")), true)
+	# 排聚合层（班已就位后重建；排号计数器按档内最大后缀推进防新排撞车）
+	for p_v in data.get("platoons", []):
+		_build_platoon_from_save(p_v, entity_map)
+	return restored
+
+
+## 组织侧是否已有该组织（档内组织收编结果查询；duck 调 OrganizationApi 契约）。
+func _org_exists(org_id: String) -> bool:
+	if _host._org_api == null or not _host._org_api.has_method("get_organization"):
+		return false
+	return bool(_host._org_api.get_organization(org_id).get("ok", false))
+
+
+## 在既有组织上重建班本体（create_squad 的"不建组织版"：状态装配/人员账/槽位/
+## 军衔/信号与创建路径同形，只跳过 OrganizationApi.create_organization）。
+func _build_squad_on_org(org_id: String, snap: Dictionary, members: Array, entity_map: Dictionary) -> void:
+	var preset: Dictionary = _host._resolve_preset(String(snap.get("preset_id", _host.DEFAULT_PRESET_ID)))
+	var work_types: Array = snap.get("work_types", [])
+	if work_types.is_empty():
+		work_types = (preset["work_types"] as Array).duplicate()
+	var name_str := String(snap.get("name", ""))
+	_host._squads[org_id] = {
+		"units": members.duplicate(),
+		"leader": null,
+		"preset_id": preset["id"],
+		"work_types": work_types,
+		"role": preset["default_role"],
+		"name": name_str,
+		"follow_player": false,
+		"follow_squad_id": "",
+		"follow_gap": 0.0,
+		"slots": {},
+		"casualty_dead": 0,
+		"casualty_reported": false,
+	}
+	# 班号计数器按档内默认名后缀推进（防读档后新建班默认名撞车；仅装饰性 id）
+	var suffix := name_str.trim_prefix("squad_").to_int()
+	if suffix > int(_host._squad_counter):
+		_host._squad_counter = suffix
+	var id_strings: Array = []
+	for u in members:
+		_host._unit_to_squad[u.get_instance_id()] = org_id
+		id_strings.append(str(u.get_instance_id()))
+		_host._recompute_unit_rank(u)
+		_host._requisition_unit(u)
+	# 组织人员账重建：档内组织 personnel 存的是存档时旧 iid（跨会话已死），
+	# 按恢复后的活实体整表重写（读档完整性批次新增 OrganizationApi.set_personnel）
+	if _host._org_api != null and _host._org_api.has_method("set_personnel"):
+		_host._org_api.set_personnel(org_id, id_strings)
+	# 编队槽位重排（几何派生数据不入档，与创建路径同源重算）
+	_host._assign_formation_slots(org_id)
+	# 班长恢复（组织指挥官 + rank 1 + 信号，走宿主既有 API 全语义）
+	var leader: Node = entity_map.get(String(snap.get("leader_ent", "")))
+	if leader != null and is_instance_valid(leader) and leader in members:
+		_host.assign_leader(org_id, leader)
+	# 发射信号（与 create_squad 同形，消费方按新建班处理）
+	var unit_ids: Array = []
+	for u in members:
+		unit_ids.append(u.get_instance_id())
+	_host.squad_created.emit(org_id, unit_ids)
+	if EventBus != null and EventBus.has_signal("squad_created"):
+		EventBus.squad_created.emit(org_id, unit_ids)
+
+
+## 从存档行重建排（create_platoon 的"保 id 版"：排 id/所属班原样还原，
+## 排长走宿主既有任命 API；班缺失/已属他排的剔除，剔空的排丢弃）。
+func _build_platoon_from_save(p_snap: Dictionary, entity_map: Dictionary) -> void:
+	var pid := String(p_snap.get("platoon_id", ""))
+	if pid.is_empty():
+		return
+	var valid: Array = []
+	for sid_v in p_snap.get("squads", []):
+		var sid := String(sid_v)
+		if _host._squads.has(sid) and not _host._squad_to_platoon.has(sid):
+			valid.append(sid)
+	if valid.is_empty():
+		return
+	_host._platoons[pid] = {
+		"name": String(p_snap.get("name", "")),
+		"squads": valid,
+		"leader": null,
+		"company_id": String(p_snap.get("company_id", "")),
+	}
+	for sid in valid:
+		_host._squad_to_platoon[sid] = pid
+	# 排号计数器推进（防读档后新建排 id 撞车）
+	var suffix := pid.trim_prefix("platoon_").to_int()
+	if suffix > int(_host._platoon_counter):
+		_host._platoon_counter = suffix
+	# 排长恢复（须为排内班成员，宿主 API 自校验；缺档/实体失效 = 保持缺口，
+	# 与"排长阵亡无补位"的编制语义一致）
+	var leader: Node = entity_map.get(String(p_snap.get("leader_ent", "")))
+	if leader != null and is_instance_valid(leader):
+		_host.assign_platoon_leader(pid, leader)
+	_host.platoon_created.emit(pid, valid.duplicate())
+
+
 # ──────────────── BalanceConfig 覆盖装载（三段循环收敛）────────────────
 
 ## 统一装载内核：代码默认 ← BalanceConfig 类型路径行覆盖（只认默认键，未知键

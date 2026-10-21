@@ -91,6 +91,14 @@ func _start_map_id_for_fallback() -> String:
 
 ## travel_started 回调：旧图卸载前快照全部编队（跨图携带，带队出征）。
 func _on_travel_started(_from_id: String, _to_id: String, _mode: int) -> void:
+	# 读档换图不是旅行（读档完整性批次）：load_game_from_slot 复用 scene_loader
+	# 的旅行链路换图，也会发 travel_started。此刻 game_loaded 已把 WorldState 容器
+	# 回读为档内组织，而班 id = 组织 id 与旧班撞车——下面的 disband_all_squads 解散
+	# 旧班会经组织侧把档内组织从容器反注销，随后 _restore_from_save 收编拿到残缺
+	# 容器、编队恢复整批跳过。读档时班随档重建，不快照不解散。
+	if _host._pending_save_load:
+		_host._pending_squad_snapshots = []
+		return
 	_snapshot_squads_for_travel()
 
 

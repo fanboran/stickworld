@@ -217,6 +217,13 @@ func remove_commander(org_id: String) -> Dictionary
 # 人员管理
 func assign_stickman(org_id: String, stickman_id: String, role: String) -> Dictionary
 func remove_stickman(org_id: String, stickman_id: String) -> Dictionary
+func set_personnel(org_id: String, stickman_ids: Array) -> Dictionary
+# 整表重设成员（清旧表重写，不触发补位引擎）；编队读档重建人员账专用
+
+# 存档恢复
+func restore_from_world() -> void
+# 读档收编：把 WorldState 容器里的组织收编为本模块工作集（save_handler 存档恢复
+# 编排调用，前置 = 编队已清场；语义见 OrganizationManager.restore_from_world_container）
 
 # 层级调整
 func insert_tier(org_id: String, new_org_name: String, position: String) -> Dictionary
@@ -281,6 +288,16 @@ func release_possession() -> Dictionary
 # 呼叫支援
 func call_reinforcements(battle_id: String, org_id: String) -> Dictionary
 func call_airstrike(battle_id: String, target: Vector2) -> Dictionary  # 巫师空袭
+
+# 编队存档（读档完整性批次；行格式权威 = save_handler._save_formation，
+# world_state 表 module_name='formation'，成员/排长以 entities 表 ent_* 为稳定键）
+func export_for_save() -> Dictionary
+# 导出班 + 排（火力组不入档；实体以 iid 为键，save_handler 换算稳定键）。{} = 无编队
+func restore_from_save(data: Dictionary, entity_map: Dictionary) -> int
+# 从存档行重建班 + 排（前置 = 清场 + 组织已收编）。返回恢复班数
+func clear_squads_for_load() -> void
+# 读档清场：只清编队本地态不触组织侧（disband_all_squads 会经组织侧反注销容器组织，
+# mid-session 读档撞 id 即断链——语义见 FormationSystem.clear_squads_for_load）
 ```
 
 ---

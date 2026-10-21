@@ -49,6 +49,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_ai_param_panel.gd",
 	"res://tests/unit/test_ai_spawn_jitter.gd",
 	"res://tests/unit/test_ai_timing_save.gd",
+	"res://tests/unit/test_save_completeness.gd",
 	"res://tests/unit/test_task_board.gd",
 	"res://tests/unit/test_ranged_slot_anchor.gd",
 	"res://tests/unit/test_battle_line.gd",

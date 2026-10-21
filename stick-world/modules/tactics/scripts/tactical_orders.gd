@@ -62,8 +62,8 @@ func setup(formation_system: Node, command_chain: Node, org_api: Node = null) ->
 ##   相位计划不触发——班粒度决策不被火力组细分整班重置。按班下令原语义不变）
 ## target_pos: 目标位置（世界坐标，ADVANCE/RALLY 用）
 ## source_tier: 发令者层级（0=玩家直接指挥，延迟为 0）
-## extra_params: 行为参数增量（合并进 _order_to_params；如 RETREAT 的 evacuate=true
-## 战役撤离标记，TeamAi ROUT 姿态消费——出征与领地架构 §4.2）
+## extra_params: 行为参数增量（合并进 _order_to_params 的通用透传通道：
+## 号令行为层的可选参数增量，缺省空 = 纯默认参数）
 ## 返回是否成功下达（编制存在且有有效单位）。
 func issue(order_type: int, target_id: String, target_pos: Vector2 = Vector2.ZERO,
 		source_tier: int = 0, extra_params: Dictionary = {}) -> bool:
@@ -119,8 +119,8 @@ func issue_to_all(order_type: int, target_pos: Vector2 = Vector2.ZERO) -> int:
 ## 对组织下达号令（§4.2.4，任意层级根）：生成逐层投递计划后经 CommandChain
 ## 物理传播接力——L1 收令时刻 = 沿途各跳延迟之和；中间层只透传不做决策。
 ## org_id: 目标组织 id（L1 小队或中间层均可）
-## extra_params: 行为参数增量（A2 TeamAi 消费：RETREAT 的 evacuate=true 经组织链
-## 透传至 L1，与 issue 直令路径同语义）
+## extra_params: 行为参数增量（经组织链透传至 L1，与 issue 直令路径同语义；
+## 通用透传通道，缺省空 = 纯默认参数）
 ## 返回是否受理（计划生成成功即受理；送达结果异步，非战斗叶在送达时拒收）
 func issue_to_org(org_id: String, order_type: int, target_pos: Vector2 = Vector2.ZERO,
 		extra_params: Dictionary = {}) -> bool:
@@ -230,7 +230,7 @@ func _order_to_params(order_type: int, target_pos: Vector2) -> Dictionary:
 			return {}
 		OrderType.RETREAT:
 			# battle_instance 由 behavior 自动从 entity 获取；
-			# 战役撤离 evacuate=true 经 issue 的 extra_params 增量并入（TeamAi ROUT 姿态）
+			# 行为参数增量（retreat_mode 档等）经 issue 的 extra_params 透传并入
 			return {}
 		OrderType.TAKE_COVER:
 			return {}

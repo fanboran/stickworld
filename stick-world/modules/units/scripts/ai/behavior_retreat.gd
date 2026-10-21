@@ -10,11 +10,6 @@ extends BehaviorBase
 ##
 ## 拉开足够距离或超时后 finish（回 attack）。
 ##
-## 战役撤离模式（C3 敌将撤仗，出征与领地架构 §4.2）：params 带 evacuate=true 时
-## 方向固定为己方出生侧地图边缘，不因安全距离/超时收束（战役级撤退不回头）；
-## 抵达边缘带登记 entity.departed（BattleInstance._count_alive 计非存活）后收束。
-## **仅 evacuate/withdraw 命令路径走向边缘/锚点**——自主避战绝不复用该路径。
-##
 ## 9i+ 增强（P6 批次 7c，design §2.1.3.6 #2/#3，档案开关默认关 = 零回归）：
 ##   - 保持招架（retreat_keep_block）：持盾兵种撤退全程举盾，finish/死亡/战斗结束还原
 ##   - 垂直位游走（rout_strafe_enabled）：撤退叠加垂直于敌我连线的横向分量，消除贴边零位移
@@ -22,10 +17,9 @@ extends BehaviorBase
 ##
 ## params 可选字段：
 ##   - battle: BattleInstance（不传则从 entity.get_battle_instance() 取）
-##   - evacuate: true 战役撤离（见上；TeamAi ROUT 姿态经 RETREAT 号令传入）
 ##   - retreat_mode: "withdraw" 撤退（回己方锚点/集结点，**命令路径保留档**——
 ##     TeamAi/玩家号令可下发；缺省/其余值 = "fallback" 后撤（避战：短距脱离重整，
-##     既有语义原样）。evacuate 优先于 withdraw；锚点查询不可用时 withdraw 降级 fallback。
+##     既有语义原样）。锚点查询不可用时 withdraw 降级 fallback。
 
 const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
@@ -34,8 +28,6 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const RETREAT_DURATION: float = 4.0
 ## 安全距离（拉开此距离后可停止撤退）
 const SAFE_DISTANCE: float = 320.0
-## 战役撤离：判定抵达边缘带的内收余量（px；阵营锚点 margin 260，正常布阵不误触）
-const DEPART_EDGE_EPSILON: float = 50.0
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属战斗实例
@@ -48,8 +40,6 @@ var _retreat_dir: Vector2 = Vector2.LEFT
 var _profile: Dictionary = {}
 ## 9i+ 保持招架：enter 时举盾标记，finish/exit 时还原（先例 behavior_seek_cover._set_blocking）
 var _keep_block_active: bool = false
-## 战役撤离模式（C3）：固定方向撤至己方侧边缘，不提前收束
-var _evacuate: bool = false
 ## A3 撤退档（withdraw）：回己方锚点/集结点（方向固定锚点，抵达带或超时收束）
 var _withdraw: bool = false
 ## withdraw 撤退目标锚点（enter 时经 BattleInstance.get_faction_side_anchor 解析）
@@ -70,16 +60,15 @@ func enter(previous: String, params: Dictionary) -> void:
 	if _battle == null and entity != null and entity.has_method("get_battle_instance"):
 		_battle = entity.get_battle_instance()
 	_timer = RETREAT_DURATION
-	_evacuate = bool(params.get("evacuate", false))
 	_was_hit_stunned = false
 	# 避战/撤离行为态置位（裁决【删溃逃、立避战】：行为态由执行行为拥有，
 	# AIController.is_disengaging 对外查询；exit 统一清位）
 	_set_disengaging(true)
 	# A3 双档语义：withdraw = 撤退回锚点（方向固定锚点）；缺省 = fallback 后撤
-	# （避战既有语义）。evacuate 优先；锚点解析失败降级 fallback。
+	# （避战既有语义）。锚点解析失败降级 fallback。
 	_withdraw = false
 	_withdraw_timer = 0.0
-	if not _evacuate and str(params.get("retreat_mode", "fallback")) == "withdraw":
+	if str(params.get("retreat_mode", "fallback")) == "withdraw":
 		if _resolve_withdraw_anchor():
 			_withdraw = true
 	# 兵种档案解析（按主手武器类型；取不到回落空档案 = 全基线）
@@ -89,9 +78,7 @@ func enter(previous: String, params: Dictionary) -> void:
 		if w != null and is_instance_valid(w) and "weapon_type" in w:
 			_profile = ScriptBehaviorProfiles.get_profile(int(w.get("weapon_type")))
 	_compute_retreat_dir()
-	if _evacuate:
-		_retreat_dir = _evac_dir()
-	elif _withdraw:
+	if _withdraw:
 		var to_anchor: Vector2 = _withdraw_anchor - entity.global_position
 		_retreat_dir = to_anchor.normalized() if to_anchor.length() > 0.1 else Vector2.LEFT
 	# 9i+ 保持招架：持盾兵种（profile 有 block_walk_anim）且开关开 → 撤退全程举盾
@@ -114,13 +101,8 @@ func update(delta: float) -> void:
 		_finish_with_block_restore()
 		return
 
-	# 战役撤离：独立通道（不查敌、不因距离/超时收束）
-	if _evacuate:
-		_update_evacuate()
-		return
-
 	# A3 撤退（withdraw）：回锚点独立通道（方向固定锚点，不因安全距离提前
-	# 收束；抵达锚点带或超时收束；不登记 departed——自主撤退是战术行为，非战役离场）
+	# 收束；抵达锚点带或超时收束——自主撤退是战术行为，非战役离场）
 	if _withdraw:
 		_update_withdraw(delta)
 		return
@@ -159,7 +141,7 @@ func update(delta: float) -> void:
 	# 撤退移动（奔跑）：方向夹紧可走带——被逼到地图边缘时不再朝带外逃
 	# （贴墙站死观感根因，2026-09-01 观察场反馈）。裁决【删溃逃、立避战】：
 	# 避战**绝不走向地图边缘**——旧"位移夹死 → 朝己方边缘离场登记 departed"
-	# 的收敛兜底随溃逃退役删除（战斗收敛兜底 = TeamAi 指挥层撤离 + duration_limit），
+	# 的收敛兜底随溃逃退役删除（战斗收敛 = 歼灭 / duration_limit 超时判），
 	# 双向夹死 → finish 交还决策（还击/重新掷骰）
 	var move_dir := _retreat_dir
 	# 9i+ 垂直位游走：叠加垂直于敌我连线的横向分量（指向可走带中心侧），消除贴边零位移
@@ -203,30 +185,9 @@ func exit(next: String) -> void:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 战役撤离主循环（C3）：固定朝己方侧边缘行军，抵达边缘带登记 departed 后收束。
-## 登记后实体保留（溃兵视觉），由 BattleInstance 侧计非存活触发战斗收束。
-func _update_evacuate() -> void:
-	if _at_retreat_edge():
-		_register_departed()
-		return
-	var move_dir := _retreat_dir
-	# y 夹紧可走带（与常规撤退同规）：撤离是水平行军，y 只防走出地带
-	var gy: float = float(entity.get("ground_y")) if "ground_y" in entity else 0.0
-	var gb: float = float(entity.get("ground_bottom")) if "ground_bottom" in entity else 0.0
-	if gb > gy:
-		var pos: Vector2 = entity.global_position
-		if move_dir.y < 0.0 and pos.y <= gy + 20.0:
-			move_dir.y = 0.0
-		elif move_dir.y > 0.0 and pos.y >= gb - 20.0:
-			move_dir.y = 0.0
-		move_dir = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
-	if move_dir != Vector2.ZERO and entity.has_method("ai_move"):
-		entity.ai_move(move_dir, true)
-
-
 ## 撤退档主循环（A3 · C6 withdraw）：固定朝己方锚点/集结点行军；
 ## 抵达锚点带或超时（档案 retreat_mod_withdraw_* 参数）收束。
-## 方向不因敌人重算（脱离接触语义），不叠加游走，不登记 departed。
+## 方向不因敌人重算（脱离接触语义），不叠加游走。
 func _update_withdraw(delta: float) -> void:
 	_withdraw_timer += delta
 	var arrive: float = float(_profile.get("retreat_mod_withdraw_arrive", 80.0))
@@ -269,35 +230,6 @@ func _resolve_withdraw_anchor() -> bool:
 		return false
 	_withdraw_anchor = _battle.get_faction_side_anchor(int(entity.get_faction()))
 	return true
-
-
-## 撤离方向：己方出生侧（faction 1 左攻方 → 左缘；faction 2 右守方 → 右缘）
-func _evac_dir() -> Vector2:
-	var f: int = int(entity.get("faction_id")) if entity != null and "faction_id" in entity else 0
-	return Vector2.LEFT if f == 1 else Vector2.RIGHT
-
-
-## 是否抵达撤退方向上的边缘带（entity.map_left/map_right 内收 DEPART_EDGE_EPSILON；
-## evacuate 与常规溃逃共用——撤离判定按"RETREAT 状态行至边缘"，出征与领地架构 §4.2）
-func _at_retreat_edge() -> bool:
-	var x: float = entity.global_position.x
-	if _retreat_dir.x < -0.5:
-		var ml: float = float(entity.get("map_left")) if "map_left" in entity else 0.0
-		return x <= ml + DEPART_EDGE_EPSILON
-	if _retreat_dir.x > 0.5:
-		var mr: float = float(entity.get("map_right")) if "map_right" in entity else 0.0
-		return x >= mr - DEPART_EDGE_EPSILON
-	return false
-
-
-## 登记战役离场：departed 置位（BattleInstance._count_alive 计非存活），
-## 停步收束（实体保留，溃兵视觉；战斗收束由 BattleInstance 侧清点触发）
-func _register_departed() -> void:
-	if "departed" in entity:
-		entity.set("departed", true)
-	if entity.has_method("ai_stop"):
-		entity.ai_stop()
-	_finish_with_block_restore()
 
 
 ## 避战行为态置位/清位（裁决【删溃逃、立避战】：委托宿主 AIController；

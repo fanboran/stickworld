@@ -344,8 +344,6 @@ static func _order_params_brief(params: Dictionary) -> String:
 			parts.append("目标=%s" % str(t))
 	if params.has("target_position"):
 		parts.append("目标点%s" % str(params["target_position"]))
-	if bool(params.get("evacuate", false)):
-		parts.append("战役撤离")
 	if params.has("retreat_mode"):
 		parts.append("档=%s" % str(params["retreat_mode"]))
 	if bool(params.get("follow_order", false)):
@@ -394,8 +392,6 @@ static func describe_switch_reason(e: Node, ai: Node, to: String, params: Dictio
 		"seek_cover":
 			return "劣势找掩体"
 		"retreat":
-			if bool(params.get("evacuate", false)):
-				return "战役撤离（TeamAi ROUT）"
 			if str(params.get("retreat_mode", "")) == "withdraw":
 				return "撤退：回己方锚点（命令档）"
 			return "避战脱离（C6 掷骰/号令）"

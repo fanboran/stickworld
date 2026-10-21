@@ -9,8 +9,7 @@ extends RefCounted
 ## 下令路径收敛（设计文档 §四）：组织化编制经 issue_to_org 逐跳传播（编制=原子，
 ## 同根一号令一轮内去重）；散兵经 issue 直令（现场电台零延迟）。玩家手动号令
 ## 保护期 > 姿态自动号令。常规姿态仅切换时下发一次（维持期不重发，防号令风暴）；
-## ROUT 例外——维持期由宿主 stance_update 每决策周期重发；攻击槽目标超时重定向
-## 由 issue_retarget_orders 重发绑定小队。
+## 攻击槽目标超时重定向由 issue_retarget_orders 重发绑定小队。
 ##
 ## 拆分纪律：本类持宿主回引（_host）；姿态/任务槽板/保护期时间戳/快照全在宿主
 ## ——姿态切换事件（EventBus.team_ai_stance_changed）的发射点在宿主 _set_stance，
@@ -43,20 +42,14 @@ func setup(host: Variant, squads: Variant, hooks: Variant) -> void:
 ## A2 槽内核（ATTACK 态）：小队经 match_groups 匹配任务槽——攻击槽绑定小队 →
 ## ADVANCE_ALL 槽目标（评分最优敌位）；未绑定/防守槽 → ADVANCE_ALL 本方质心
 ## （防守位兜底）。DEFEND → ADVANCE_ALL 本方质心（回聚合防线坚守，不消费槽）；
-## GARRISON → RALLY 己方锚点（围圈驻点，生存模式不走槽）；ROUT → RETREAT(evacuate)
-## 全军战役撤离（撤至己方侧边缘登记 departed，C3 敌将撤仗）。
+## GARRISON → RALLY 己方锚点（围圈驻点，生存模式不走槽）。
 ## 下令路径收敛（设计文档 §四）：组织化编制经 issue_to_org 逐跳传播（编制=原子，
 ## 同根一号令一轮内去重）；散兵经 issue 直令（现场电台零延迟）。玩家手动号令
 ## 保护期 > 姿态自动号令：散兵逐队避让；编制任一成员保护期内整组避让（玩家意图
 ## 压过编制号令，下轮姿态切换/槽重发恢复）。
-## 常规姿态仅切换时下发一次（维持期不重发，防号令风暴）；ROUT 例外——维持期由
-## stance_update 每决策周期重发（溃逃抢占兜底，见 §4.2）；攻击槽目标超时重定向
+## 常规姿态仅切换时下发一次（维持期不重发，防号令风暴）；攻击槽目标超时重定向
 ## 由 issue_retarget_orders 重发绑定小队。
 func issue_stance_orders() -> void:
-	if _host._stance == _host.STANCE_ROUT:
-		issue_orders(_squads.own_combat_squads(), {}, ScriptTacticalOrders.OrderType.RETREAT,
-				Vector2.ZERO, {"evacuate": true})
-		return
 	var squads: Array = _squads.own_combat_squads()
 	if squads.is_empty():
 		return
@@ -109,7 +102,7 @@ func issue_retarget_orders(dirty_slot_ids: Array) -> void:
 
 
 ## 号令下发执行（唯一出口）：逐小队查计划 → 手动号令保护期避让 → 路径分流。
-## plan_of 为空且给定 order_type 时全员同令（ROUT 撤离路径）。
+## plan_of 为空且给定 order_type 时全员同令。
 ## 保护期语义：散兵逐队避让；编制组（同组织根）任一成员在保护期内 → 整组避让。
 ## 路径分流：有组织根 ∧ 号令系统支持 issue_to_org → 编制根一号令（同根去重）；
 ## 否则散兵 issue 直令。issue 拒绝（职责校验/空队）→ 跳过不重试，下一决策周期

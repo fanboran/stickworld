@@ -1,7 +1,7 @@
 extends VBoxContainer
 ## TeamAi 状态 HUD（W1 观测接线批 · 组织界面与AI状态接线总体方案 §2.2，调试向）。
 ##
-## 阵营级 AI 姿态可观测面：攻/防双方各一行——姿态徽标（驻守/防守/进攻/溃退）
+## 阵营级 AI 姿态可观测面：攻/防双方各一行——姿态徽标（驻守/防守/进攻）
 ## + reason 一行 + attack% + 攻/防任务槽占用 + 开战攻击倒计时。
 ## 数据来源（方案 §2.0/§2.2）：
 ##   - 信号驱动：EventBus.team_ai_stance_changed（姿态变更即刷，不逐帧轮询）；
@@ -27,7 +27,7 @@ const DRAWER_NAME := "team_ai_hud"
 const POLL_INTERVAL: float = 0.25
 
 ## 姿态徽标文案（下标 = TeamAi.STANCE_* 枚举序）
-const STANCE_NAMES: Array[String] = ["驻守", "防守", "进攻", "溃退"]
+const STANCE_NAMES: Array[String] = ["驻守", "防守", "进攻"]
 
 @onready var _stance_labels: Array = [$AtkRow/Row/Stance, $DefRow/Row/Stance]
 @onready var _info_labels: Array = [$AtkRow/Row/Info, $DefRow/Row/Info]
@@ -94,7 +94,7 @@ func _refresh_row(row_idx: int, faction: int) -> void:
 		stance_label.modulate = Color(0.6, 0.6, 0.6, 0.9)
 		info_label.text = "TeamAi 未启用"
 		return
-	# 姿态徽标（0=驻守/1=防守/2=进攻/3=溃退；越界回退"?"）
+	# 姿态徽标（0=驻守/1=防守/2=进攻；越界回退"?"）
 	var stance: int = int(tai.get_stance()) if tai.has_method("get_stance") else -1
 	if stance >= 0 and stance < STANCE_NAMES.size():
 		stance_label.text = STANCE_NAMES[stance]
@@ -128,7 +128,7 @@ func _attack_remain(tai: Variant) -> float:
 	return float(tai.get_attack_deadline()) - float(bi.get_duration())
 
 
-## 姿态徽标色（驻守=蓝 / 防守=绿 / 进攻=琥珀 / 溃退=红）
+## 姿态徽标色（驻守=蓝 / 防守=绿 / 进攻=琥珀）
 func _stance_color(stance: int) -> Color:
 	match stance:
 		ScriptTeamAi.STANCE_GARRISON:
@@ -137,8 +137,6 @@ func _stance_color(stance: int) -> Color:
 			return Color(0.65, 0.9, 0.65, 1.0)
 		ScriptTeamAi.STANCE_ATTACK:
 			return Color(0.98, 0.75, 0.35, 1.0)
-		ScriptTeamAi.STANCE_ROUT:
-			return Color(0.95, 0.45, 0.4, 1.0)
 	return Color(0.6, 0.6, 0.6, 0.9)
 
 

@@ -82,7 +82,7 @@ func _run_preset(idx: int) -> Dictionary:
 	_arena = _ArenaScene.instantiate()
 	add_child(_arena)
 	# ── 等开战（battle_arena 自举：boot → 切战场图 → 出生 → start_test_battle）──
-	# 结算监听（收束原因归因：decapitation/annihilation/rout/timeout/mutual）
+	# 结算监听（收束原因归因：annihilation/timeout/mutual）
 	var settle_info: Array = []   # [reason, alive_a, alive_b]
 	var eb: Node = get_node_or_null("/root/EventBus")
 	var on_settled: Callable = func(_bid: String, payload: Dictionary) -> void:

@@ -84,7 +84,7 @@ func behavior_seed() -> int:
 ## default_behavior v2 接入点（追加钩子，不改既有号令语义）：
 ## 只接管「无显式号令」的小队——攻/防姿态下未绑攻击槽、落防守兜底（ADVANCE_ALL
 ## 本方质心）的原子单元小队；攻击槽绑定小队有任务槽号令不接管；GARRISON（生存模式
-## RALLY）与 ROUT（战役撤离）不经本钩子（ROUT 路径在 stance_update 提前返回）。
+## RALLY）不经本钩子（号令在 emitter 姿态分支直出）。
 ## 开关关（default_behavior_v2_enabled 默认关）/ 组织无配置 / 打分无候选 → 原样返回
 ## （零回归）。组织根经 squad_query 查询（同既有号令分流口径），root 缺失 = 散兵不消费。
 func apply_default_behavior_plans(plan_of: Dictionary, mapping: Dictionary) -> Dictionary:

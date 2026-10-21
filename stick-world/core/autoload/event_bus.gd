@@ -58,8 +58,7 @@ extends Node
 ## 发射方：BattleInstance.start / _physics_tick
 @warning_ignore("unused_signal") signal battle_engagement_changed(battle_id: String, alive_units: int)
 # 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序
-# 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）；
-# 3=ROUT 为本作扩展（敌将溃逃终态）
+# 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）
 @warning_ignore("unused_signal") signal team_ai_stance_changed(battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String)
 # 治疗施放（WeaponMount.cast_heal -> battle_sim 采样/可观测性，P7 批次 7b）：
 # battle_id 经施法者 get_battle_instance().get_battle_id()；caster/target 用 instance_id；

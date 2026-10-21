@@ -17,12 +17,25 @@ const _SQL_META_SELECT_CREATED := "SELECT created_at FROM save_meta WHERE slot_i
 # 列顺序对齐 _SCHEMA_SQLS 的 save_meta 建表定义（_upsert_save_meta 单语句写入）
 const _SQL_META_UPSERT := "INSERT OR REPLACE INTO save_meta (slot_id, save_name, created_at, updated_at, playtime_seconds, version, current_map_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
 
-# ── schema 版本化（PRAGMA user_version）──
-## 当前支持的存档 schema 版本。v2 = 现行建表 SQL 的表结构（save_meta.version 所写数值）；
-## 0 = 版本化机制启用前的旧档（表结构与 v2 等价，视为受支持）。
-## 引入不兼容表结构变更时：本常量增一，并在 _migrate_loaded_schema 追加逐级迁移分支。
+# ── schema 版本化（PRAGMA user_version）+ 迁移链 ──
+## 当前支持的存档 schema 版本。读档门禁与迁移链的真相源；save_meta.version 列是展示
+## 元数据，存档路径每次保存与本文同源写入（口径详见 docs/技术/架构/数据与契约/存储架构设计.md）。
+## 版本语义：
+##   v0 = 版本化机制启用前的旧档（user_version 未盖章，结构无保证——可能缺表/缺列）
+##   v1 = 规范化结构 = v0 经迁移链补齐建表 SQL + construction_projects 补列后的形态
+##   v2 = 现行建表 SQL 的表结构（与 v1 等价，仅作为链式迁移的版本对齐步保留）
+## 引入不兼容表结构变更的三步动作：
+##   1. 本常量增一；
+##   2. _migration_steps 登记 `<旧版本>: _migrate_vN_to_vN1`（函数内完成结构变更与数据搬移）；
+##   3. 重跑 tools/save/generate_save_fixtures.tscn 新增一份当前版 fixture 入 tests/fixtures/saves/
+##      （纪律：每次存档格式变更必须新增一份 fixture，见存储架构设计.md §版本迁移链）。
 const CURRENT_SCHEMA_VERSION := 2
 const _SQL_PRAGMA_USER_VERSION_GET := "PRAGMA user_version"
+
+## 迁移注册表：键 = 起始 schema 版本，值 = 升一档迁移函数（Callable，操作 _db，返回成败）。
+## load_game 从档内版本起逐级查表执行到 CURRENT_SCHEMA_VERSION，全程单事务
+## （任一步失败回滚拒绝读档——半迁移状态比读不出更危险）。_init 填充（方法引用需 self）。
+var _migration_steps: Dictionary = {}
 
 var _auto_save_timer: float = 0.0
 var _auto_save_slot: int = 0
@@ -138,6 +151,14 @@ const _SCHEMA_SQLS: Array[String] = [
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
+
+func _init() -> void:
+	# 迁移链注册：键 = 起始版本，值 = 升一档函数。未来 v2→v3 照此追加新键值对。
+	_migration_steps = {
+		0: _migrate_v0_to_v1,
+		1: _migrate_v1_to_v2,
+	}
+
 
 func _ready() -> void:
 	# 服务方 autoload：暂停期照常服务——存读档可从暂停菜单发起（F5/F9/面板），
@@ -286,7 +307,7 @@ func load_game(slot_index: int) -> bool:
 		_db = null
 		_current_slot = -1
 		return false
-	# 版本低于当前支持：走迁移分支升级（当前无实际迁移，仅占位结构）
+	# 版本低于当前支持：走迁移链逐级升档（任一步失败回滚并拒绝读档）
 	if not _migrate_loaded_schema(schema_version):
 		push_error("[SaveManager] 存档槽位 %d schema 迁移失败（v%d → v%d），拒绝读档"
 			% [slot_index, schema_version, CURRENT_SCHEMA_VERSION])
@@ -429,22 +450,31 @@ func _ensure_schema() -> void:
 		push_error("[SaveManager] schema 事务提交失败: %s" % str(_db.error_message))
 
 
-## 旧库迁移：construction_projects 补 material_progress 列。
+## 旧库补列（存档路径兜底）：construction_projects 补 material_progress 列，幂等。
+## 迁移链（读档路径 _migrate_v0_to_v1）与本入口共用 _patch_material_progress_column。
+func _migrate_schema() -> void:
+	_patch_material_progress_column("存档路径")
+
+
+## construction_projects 补 material_progress 列（幂等，按列检查后 ALTER）。
 ## 修复背景：写侧 insert 含该列而旧建表 SQL 缺列，导致含未完工项目的存档写入静默失败、项目丢失。
 ## CREATE TABLE IF NOT EXISTS 对已存在的旧表无效，须按列检查后 ALTER 补列。
-func _migrate_schema() -> void:
+## context 仅用于日志定位（"存档路径" / 迁移步名）。返回 false = 补列失败。
+func _patch_material_progress_column(context: String) -> bool:
 	if _db == null:
-		return
+		return false
 	if _db.query("PRAGMA table_info(construction_projects)") == false:
-		return
+		return false
 	for raw_row in _db.query_result:
 		var row: Dictionary = raw_row
 		if str(row.get("name", "")) == "material_progress":
-			return
+			return true
 	var migrated: Variant = _db.query(
 		"ALTER TABLE construction_projects ADD COLUMN material_progress REAL NOT NULL DEFAULT 1.0")
 	if migrated == false:
-		push_warning("[SaveManager] construction_projects 补列 material_progress 失败，未完工项目存档将丢失")
+		push_warning("[SaveManager] construction_projects 补列 material_progress 失败（%s），未完工项目存档将丢失" % context)
+		return false
+	return true
 
 
 ## 读取存档 schema 版本（PRAGMA user_version）。
@@ -472,20 +502,51 @@ func _stamp_schema_version() -> void:
 			% [CURRENT_SCHEMA_VERSION, str(_db.error_message)])
 
 
-## 读档路径：schema 版本低于当前支持时的逐级迁移分支（当前为占位结构，无实际迁移）。
-## version == 0：版本化机制启用前的旧档，表结构与 v2 等价（material_progress 缺列
-## 由 _migrate_schema 在存档路径补列、读档按缺省值兜底），直接放行。
-## 返回 false = 迁移失败，调用方应拒绝读档（半迁移状态比读不出更危险）。
+## 读档路径：schema 版本迁移链——从档内版本起查 _migration_steps 逐级升档到当前版。
+## 全程单事务：任一步失败 ROLLBACK 并返回 false，调用方拒绝读档（半迁移状态比读不出更危险）。
+## 链走完就地盖章 user_version = CURRENT（迁移结果持久化，下次读档零迁移直通）。
+## 档内版本在注册表中缺分支 = 未处理的旧版本（程序缺陷或断代档案），拒绝读档。
 func _migrate_loaded_schema(from_version: int) -> bool:
 	if from_version >= CURRENT_SCHEMA_VERSION:
 		return true
-	# 占位：未来不兼容变更时在此追加迁移分支，示例——
-	# if from_version < 3:
-	# 	if not _db.query("ALTER TABLE …"):
-	# 		push_error("[SaveManager] v2→v3 迁移失败: %s" % str(_db.error_message))
-	# 		return false
-	# 走到这里 = 更旧版本但未命中任何迁移分支（含 v0 旧档：表结构等价，按原样放行）
-	push_warning("[SaveManager] 存档 schema v%d → v%d 无迁移分支，按原样放行" % [from_version, CURRENT_SCHEMA_VERSION])
+	if not _migration_steps.has(from_version):
+		push_error("[SaveManager] 存档 schema v%d 无迁移分支（当前支持 v%d），拒绝读档"
+			% [from_version, CURRENT_SCHEMA_VERSION])
+		return false
+	if not _db.query("BEGIN IMMEDIATE"):
+		push_error("[SaveManager] 迁移事务开启失败: %s" % str(_db.error_message))
+		return false
+	var v: int = from_version
+	while v < CURRENT_SCHEMA_VERSION:
+		var step: Variant = _migration_steps.get(v)
+		if step == null or not step.call():
+			push_error("[SaveManager] 存档 schema 迁移失败 v%d→v%d，回滚拒绝读档" % [v, v + 1])
+			_db.query("ROLLBACK")
+			return false
+		v += 1
+	_stamp_schema_version()
+	if not _db.query("COMMIT"):
+		push_error("[SaveManager] 迁移事务提交失败（已回滚）: %s" % str(_db.error_message))
+		_db.query("ROLLBACK")
+		return false
+	print("[SaveManager] 存档 schema v%d → v%d 迁移完成" % [from_version, CURRENT_SCHEMA_VERSION])
+	return true
+
+
+## 迁移步 v0→v1 规范化：版本化机制启用前的旧档结构无保证——建表 SQL 全量补齐
+## （IF NOT EXISTS 幂等）+ construction_projects 补 material_progress 列，
+## 把库规范化到 v1 结构（与 v2 表结构完全等价）。
+func _migrate_v0_to_v1() -> bool:
+	for stmt in _SCHEMA_SQLS:
+		if not _db.query(stmt):
+			push_error("[SaveManager] v0→v1 建表规范化失败: %s…（%s）" % [stmt.left(48), str(_db.error_message)])
+			return false
+	return _patch_material_progress_column("迁移 v0→v1")
+
+
+## 迁移步 v1→v2 版本对齐：v1 与 v2 表结构完全等价，无结构变更，仅作为链式骨架的对齐步
+## （每引入一个新版本即新增一个迁移函数并登记 _migration_steps，无论该步是否有实际结构变更）。
+func _migrate_v1_to_v2() -> bool:
 	return true
 
 

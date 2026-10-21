@@ -1,7 +1,6 @@
 # HD-2D 架构正式化
 
-> **状态**：迁址批次已合入 main；职责拆分 v2 已执行（2026-10-21），分支 `agent/hd2d-split-v2` 待创始人验收后合 main。
-> **worktree**：`.temp/wf-hd2d`（分支 `agent/hd2d-split-v2`）。
+> **状态**：**已收官并并 main**（迁址批次 + 拆分 v2 均合入，merge `02aacb37`：hd2d_world 2808→1696 门面+六职责组件，渲染 A/B 噪声级一致）；分支/worktree 已收线。
 
 ## 一、任务与裁决
 
@@ -46,5 +45,5 @@
 ## 四、新会话恢复指引
 
 1. `git worktree list` 找 `.temp/wf-hd2d`（拆分分支）或 `.temp/hd2d-promotion`（迁址分支，已合 main）。
-2. 拆分批验收：读本文档 + [`../待办/HD2D代码拆分v2.md`](../待办/HD2D代码拆分v2.md) +
+2. 拆分批验收：读本文档 + [`待办/归档/HD2D代码拆分v2.md`](../../待办/归档/HD2D代码拆分v2.md) +
    `git log agent/hd2d-split-v2`；验收过则合 main（合并后同步归档待办条目）。

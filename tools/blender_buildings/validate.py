@@ -115,10 +115,10 @@ ASM_TIER_ATTR = {
     "council_hall": "COUNCIL_TIERS", "town_hall": "TOWNHALL_TIERS",
     "governor_palace": "GOVERNOR_TIERS", "imperial_palace": "IMPERIAL_TIERS",
     "belfry": "BELFRY_TIERS", "mint": "MINT_TIERS",
-    # 批 2 八装配器（驿站族/赌场族/科研族/花店）
+    # 批 2 六装配器（驿站族/科研族/花店）
     "waystation": "WAYSTATION_TIERS", "inn_post": "INN_POST_TIERS",
-    "coach_house": "COACH_HOUSE_TIERS", "gambling_den": "GAMBLING_TIERS",
-    "grand_casino": "CASINO_TIERS", "academy": "ACADEMY_TIERS",
+    "coach_house": "COACH_HOUSE_TIERS",
+    "academy": "ACADEMY_TIERS",
     "observatory": "OBSERVATORY_TIERS", "flower_shop": "FLOWER_SHOP_TIERS",
 }
 

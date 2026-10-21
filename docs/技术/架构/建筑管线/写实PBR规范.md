@@ -34,8 +34,8 @@
 
 ```
 tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地图）
-├── city_layout.py   城市平面求解：TIER_SPECS 8 档 + DEFS 44 def → lots/walls/roads/plaza（纯 Python，零 bpy）
-├── buildings.py     建筑装配：ASSEMBLERS 40 种 + Builder 原语/倒角/窗表/屋顶（立项期的独立"模块库"已并入其中）
+├── city_layout.py   城市平面求解：TIER_SPECS 8 档 + DEFS 42 def → lots/walls/roads/plaza（纯 Python，零 bpy）
+├── buildings.py     建筑装配：ASSEMBLERS 39 种 + Builder 原语/倒角/窗表/屋顶（立项期的独立"模块库"已并入其中）
 ├── materials.py     材质库：PBR 节点图 65 key（M_PER_UV=0.42 米制标定）        → 门禁：样片渲染通过
 ├── props.py         道具/街具约 115 件 + dress 挂载 + dress_street 沿街节奏
 ├── interiors.py     内景 34 def 前后两层（对接游戏"前墙 alpha 0.3"机制）
@@ -81,17 +81,17 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 
 ### 3.3 建筑规格总览（def × 宽度档 × 层 × 高 × 材质）
 
-现行规模：**DEFS 44 def**（`city_layout.py`）+ **装配器 40 种**（`buildings.py` `ASSEMBLERS`）。逐 def 的宽度档 / 墙高 / 屋顶 rise / 进深 / 材质档以 `city_layout.py` 的 `DEFS` 字面量为唯一真相源；个别 def 经映射共用装配器——chapel / church / cathedral 三档同源（cathedral[8/12/16]），city_hall 过渡期由 guildhall[16] 兼任，well / market_stall 走道具聚簇。
+现行规模：**DEFS 42 def**（`city_layout.py`）+ **装配器 39 种**（`buildings.py` `ASSEMBLERS`）。逐 def 的宽度档 / 墙高 / 屋顶 rise / 进深 / 材质档以 `city_layout.py` 的 `DEFS` 字面量为唯一真相源；个别 def 经映射共用装配器——chapel / church / cathedral 三档同源（cathedral[8/12/16]），city_hall 过渡期由 guildhall[16] 兼任，well / market_stall 走道具聚簇。
 
 - **全量清单**（逐 def 参数、识别元素、装配器对应）：《建筑资产清单》§一/§八。
 - **家族 × 级别窗口**（哪族在哪档出现/消亡）：《聚落等级与建筑分级》§三。
 
-分类概览（44 def）：
+分类概览（42 def）：
 
 | 分类 | def |
 |---|---|
 | 民居（5） | cottage、house、townhouse、plaster_house、hayloft |
-| 商铺/服务（7） | shop、bakery、tavern、flower_shop、gambling_den、grand_casino、inn_post |
+| 商铺/服务（5） | shop、bakery、tavern、flower_shop、inn_post |
 | 驿站/物流（3） | waystation、warehouse、coach_house |
 | 工坊（5） | smithy1、smithy2、smithy3、smithy4、alchemy |
 | 生产/附属（4） | barn、stable、shelter、windmill |
@@ -225,7 +225,7 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 |---|---|---|
 | 1 | 材质库样片 + 光照/相机定标 | 材质样片审查通过 |
 | 2 | 模块库（墙/屋顶/门窗/烟囱/台阶/招牌/城防件） | 模块拼装样片通过 |
-| 3 | 单体建筑（44 def × 宽度档，装配器 40 种） | 单体拼页审查通过 |
+| 3 | 单体建筑（42 def × 宽度档，装配器 39 种） | 单体拼页审查通过 |
 | 4 | 城市装配（8 规模档 × 分区/广场/城墙） | 街景审查通过 |
 | 5 | 运行时接入（def_id 映射、api.gd 重定向、内饰图）+ 入库 | 实机对照通过 |
 
@@ -359,7 +359,7 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 
 - **做什么**：按规模档 + seed 确定性求解城镇平面：分区配额、地块排布、行政槽位、特殊建筑摆位、城墙/道路/广场/巷道、天际线。纯 Python，零 bpy 依赖。
 - **代码入口**：`plan_city(tier, seed=611036, width_px, depth_cells, has_gate, has_plaza, n_buildings, wall)`；CLI `python tools/blender_buildings/city_layout.py --tier <档> --seed <n> [--out x.json] [--selftest]`。
-- **关键数据**：`TIER_SPECS` **8 档**（hamlet / village / town / city / townlet / burgh / capital / metropolis）；`DEFS` **44 def**（宽度档/墙高/屋顶 rise/进深/材质档）；`SPECIAL_DEFS` 7 个浮动摆位（mage_tower / library / barracks / warehouse / alchemy / belfry / observatory）。
+- **关键数据**：`TIER_SPECS` **8 档**（hamlet / village / town / city / townlet / burgh / capital / metropolis）；`DEFS` **42 def**（宽度档/墙高/屋顶 rise/进深/材质档）；`SPECIAL_DEFS` 7 个浮动摆位（mage_tower / library / barracks / warehouse / alchemy / belfry / observatory）。
 - **产出**：JSON-able plan dict——`lots` / `admin_slots`（行政"充当档"指认既有 lot，零漂移不改既有排布）/ `specials` / `yards` / `props` / `walls` / `roads`（main + branches + lanes + plaza）/ `anchors`（gate / plaza_center / core / main_street）/ `skyline` / `leftover_units`，附带 `verify_plan()` 自检结果。
 - **确定性保证**：`_rng_for(tier, seed)` 分域随机流，同 tier+seed 逐字节一致（`--selftest` 断言同 seed 一致、异 seed 有差异）。
 
@@ -427,8 +427,8 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 | 文件 | 职责 | 被谁消费 |
 |---|---|---|
 | `materials.py` | PBR 材质库 65 key + M_PER_UV 标定 + 做旧/色变 | buildings、ground_tiles、各探针 |
-| `buildings.py` | 40 种建筑装配器 + Builder 原语/倒角/窗表/屋顶 | props、interiors、nature、ground_transitions、各探针、烘卡脚本 |
-| `city_layout.py` | 城镇平面求解（8 档 / 44 def，确定性） | export_city_layout、validate、probe_city_plan/city_scene |
+| `buildings.py` | 39 种建筑装配器 + Builder 原语/倒角/窗表/屋顶 | props、interiors、nature、ground_transitions、各探针、烘卡脚本 |
+| `city_layout.py` | 城镇平面求解（8 档 / 42 def，确定性） | export_city_layout、validate、probe_city_plan/city_scene |
 | `props.py` | 道具/街具库 + dress 挂载 + dress_street 节奏 | probe_city_scene、bake_export、bake_props |
 | `interiors.py` | 34 def 内景前后两层 + thin_glass | probe_interiors、bake_export |
 | `nature.py` | 野外自然物 16 类（树/矿/石/植被） | probe_nature、bake_nature |
@@ -453,7 +453,7 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 | `probe_d3a.py` | 批次 D3a（9 个新民用装配器）2.6x 特写自检 | 装配器验收 |
 | `probe_d3b.py` | 批次 D3b（8 个新/独立化装配器）2.6x 特写自检 | 装配器验收 |
 | `probe_admin.py` | 行政/地标轮（6 个新装配器）出图自检 | 装配器验收 |
-| `probe_batch2.py` | 分级批次 2 出图（驿站/赌场/科研/花店） | 装配器验收 |
+| `probe_batch2.py` | 分级批次 2 出图（驿站/科研/花店） | 装配器验收 |
 | `probe_props.py` | 道具层验收图（一轮） | 道具验收 |
 | `probe_props3.py` | 道具层二轮验收图 | 道具验收 |
 | `probe_props4.py` | 道具层三轮（玻璃/魔法/宗教/军政农事） | 道具验收 |

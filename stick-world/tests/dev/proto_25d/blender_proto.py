@@ -98,7 +98,7 @@ STREET = [
     ("smithy3", 8),
     ("smithy4", 12),
     ("windmill", 6),
-    # 2026-09-14 行政/金融/驿站/赌场/科研族装配器补卡（宽度档 = buildings.py 各
+    # 2026-09-14 行政/金融/驿站/科研族装配器补卡（宽度档 = buildings.py 各
     # XXX_TIERS 字典的实际键，逐档一张卡；6 格档仅装配器允许时用）
     ("council_hall", 8),
     ("town_hall", 12),
@@ -115,9 +115,6 @@ STREET = [
     ("inn_post", 16),
     ("coach_house", 12),
     ("coach_house", 16),
-    ("gambling_den", 8),
-    ("gambling_den", 12),
-    ("grand_casino", 16),
     ("academy", 12),
     ("academy", 16),
     ("observatory", 8),

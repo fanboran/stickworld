@@ -6278,16 +6278,15 @@ PROBE_LIST += [("council_hall", 8),
                ("mint", 12), ("mint", 16)]
 
 
-# ================================================================ §10 分级批次 2：驿站/赌场/科研/花店
+# ================================================================ §10 分级批次 2：驿站/科研/花店
 #
-# 依据《16-聚落等级与建筑分级.md》§3.1/§3.3 级别窗口 + §7.1 P1 清单，补 8 个装配器：
+# 依据《16-聚落等级与建筑分级.md》§3.1/§3.3 级别窗口 + §7.1 P1 清单，补 6 个装配器：
 #   驿站族（全级 5 族之一）：waystation（Lv1 路驿）/ inn_post（Lv2 客栈驿站）/ coach_house（Lv3 车马行）
-#   赌场族（2 级）：gambling_den（Lv1 赌坊）/ grand_casino（Lv2 大赌场）
 #   科研族（全级）：academy（Lv3 学院）/ observatory（观星台圆顶塔）——library 保持 Lv2
 #   花店：flower_shop（文档原口径=shop 载体 DRESS 不新建；本批按任务指令落独立件，窗口标提案/待定）
 # 纪律同前批：只新增函数/常量/参数表；既有装配器、WINDOW_SPEC 既有条目、既有 PROBE_LIST
 # 条目一律不动；窗走 §0.5 窗表（禁写死 ow/oh/窗台），屋顶走 roof_gable/cone_roof/dome_cap，
-# 烟囱走 chimney（落地 + 泛水裙）；识别件（红灯笼/骰子招牌/彩旗串/花器/备轮）为"建筑自带"
+# 烟囱走 chimney（落地 + 泛水裙）；识别件（红灯笼/花器/备轮）为"建筑自带"
 # （同 hang_sign_iron 的自带理由：道具层概率挂载保不住识别符号）；花丛/桶栽全部 _jit 确定性。
 
 #: 本批新增件的花色调（染布三色同 props 花坛口径；花头在游戏尺寸下读"一团饱和色"）
@@ -6297,7 +6296,7 @@ _FLOWER_PAL = ("cloth_red", "cloth_ochre", "cloth_blue")
 def red_lantern(b, x, y, z, s=13.0):
     """挂式红灯笼：吊带 + 深红鼓身（cloth_red）+ 透光环带（lamp 自发光）+ 流苏。
 
-    驿站/赌坊的识别件（白天靠红读，夜档靠 lamp 环带透光）——为什么自带同 hang_sign_iron。
+    驿站的识别件（白天靠红读，夜档靠 lamp 环带透光）——为什么自带同 hang_sign_iron。
     `z` = 吊挂点（灯笼从 z 向下挂）。
     """
     b.box((3.0, 3.0, s * 0.8), (x, y, z + s * 0.4), "iron")
@@ -6310,7 +6309,7 @@ def red_lantern(b, x, y, z, s=13.0):
 
 
 def wall_lantern_iron(b, x, y_wall, z, s=13.0):
-    """壁挂红灯笼：铁座 + 外挑斜臂 + 红灯笼（驿站/赌坊/赌场门侧识别件）。`z` = 铁座底。"""
+    """壁挂红灯笼：铁座 + 外挑斜臂 + 红灯笼（驿站门侧识别件）。`z` = 铁座底。"""
     b.box_bottom((12.0, 8.0, 16.0), (x, y_wall - 4.0), z, "iron", bevel=BEV_SMALL)
     strut(b, (x, y_wall - 6.0, z + 12.0), (x, y_wall - s * 1.5, z + s * 1.15), 5.0, "iron")
     red_lantern(b, x, y_wall - s * 1.5, z + s * 1.05, s=s)
@@ -6393,43 +6392,6 @@ def flower_basket_hang(b, x, y, z, r=13.0, seed=0):
         b.box((3.0, 3.0, r * 0.9), (x + math.cos(a) * r * 0.95,
                                     y + math.sin(a) * r * 0.95, bz - r * 0.20),
               "foliage", rot=(math.radians(18.0), 0.0, a))
-
-
-def pennant_line(b, x0, x1, y, z, n=9, sag=16.0, seed=0):
-    """彩旗串（大赌场识别件）：两点悬链（抛物近似）+ 交替三色小旗（旗身收窄读三角）。"""
-    n = max(2, int(n))
-    px0, pz0 = x0, z
-    for i in range(n + 1):
-        t = i / float(n)
-        px = x0 + (x1 - x0) * t
-        pz = z - sag * (4.0 * t * (1.0 - t))
-        if i:
-            strut(b, (px0, y, pz0), (px, y, pz), 1.8, "iron")
-        if i < n:
-            j = _jit(i, 853 + seed)
-            pmx = (px0 + px) * 0.5
-            pmz = (pz0 + pz) * 0.5 - 2.0
-            fw = 15.0 + 3.0 * abs(j)
-            fh = 21.0
-            col = _FLOWER_PAL[i % 3]
-            b.box((fw, 2.2, fh * 0.62), (pmx, y - 1.2, pmz - fh * 0.31), col)
-            b.box((fw * 0.55, 2.2, fh * 0.38), (pmx, y - 1.2, pmz - fh * 0.80), col)
-        px0, pz0 = px, pz
-
-
-def dice_sign(b, x, y_wall, z_top):
-    """骰子招牌（赌坊识别件）：铁挑臂 + 双斜撑 + 挂牌 + 两粒斜叠骰（白石体 + 铁点面）。"""
-    yb = y_wall - 46.0
-    b.box_bottom((10.0, 7.0, 52.0), (x, y_wall - 3.0), z_top - 46.0, "iron")
-    strut(b, (x, y_wall - 4.0, z_top + 12.0), (x, y_wall - 50.0, z_top + 4.0), 5.0, "iron")
-    strut(b, (x, y_wall - 4.0, z_top - 40.0), (x, y_wall - 32.0, z_top - 12.0), 4.0, "iron")
-    b.box((46.0, 5.0, 34.0), (x, yb, z_top - 18.0), "wood_dark", bevel=BEV_MID)
-    for (dx, dz, s, seed) in ((-10.0, 3.0, 15.0, 0), (9.0, -4.0, 11.0, 3)):
-        b.box((s, s, s), (x + dx, yb - 5.0, z_top - 18.0 + dz), "white_stone",
-              rot=(0.3, 0.5, 0.2 + 0.1 * seed), bevel=BEV_SMALL)
-        for k in range(3):                          # 点数面（贴牌一侧的三点）
-            b.box((2.6, 1.5, 2.6), (x + dx - s * 0.22 + s * 0.22 * k, yb - 8.0,
-                                    z_top - 18.0 + dz + s * 0.18), "iron")
 
 
 # ---------------------------------------------------------------- 10.1 路驿 waystation
@@ -6807,260 +6769,6 @@ def assemble_coach_house(width_cells=12):
         "chimneys": [{"x": ch_x, "y": ch_y, "roof": ch_roof, "top": ch_top + 13.0,
                       "foot": 0.0, "w": 34.0, "d": 34.0}],
         "material": "砖砌 + 白石隅石 / 陶瓦 + 近满高车门 + 马车台备轮架 + 宿舍翼"})
-    return ob, spec
-
-
-# ---------------------------------------------------------------- 10.4 赌坊 gambling_den
-
-GAMBLING_TIERS = {
-    # 赌坊（赌场族 Lv1，burgh 起投放——窗口放宽为提案/待定）：暗木板门面 + 小高窗铁栅 +
-    # 半掩红帘 + 红灯笼对 + 骰子招牌 + 地窖口。后巷营生：不亮、不敞、透着钱。
-    8:  dict(D=164.0, plinth=14.0, wall=202.0, rise=84.0, wt=18.0, door_w=50.0),
-    12: dict(D=196.0, plinth=16.0, wall=206.0, rise=98.0, wt=20.0, door_w=52.0),
-}
-
-
-def assemble_gambling_den(width_cells=8):
-    """赌坊（赌场族 Lv1）：通体暗木板 + 小高窗（铁栅 + 半掩红帘）+ 红灯笼对 + 骰子招牌 +
-    地窖口 + 歪烟囱。
-
-    与 tavern 的可辨差异（≥2 项）：
-    ① 材质：**通体深木板**（timber 框 + 深板墙）—— 酒馆是石砌公共层 + 明抹灰上层；
-    ② 开窗：**小而高 + 铁栅 + 半掩红帘**（暗，不想让人看进去）—— 酒馆是大玻璃公共窗；
-    ③ 识别组：红灯笼对 + 骰子招牌 + 地窖口 —— 后巷赌窟的暗读法。
-    """
-    t = GAMBLING_TIERS[width_cells]
-    W = width_cells * CELL
-    D, plinth_h, wall_h, rise = t["D"], t["plinth"], t["wall"], t["rise"]
-    wt, door_w = t["wt"], t["door_w"]
-    over = eave_over(W)
-    eave = plinth_h + wall_h
-    yf, yb = -D / 2.0, D / 2.0
-    bays = bays_of(width_cells)
-    dx = -W * 0.08
-    # 小高窗：vent 档抬高窗台（floor_z 抬高 = "小而高"，不新增窗型）
-    hi_z = plinth_h + 92.0
-    wins = []
-    for cx in bay_centers(W, bays):
-        if abs(cx - dx) < bw_pad_guard(W, bays):
-            continue
-        w = win_rect("vent", floor_z=hi_z, over=dict(bars=True))
-        w["cx"] = cx
-        wins.append(w)
-
-    b = Builder("gambling_den_w%d" % width_cells)
-    contact_shadow(b, W, D, spread=30.0)
-    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
-           gap=(dx - door_w / 2.0 - 6.0, dx + door_w / 2.0 + 6.0), lip=9.0)
-    # ---- 暗木板门面：深板墙 + 深木骨 + 斜撑（通体暗，同立面 1 档窗）
-    room_shell(b, W, D, plinth_h, wall_h, wt, "wood_dark",
-               front_openings=[(dx, door_w, DOOR_SILL, DOOR_SILL + DOOR_H)]
-                              + win_holes(wins))
-    timber_frame(b, W, wall_h, "timber", (0.0, yf), plinth_h, depth=7.0, post=13.0,
-                 top_band=16.0, bays=bays, braces=True,
-                 openings=[(dx, door_w)] + [(w["cx"], w["ow"]) for w in wins])
-    door(b, h=DOOR_H, w=door_w, mat="wood_door", x=dx, y=yf, z=DOOR_SILL,
-         frame_mat="timber", planks=3, iron=True)
-    step_stone(b, w=door_w + 28.0, depth=24.0, h=9.0, x=dx, y=yf - 17.0)
-    # ---- 小高窗 + 铁栅窗 + 半掩红帘（帘占窗上半，留下半缝——"半掩"读法）
-    for w in wins:
-        put_window(b, w, w["cx"], yf, frame_mat="iron")
-        b.box((w["ow"] * 0.94, 3.5, w["oh"] * 0.52), (w["cx"], yf - 2.0,
-                                                      w["z1"] - w["oh"] * 0.26),
-              "cloth_red")
-        b.box((w["ow"] * 0.30, 3.0, w["oh"] * 0.16), (w["cx"] + w["ow"] * 0.24,
-                                                      yf - 3.5, w["z1"] - w["oh"] * 0.58),
-              "cloth_red", rot=(0.0, 0.0, 0.10))
-    # ---- 红灯笼对（门侧）+ 骰子招牌（门上方）
-    for sx in (-1.0, 1.0):
-        wall_lantern_iron(b, dx + sx * (door_w / 2.0 + 24.0), yf - 1.0,
-                          DOOR_SILL + DOOR_H + 18.0, s=13.0)
-    dice_sign(b, dx, yf, plinth_h + wall_h - 34.0)
-    # ---- 地窖口（右前墙脚）：石槛 + 暗腔斜门 + 铁环
-    c_x = W * 0.30
-    b.box_bottom((44.0, 20.0, 12.0), (c_x, yf - 8.0), 0.0, "stone_dark", bevel=BEV_MID)
-    b.box((38.0, 14.0, 6.0), (c_x, yf - 10.0, 10.0), "cavity", rot=(0.42, 0.0, 0.0))
-    b.box_bottom((36.0, 3.0, 20.0), (c_x, yf - 2.0), 0.0, "wood_dark", rot=None)
-    b.cylinder((c_x + 12.0, yf - 13.0, 14.0), 4.0, 2.5, "iron", segments=10, axis="Y")
-    # ---- 歪烟囱（里面烧着赌桌边的火盆）+ 山墙
-    ch_x = W * 0.24
-    ch_y = yf + 13.0
-    ch_top = eave + rise - 14.0
-    ch_roof = gable_roof_z(eave, rise, D / 2.0 + over, ch_y)
-    chimney(b, 24.0, 24.0, ch_top, "brick", ch_x, ch_y, foot=0.0,
-            cap_mat="stone_dark", cap=10.0, roof=ch_roof)
-    roof_gable(b, W, D, rise, over, "wood_roof", z=eave, thickness=14.0,
-               mat_under="wood_dark", cap_size=(26.0, 13.0), cap_mat="wood_dark",
-               board_h=8.0, ao_mat="shadow_mid")
-    gable_w = win_rect("garret", bay_w=D * 0.5, floor_z=eave)
-    gable_w["u"] = -D * 0.12
-    gable_infill(b, W, D, rise, "wood_dark", z=eave, thickness=13.0,
-                 hole=(gable_w["u"], gable_w["ow"], gable_w["z0"], gable_w["z1"]))
-    for sx in (-1.0, 1.0):
-        put_window(b, gable_w, gable_w["u"], sx * (W / 2.0), axis="Y", face_dir=sx,
-                   frame_mat="iron")
-    # ---- 门口酒桶两只（进赌坊的"水"）
-    barrel(b, x=dx - door_w - 26.0, y=yf - 20.0, z=0.0, r=13.0, h=36.0, lid=True)
-    barrel(b, x=dx - door_w - 26.0 + 30.0, y=yf - 14.0, z=0.0, r=13.0, h=36.0)
-
-    ob = b.to_object()
-    spec = _mk("gambling_den", width_cells, {
-        "depth": D, "plinth_h": plinth_h, "wall_h": wall_h, "eave_h": eave,
-        "rise": rise, "total_h": eave + rise, "overhang": over, "roof_t": 14.0,
-        "storey_h": [wall_h], "door": (door_w, DOOR_H), "door_x": dx,
-        "bays": bays, "high_windows": len(wins), "red_lanterns": 2, "cellar": True,
-        "window": (wins[0]["ow"], wins[0]["oh"], wins[0]["z0"] - plinth_h),
-        "gable_window": (gable_w["ow"], gable_w["oh"], gable_w["u"], gable_w["z0"]),
-        "chimneys": [{"x": ch_x, "y": ch_y, "roof": ch_roof, "top": ch_top + 10.0,
-                      "foot": 0.0, "w": 24.0, "d": 24.0}],
-        "material": "通体暗木板 + 小高窗铁栅半掩红帘 + 红灯笼对 + 骰子招牌 + 地窖口"})
-    return ob, spec
-
-
-def bw_pad_guard(W, bays):
-    """开间窗与门的避让半径：半开间宽（赌坊小高窗避门用）。"""
-    return W / float(bays) * 0.5
-
-
-# ---------------------------------------------------------------- 10.5 大赌场 grand_casino
-
-CASINO_TIERS = {
-    # 大赌场（赌场族 Lv2，city/capital 投放）：穹顶门楼（铜金穹顶）+ 彩旗串 + 铜檐口 +
-    # 柱廊大门 + 红毯大台阶 + 仪仗卫兵。
-    16: dict(D=236.0, plinth=20.0, storey=(204.0, 204.0), rise=100.0, wt=22.0,
-             door_w=58.0, risa_w=180.0, risa_fwd=26.0, dome_r=54.0,
-             dome_drum=32.0, dome_h=52.0, finial=18.0),
-}
-
-
-def assemble_grand_casino(width_cells=16):
-    """大赌场（赌场族 Lv2）：抹灰古典立面（白石壁柱 + 铜檐口）+ 中央穹顶门楼（拱门双柱 +
-    玫瑰圆窗）+ 彩旗串 + 红毯大台阶 + 仪仗卫兵（持矛立卫）。
-
-    与 guildhall/town_hall 的可辨差异（≥2 项）：
-    ① **穹顶门楼**（铜金穹顶 + 鼓座）—— 行政厅是平檐/钟楼，赌场靠穹顶炫富；
-    ② **彩旗串 + 铜檐口 + 红毯**（三件一组的热闹富贵读法）—— 行政建筑克制不挂彩；
-    ③ 仪仗卫兵（门口持矛立卫两尊）—— 看场子的。
-    """
-    t = CASINO_TIERS[width_cells]
-    W = width_cells * CELL
-    D, plinth_h = t["D"], t["plinth"]
-    sh1, sh2 = t["storey"]
-    rise, wt, door_w = t["rise"], t["wt"], t["door_w"]
-    risa_w, risa_fwd = t["risa_w"], t["risa_fwd"]
-    dome_r, dome_drum, dome_h, finial = t["dome_r"], t["dome_drum"], t["dome_h"], t["finial"]
-    over = eave_over(W)
-    eave = plinth_h + sh1 + sh2
-    z2 = plinth_h + sh1
-    yf = -D / 2.0
-    yrf = yf - risa_fwd                  # 门楼前面
-    bays = bays_of(width_cells)
-    # 上层拱窗（白石圈 + 铜框玻璃）；拱头高度按窗宽一半，洞口矩形洞顶开到拱顶 —— 洞与拱吻合
-    _d1, wins2 = bay_openings(W, bays, WIN_UP, floor_z=z2, w_scale=1.06, h_scale=0.94)
-    wins2 = [w for w in wins2 if abs(w["cx"]) > risa_w * 0.5 + 10.0]
-    # 一层高窗（铜框直棂，h_scale 抬高读"气派"但拱头不越层间白石带）
-    gwins = []
-    for cx in (-W * 0.345, W * 0.345):
-        w = win_rect(WIN_LOW, bay_w=W * 0.22, floor_z=plinth_h, w_scale=0.96,
-                     h_scale=1.15)
-        w["cx"] = cx
-        gwins.append(w)
-
-    b = Builder("grand_casino_w%d" % width_cells)
-    contact_shadow(b, W, D + risa_fwd + 96.0, spread=38.0)
-    plinth(b, W, D, plinth_h, "stone_dark", 0, 0, 0,
-           gap=(-risa_w * 0.42, risa_w * 0.42), lip=12.0)
-    # ---- 主体：抹灰两层（白石腰线）+ 一层铜框高窗 + 二层拱窗（白石圈）+ 铜檐口 + 壁柱
-    room_shell(b, W, D, plinth_h, sh1, wt, "plaster",
-               front_openings=win_holes(gwins))
-    room_shell(b, W, D, z2, sh2, wt, "plaster",
-               front_openings=[(w["cx"], w["ow"] + 4.0, w["z0"] - 4.0,
-                                w["z1"] + w["ow"] * 0.5 + 2.0) for w in wins2])
-    b.box_bottom((W + 12.0, D + 10.0, 14.0), (0.0, 0.0), z2 - 14.0, "white_stone",
-                 bevel=BEV_BIG)
-    for w in gwins:
-        put_window(b, w, w["cx"], yf, frame_mat="bronze")
-    for w in wins2:
-        arched_window(b, w["cx"], yf - 1.0, w["z0"], w["ow"], w["oh"],
-                      w["ow"] * 0.5, ring="white_stone")
-    for px in (-W / 2.0 + 12.0, -W * 0.30, -risa_w * 0.5 - 14.0,
-               risa_w * 0.5 + 14.0, W * 0.30, W / 2.0 - 12.0):
-        pilaster_strip(b, px, yf - 1.0, plinth_h + 2.0, eave - 8.0, w=18.0, depth=10.0)
-    # 铜檐口两道（层间 + 檐口，"金饰"读法走铜金色）
-    for (zc, ww) in ((z2 - 20.0, W + 14.0), (eave - 12.0, W + 16.0)):
-        b.box_bottom((ww, 14.0, 9.0), (0.0, yf - 3.0), zc, "bronze", bevel=BEV_SMALL)
-    # ---- 中央门楼：前凸壁体 + 拱门（真洞）+ 双柱 + 玫瑰圆窗 + 鼓座 + 铜金穹顶
-    yrc = (yrf + yf + wt) / 2.0
-    wall_panel(b, risa_w, eave - plinth_h + 26.0, wt, "plaster", 0.0,
-               yf - risa_fwd / 2.0, plinth_h,
-               openings=[(0.0, 96.0, DOOR_SILL, DOOR_SILL + DOOR_H + 34.0)])
-    b.box((96.0 - 4.0, risa_fwd + 18.0, DOOR_SILL + DOOR_H + 34.0),
-          (0.0, yrf + 4.0 + (risa_fwd + 18.0) / 2.0,
-           (DOOR_SILL + DOOR_H + 34.0) / 2.0), "cavity")
-    leaf_w = 46.0
-    for sx in (-1.0, 1.0):
-        door(b, h=DOOR_H, w=leaf_w, mat="wood_door", x=sx * (leaf_w / 2.0 + 2.0),
-             y=yrf + 2.0, z=DOOR_SILL, frame_mat="bronze", frame=8.0, planks=4,
-             iron=True)
-    b.box_bottom((8.0, 10.0, DOOR_H), (0.0, yrf - 1.0), DOOR_SILL, "bronze")
-    b.box_bottom((96.0 - 10.0, 5.0, 36.0), (0.0, yrf + 4.0),
-                 DOOR_SILL + DOOR_H + 1.0, "wood_door")   # 拱门上亮板（门扇本身 150）
-    ring_stone(b, 0.0, yrf - 1.0, DOOR_SILL + DOOR_H + 34.0, 54.0, "white_stone",
-               blocks=11, depth=12.0, thick=16.0, a0=0.0, a1=math.pi)
-    for sx in (-1.0, 1.0):               # 双柱（白石 + 铜头铜础）
-        cxx = sx * (risa_w * 0.5 - 18.0)
-        b.cylinder((cxx, yrf - 12.0, plinth_h + (z2 - plinth_h) * 0.5 + 8.0), 12.0,
-                   z2 - plinth_h - 6.0, "white_stone", segments=14)
-        b.cylinder((cxx, yrf - 12.0, plinth_h + 7.0), 15.0, 14.0, "bronze", segments=14)
-        b.cylinder((cxx, yrf - 12.0, z2 - 4.0), 15.0, 10.0, "bronze", segments=14)
-    rose_window(b, 0.0, yrf - wt * 0.5 - 3.0, z2 + sh2 * 0.52, 26.0, spokes=8)
-    b.box_bottom((risa_w + 16.0, risa_fwd + 22.0, 16.0), (0.0, yrf + risa_fwd * 0.5 - 2.0),
-                 eave + 10.0, "white_stone", bevel=BEV_BIG)     # 门楼披檐压顶
-    for sx in (-1.0, 1.0):
-        b.box_bottom((20.0, 14.0, 12.0), (sx * (risa_w * 0.5 - 4.0), yrf - 2.0),
-                     eave + 26.0, "white_stone", bevel=BEV_MID)  # 压顶端块
-    dome_top = dome_cap(b, 0.0, yrf + risa_fwd * 0.5 - 3.0, eave + 26.0, dome_r,
-                        dome_h, "bronze", segments=20, drum=dome_drum,
-                        drum_mat="white_stone", finial_h=finial, finial_mat="bronze")
-    # ---- 红毯大台阶 + 彩旗串 + 仪仗卫兵两尊
-    grand_stair(b, 0.0, yrf - 14.0, plinth_h + DOOR_SILL, w=150.0, n=3, step_h=9.3,
-                step_d=26.0, mat="stone")
-    b.box_bottom((112.0, 66.0, 4.5), (0.0, yrf - 14.0 + 40.0), plinth_h + 0.5,
-                 "cloth_red")
-    pennant_line(b, -W * 0.40, W * 0.40, yrf - 30.0, eave - 26.0, n=11, sag=20.0)
-    for sx in (-1.0, 1.0):               # 卫兵：立卫 + 铁矛 + 铜缨（130 读真人尺寸）
-        gxx = sx * (risa_w * 0.5 + 42.0)
-        b.box_bottom((30.0, 22.0, 16.0), (gxx, yrf - 34.0), 0.0, "stone_dark",
-                     bevel=BEV_SMALL)
-        stickman(b, x=gxx, y=yrf - 34.0, z=16.0, h=124.0)
-        strut(b, (gxx + 9.0, yrf - 34.0, 16.0), (gxx + 9.0, yrf - 34.0, 172.0), 4.5,
-              "iron")
-        b.cylinder((gxx + 9.0, yrf - 34.0, 176.0), 4.5, 10.0, "bronze", segments=8)
-    # ---- 屋顶（陶瓦缓坡）+ 山墙盲窗 + 角部烟囱
-    roof_gable(b, W, D, rise, over, "tile", z=eave, thickness=16.0,
-               mat_under="wood_dark", cap_size=(32.0, 15.0), cap_mat="stone_dark",
-               board_h=9.0, ao_faces=(yf, D / 2.0))
-    gable_infill(b, W, D, rise, "plaster", z=eave, thickness=16.0)
-    ch_x = -W * 0.36
-    ch_y = D * 0.14
-    ch_top = eave + rise + 26.0
-    ch_roof = gable_roof_z(eave, rise, D / 2.0 + over, ch_y)
-    chimney(b, 30.0, 30.0, ch_top, "brick", ch_x, ch_y, foot=0.0,
-            cap_mat="white_stone", cap=12.0, roof=ch_roof, skirt_h=20.0, skirt_lip=8.0)
-
-    ob = b.to_object()
-    spec = _mk("grand_casino", width_cells, {
-        "depth": D + risa_fwd, "plinth_h": plinth_h, "wall_h": sh1 + sh2,
-        "eave_h": eave, "rise": rise, "total_h": dome_top["top"], "overhang": over,
-        "roof_t": 16.0, "storey_h": [sh1, sh2], "double_storey": True,
-        "door": (leaf_w, DOOR_H), "door_x": 0.0, "bays": bays,
-        "dome_r": dome_r, "dome_top": dome_top["top"], "pilasters": 6,
-        "pennants": 11, "guards": 2, "red_carpet": True,
-        "window": (gwins[0]["ow"], gwins[0]["oh"], gwins[0]["z0"] - plinth_h),
-        "window_up": (wins2[0]["ow"], wins2[0]["oh"], wins2[0]["z0"] - z2),
-        "chimneys": [{"x": ch_x, "y": ch_y, "roof": ch_roof, "top": ch_top + 12.0,
-                      "foot": 0.0, "w": 30.0, "d": 30.0}],
-        "material": "抹灰 + 白石壁柱 / 陶瓦 + 铜金穹顶门楼 + 彩旗串 + 红毯 + 仪仗卫兵"})
     return ob, spec
 
 
@@ -7468,8 +7176,6 @@ def assemble_flower_shop(width_cells=8):
 ASSEMBLERS["waystation"] = assemble_waystation
 ASSEMBLERS["inn_post"] = assemble_inn_post
 ASSEMBLERS["coach_house"] = assemble_coach_house
-ASSEMBLERS["gambling_den"] = assemble_gambling_den
-ASSEMBLERS["grand_casino"] = assemble_grand_casino
 ASSEMBLERS["academy"] = assemble_academy
 ASSEMBLERS["observatory"] = assemble_observatory
 ASSEMBLERS["flower_shop"] = assemble_flower_shop
@@ -7478,8 +7184,6 @@ ASSEMBLERS["flower_shop"] = assemble_flower_shop
 PROBE_LIST += [("waystation", 6), ("waystation", 8),
                ("inn_post", 12), ("inn_post", 16),
                ("coach_house", 12), ("coach_house", 16),
-               ("gambling_den", 8), ("gambling_den", 12),
-               ("grand_casino", 16),
                ("academy", 12), ("academy", 16),
                ("observatory", 8),
                ("flower_shop", 8), ("flower_shop", 12)]

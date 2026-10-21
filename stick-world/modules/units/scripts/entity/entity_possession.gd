@@ -5,7 +5,6 @@ extends RefCounted
 ## - 玩家移动输入（WASD/方向键，_handle_player_input，InputMap action）
 ## - 玩家攻击/空挥（_player_attack_press/_release 按武器分流 / _player_swing）
 ## - 武器蓄力状态机（弓拉弓 / 矛蓄力投掷 / 杖指向施法；轻点走旧点击路径）
-## - 瞄准慢放（拉弓期间全局 timeScale 降档，与 hitstop 互斥）
 ## - 战斗/探索模式切换（_toggle_combat_mode，Q 键）
 ## - 副手盾格挡（_set_player_blocking，右键按住/松开）
 ## - 输入辅助（_find_input_dispatcher / _find_nearest_enemy_in_range /
@@ -17,30 +16,23 @@ extends RefCounted
 ##
 ## 蓄力交互设计（SWL ArcherControls 逆向实锤的 PC 翻译，09 文档 §二）：
 ## 原版触屏=向后拖拽定方向与力度；PC 翻译=鼠标指向定方向（朝向+弹道），
-## 按住左键时长定力度（真实毫秒计时，不受慢放影响）。蓄满 1000ms × 慢放
-## 0.5 恰好让 attack_bow 动画走到 Drawn@0.5 拉满帧——蓄力与动画拉满同步。
+## 按住左键时长定力度（真实毫秒计时）。
 
 ## 实体回引（构造注入；Node 不参与引用计数，无循环持有）
 var _entity: Node = null
 
 # ─────────────────────────────── 蓄力状态机 ────────────────────────────────
 ## 满蓄力真实毫秒（Time.get_ticks_msec 口径，不受 time_scale 影响）。
-## 1000ms 行业惯例（MC 满蓄 1s）；× 瞄准慢放 0.5 后动画恰走到 Drawn@0.5。
+## 1000ms 行业惯例（MC 满蓄 1s）。
 const CHARGE_FULL_MS: float = 1000.0
 ## 蓄力下限（原版 ArrowSpeedMinPower 语义：轻点也是一支软箭，不是哑火）
 const CHARGE_MIN_POWER: float = 0.2
 ## 矛轻点阈值（ms）：按住短于此时长=近战戳刺（旧路径），否则=蓄力投掷
 const SPEAR_TAP_MS: float = 180.0
-## 瞄准慢放档（SWL 拖拽时 Time.timeScale 慢放的 PC 对应物）
-const AIM_SLOWMO_SCALE: float = 0.5
-## 瞄准慢放是否启用（可关；ConfigManager game/aim_slowmo 接线留待办）
-var aim_slowmo_enabled: bool = true
 
 ## 蓄力态（弓/矛/杖按下中）：active + 起始毫秒
 var _charge_active: bool = false
 var _charge_start_ms: int = 0
-## 瞄准慢放在场标志（exit 恢复 1.0；hitstop 互斥查询用实例方法）
-var _aim_slowmo: bool = false
 
 
 func _init(entity: Node) -> void:
@@ -135,7 +127,7 @@ func _is_ranged_weapon() -> bool:
 # ─────────────────────────────── 攻击按下/松开（按武器分流）────────────────
 
 ## 左键按下分流（InputMap possess_attack）：
-## - 弓/矛/杖：进入蓄力态（拉弓动画 + 瞄准慢放 + 朝向跟随），冷却门在此判；
+## - 弓/矛/杖：进入蓄力态（拉弓动画 + 朝向跟随），冷却门在此判；
 ## - 剑/镐等近战：保持"按下即攻击"（旧行为，零延迟）。
 ## 搬运材料时双手被占用（放下前不可攻击）。
 func _player_attack_press() -> void:
@@ -160,7 +152,6 @@ func _player_attack_release() -> void:
 	if not _charge_active:
 		return
 	_charge_active = false
-	_exit_aim_slowmo()
 	if _entity.has_method("hide_charge_preview"):
 		_entity.hide_charge_preview()
 	if _entity.is_carrying():
@@ -172,8 +163,7 @@ func _player_attack_release() -> void:
 	var power: float = clampf(held_ms / CHARGE_FULL_MS, CHARGE_MIN_POWER, 1.0)
 	match int(weapon_mount.get("weapon_type")):
 		2:  # BOW：松手放箭（SWL AimReleased → UserControlledArrowReleased）
-			var arrow: Node2D = weapon_mount.release_player_shot(_aim_dir(), power)
-			_notify_arrow_cam(arrow)
+			weapon_mount.release_player_shot(_aim_dir(), power)
 		1:  # SPEAR：轻点=近战戳刺（旧路径自动锁敌），按住=蓄力投掷
 			if held_ms <= SPEAR_TAP_MS:
 				_player_attack()
@@ -183,26 +173,12 @@ func _player_attack_release() -> void:
 			weapon_mount.cast_magic_at(_mouse_world())
 
 
-## 箭矢镜头通知（SWL ArrowCam）：放出的箭交给 PossessionInterface，
-## 由它决定是否短暂跟随（配置 game/arrow_cam，默认关）。
-func _notify_arrow_cam(arrow: Node2D) -> void:
-	if arrow == null:
-		return
-	var dispatcher: Node = _find_input_dispatcher()
-	if dispatcher == null or not dispatcher.has_method("get_handler"):
-		return
-	var pi: Node = dispatcher.get_handler(PlayerControlAPI.Mode.POSSESS)
-	if pi != null and pi.has_method("on_player_arrow_launched"):
-		pi.on_player_arrow_launched(arrow)
-
-
-## 进入蓄力态：拉弓动画起播（不进冷却不登记结算）+ 瞄准慢放。
+## 进入蓄力态：拉弓动画起播（不进冷却不登记结算）。
 func _begin_charge(weapon_mount: Node2D) -> void:
 	_charge_active = true
 	_charge_start_ms = Time.get_ticks_msec()
 	if weapon_mount.has_method("begin_player_draw"):
 		weapon_mount.begin_player_draw()
-	_enter_aim_slowmo()
 	_update_aim()
 
 
@@ -211,36 +187,13 @@ func is_aim_charging() -> bool:
 	return _charge_active
 
 
-## 强制收口（附身退出/死亡等异常路径）：只清状态与慢放，不出手。
+## 强制收口（附身退出/死亡等异常路径）：只清状态，不出手。
 func cancel_charge() -> void:
 	if not _charge_active:
 		return
 	_charge_active = false
-	_exit_aim_slowmo()
 	if _entity.has_method("hide_charge_preview"):
 		_entity.hide_charge_preview()
-
-
-# ─────────────────────────────── 瞄准慢放 ─────────────────────────────────
-
-## 进入瞄准慢放（SWL 拖拽期间 Time.timeScale 降档）：拉弓期间世界半速，
-## 蓄力计时走真实毫秒不受影响。headless 短路（不拖慢测试）。
-func _enter_aim_slowmo() -> void:
-	if not aim_slowmo_enabled or _aim_slowmo:
-		return
-	if DisplayServer.get_name() == "headless":
-		return
-	_aim_slowmo = true
-	Engine.time_scale = AIM_SLOWMO_SCALE
-
-
-## 退出瞄准慢放：恢复常速。与 hitstop 的互斥由 HitstopController 单向让位
-## （蓄力中 hitstop 不触发；hitstop 恢复 timer 到点时蓄力在场则不覆盖慢放值）。
-func _exit_aim_slowmo() -> void:
-	if not _aim_slowmo:
-		return
-	_aim_slowmo = false
-	Engine.time_scale = 1.0
 
 
 # ─────────────────────────────── 既有输入路径 ──────────────────────────────

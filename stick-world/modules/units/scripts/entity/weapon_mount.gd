@@ -555,7 +555,6 @@ func perform_swing() -> bool:
 ## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：弓播拉弓保持段（举弓-拉弦-
 ## 绷住，定格拉满陪按住全程）；其余武器维持旧行为（播攻击动画）。
 ## 不进冷却、不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
-## 蓄满 1000ms × 瞄准慢放 0.5 恰使拉弦动作走到 Drawn@0.5 拉满帧。
 func begin_player_draw() -> void:
 	if weapon_type != WeaponType.BOW:
 		_play_swing()

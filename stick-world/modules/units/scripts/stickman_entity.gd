@@ -909,7 +909,7 @@ func _on_possession_changed(p: bool) -> void:
 		_current_speed = 0.0
 		_is_running = false
 		velocity = Vector2.ZERO
-		# 退出附身强制收口蓄力态（清瞄准慢放，防 Engine.time_scale 卡在 0.5）
+		# 退出附身强制收口蓄力态
 		_possession.cancel_charge()
 		hide_charge_preview()
 	# 取消附身时也清除 AI 移动方向，避免残留

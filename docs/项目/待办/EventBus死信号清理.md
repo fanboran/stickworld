@@ -8,4 +8,4 @@
 - [x] building_started（construction/api.gd）已下线：声明 + start_construction/start_construction_at 两处发射删除；`start_construction*` 行为不变（返回值契约不变）
 - [ ] map_unloaded（EventBus 版）**是活信号，不下线**：MusicDirector autoload 生产订户（`music_director.gd` `_wire_event_bus` → `_on_map_unloaded` 重置音乐情境 map_type）；另 smoke `test_cross_map_travel` 订阅并断言其转发。`scene_loader.gd` 自带版为另一条活链路（game_root_map_flow 消费）
 - [ ] org_created/org_restructured/org_disbanded（organization/api.gd）**是活信号，不下线**：三个组织 UI 生产订户——`org_panel.gd` / `command_chain_view.gd` / `strategic_overview_panel.gd` 各自 `_connect_signals` 订 `_org_api` 三信号全量重建；另有 unit `test_organization_manager.gd` 信号契约测试
-- [ ] resource_not_enough（resources/api.gd）**待裁决**：生产零订户，但 unit `test_resources_api.gd` 订阅并断言（consume 不足通知调用方 = api 契约行为），下线须同步删契约测试与 api 注释——是否清理由创始人定
+- [x] resource_not_enough（resources/api.gd，**resources 模块 api 信号，非 EventBus 信号**）已复活销项：玩家拍板"加上"——`ui_global` 的 ResourceBar 订阅（`resource_bar.gd` `_connect_signals`），扣减失败在资源条对应条目尾部浮出红字"缺N"，2s 节流窗内重复失败只刷新文案不重弹（防加工职业原料断供时每拍重试刷屏）；unit `test_resource_bar_hint.gd` 覆盖提示可见/节流合并/窗外重弹

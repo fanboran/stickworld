@@ -93,6 +93,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_minimap_layout.gd",
 	"res://tests/unit/test_mirror_channel.gd",
 	"res://tests/unit/test_ai_viz_signal.gd",
+	"res://tests/unit/test_resource_bar_hint.gd",
 ]
 
 const PER_TEST_TIMEOUT_SEC: float = 30.0

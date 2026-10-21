@@ -29,56 +29,42 @@ UIRoot (常驻)
 
 #### 10.1.1 GlobalHUD 详细设计
 
-> **当前实现**：[global_hud.gd](../../../../stick-world/modules/ui_global/scripts/hud/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与聚落.md](建筑与聚落.md) §9.4 / P0-11）。
+> **当前实现**：[global_hud.gd](../../../../stick-world/modules/ui_global/scripts/hud/global_hud.gd)——顶栏按钮群 + 右上时钟速度弧 + 时钟正下方天数时间；资源条 ResourceBar 经 `attach_resources` 注入顶栏下方左侧 ResourceBarHost（SystemSetup 在资源系统装配后调用），资源显示与不足提示均已接线。
 
-GlobalHUD 节点结构（含资源显示扩展）：
+GlobalHUD 节点结构：
 
 ```
 GlobalHUD (Control)
-├── TopBar (HBoxContainer)               ← 顶部状态条
-│   ├── SpeedLabel                       ← 时间速度（1x/2x/暂停）
-│   ├── TimeLabel                        ← 游戏内时间（Day 3, 14:30）
-│   ├── ResourceBar (HBoxContainer)      ← 资源数量条
-│   │   ├── ResourceSlot[res_wood]       ← 木材图标 + 数量
-│   │   ├── ResourceSlot[res_stone]      ← 石料图标 + 数量
-│   │   ├── ResourceSlot[res_metal_ore]  ← 铁矿图标 + 数量
-│   │   ├── ResourceSlot[res_gold]       ← 黄金图标 + 数量
-│   │   └── ResourceSlot[res_diamond]    ← 钻石图标 + 数量
-│   └── CenteredButton                   ← 居中模式按钮
-├── NotificationLabel                    ← 通知文字（淡入淡出）
-└── ClockWidget                          ← 圆形表盘（详见现有实现）
+├── MarginContainer/HBoxContainer        ← 顶栏按钮群（设置/编制/总览/科技/物流/成就/居中/预览/组织）
+├── ResourceBarHost (PanelContainer)     ← 顶栏下方左侧材料横条（sketch 手绘面板）
+│   └── ResourceBar (HBoxContainer)      ← 每资源一条目：图标+名称+数量（+不足提示红字）
+├── ClockWidget                          ← 右上速度弧（点按调速）
+└── DayTimeLabel                         ← 时钟正下方"第N天 HH:MM"
 ```
+
+> 通知不走 GlobalHUD 节点：统一发 EventBus `ui_notification`，由 UIRoot 左下 NotificationFeed 堆叠展示。
 
 **ResourceBar 资源显示**：
 
 | 属性 | 设计 |
 |------|------|
 | 显示资源 | 现行 5 种（木/石/铁/金/钻，见 `resource_bar.gd`） |
-| 数据来源 | `resources_api.get_stock(resource_id, "player_territory")` |
+| 数据来源 | `resources_api.get_stock(resource_id, "")`（全局总量） |
 | 更新方式 | 信号驱动：订阅 `resources_api.resource_changed` 信号，非每帧轮询 |
-| 显示格式 | `[图标] 数量`（如 `🪵 150`），数量变化时短暂高亮（0.5s 黄色闪烁） |
-| 不足提示 | 收到 `resource_not_enough` 信号时，对应 ResourceSlot 闪红 + NotificationLabel 显示"木材不足" |
+| 显示格式 | `[图标] 名称 数量`；扣减红闪 0.5s / 增加绿闪 0.6s |
+| 不足提示 | 订阅 `resource_not_enough`（resources 模块 api 信号，非 EventBus）：对应条目尾部浮出红字"缺N"（需求−可用，向上取整），**2s 节流窗**内重复失败只刷新文案不重弹（防加工职业原料断供每拍重试刷屏），窗外重试重新浮出；资源条不展示的资源忽略 |
 | 交互 | P0 仅显示；P1 点击展开详情面板（产出/消耗/历史趋势） |
 
-**信号订阅代码示意**：
+**信号订阅**（实现在 `resource_bar.gd` `_connect_signals`，装配入口 = `GlobalHUD.attach_resources`）：
 
 ```gdscript
-# global_hud.gd 扩展
-func _setup_resource_bar(resources_api: Node) -> void:
-    resources_api.resource_changed.connect(_on_resource_changed)
-    resources_api.resource_not_enough.connect(_on_resource_not_enough)
-    # 初始化显示当前库存
-    for res_id in ["res_wood", "res_stone", "res_metal_ore", "res_gold", "res_diamond"]:
-        var amount := resources_api.get_stock(res_id, "player_territory")
-        _update_resource_slot(res_id, amount)
-
-func _on_resource_changed(res_id: String, amount: float, delta: float, _region_id: String) -> void:
-    if _resource_slots.has(res_id):
-        _update_resource_slot(res_id, amount)
-        _flash_slot(res_id, delta > 0)  # 正增负减，颜色区分
+if _resources_api.has_signal("resource_changed"):
+    _resources_api.resource_changed.connect(_on_resource_changed)
+if _resources_api.has_signal("resource_not_enough"):
+    _resources_api.resource_not_enough.connect(_on_resource_not_enough)
 ```
 
-> **依赖**：ResourceBar 需要 P0-11（资源系统装配）完成后才能接入。当前 GlobalHUD 代码已预留扩展点（TopBar 是 HBoxContainer，可追加子节点）。
+> **依赖**：SystemSetup 装配顺序保证资源系统先于 `attach_resources`——依赖已内建于装配链，ResourceBar 侧对 api 缺信号/缺方法均静默降级。
 
 ### 10.2 模式切换响应
 

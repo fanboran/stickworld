@@ -1,8 +1,9 @@
 extends Node
 ## 热加载平衡变量 —— 从 config/ 目录加载 .tres 资源。
 ##
-## 数据来源：Excel 导出管线（config/excel/*.xlsx → config/**/*.tres）。
-## 每个 .tres 对应一张 Excel Sheet，由 BalanceResource 承载。
+## 数据来源：config/ 目录下的 .tres 数据表（唯一真源，直接编辑）；
+## 原 Excel→tres 导出管线已废弃归档（tools/pipeline/archive/excel_pipeline/）。
+## 每个 .tres 对应一张数据表，由 BalanceResource 承载。
 ## 提供平衡变量的统一读取入口 get_value(path)。
 ## 支持热加载：编辑 .tres 后调用 reload() 无需重启游戏。
 ## 变量变更时通过 EventBus 发射 balance_changed 信号。

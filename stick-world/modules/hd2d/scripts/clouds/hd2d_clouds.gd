@@ -10,8 +10,9 @@ extends Node3D
 ## 成员属模块内部自由域，模块对外契约仍只有 modules/hd2d/api.gd 的 duck 面。
 
 ## 漂移云牌（创始人 2026-09-15：2D 地图的手绘云加进新天空）——sketch_cloud
-## 程序化画风烘成贴图上 Sprite3D billboard；风驱漂移+出带回绕（SkyDecor 云同语义）
-const SKETCH_CLOUD := preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")
+## 程序化画风烘成贴图上 Sprite3D billboard；风驱漂移+出带回绕（SkyDecor 云同语义）。
+## 组件脚本经 UIAPI 契约取（不跨模块 preload ui_global 内部路径，audit_deps 口径）
+const SKETCH_CLOUD: GDScript = preload("res://modules/ui_global/api.gd").SKETCH_CLOUD
 
 ## 宿主门面（hd2d_world）回引：place(world) 时注入。禁循环 preload（门面 preload
 ## 本文件），故不标类型。

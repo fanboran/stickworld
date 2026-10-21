@@ -19,12 +19,14 @@ extends Node
 ## 命中这些前缀的当前场景，ESC 视为「请求回主页」。
 ## 只收浏览型 dev 场景（tests/dev/），不收 tests/ 其余层级——integration 等
 ## 自动化挂钩场景会把 GameRoot 挂进来注入 ESC 测游戏语义，不能劫持。
+## ui_global 侧前缀经 UIAPI 契约常量取（不写 ui_global 内部路径，audit_deps 口径）
+const _UIAPI := preload("res://modules/ui_global/api.gd")
 const ESCAPE_PREFIXES: PackedStringArray = [
 	"res://tests/dev/",
-	"res://modules/ui_global/scenes/templates/",
+	_UIAPI.TEMPLATE_SCENE_DIR,
 ]
 
-const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
+const MAIN_MENU_SCENE := _UIAPI.MAIN_MENU_SCENE
 
 ## 确认框宿主（全屏 Control，挂根窗口下；父非 Control 时确认框遮罩会塌缩）
 var _host: Control = null

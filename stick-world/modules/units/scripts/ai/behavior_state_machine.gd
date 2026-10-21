@@ -48,6 +48,12 @@ func travel(behavior_name: String, params: Dictionary = {}) -> void:
 	_current_name = behavior_name
 	_current_behavior = _behaviors[behavior_name] as BehaviorBase
 	_current_behavior.enter(previous, params)
+	# 可观测性埋点（AI 决策可视化消费；纯追加广播，无订户零成本、不影响决策）：
+	# travel 是全部行为切换的唯一入口，这里发射 = 任何路径（决策层/号令/看门狗/
+	# 打通态）的切换都有记录，切换原因由观测侧结合 AIController 状态推断。
+	# entity 取当前行为宿主注入的引用（registry 装配时写入，测试直构同样有效）
+	EventBus.ai_behavior_switched.emit(_current_behavior.entity if _current_behavior != null else null,
+			previous, behavior_name, params)
 
 
 # ─────────────────────────────── 每帧调度 ────────────────────────────────

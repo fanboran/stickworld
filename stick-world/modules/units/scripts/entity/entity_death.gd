@@ -6,7 +6,8 @@ extends RefCounted
 ##   延迟禁 Collider、通知战斗实例、生成遗物）
 ## - 尸体物理帧（tick_corpse，宿主 _physics_tick 死亡分支委托）：Collider 禁用
 ##   计时 + 尸体停留/淡出（SWL fadeOutOver 语义）
-## - 死亡遗物生成（翻包式掉落，items 域容器）
+## - 死亡掉落（物品直接落地，创始人口径）：按个体 loadout 个体化清单 →
+##   GroundItem 散落地面待拾取（旧翻包式遗物容器链路保留未动，去留另行裁决）
 ## - 受击处理（反编译参考实装 B：SelectHitAnimation 部位×方向×强度直译）+
 ##   受击硬直/受击音
 ## - 受击反馈（§7.5 近战打击感）：物理击退冲量 + 受击红闪
@@ -22,6 +23,13 @@ var _hurt_tween: Tween = null
 
 ## 动画名/变体池（死亡与受击变体选择用；显式 preload 防 headless class_name 未注册）
 const Anims := preload("res://modules/stick_rig/api.gd").ANIMS_SCRIPT
+## 地面掉落物场景（死亡物品直接落地）
+const GROUND_ITEM_SCENE: PackedScene = preload("res://modules/units/scenes/components/ground_item.tscn")
+## 随机小额消耗品掉率（掉落清单的战利品风味项）
+const BANDAGE_DROP_CHANCE: float = 0.3
+## 落物散布半径（px）：尸体两侧交错散开，多件掉落不叠成一摞
+const DROP_SCATTER_X: float = 26.0
+const DROP_SCATTER_Y: float = 8.0
 
 
 func _init(entity: Node) -> void:
@@ -75,13 +83,14 @@ func on_died() -> void:
 	if bi != null and is_instance_valid(bi):
 		if bi.has_method("on_unit_died"):
 			bi.on_unit_died(_entity)
-	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
-	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")。
-	# 滞留/淡出由 _physics_process 死亡分支的物理帧计时**唯一驱动**
-	#（A1b：旧 tween 与物理计时双驱动打架——有遗物尸体在 alpha≈0.36 被物理
-	# 路径瞬删跳变；时长真相源归一 4/12s + 1.2s 淡出）
+	# 死亡掉落（创始人口径：物品直接落地，无翻包环节）——按个体 loadout
+	# 个体化生成清单（spawn 建档，两步机制第二步），散落地面等玩家拾取。
+	# 玩家附身实体不掉（装备属于玩家背包）；尸体淡出走常规节奏（遗物容器
+	# 停留 ×3 逻辑不再触发——无 meta("loot")）。
+	# 旧翻包式遗物容器（generate_loot_container + 翻包窗口链路）保留未动，
+	# 去留另行裁决。
 	if not _entity.possessed:
-		generate_loot_container()
+		_drop_loadout_items()
 
 
 ## 尸体物理帧（宿主 _physics_tick 死亡分支委托）：清零速度、Collider 禁用计时、
@@ -117,7 +126,74 @@ func tick_corpse(delta: float) -> void:
 			_entity.modulate.a = clampf(_entity._corpse_fade_timer / CORPSE_FADE, 0.0, 1.0)
 
 
-## 死亡遗物生成（weapon_type→def 映射 + 盾 + 随机小额消耗品）。
+# ─────────────────────────────── 死亡掉落（物品直接落地）────────────────────────
+
+## 死亡掉落清单（掉落个体化两步机制的第二步）：
+## 有个体装备记录（spawn 建档/读档回填）按记录生成——主手武器 + 副手盾 +
+## 出生弹药（弓手箭束）；无记录（测试桩/旧实体）回落按 weapon_type 反查。
+## 另掷 BANDAGE_DROP_CHANCE 掉一件绷带（战利品风味）。
+## 返回 [{def_id: StringName, count: int}]。
+func build_drop_manifest() -> Array:
+	var items: Array = []
+	var loadout: Dictionary = {}
+	if _entity.has_method("get_loadout"):
+		loadout = _entity.get_loadout()
+	if not loadout.is_empty():
+		var main_id := StringName(String(loadout.get("main_hand", "")))
+		if main_id != &"" and ItemDB.get_def(main_id) != null:
+			items.append({"def_id": main_id, "count": 1})
+		var off_id := StringName(String(loadout.get("off_hand", "")))
+		if off_id != &"" and ItemDB.get_def(off_id) != null:
+			items.append({"def_id": off_id, "count": 1})
+		var ammo: Variant = loadout.get("ammo", {})
+		if ammo is Dictionary:
+			for key in ammo:
+				var aid := StringName(String(key))
+				var n: int = int(ammo[key])
+				if n > 0 and ItemDB.get_def(aid) != null:
+					items.append({"def_id": aid, "count": n})
+	else:
+		# 无个体记录回落：与旧遗物生成同款反查（weapon_type→def + 盾规则）
+		var wm: Node2D = _entity.weapon_mount
+		if wm != null and is_instance_valid(wm):
+			var wt: int = int(wm.weapon_type)
+			var wid: StringName = ItemsAPI.WEAPON_ITEM_BY_TYPE.get(wt, &"")
+			if wid != &"":
+				items.append({"def_id": wid, "count": 1})
+			if bool(wm.equipped_shield) \
+					or (bool(wm.shield_enabled) and wt == 1):
+				items.append({"def_id": &"shd_wood_001", "count": 1})
+	if randf() < BANDAGE_DROP_CHANCE:
+		items.append({"def_id": &"con_bandage", "count": 1})
+	return items
+
+
+## 落物散落：清单逐件生成 GroundItem 挂到宿主同层（EntityHost，随 y-sort），
+## 尸体两侧交错散开。空清单/无父节点静默跳过。
+func _drop_loadout_items() -> void:
+	var manifest := build_drop_manifest()
+	if manifest.is_empty():
+		return
+	var host: Node = _entity.get_parent()
+	if host == null:
+		return
+	for i in manifest.size():
+		var e: Dictionary = manifest[i]
+		var drop: Node2D = GROUND_ITEM_SCENE.instantiate() as Node2D
+		if drop == null:
+			return
+		host.add_child(drop)
+		# 交错散布：奇偶分侧 + 半径内随机，纵向轻抖动（贴地不腾空）
+		var side: float = 1.0 if i % 2 == 0 else -1.0
+		drop.global_position = _entity.global_position + Vector2(
+				side * randf_range(DROP_SCATTER_X * 0.4, DROP_SCATTER_X),
+				randf_range(-DROP_SCATTER_Y, DROP_SCATTER_Y))
+		if drop.has_method("setup"):
+			drop.setup(e["def_id"], int(e["count"]))
+
+
+## 死亡遗物生成（翻包式掉落，已被地面掉落取代不再调用——生成侧与翻包窗口
+## 链路原样保留，去留另行裁决）。
 ## 返回是否生成了非空容器（决定尸体保留时长）。
 func generate_loot_container() -> bool:
 	var loot := ItemContainer.new()

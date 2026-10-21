@@ -114,13 +114,13 @@
 | `region_owner_changed` | region_id: String, new_owner: String | 世界模型政权归属变更（尚未接入；接入前测试可代发驱动染色管道） | 战略图（world_map/api.gd，唯一订阅方：累积归属表 → 重取已占地块表 → 政治模式逐格染色） | 地块政权归属变更；region_id 发 tile 级 id（归属最小单位是 tile，契约见世界地图数据流） |
 | `unlock_granted` | unlock_id: String | 待世界模型接入 | 建筑可建集门禁（`ConstructionManager.is_def_unlocked` × `WorldState.unlocks` 判定，BuildMenu 随信号重刷）、测试 | 解锁项发放（预留装备/科技等系统按需接线） |
 
-### 2.8 UI / 附身 / 室内事件
+### 2.8 UI / 接管 / 室内事件
 
 | 信号 | 参数 | 发射方 | 接收方 |
 |------|------|--------|--------|
 | `ui_notification` | title, body, level | 任意 | GlobalHUD |
-| `possession_started` | entity | PossessionInterface | UI、Units、TimeManager |
-| `possession_ended` | entity | PossessionInterface | UI、Units、TimeManager |
+| `user_control_started` | entity | UserControlInterface | UI、Units、TimeManager |
+| `user_control_ended` | entity | UserControlInterface | UI、Units、TimeManager |
 | `interior_entered` | building_id: int | Building | InputDispatcher、UI |
 | `interior_exited` | building_id: int | Building | InputDispatcher、UI |
 | `mega_interior_entered` | building_id: int, map_id: String | Building | MusicDirector（情境回退）；传送链随 mega_interior 图清退拆除，信号保留待室内 v3 |

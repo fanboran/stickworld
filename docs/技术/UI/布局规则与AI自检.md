@@ -141,11 +141,11 @@ z=100  UiInspector    ← F3 调试：悬停 UI 显示控件名+脚本路径
 暂停同时冻结：世界/AI 更新、玩家移动、相机缩放（遮罩 STOP 消费滚轮）、
 悬停角色反馈（hover_indicator 检查 `TimeManager.is_paused()`）。
 
-### 8.3 ESC 语义（统一模态栈退栈，GameRoot._handle_escape 仅保留 POSSESS 特判）
+### 8.3 ESC 语义（统一模态栈退栈，GameRoot._handle_escape 仅保留 USER_CONTROL 特判）
 
 ```
 有模态 → 逐层退栈顶（设置/存档/占位/确认框→取消）；无模态 → 开暂停菜单
-附身模式（POSSESS）→ 不消费，ESC 留给退出附身
+User Control 模式（USER_CONTROL）→ 不消费，ESC 留给退出接管
 ```
 
 暂停菜单（`PauseMenuPanel`）：继续游戏 / 设置 / 存档管理 / 保存并回主菜单。

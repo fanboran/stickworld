@@ -15,11 +15,11 @@ UIRoot (常驻)
 ├── ModePanel              ← 模式相关：整体替换
 │   ├── VillagePanel       (建设菜单、村民管理、库存)
 │   ├── BattlePanel        (框选信息、指令按钮、编制树)
-│   └── PossessPanel       (附身时的角色控制 HUD)
+│   └── UserControlPanel       (User Control 时的角色控制 HUD)
 ├── ContextPanel           ← 上下文相关：选中什么显示什么
 │   ├── BuildingInspector  (选中建筑)
 │   ├── SquadInspector     (选中编制)
-│   └── CommanderPanel     (附身指挥官时的管理面板)
+│   └── CommanderPanel     (接管指挥官时的管理面板)
 ├── HudOverlay             ← 常驻 HUD 部件槽（有尺寸的容器，见 §10.7）
 │   ├── BuildMenu          ← 建造按钮 + 两阶段放置（见 §10.7.3）
 │   ├── Minimap            ← 小地图（屏幕正上方中央，详见 §10.4）
@@ -86,18 +86,18 @@ modules/ui_global/           # 全局 UI 层：容器 + 通用控件
 │   ├── ui_root.gd           # UIRoot 主控
 │   ├── hud/                 # GlobalHUD / ClockWidget / Minimap（+ minimap_painter / minimap_window）/ ZoomBar（薄壳）/ ZoomSlider（公共缩放条机件）/ ResourceBar
 │   ├── panels/              # ModePanel（容器）/ ContextPanel（容器）/ SettingsMenuPanel
-│   └── indicators/          # 游玩指示器（附身圆圈/悬停方框/中键图标）
+│   └── indicators/          # 游玩指示器（接管圆圈/悬停方框/中键图标）
 └── scenes/
     ├── ui_root.tscn
     ├── hud/global_hud.tscn
-    ├── panels/mode_panel.tscn    # 含 Village/Battle/Possess 槽位（内容由各模块装配）
+    ├── panels/mode_panel.tscn    # 含 Village/Battle/UserControl 槽位（内容由各模块装配）
     ├── panels/context_panel.tscn
     └── overlays/            # modal_overlay.tscn / resource_bar.tscn
 
 modules/<模块>/ui/           # 模块专属 UI（各模块自包含）
 ├── combat/ui/               # battle_panel.gd（战斗面板）/ formation_panel.gd（编制窗口）
 ├── construction/ui/         # build_menu.gd（建造菜单入口/选址）/ build_list_window.gd（建筑列表 DOCK 窗）
-├── player_control/ui/       # possess_panel.gd（附身面板）
+├── player_control/ui/       # user_control_panel.gd（User Control 面板）
 └── world_map/ui/            # 战略图面板/提示等
 ```
 
@@ -359,7 +359,7 @@ hide_legend()
 实时看每个单位的 AI 在想什么（信息密度对标 LimboAI 调试器）。**纯观测零行为改动**：
 列表/详情经 `ai_viz_snapshot.gd` 只读快照层轮询（0.25s 节流，全 duck 调用），状态切换
 订阅 `EventBus.ai_behavior_switched`（`BehaviorStateMachine.travel` 唯一入口埋点，
-无订户零成本），**切换原因在信号到达时点推断**（看门狗推力/附身恢复是瞬时态，事后不可考）。
+无订户零成本），**切换原因在信号到达时点推断**（看门狗推力/接管恢复是瞬时态，事后不可考）。
 
 - 窗体：`StickWindow` FLOATING 模板（可拖/无遮罩/ESC 自关），`UIKit.full_rect()` 合规出口装配
 - 左栏：单位列表（阵营色/兵种/当前行为/特殊态徽标[令·通·避·晕·附]/HP），全部/蓝方/红方/接战中过滤
@@ -400,7 +400,7 @@ hide_legend()
 
 #### 10.6.3 交互弹窗
 
-玩家附身时靠近仓库/工地，在**目标建筑上方**显示交互提示弹窗：
+玩家 User Control 时靠近仓库/工地，在**目标建筑上方**显示交互提示弹窗：
 
 - 节点结构：`Node2D`（挂到 `foreground_layer`，z_index=20）+ `Label`（带 `StyleBoxFlat` 暗色圆角背景）
 - 位置：建筑 PassageBarrier 中心 X，`ground_y - 280` Y

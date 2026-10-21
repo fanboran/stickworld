@@ -178,7 +178,7 @@ func _open_placeholder_panel(preset_id: String) -> void:
 
 
 ## ESC 语义（统一模态栈逐层退栈）：有模态 → 退栈顶（设置→关设置、确认框→取消、
-## 占位面板→关面板，逐层返回）；无模态 → 开暂停菜单。 User Control 模式返回 false
+## 占位面板→关面板，逐层返回）；无模态 → 开暂停菜单。User Control 模式返回 false
 ## （ESC 留给退出接管，不消费）。返回是否已消费事件。
 func _handle_escape() -> bool:
 	if _host.input_dispatcher != null and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.USER_CONTROL:

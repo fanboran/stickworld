@@ -280,10 +280,10 @@ func get_battle_state(battle_id: String) -> Dictionary
 func issue_order(battle_id: String, org_id: String, order_type: String, params: Dictionary) -> Dictionary
 # order_type: "advance" / "defend" / "flank" / "retreat" / "hold"
 
-# 附身
-func possess_commander(org_id: String, tier: int) -> Dictionary
+# 接管
+func user_control_commander(org_id: String, tier: int) -> Dictionary
 # 玩家直接操控该组织的指挥官
-func release_possession() -> Dictionary
+func release_user_control() -> Dictionary
 
 # 呼叫支援
 func call_reinforcements(battle_id: String, org_id: String) -> Dictionary
@@ -522,7 +522,7 @@ get_bone_ids() -> Array
 #       WeaponType（SWORD / SPEAR / BOW / SHIELD / UNARMED）
 
 # StickmanEntity 公共 API（物理+碰撞外壳）
-set_possessed(bool) / is_possessed() -> bool
+set_user_controlled(bool) / is_user_controlled() -> bool
 get_facing() -> int                  # 1=右，-1=左
 ai_move(dir: Vector2, run: bool) / ai_stop()
 get_ai_controller() -> Node
@@ -561,20 +561,20 @@ enum EntrySide { LEFT, RIGHT }
 ## 十三、玩家控制模块 `modules/player_control/api.gd`（PlayerControlAPI）
 
 ```gdscript
-enum Mode { NONE, EXPLORE, BUILD, BATTLE, POSSESS, INDOOR, UI }
+enum Mode { NONE, EXPLORE, BUILD, BATTLE, USER_CONTROL, INDOOR, UI }
 
 # InputDispatcher 注册表（GameRoot 装配时注册；units 等模块经此获取，替代 group 反查）
 static func register_input_dispatcher(dispatcher: Node) -> void
 static func get_input_dispatcher() -> Node
 
-# PossessionInterface 公共 API（附身操控）
-get_possessed_entity() -> Node2D
-possess(entity: Node2D) -> void
+# UserControlInterface 公共 API（User Control 操控）
+get_user_controlled_entity() -> Node2D
+control(entity: Node2D) -> void
 release() -> void
 ```
 
 > 信号契约：`InputDispatcher.mode_changed(old_mode: int, new_mode: int)`。
-> 附身流程（BATTLE 框选 → 附身按钮 → set_possessed + 相机跟随 + TimeManager 降速 → WASD/左键/ESC）见 api.gd 头注释。
+> 接管流程（BATTLE 框选 → 接管按钮 → set_user_controlled + 相机跟随 + TimeManager 降速 → WASD/左键/ESC）见 api.gd 头注释。
 
 ---
 

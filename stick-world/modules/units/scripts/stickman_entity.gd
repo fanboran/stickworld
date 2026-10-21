@@ -4,7 +4,7 @@ extends CharacterBody2D
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1。
 ## 在已有 StickmanRig（纯渲染骨架）外包一层 CharacterBody2D，
-## 承担物理移动、碰撞、 User Control 接口。
+## 承担物理移动、碰撞、User Control 接口。
 ##
 ## 移动与驱动：
 ##   - 玩家 User Control 时 WASD 控制移动/攻击（entity_user_control）

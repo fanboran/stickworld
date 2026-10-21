@@ -87,7 +87,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - **血条 = char_bar_atlas 原版驱动镜像图集**：你逐值微调的 HealthBarIndicator 以驱动镜像画进共享视口（同一 apply_bar_state 协议，30Hz 回读），3D 面片贴头顶锚点。
 - 武器/盾：读武器场景 Sprite 贴图 + GripPoint 补偿挂手骨，贴图分桶 quad（ZB_WEAPON 恒在身体之上——原版树序「武器盾盖头」）。
 - 尸体：死亡动画播完停尾帧 + 插箭，实体淡出期 `set_master_alpha` 压实例色 alpha（透明混合单桶，不换桶）。
-- 接地影/劳作条/附身四角框为独立 3D quad，随宿主走；渲染帧插值（#9）：位置物理刻双缓冲 + 渲染帧分数插值。
+- 接地影/劳作条/接管四角框为独立 3D quad，随宿主走；渲染帧插值（#9）：位置物理刻双缓冲 + 渲染帧分数插值。
 - feed API（set_world_pos/set_anim/set_weapon_type/set_stance_anims/apply_health_state…）由 `hd2d_map_base._sync_character_render` 逐帧驱动。
 - **引擎级约束（沿自整卡烘焙时代的实测，仍然有效）**：spatial 管线采样画布 RT 会在细亮线两侧逐通道色散（引擎/驱动层缺陷，不可修）——一切画布→3D 的纹路必须走「视口渲染→get_image 回读→ImageTexture」绕行（关节图集与血条图集同此口径）；画布视口 msaa_2d 必须关（同源色散，见下 msaa_2d 段）。
 
@@ -341,7 +341,7 @@ FxLibrary 飘字粒子）就整体偏移多少×缩放**；而 3D 世界本身�
 - **选中/悬浮四角框（SelectionSystem）**：**全身包裹**——选中框与悬浮框共用
   `entity_hover_rect` 矩形（HD-2D=billboard 视觉身高 156 框，脚线~头顶；2D=
   Range 原框），角臂画四角（创始人"框住整个火柴人"；§4.2.1 协议）。
-  点选/框选判定锚同一矩形中心。possessed 主控框走 3D 脚下框
+  点选/框选判定锚同一矩形中心。user_controlled 主控框走 3D 脚下框
   （wants_3d_bracket 门控），位置天然正确。
 - **建筑宽度辅助线**（2D 图 F3 版式样原样搬入，白色口径，创始人）：
   - grid_drawer → HD-2D 分支 `_draw_hd2d_cell_lines`：32px 一条竖线，横纵裁在

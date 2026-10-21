@@ -63,7 +63,7 @@ modules/ui_global/
 │   │   ├── quest_panel.gd              #   QuestPanel：左上目标卡（纯被动显示，装配层调 show_quest/mark_done）
 │   │   └── fps_counter.gd              #   FpsCounter：设置面板「显示 FPS」开关驱动
 │   ├── panels/                         # 三层 UI 面板与菜单
-│   │   ├── mode_panel.gd               #   ModePanel：模式面板容器（Village/Battle/Possess 槽位可见性切换）
+│   │   ├── mode_panel.gd               #   ModePanel：模式面板容器（Village/Battle/UserControl 槽位可见性切换）
 │   │   ├── context_panel.gd            #   ContextPanel：上下文面板（右缘列 + 具名槽，槽由装配层填内容）
 │   │   ├── settings_menu_panel.gd      #   SettingsMenuPanel：设置菜单（左分类右内容，schema 驱动）
 │   │   └── pause_menu_panel.gd         #   PauseMenuPanel：ESC 暂停菜单
@@ -93,7 +93,7 @@ modules/ui_global/
     ├── hud/
     │   └── global_hud.tscn             # 顶栏通栏场景
     ├── panels/
-    │   ├── mode_panel.tscn             # Village/Battle/Possess 槽位
+    │   ├── mode_panel.tscn             # Village/Battle/UserControl 槽位
     │   └── context_panel.tscn          # SquadInspector 具名槽
     ├── menus/
     │   ├── main_menu.tscn
@@ -113,7 +113,7 @@ modules/ui_global/
 
 | 入口 | 说明 |
 |---|---|
-| `UIAPI`（api.gd） | `PanelType` 枚举（VILLAGE/BATTLE/POSSESS）、容器节点路径常量、`create_save_panel()` |
+| `UIAPI`（api.gd） | `PanelType` 枚举（VILLAGE/BATTLE/USER_CONTROL）、容器节点路径常量、`create_save_panel()` |
 | `UIRoot` | 槽位路由 `get_slot` / `add_to_slot(slot_name, node)`；zone 落位 `place_in_zone(zone, control)`；`apply_mode_panel` / `set_context_content` / `open_modal` / `get_modal_stack` |
 | `UIModalStack` | `Layer` 层键枚举、`push(obj, layer)` / `pop()` / `find(node)`（ESC 逐层退栈的单一权威） |
 | `UIKit` | `full_rect(script, name)` 全屏根 / `widget(script, name)` 角落部件 |

@@ -367,8 +367,8 @@ hide_legend()
   目标及选择理由（前向最近/全域回退/打通强制/锁定驻留时长）/ 阈值余量（撤退安全线
   320、武器冷却、射程余量、持瞄进度、下次决策倒计时与拍数）/ 号令 / 特殊态；
   下半为该单位切换日志（最近 10 条：时刻 from→to 原因）
-- 挂载：调试场景自行挂开关（默认关）。观察场（battle_arena）V 键切换；验收出图
-  走 `arena_shot_boot.tscn -- --aiviz`（tools/dev/arena_aiviz_shot.gd driver）
+- 挂载：调试场景自行挂开关（默认关）。观察场（battle_arena）与单挑观察场（duel_arena）
+  V 键切换；验收出图走 `arena_shot_boot.tscn -- --aiviz`（tools/dev/arena_aiviz_shot.gd driver）
 
 ### 10.6 建造进度条与交互弹窗
 

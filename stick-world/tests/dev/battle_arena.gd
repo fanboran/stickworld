@@ -4,7 +4,12 @@ extends Node
 ## 用途：肉眼观察战斗画面自然度——编队推进/站姿/走姿/挥砍/受击/死亡/血条/阵营对抗。
 ## 入口：项目主场景（F5 直进）或主菜单「战斗演练」→「大乱斗观察场」。
 ## 控制面板（底部居中）：预设按钮（遭遇战·16 / 密度压力·48 / 极端压力·96，点按或
-## 1/2/3 切换并立即重开，static _preset_idx 跨重开保持）+「重开 (R)」按钮。
+## 1/2/3 切换并立即重开，static _preset_idx 跨重开保持）+「编队配置 (C)」+「重开 (R)」。
+## 编队配置化：C 键开配置窗（arena_composition_panel.gd，FLOATING 工具窗）——
+## 双方兵力构成可编辑（兵种/数量/班结构 + 三档布阵载入，镜像或左右独立），
+## 「应用并重开」持久化 user://arena_composition.json 并以「自定义」第四档
+##（4 键可选）重开；排聚合对自定义编成自动推（班≥4 两两成排、奇尾并三班，
+## 2~3 班/排对齐编制口径）。
 ##
 ## 编制（现实军衔体系重排，融合 FormationSystem 排聚合层 + 火力组指挥分组）：
 ##   班 squad = 8~12 人小班（硬顶 15），班长 1 名（rank 1，阵亡经组织侧补位免费无缝轮转）；
@@ -59,6 +64,10 @@ const _TacticsAPI: GDScript = preload("res://modules/tactics/api.gd")
 ## AI 决策观察窗（V 键开关，默认关）：调试场景工具件，浮窗 FLOATING 先例，
 ## 纯只读观测（ai_viz_snapshot 快照层 + EventBus 切换信号）
 const _AiVizWindowScript: GDScript = preload("res://modules/debug_gui/scripts/ai_viz_window.gd")
+## 编队配置窗（C 键开关）：双方兵力构成编辑 + 持久化（见头注释「编队配置化」段）
+const _CompPanelScript: GDScript = preload("res://tests/dev/arena_composition_panel.gd")
+## 自定义编成持久化路径（user://；配置窗「应用并重开」时写入）
+const CUSTOM_SAVE_PATH := "user://arena_composition.json"
 
 ## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
 const W_SWORD: int = 0
@@ -158,8 +167,11 @@ const PRESETS: Array = [
 ]
 ## 当前预设下标（static：场景 reload 重开/切预设后保持所选档位）。
 ## 默认 0 = 遭遇战·16——观感验收主档对齐设计口径（02-战斗 二-A.1「每侧最多
-## 十几二十几」，96 档封存；48/96 只作密度压力对照）
+## 十几二十几」，96 档封存；48/96 只作密度压力对照）。3 = 自定义档（保存过
+## 编队配置时存在，见 _effective_presets）
 static var _preset_idx: int = 0
+## 自定义编成缓存（static：配置窗应用后随进程保持；文件为持久层真相源）
+static var _custom_comp: Dictionary = {}
 ## 左右两团出生线 x 相对地图中线的偏移。视野预算（创始人 2026-10-12 裁决：
 ## 出生范围要在视野范围内列阵）：1.0 缩放可视半宽 960。横距 230 档（战场
 ## 垂直碰撞超级大批联动）下 16 主档纵深链 = 阵线偏移 330 + 近战 3 排 200 +
@@ -256,14 +268,165 @@ var _camera_following: bool = false
 var _cover: ColorRect = null
 ## AI 决策观察窗（V 键开关，默认关——任务口径：观察场挂开关默认不启用）
 var _ai_viz_window: Control = null
+## 编队配置窗（C 键开关，默认关——改完要「应用并重开」才生效）
+var _comp_panel: Control = null
 
 
 func _ready() -> void:
+	# 自定义档失效（存档被删/损坏）时回退主档，防 _preset_idx 悬空越界
+	if _preset_idx >= _effective_presets().size():
+		_preset_idx = 0
 	_build_cover()
 	_game_root = _GameRootScene.instantiate()
 	add_child(_game_root)
 	_build_hud()
 	_spawn_and_start.call_deferred()
+
+
+# ─────────────────────────── 编队配置化 ───────────────────────────
+
+## 生效预设列表 = 三档内置 + 自定义（保存过编成时存在）。自定义镜像 =
+## 双方共用左方编成；左右独立 = squads_right 另给。排聚合自动推
+##（_auto_platoons），班长/火力组编成与内置档同管线（见 _spawn_and_start）。
+static func _effective_presets() -> Array:
+	var list: Array = PRESETS.duplicate()
+	var comp := _load_custom()
+	if not comp.is_empty():
+		var left: Array = comp["left"]
+		var entry: Dictionary = {
+			"name": "自定义",
+			"mirror": comp["mirror"],
+			"squads": left,
+			"platoons": _auto_platoons(left.size()),
+		}
+		if not comp["mirror"]:
+			var right: Array = comp["right"]
+			entry["squads_right"] = right
+			entry["platoons_right"] = _auto_platoons(right.size())
+		list.append(entry)
+	return list
+
+
+## 自定义编成读取（static 缓存 + 文件持久层；缺失/损坏 → 空 = 无第四档）
+static func _load_custom() -> Dictionary:
+	if not _custom_comp.is_empty():
+		return _custom_comp
+	if not FileAccess.file_exists(CUSTOM_SAVE_PATH):
+		return {}
+	var f := FileAccess.open(CUSTOM_SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed = JSON.parse_string(f.get_as_text())
+	f.close()
+	_custom_comp = _sanitize_custom(parsed)
+	return _custom_comp
+
+
+## 自定义编成合法性钳制（文件可能手改/跨版本：类型/范围全防御，越界裁剪）
+static func _sanitize_custom(v) -> Dictionary:
+	if typeof(v) != TYPE_DICTIONARY:
+		return {}
+	var mirror: bool = bool(v.get("mirror", true))
+	var left := _sanitize_side(v.get("left", []))
+	if left.is_empty():
+		return {}
+	var right: Array = []
+	if not mirror:
+		right = _sanitize_side(v.get("right", []))
+		if right.is_empty():
+			return {}
+	return {"mirror": mirror, "left": left, "right": right}
+
+
+## 单侧编成钳制：班 ≤8 / 班内行 ≤6 / 单行 1~50 人 / 侧总 ≤192（96 档天花板再
+## 翻倍封顶——一屏几何物理上限，超出裁剪不拒绝）
+static func _sanitize_side(side_v) -> Array:
+	if typeof(side_v) != TYPE_ARRAY:
+		return []
+	var out: Array = []
+	var total := 0
+	for squad_v in side_v:
+		if out.size() >= 8:
+			break
+		if typeof(squad_v) != TYPE_DICTIONARY:
+			continue
+		var rows_v = squad_v.get("rows", [])
+		if typeof(rows_v) != TYPE_ARRAY:
+			continue
+		var rows: Array = []
+		for row_v in rows_v:
+			if rows.size() >= 6:
+				break
+			if typeof(row_v) != TYPE_DICTIONARY:
+				continue
+			var w: int = int(row_v.get("weapon", -1))
+			var c: int = int(row_v.get("count", 0))
+			if w < 0 or w > 5 or c <= 0:
+				continue
+			c = mini(c, 50)
+			if total + c > 192:
+				c = 192 - total
+			if c <= 0:
+				break
+			total += c
+			rows.append({"weapon": w, "count": c})
+		if rows.is_empty():
+			continue
+		out.append({"name": String(squad_v.get("name", "")), "rows": rows})
+	return out
+
+
+## 排聚合自动推导（自定义编成用）：班 <4 不设排长层（同 16 档 Tier0 口径）；
+## ≥4 两两成排，奇数尾量并进三班排（排 = 2~3 个班，对齐编制口径）
+static func _auto_platoons(n: int) -> Array:
+	if n < 4:
+		return []
+	var res: Array = []
+	var i := 0
+	while i < n:
+		if (n - i) % 2 == 1 and (n - i) >= 3:
+			res.append([i, i + 1, i + 2])
+			i += 3
+		else:
+			res.append([i, i + 1])
+			i += 2
+	return res
+
+
+## 配置窗「载入当前」入口：当前生效预设 → 编辑态深拷贝（含右方独立编成）
+func _composition_for_edit() -> Dictionary:
+	var preset: Dictionary = _effective_presets()[_preset_idx]
+	return {
+		"mirror": preset.get("mirror", true),
+		"left": (preset["squads"] as Array).duplicate(true),
+		"right": (preset.get("squads_right", preset["squads"]) as Array).duplicate(true),
+	}
+
+
+## 配置窗「应用并重开」入口：落盘 + 切自定义档重开（面板侧已推导班名，
+## 这里再过一遍防线钳制）
+func apply_custom_composition(comp: Dictionary) -> void:
+	var sane := _sanitize_custom(comp)
+	if sane.is_empty():
+		push_warning("[Arena] 自定义编成无效，忽略")
+		return
+	_custom_comp = sane
+	var f := FileAccess.open(CUSTOM_SAVE_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(sane, "\t"))
+		f.close()
+	_preset_idx = PRESETS.size()   # 自定义 = 内置档后的第四档
+	get_tree().reload_current_scene()
+
+
+## 编队配置窗开关（C 键；打开时载入当前生效编成）
+func _toggle_comp_panel() -> void:
+	if _comp_panel == null or not is_instance_valid(_comp_panel):
+		return
+	if _comp_panel.visible:
+		_comp_panel.close()
+	elif _comp_panel.has_method("open_with"):
+		_comp_panel.open_with(_composition_for_edit())
 
 
 func _spawn_and_start() -> void:
@@ -358,15 +521,17 @@ func _spawn_and_start() -> void:
 	var minimap: Node = _game_root.get("_minimap")
 	if minimap != null and is_instance_valid(minimap) and minimap.has_method("set_map_info"):
 		minimap.set_map_info(map.map_left, map.map_right, map.ground_y, map.ground_ratio)
-	# 按编制出生（左攻右守，镜像）——出生位 = 战线组方阵槽位本位（02 二-A.3
+	# 按编制出生（左攻右守）——出生位 = 战线组方阵槽位本位（02 二-A.3
 	# 「组方阵纵向铺满行动带」落码）：近战组/远程组各一个组级方阵，列高/槽深
 	# 用 BattleLine 静态式（单一真相源），出生序 = 槽序 = 入线序——开局即成阵
 	# 面向敌军，无收拢期倒走/横穿（旧按班行块出生与战线槽位两套几何，开战
 	# 走位 transient = 「全员回头」根因之一）。祭司随远程组（SWL 层序 HEALERS
 	# 后置，battle_line.add_unit 同口径）。
-	var squad_defs: Array = PRESETS[_preset_idx]["squads"]
-	var squads_left: Array = []
-	var squads_right: Array = []
+	# 编队配置化：镜像档双方共用编成（squads）；自定义档可左右独立
+	#（squads_right / platoons_right），几何按各侧编成独立推导（_spawn_side）。
+	var preset: Dictionary = _effective_presets()[_preset_idx]
+	var squad_defs: Array = preset["squads"]
+	var defs_right: Array = preset.get("squads_right", squad_defs)
 	var fs: Node = _game_root.get_formation_system()
 	# 战场间距档（2026-10-14 裁决#40b：碰撞椭球 112/440 与摆放解耦——摆放
 	# 紧凑不随椭球联动，超椭球接近对由分离力自然展开）：
@@ -380,59 +545,10 @@ func _spawn_and_start() -> void:
 	fs.SPREAD_SPACING = 150.0
 	BattleLine.RESERVE_GAP = 110.0
 	BattleLine.GROUP_GAP = 130.0
-	var melee_total: int = 0
-	var ranged_total: int = 0
-	for def in squad_defs:
-		for row in def["rows"]:
-			if int(row["weapon"]) in [W_BOW, W_STAFF, W_MERIC]:
-				ranged_total += int(row["count"])
-			else:
-				melee_total += int(row["count"])
-	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
-	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带（旧"指挥条带"随摆场
-	# 指挥官/护卫根除，口径保留）
-	var upc_r: int = mini(BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING),
-			RANGED_UPC_CAP)
-	# 远程组出生基线 = 近战组全纵深 + GROUP_GAP（与 ranged_line_x 同式：开局
-	# 远程恰好站进自己的随行槽位）
-	var ranged_base_off: float = BattleLine.block_depth(melee_total, upc_m, fs.ROW_GAP) \
-			+ BattleLine.GROUP_GAP
-	var ranged_depth: float = BattleLine.block_depth(ranged_total, upc_r, fs.ROW_GAP)
 	var line_x0_l: float = mid_x - TEAM_OFFSET_X + 150.0
 	var line_x0_r: float = mid_x + TEAM_OFFSET_X - 150.0
-	var melee_idx: int = 0
-	var ranged_idx: int = 0
-	for si in squad_defs.size():
-		var def: Dictionary = squad_defs[si]
-		var l_units: Array = []
-		var r_units: Array = []
-		var rows: Array = def["rows"]
-		for row in rows:
-			var ranged_grp: bool = int(row["weapon"]) in [W_BOW, W_STAFF, W_MERIC]
-			for _k in int(row["count"]):
-				var idx: int = ranged_idx if ranged_grp else melee_idx
-				var upc: int = upc_r if ranged_grp else upc_m
-				var slot := Vector2i(floori(float(idx) / float(upc)), idx % upc)
-				var lateral: float = (float(slot.y) - float(upc - 1) * 0.5) * fs.SPREAD_SPACING
-				var depth: float = BattleLine.rank_depth(slot.x, fs.ROW_GAP) \
-						+ (ranged_base_off if ranged_grp else 0.0)
-				var y: float = spawn_y + lateral
-				# 左军面向 +x：后列向自方退（−depth）；右军镜像（+depth）
-				var lt := _spawn_unit(map, Vector2(line_x0_l - depth, y), int(row["weapon"]), fs, 1)
-				if lt != null:
-					l_units.append(lt)
-					_attacker.append(lt)
-				var rt := _spawn_unit(map, Vector2(line_x0_r + depth, y), int(row["weapon"]), fs, -1)
-				if rt != null:
-					r_units.append(rt)
-					_defender.append(rt)
-				if ranged_grp:
-					ranged_idx += 1
-				else:
-					melee_idx += 1
-		squads_left.append(l_units)
-		squads_right.append(r_units)
-		await get_tree().process_frame
+	var squads_left: Array = await _spawn_side(map, squad_defs, 1, line_x0_l, spawn_y, fs)
+	var squads_right: Array = await _spawn_side(map, defs_right, -1, line_x0_r, spawn_y, fs)
 	var battle: Node = _game_root.start_test_battle(_attacker, _defender)
 	# 出生域视野自检（裁决#28 硬验收「出生范围在视野范围内列阵」）：主档/密度档
 	# 须整体入画；96 封存档密度几何装不进一屏，预期超界（打印告示不阻断）。
@@ -443,9 +559,9 @@ func _spawn_and_start() -> void:
 	var bounds_half_now: float = (map.map_right - map.map_left) * 0.5
 	if spawn_far > bounds_half_now:
 		print("[Arena] 预设[%s] 出生域半宽 %.0f 超出可走边界 %.0f（封存压力档预期超界）"
-				% [PRESETS[_preset_idx]["name"], spawn_far, bounds_half_now])
+				% [preset["name"], spawn_far, bounds_half_now])
 	print("[Arena] 预设[%s] 战斗开始: battle=%s 左 %d 人 vs 右 %d 人（出生半宽 %.0f / 视野边界 %.0f）"
-			% [PRESETS[_preset_idx]["name"], battle, _attacker.size(), _defender.size(), spawn_far, bounds_half_now])
+			% [preset["name"], battle, _attacker.size(), _defender.size(), spawn_far, bounds_half_now])
 	# 开战自动暂停豁免（TimeManager._on_battle_started，game/auto_pause_battle 默认
 	# true 会把全局时间置 PAUSED）：观察场要直接开演，自动恢复 X1；空格仍可手动暂停
 	if TimeManager != null and TimeManager.is_paused():
@@ -456,25 +572,22 @@ func _spawn_and_start() -> void:
 	var right_squad_ids: Array = []
 	for si in squad_defs.size():
 		left_squad_ids.append(_make_squad(fs, squads_left[si], "%s·蓝" % squad_defs[si]["name"]))
-		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % squad_defs[si]["name"]))
+	for si in defs_right.size():
+		right_squad_ids.append(_make_squad(fs, squads_right[si], "%s·红" % defs_right[si]["name"]))
 	# 排聚合层编成（现实军衔体系重排）：按预设 platoons 分组建排 + 任命排长
 	#（rank 2；排长 = 排内第一班的队首成员，班长取队列中位，两者不重合互不挤占）。
 	# 排长阵亡 = 该排指挥链缺口（失去集火/光环），班照常执行规划器号令。
-	for platoon_def_v in PRESETS[_preset_idx].get("platoons", []):
-		var members: Array = platoon_def_v
-		var l_ids: Array = []
-		var r_ids: Array = []
-		for mi in members.size():
-			l_ids.append(left_squad_ids[int(members[mi])])
-			r_ids.append(right_squad_ids[int(members[mi])])
-		var _l_pid: String = _make_platoon(fs, l_ids, squads_left, members)
-		var _r_pid: String = _make_platoon(fs, r_ids, squads_right, members)
+	# 自定义档 platoons 自动推（_auto_platoons）；左右独立时各推各的。
+	_make_platoons(fs, preset.get("platoons", []), left_squad_ids, squads_left)
+	_make_platoons(fs, preset.get("platoons_right", preset.get("platoons", [])),
+			right_squad_ids, squads_right)
 	# 火力组编成（班内指挥分组，创始人编制口径）：每班劈一号/二号两组——组长 =
 	# 组内首员无标记，火力组不拆散班聚结、不占军衔；号令通道已通（TacticalOrders
 	# issue 对 ft_id 寻址）。军师规划器仍按班下令不动——细分是后续班长级 AI 的地基。
 	_arena_fireteams = { 1: [], 2: [] }
-	for si in squad_defs.size():
+	for si in left_squad_ids.size():
 		_arena_fireteams[1].append_array(_make_fireteams(fs, left_squad_ids[si]))
+	for si in right_squad_ids.size():
 		_arena_fireteams[2].append_array(_make_fireteams(fs, right_squad_ids[si]))
 	# 开战推进接管权分流：夺点模式 = 意图规划器（布点 + 双方各一台，0.5s 节拍
 	# 自主攻点/驻防/接火）；关闭 = 完整回退旧开战逻辑（下 else 分支，逐行原样）
@@ -501,6 +614,77 @@ func _spawn_and_start() -> void:
 		opening_hint.queue_free()
 	_camera_following = true
 	_reveal()
+
+
+## 单侧出生（编队配置化拆出：左右编成可独立）。side +1 = 左攻方（面向 +x，
+## 后列向自方退 −depth），-1 = 右守方（镜像 +depth）。返回班单位列表（每班
+## 一个数组，顺序对齐 defs）；近战/远程组方阵几何按本侧编成独立推导（口径
+## 同旧镜像逻辑——upc 横展/纵深链/远程基线一式不动）。每班一帧分摊出生。
+func _spawn_side(map: Node2D, defs: Array, side: int, line_x0: float, spawn_y: float,
+		fs: Node) -> Array:
+	var melee_total: int = 0
+	var ranged_total: int = 0
+	for def in defs:
+		for row in def["rows"]:
+			if int(row["weapon"]) in [W_BOW, W_STAFF, W_MERIC]:
+				ranged_total += int(row["count"])
+			else:
+				melee_total += int(row["count"])
+	var upc_m: int = BattleLine.group_upc(melee_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING)
+	# 远程组列高封顶（RANGED_UPC_CAP）：横展不铺满行动带（口径同旧）
+	var upc_r: int = mini(BattleLine.group_upc(ranged_total, ACTION_BAND_HALF_PX, fs.SPREAD_SPACING),
+			RANGED_UPC_CAP)
+	# 远程组出生基线 = 近战组全纵深 + GROUP_GAP（开局恰好站进随行槽位）
+	var ranged_base_off: float = BattleLine.block_depth(melee_total, upc_m, fs.ROW_GAP) \
+			+ BattleLine.GROUP_GAP
+	var squads: Array = []
+	var melee_idx: int = 0
+	var ranged_idx: int = 0
+	for def in defs:
+		var units: Array = []
+		var rows: Array = def["rows"]
+		for row in rows:
+			var ranged_grp: bool = int(row["weapon"]) in [W_BOW, W_STAFF, W_MERIC]
+			for _k in int(row["count"]):
+				var idx: int = ranged_idx if ranged_grp else melee_idx
+				var upc: int = upc_r if ranged_grp else upc_m
+				var slot := Vector2i(floori(float(idx) / float(upc)), idx % upc)
+				var lateral: float = (float(slot.y) - float(upc - 1) * 0.5) * fs.SPREAD_SPACING
+				var depth: float = BattleLine.rank_depth(slot.x, fs.ROW_GAP) \
+						+ (ranged_base_off if ranged_grp else 0.0)
+				var y: float = spawn_y + lateral
+				var u := _spawn_unit(map, Vector2(line_x0 - side * depth, y),
+						int(row["weapon"]), fs, side)
+				if u != null:
+					units.append(u)
+					if side == 1:
+						_attacker.append(u)
+					else:
+						_defender.append(u)
+				if ranged_grp:
+					ranged_idx += 1
+				else:
+					melee_idx += 1
+		squads.append(units)
+		await get_tree().process_frame
+	return squads
+
+
+## 单侧排聚合编成（编队配置化拆出：左右独立时各调各的）。platoons = 班下标
+## 分组（预设硬编码或自定义自动推）；下标越界（手改存档）跳过该班不炸。
+func _make_platoons(fs: Node, platoons: Array, squad_ids: Array, squads_units: Array) -> void:
+	for platoon_def_v in platoons:
+		var members: Array = platoon_def_v
+		var ids: Array = []
+		var valid_members: Array = []
+		for mi in members.size():
+			var si := int(members[mi])
+			if si < squad_ids.size():
+				ids.append(squad_ids[si])
+				valid_members.append(si)
+		if ids.is_empty():
+			continue
+		var _pid: String = _make_platoon(fs, ids, squads_units, valid_members)
 
 
 # ─────────────────────────────── 开场遮罩 ────────────────────────────────
@@ -892,8 +1076,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_tree().reload_current_scene()
 			KEY_SPACE:
 				_toggle_pause()
-			KEY_1, KEY_2, KEY_3:
+			KEY_1, KEY_2, KEY_3, KEY_4:
 				_switch_preset(int(event.keycode) - int(KEY_1))
+			KEY_C:
+				_toggle_comp_panel()
 			KEY_V:
 				_toggle_ai_viz()
 
@@ -905,9 +1091,10 @@ func _toggle_ai_viz() -> void:
 		_ai_viz_window.toggle()
 
 
-## 切换对战预设并立即重开（static _preset_idx 跨 reload 保持所选档位）。
+## 切换对战预设并立即重开（static _preset_idx 跨 reload 保持所选档位；
+## 生效列表含「自定义」第四档——保存过编队配置才存在，越界键忽略）
 func _switch_preset(idx: int) -> void:
-	if idx < 0 or idx >= PRESETS.size() or idx == _preset_idx:
+	if idx < 0 or idx >= _effective_presets().size() or idx == _preset_idx:
 		return
 	_preset_idx = idx
 	get_tree().reload_current_scene()
@@ -950,12 +1137,17 @@ func _build_hud() -> void:
 	_flag_label = _make_label(board_v, Vector2.ZERO, Color(0.92, 0.85, 0.5), StickTokens.FONT_HUD)
 	_ft_label = _make_label(board_v, Vector2.ZERO, Color(0.75, 0.9, 0.75), StickTokens.FONT_HUD)
 	_hint_label = _make_label(board_v, Vector2.ZERO, Color(0.8, 0.8, 0.8), StickTokens.FONT_HINT)
-	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
+	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1-4 换预设 · C 编队配置 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
 	# AI 决策观察窗（V 键开关，默认关）：UIKit.full_rect 合规出口装配（全屏 Control
 	# 根 + 内部绝对定位浮窗，先例 DebugOverlay 装配 DebugToolsPanel），挂 HUD 层
 	_ai_viz_window = UIKit.full_rect(_AiVizWindowScript, "AiVizWindow")
 	ui_root.add_child(_ai_viz_window)
-	# 控制面板（底部居中）：对战预设按钮组 + 重开按钮——点按立即重开
+	# 编队配置窗（C 键开关，默认关）：同 full_rect 出口装配；内置三档注入面板
+	#（面板不反向 preload 本脚本，防环）
+	_comp_panel = UIKit.full_rect(_CompPanelScript, "ArenaCompPanel")
+	_comp_panel.setup(self, _builtin_presets_for_panel())
+	ui_root.add_child(_comp_panel)
+	# 控制面板（底部居中）：对战预设按钮组（含自定义第四档）+ 编队配置 + 重开
 	var panel := SketchPanel.new()
 	panel.name = "ControlPanel"
 	panel.tone = SketchPanel.Tone.LIGHT
@@ -967,15 +1159,26 @@ func _build_hud() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	panel.add_child(row)
-	for pi in PRESETS.size():
-		var btn := StickKit.sketch_button(row, "%d·%s" % [pi + 1, PRESETS[pi]["name"]],
+	var presets := _effective_presets()
+	for pi in presets.size():
+		var btn := StickKit.sketch_button(row, "%d·%s" % [pi + 1, presets[pi]["name"]],
 				_switch_preset.bind(pi), StickKit.ButtonKind.NORMAL, 30.0)
 		btn.toggle_mode = true
 		_preset_buttons.append(btn)
+	StickKit.sketch_button(row, "编队配置 (C)", _toggle_comp_panel,
+			StickKit.ButtonKind.NORMAL, 30.0)
 	StickKit.sketch_button(row, "重开 (R)",
 			func() -> void: get_tree().reload_current_scene(),
 			StickKit.ButtonKind.NORMAL, 30.0)
 	_refresh_preset_buttons()
+
+
+## 内置三档预设的面板注入件（名称 + 编成深拷贝——面板载入档位用）
+func _builtin_presets_for_panel() -> Array:
+	var out: Array = []
+	for p in PRESETS:
+		out.append({"name": p["name"], "squads": (p["squads"] as Array).duplicate(true)})
+	return out
 
 
 ## 预设按钮高亮态（当前档位按下锁定）
@@ -1007,7 +1210,7 @@ func _update_hud() -> void:
 	if _attacker.is_empty() or _defender.is_empty():
 		_left_alive_label.text = "蓝方（攻）集结中"
 		_right_alive_label.text = "红方（守）集结中"
-		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1-4 换预设 · C 编队配置 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
 		return
 	var la := _count_alive(_attacker)
 	var ra := _count_alive(_defender)
@@ -1016,7 +1219,7 @@ func _update_hud() -> void:
 	if la == 0 or ra == 0:
 		_hint_label.text = "战斗结束：%s 获胜 —— R 重开 / 换预设" % ("蓝方" if ra == 0 else "红方")
 	else:
-		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1-4 换预设 · C 编队配置 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
 
 
 func _count_alive(units: Array) -> int:

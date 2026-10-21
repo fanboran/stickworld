@@ -224,5 +224,12 @@ func draw_vector_fallback(zz: float) -> void:
 			pts.resize(outer.size())
 			for i in outer.size():
 				pts[i] = outer[i] + sref.position
+			# 退化环预检：共线/重复点环 shoelace 面积≈0，draw_colored_polygon
+			# 三角化必败（Invalid polygon data 刷屏）；退化环本无可见面，直接跳过。
+			var area2 := 0.0
+			for i in pts.size():
+				area2 += pts[i].cross(pts[(i + 1) % pts.size()])
+			if absf(area2) < 1.0:
+				continue
 			_h.draw_colored_polygon(pts, _h.BLOB_FILL)
 			_h.draw_polyline(_GeoLib.closed(pts), edge, bew, true)

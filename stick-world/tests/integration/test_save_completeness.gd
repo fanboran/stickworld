@@ -1,6 +1,6 @@
 extends Node
 ## 集成测试：读档完整性三件——真实 SaveManager + SaveHandler + 编队/组织模块全链路
-## （存 → 读 → 断言；GameRoot 全链 boot，同 test_battle_retreat 模式）。
+## （存 → 读 → 断言；GameRoot 全链 boot，全链 boot 模式）。
 ##
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_save_completeness.tscn -- --fresh-start
@@ -46,7 +46,7 @@ func _boot_async() -> void:
 		get_tree().quit(1)
 		return
 	_game_root = packed.instantiate()
-	_game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场（与 battle_retreat 同图）
+	_game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场（HD-2D 城郊战场图）
 	add_child(_game_root)
 	var ok: bool = await TestHelpers.await_condition(
 		func(): return _get_map() != null, SETTLE_TIMEOUT, "GameRoot 地图就绪")

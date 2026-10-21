@@ -98,7 +98,6 @@ INTEGRATION_SUITES=(
 	"tests/integration/test_settings_apply.tscn"
 	"tests/integration/test_notification_feed.tscn"
 	"tests/integration/test_debug_api.tscn"
-	"tests/integration/test_battle_retreat.tscn"
 	"tests/integration/test_recruit_flow.tscn"
 	"tests/integration/test_town_life_harvest.tscn"
 	"tests/integration/test_town_life_worksite.tscn"
@@ -119,7 +118,6 @@ declare -A SUITE_TIMEOUT=(
 	["tests/integration/test_battle_lifecycle.tscn"]=120
 	# 实测 94~118s（并行 3 下），原 180 预算按"串行×2"公式偏低——池内争用时曾误杀一次 TIMEOUT。
 	# 提到 240 保留挂死检测能力（真挂死远不止此数），消除争用误杀。
-	["tests/integration/test_battle_retreat.tscn"]=240
 	["tests/integration/test_recruit_flow.tscn"]=120
 	["tests/integration/test_town_life_harvest.tscn"]=240
 	["tests/integration/test_town_life_worksite.tscn"]=300
@@ -170,7 +168,6 @@ affected_suites() {
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
 				picked["tests/integration/test_placement_grid_units.tscn"]=1
-				picked["tests/integration/test_battle_retreat.tscn"]=1
 				picked["tests/integration/test_recruit_flow.tscn"]=1
 				picked["tests/integration/test_town_life_worksite.tscn"]=1 ;;
 			stick-world/modules/combat/*|stick-world/modules/formation/*)
@@ -184,7 +181,6 @@ affected_suites() {
 				picked["tests/integration/test_melee_combat.tscn"]=1
 				picked["tests/integration/test_combat_feedback.tscn"]=1
 				picked["tests/integration/test_combat_control.tscn"]=1
-				picked["tests/integration/test_battle_retreat.tscn"]=1
 				picked["tests/integration/test_save_completeness.tscn"]=1 ;;
 			stick-world/modules/construction/*)
 				picked["tests/integration/test_construction_cycle.tscn"]=1

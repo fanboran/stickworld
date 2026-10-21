@@ -3,7 +3,7 @@ extends Node
 ##
 ## 职责：随机对阵生成 → 编程造战（不走 battle_arena 场景，无 TeamAi / 无意图规划器，
 ## 网络是唯一指挥官）→ 观察编码（全特征"己方视角"镜像化）→ 动作翻译下发 →
-## 夺点结算 tick → 终局奖励素材收集。造战模式参照 tests/integration/test_battle_retreat.gd
+## 夺点结算 tick → 终局奖励素材收集。造战模式参照集成测试全链 boot 先例
 ## 的 _setup_battle（map.spawn_entity + start_test_battle）。
 ##
 ## 训练协议（创始人 2026-09-30 修正版）：每轮迭代随机抽一个对阵（双方兵种比例与

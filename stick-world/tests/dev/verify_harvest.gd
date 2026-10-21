@@ -33,10 +33,10 @@ func _run() -> void:
 		return
 	_pass("资源点生成正常：%d 个" % nodes.size())
 
-	# 2) 找玩家（possessed 实体）与其交互控制器
+	# 2) 找玩家（user_controlled 实体）与其交互控制器
 	var player: Node2D = _find_player()
 	if player == null:
-		_fail("未找到附身玩家实体", failures)
+		_fail("未找到接管玩家实体", failures)
 		_quit(1)
 		return
 	var interaction: Node = player.get_node_or_null("InteractionController")
@@ -103,7 +103,7 @@ func _find_player() -> Node2D:
 		return null
 	for e in map.get_entities():
 		var ent := e as Node2D
-		if ent != null and ent.has_method("is_possessed") and ent.is_possessed():
+		if ent != null and ent.has_method("is_user_controlled") and ent.is_user_controlled():
 			return ent
 	return null
 

@@ -75,12 +75,12 @@ func on_died() -> void:
 	if bi != null and is_instance_valid(bi):
 		if bi.has_method("on_unit_died"):
 			bi.on_unit_died(_entity)
-	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
+	# 尸体遗物（翻包式掉落，items 域容器）：玩家接管实体不掉（装备属于玩家
 	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")。
 	# 滞留/淡出由 _physics_process 死亡分支的物理帧计时**唯一驱动**
 	#（A1b：旧 tween 与物理计时双驱动打架——有遗物尸体在 alpha≈0.36 被物理
 	# 路径瞬删跳变；时长真相源归一 4/12s + 1.2s 淡出）
-	if not _entity.possessed:
+	if not _entity.user_controlled:
 		generate_loot_container()
 
 
@@ -103,9 +103,9 @@ func tick_corpse(delta: float) -> void:
 	# 堆满战场）——碰撞禁用后停留 CORPSE_LIFETIME，再 CORPSE_FADE 淡入地里移除；
 	# 有遗物的尸体停留 ×3（12s 翻检窗口，与 on_died tween 同拍）；翻空的
 	# 尸体快进淡出（遗物被搬走，不再占战场）
-	elif not _entity.possessed and _entity._corpse_fade_timer < 0.0:
+	elif not _entity.user_controlled and _entity._corpse_fade_timer < 0.0:
 		_entity._corpse_fade_timer = CORPSE_LIFETIME * (3.0 if _entity.has_meta("loot") else 1.0)
-	if not _entity.possessed and _entity._corpse_fade_timer >= 0.0:
+	if not _entity.user_controlled and _entity._corpse_fade_timer >= 0.0:
 		if _entity._corpse_fade_timer > CORPSE_FADE:
 			var loot: ItemContainer = get_loot_container()
 			if loot != null and loot.is_empty():

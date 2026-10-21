@@ -9,7 +9,7 @@ extends Node
 ##     （防双重遮罩，揭示时恢复可见）
 ##
 ## 由 UIRoot 装配（UIModalStack 子节点）；GameRoot._handle_escape 只保留
-## POSSESS 特判与"空栈 → 开暂停菜单"，其余全部委托给本栈。
+## USER_CONTROL 特判与"空栈 → 开暂停菜单"，其余全部委托给本栈。
 ## 非模态窗口（StickWindow FLOATING/DOCK/POPOVER）不入栈，ESC 自关。
 
 # ─────────────────────────────── 层键 ────────────────────────────────

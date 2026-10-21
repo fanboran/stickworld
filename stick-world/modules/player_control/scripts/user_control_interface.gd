@@ -1,16 +1,16 @@
-class_name PossessionInterface
+class_name UserControlInterface
 extends Node
-## 附身接口 -- POSSESS 模式 handler。
+## User Control 接口 -- USER_CONTROL 模式 handler。
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §7.1.3、§7.5。
 ##
 ## 职责：
-##   1. 进入 POSSESS 模式时，从 SelectionSystem 取选中单位（或沿用 EXPLORE 已附身实体）
-##   2. 调用 entity.set_possessed(true)，暂停 AIController
+##   1. 进入 USER_CONTROL 模式时，从 SelectionSystem 取选中单位（或沿用 EXPLORE 已接管实体）
+##   2. 调用 entity.set_user_controlled(true)，暂停 AIController
 ##   3. CameraRig 跟随该实体 + 居中模式
-##   4. 消费 TimeManager.auto_slow_on_possess（自动降速到 X1）
-##   5. 发射 EventBus.possession_started / possession_ended
-##   6. ESC 退出附身，回到进入前的模式
+##   4. 消费 TimeManager.auto_slow_on_user_control（自动降速到 X1）
+##   5. 发射 EventBus.user_control_started / user_control_ended
+##   6. ESC 退出接管，回到进入前的模式
 ##
 ## 实际 WASD/鼠标输入由 StickmanEntity._physics_process / _input 读取（P0 简化）。
 
@@ -21,15 +21,15 @@ var _camera_rig: Camera2D = null
 var _selection: Node = null
 
 # ─────────────────────────────── 状态 ────────────────────────────────
-## 当前附身的实体
-var _possessed_entity: Node2D = null
-## 进入 POSSESS 前的模式（退出时恢复）
+## 当前接管的实体
+var _user_controlled_entity: Node2D = null
+## 进入 USER_CONTROL 前的模式（退出时恢复）
 var _previous_mode: int = PlayerControlAPI.Mode.NONE
-## 附身前的时间速度（退出时恢复）
+## User Control 前的时间速度（退出时恢复）
 var _previous_speed: int = TimeManager.Speed.X1
 ## 是否已降速
 var _slowed_time: bool = false
-## 待附身实体（由外部在模式切换前设置，解决 SelectionSystem 清空选择的问题）
+## 待接管实体（由外部在模式切换前设置，解决 SelectionSystem 清空选择的问题）
 var _pending_entity: Node2D = null
 
 
@@ -47,19 +47,19 @@ func setup(game_root: Node) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# ESC 退出附身（echo 过滤：按住 ESC 键盘重复不连发）
+	# ESC 退出接管（echo 过滤：按住 ESC 键盘重复不连发）
 	if event is InputEventKey and event.pressed and not event.is_echo() and event.keycode == KEY_ESCAPE:
-		if _input_dispatcher != null and _input_dispatcher.has_method("is_mode") and _input_dispatcher.is_mode(PlayerControlAPI.Mode.POSSESS):
+		if _input_dispatcher != null and _input_dispatcher.has_method("is_mode") and _input_dispatcher.is_mode(PlayerControlAPI.Mode.USER_CONTROL):
 			_release_and_exit()
 			get_viewport().set_input_as_handled()
 
 
 # ─────────────────────────────── 模式回调 ────────────────────────────────
 
-## 设置待附身实体（在 enter_possess_mode() 之前调用）
+## 设置待接管实体（在 enter_user_control_mode() 之前调用）
 func set_pending_entity(entity: Node2D) -> void:
 	_pending_entity = entity
-	# 提前捕获当前模式（_on_mode_activated 时模式已切换为 POSSESS）
+	# 提前捕获当前模式（_on_mode_activated 时模式已切换为 USER_CONTROL）
 	if _input_dispatcher != null and _input_dispatcher.has_method("get_mode"):
 		_previous_mode = _input_dispatcher.get_mode()
 
@@ -69,18 +69,18 @@ func _on_mode_activated(_mode: int) -> void:
 	if _pending_entity == null:
 		if _input_dispatcher != null and _input_dispatcher.has_method("get_mode"):
 			_previous_mode = _input_dispatcher.get_mode()
-	# 取选中单位附身
-	_possess_selected_or_current()
+	# 取选中单位接管
+	_user_control_selected_or_current()
 
 
 func _on_mode_deactivated(_mode: int, _new_mode: int = PlayerControlAPI.Mode.NONE) -> void:
-	_release_possession()
+	_release_user_control()
 
 
-# ─────────────────────────────── 附身逻辑 ────────────────────────────────
+# ─────────────────────────────── 接管逻辑 ────────────────────────────────
 
-## 附身选中单位，若无选中则沿用当前已附身实体（从 EXPLORE 切换时）。
-func _possess_selected_or_current() -> void:
+## 接管选中单位，若无选中则沿用当前已接管实体（从 EXPLORE 切换时）。
+func _user_control_selected_or_current() -> void:
 	var target: Node2D = null
 	# 优先使用 pending entity（由 BattlePanel 在模式切换前设置）
 	if _pending_entity != null and is_instance_valid(_pending_entity):
@@ -92,27 +92,27 @@ func _possess_selected_or_current() -> void:
 		var units: Array = _selection.get_selected_units()
 		if not units.is_empty():
 			for u in units:
-				if is_instance_valid(u) and u.has_method("set_possessed"):
+				if is_instance_valid(u) and u.has_method("set_user_controlled"):
 					if not (u.has_method("is_dead") and u.is_dead()):
 						target = u
 						break
-	# 若无选中，尝试沿用当前已附身实体（EXPLORE -> POSSESS）
-	if target == null and _possessed_entity != null and is_instance_valid(_possessed_entity):
-		if not (_possessed_entity.has_method("is_dead") and _possessed_entity.is_dead()):
-			target = _possessed_entity
-	# 若仍无目标，尝试从地图取第一个可附身实体
+	# 若无选中，尝试沿用当前已接管实体（EXPLORE -> USER_CONTROL）
+	if target == null and _user_controlled_entity != null and is_instance_valid(_user_controlled_entity):
+		if not (_user_controlled_entity.has_method("is_dead") and _user_controlled_entity.is_dead()):
+			target = _user_controlled_entity
+	# 若仍无目标，尝试从地图取第一个可接管实体
 	if target == null:
 		target = _find_first_entity()
 	if target == null:
-		push_warning("[PossessionInterface] 未找到可附身实体")
+		push_warning("[UserControlInterface] 未找到可接管实体")
 		return
-	# 附身
-	if target.has_method("set_possessed"):
-		# 先解除之前附身的实体
-		if _possessed_entity != null and _possessed_entity != target and is_instance_valid(_possessed_entity):
-			_possessed_entity.set_possessed(false)
-		target.set_possessed(true)
-	_possessed_entity = target
+	# 接管
+	if target.has_method("set_user_controlled"):
+		# 先解除之前接管的实体
+		if _user_controlled_entity != null and _user_controlled_entity != target and is_instance_valid(_user_controlled_entity):
+			_user_controlled_entity.set_user_controlled(false)
+		target.set_user_controlled(true)
+	_user_controlled_entity = target
 	# 相机跟随 + 居中
 	if _camera_rig != null:
 		if _camera_rig.has_method("set_follow_target"):
@@ -123,39 +123,39 @@ func _possess_selected_or_current() -> void:
 	_slow_time()
 	# 发射信号
 	if EventBus != null:
-		EventBus.possession_started.emit(target)
+		EventBus.user_control_started.emit(target)
 
 
-## 释放附身
-func _release_possession() -> void:
-	if _possessed_entity == null:
+## 释放接管
+func _release_user_control() -> void:
+	if _user_controlled_entity == null:
 		# 已经释放（如 release() 内部先释放、随后 mode_deactivated 再次回调），不重复广播
 		return
-	if not is_instance_valid(_possessed_entity):
-		# 实体已销毁（如战斗中死亡）：仍要广播 possession_ended，
+	if not is_instance_valid(_user_controlled_entity):
+		# 实体已销毁（如战斗中死亡）：仍要广播 user_control_ended，
 		# 否则依赖方（HUD/面板）状态残留（2026-08 审计修复）
-		_possessed_entity = null
+		_user_controlled_entity = null
 		_restore_time()
 		if EventBus != null:
-			EventBus.possession_ended.emit(null)
+			EventBus.user_control_ended.emit(null)
 		return
-	if _possessed_entity.has_method("set_possessed"):
-		_possessed_entity.set_possessed(false)
+	if _user_controlled_entity.has_method("set_user_controlled"):
+		_user_controlled_entity.set_user_controlled(false)
 	# 发射信号
 	if EventBus != null:
-		EventBus.possession_ended.emit(_possessed_entity)
-	_possessed_entity = null
+		EventBus.user_control_ended.emit(_user_controlled_entity)
+	_user_controlled_entity = null
 	# 恢复时间速度
 	_restore_time()
 
 
-## 释放附身并退出 POSSESS 模式
+## 释放接管并退出 USER_CONTROL 模式
 func _release_and_exit() -> void:
-	_release_possession()
+	_release_user_control()
 	# 回到之前的模式（BATTLE 或 EXPLORE）
 	if _input_dispatcher != null and _input_dispatcher.has_method("set_mode"):
 		var restore_mode: int = _previous_mode
-		if restore_mode == PlayerControlAPI.Mode.NONE or restore_mode == PlayerControlAPI.Mode.POSSESS:
+		if restore_mode == PlayerControlAPI.Mode.NONE or restore_mode == PlayerControlAPI.Mode.USER_CONTROL:
 			restore_mode = PlayerControlAPI.Mode.EXPLORE
 		_input_dispatcher.set_mode(restore_mode)
 	# 相机取消居中
@@ -166,14 +166,14 @@ func _release_and_exit() -> void:
 ## 从地图找第一个可用 StickmanEntity
 func _find_first_entity() -> Node2D:
 	if _game_root == null:
-		push_warning("[PossessionInterface] game_root 未注入（setup 未调用？）")
+		push_warning("[UserControlInterface] game_root 未注入（setup 未调用？）")
 		return null
 	var map: Node2D = _game_root.get_current_map()
 	if map == null:
 		return null
 	if map.has_method("get_entities"):
 		for e in map.get_entities():
-			if e is CharacterBody2D and e.has_method("set_possessed"):
+			if e is CharacterBody2D and e.has_method("set_user_controlled"):
 				if not (e.has_method("is_dead") and e.is_dead()):
 					return e
 	return null
@@ -181,11 +181,11 @@ func _find_first_entity() -> Node2D:
 
 # ─────────────────────────────── 时间控制 ────────────────────────────────
 
-## 附身时自动降速到 X1
+## User Control 时自动降速到 X1
 func _slow_time() -> void:
 	if TimeManager == null:
 		return
-	if not TimeManager.auto_slow_on_possess:
+	if not TimeManager.auto_slow_on_user_control:
 		return
 	# 记录当前速度
 	_previous_speed = TimeManager.current_speed
@@ -195,7 +195,7 @@ func _slow_time() -> void:
 	_slowed_time = true
 
 
-## 恢复附身前的时间速度
+## 恢复 User Control 前的时间速度
 func _restore_time() -> void:
 	if not _slowed_time:
 		return
@@ -208,26 +208,26 @@ func _restore_time() -> void:
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
 
-## 获取当前附身的实体
-func get_possessed_entity() -> Node2D:
-	return _possessed_entity
+## 获取当前接管的实体
+func get_user_controlled_entity() -> Node2D:
+	return _user_controlled_entity
 
 
-## 主动附身指定实体（供测试或 UI 按钮调用）
-func possess(entity: Node2D) -> void:
+## 主动接管指定实体（供测试或 UI 按钮调用）
+func control(entity: Node2D) -> void:
 	if entity == null or not is_instance_valid(entity):
 		return
-	if not entity.has_method("set_possessed"):
+	if not entity.has_method("set_user_controlled"):
 		return
-	# 死亡单位不可附身
+	# 死亡单位不可接管
 	if entity.has_method("is_dead") and entity.is_dead():
 		return
 	# 先释放当前
-	if _possessed_entity != null and _possessed_entity != entity and is_instance_valid(_possessed_entity):
-		_possessed_entity.set_possessed(false)
-	# 附身新目标
-	entity.set_possessed(true)
-	_possessed_entity = entity
+	if _user_controlled_entity != null and _user_controlled_entity != entity and is_instance_valid(_user_controlled_entity):
+		_user_controlled_entity.set_user_controlled(false)
+	# 接管新目标
+	entity.set_user_controlled(true)
+	_user_controlled_entity = entity
 	# 相机跟随 + 居中
 	if _camera_rig != null:
 		if _camera_rig.has_method("set_follow_target"):
@@ -236,9 +236,9 @@ func possess(entity: Node2D) -> void:
 			_camera_rig.set_centered_mode(true)
 	_slow_time()
 	if EventBus != null:
-		EventBus.possession_started.emit(entity)
+		EventBus.user_control_started.emit(entity)
 
 
-## 释放附身并退出（公共方法，供 UI 按钮调用）
+## 释放接管并退出（公共方法，供 UI 按钮调用）
 func release() -> void:
 	_release_and_exit()

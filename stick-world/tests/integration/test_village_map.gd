@@ -183,8 +183,8 @@ func _test_player_spawned() -> void:
 	if map == null:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
-	var player: Node2D = map.get_possessed_entity()
-	_runner.assert_true(player != null, "应有玩家附身实体")
+	var player: Node2D = map.get_user_controlled_entity()
+	_runner.assert_true(player != null, "应有玩家接管实体")
 	if player == null:
 		return
 	_runner.assert_true(player is CharacterBody2D, "玩家应为 CharacterBody2D")
@@ -218,7 +218,7 @@ func _test_player_ground_lock() -> void:
 	if map == null:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
-	var player: Node2D = map.get_possessed_entity()
+	var player: Node2D = map.get_user_controlled_entity()
 	if player == null:
 		_runner.assert_true(false, "无玩家实体")
 		return
@@ -291,7 +291,7 @@ func _test_stickman_entity_api() -> void:
 	if map == null:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
-	var player: Node2D = map.get_possessed_entity()
+	var player: Node2D = map.get_user_controlled_entity()
 	if player == null:
 		_runner.assert_true(false, "无玩家实体")
 		return
@@ -299,8 +299,8 @@ func _test_stickman_entity_api() -> void:
 	if e == null:
 		_runner.assert_true(false, "玩家非 StickmanEntity")
 		return
-	_runner.assert_true(e.is_possessed(), "玩家应已被附身")
-	_runner.assert_true(e.has_method("set_possessed"), "应有 set_possessed 方法")
+	_runner.assert_true(e.is_user_controlled(), "玩家应已被接管")
+	_runner.assert_true(e.has_method("set_user_controlled"), "应有 set_user_controlled 方法")
 	_runner.assert_true(e.has_method("get_facing"), "应有 get_facing 方法")
 	_runner.assert_true(e.rig != null, "rig 引用应非空")
 
@@ -367,7 +367,7 @@ func _test_stickman_map_ref() -> void:
 	if map == null:
 		_runner.assert_true(false, "地图非 VillageMap")
 		return
-	var player: Node2D = map.get_possessed_entity()
+	var player: Node2D = map.get_user_controlled_entity()
 	if player == null:
 		_runner.assert_true(false, "无玩家实体")
 		return

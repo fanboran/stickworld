@@ -4,11 +4,11 @@ extends RefCounted
 ##
 ## 本层提供三层 UI 容器：
 ## - GlobalHUD       顶层常驻：时间速度、资源数、通知
-## - ModePanel       模式相关：整体替换（Village/Battle/Possess 槽位）
+## - ModePanel       模式相关：整体替换（Village/Battle/UserControl 槽位）
 ## - ContextPanel    上下文相关：选中什么显示什么
 ## - ModalOverlay    弹窗（暂停菜单、组织架构总览、世界地图）
 ##
-## 业务面板（BuildMenu/BattlePanel/FormationPanel/PossessPanel 等）归属各模块
+## 业务面板（BuildMenu/BattlePanel/FormationPanel/UserControlPanel 等）归属各模块
 ## `ui/` 子目录，由 SystemSetup 装配到本层容器槽位，详见 modules/README.md。
 ##
 ## 占位面板（scripts/placeholders/）：依赖系统未建立的大界面空面板（科技树等），
@@ -20,7 +20,7 @@ extends RefCounted
 enum PanelType {
 	VILLAGE,    ## 聚落/城镇面板（建设菜单、村民管理、库存）
 	BATTLE,     ## 战斗面板（框选信息、指令按钮、编制树）
-	POSSESS,    ## 附身面板（角色控制 HUD）
+	USER_CONTROL,    ## User Control 面板（角色控制 HUD）
 }
 
 # ─────────────────────────────── 节点路径 ────────────────────────────────

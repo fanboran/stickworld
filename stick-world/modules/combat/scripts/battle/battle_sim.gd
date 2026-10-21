@@ -19,7 +19,7 @@ extends RefCounted
 ##   - AI 决策/行为状态机（低频决策，行为库与实体深度耦合）
 ##   - DamagePipeline / 箭矢弹道 / 状态效果 / 存血量（低频事件链，
 ##     HealthComponent 仍是血量权威）
-##   - 附身单位（玩家交互链不动，不注册 sim）
+##   - 接管单位（玩家交互链不动，不注册 sim）
 ##
 ## 教训落实（§十 重开必读）：
 ##   - 整链一次切换（移动+分离+冷却+命中同批循环），A/B 开关保底回退
@@ -114,11 +114,11 @@ func set_bounds(p_left: float, p_right: float, p_gy: float, p_gb: float) -> void
 
 
 ## 注册参战单位，返回 sid（<0 = 注册失败）。
-## 附身单位不进 sim（玩家交互链不动）；注册即接管移动/冷却/命中时序。
+## 接管单位不进 sim（玩家交互链不动）；注册即接管移动/冷却/命中时序。
 func register_unit(unit: Node, p_faction: int) -> int:
 	if unit == null or not is_instance_valid(unit):
 		return -1
-	if unit.has_method("is_possessed") and unit.is_possessed():
+	if unit.has_method("is_user_controlled") and unit.is_user_controlled():
 		return -1
 	var sid: int = entities.size()
 	entities.append(unit)

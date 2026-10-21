@@ -105,7 +105,7 @@ SWL:  ShouldAim(站定+目标进射程) → isAiming → 播 Draw ──0.5s─�
 | 射角解算 | `ArcherAi.AimAngle(dist, ref able, v=15, target, source, rand)` | `ArrowBallistics.solve`（ARROW_VX=850/G=2000） | ✅ 同构（v=15 为 Unity 单位制，量纲不同语义同） |
 | 散布 | `NextGaussian`（currentShotBodyRandomness） | `next_gaussian` + sustained_fire 热度 | ✅ 直译 |
 | 射角→姿势 | `UpdateAim`：Lerp 追踪 + `FindBone(骨).rotation = aim−4`（LateUpdate）【事实：反汇编；骨名 literal 静态不可解析，实机观感=**仅持弓臂抬**】 | `get_aim_pitch`（同源解算）→ `entity.aim_pitch` → feed → `rig.set_aim_pitch` → overlay（lerp 10/s=GetAimRate 等价）→ 晚优先级 `_process` 采样基值绝对写 `upper_arm_inner` | ✅（三轮收敛：头轨道→髋枢全身→**持弓臂**；修法=实机观感基准） |
-| 拉弓力度 | `DrawBow(power)/DrawBowGradually/UnDrawBow`（AI 渐拉、玩家拖拽定力） | AI 恒满弓；玩家附身 `fire_arrow_manual(power)`（蓄力有、渐拉表现无） | ≈ 附身侧待做（拖拽弹道 UI，见[拉弓操控逆向](../../项目/审计/SWL拉弓操控逆向_2026-09-19.md)差距对照） |
+| 拉弓力度 | `DrawBow(power)/DrawBowGradually/UnDrawBow`（AI 渐拉、玩家拖拽定力） | AI 恒满弓；玩家接管 `fire_arrow_manual(power)`（蓄力有、渐拉表现无） | ≈ 接管侧待做（拖拽弹道 UI，见[拉弓操控逆向](../../项目/审计/SWL拉弓操控逆向_2026-09-19.md)差距对照） |
 | 装填 | `Reload` 动画 1.17s + `IsReloading()` | `attack_bow_reload`：释放段播完进冷却窗即播（`weapon_mount._process` 持瞄窗装填仲裁，`_cooldown_left>0` 门 + 每窗一次闩锁），冷却尽回拉满（打断装填尾段——射速权威在冷却计时） | ✅ S1b 接线完毕（玩家蓄力路径不经仲裁无装填段） |
 | 弹道 | `Arrow`（Rigidbody2D+gravityScale，`launchY`） | `arrow_projectile`（解算式抛物线+落点地面线） | ✅（弹道层已追平，插箭/爆头已有） |
 
@@ -147,7 +147,7 @@ SWL:  ShouldAim(站定+目标进射程) → isAiming → 播 Draw ──0.5s─�
 3. ~~**战线纵向满编**~~（✅ 2026-10-11）：夹钳撤除、带满扩列、二线驻位、动态远程层距、开局朝向/组方阵出生（差距#1 结案）。
 4. ~~**热锅蚂蚁翻转**~~（✅ 批3 落码）：facing 滞回/换档斜坡/分离错峰 + 战线槽位稳定（差距#1）。
 5. **S3 口径清算**："复刻/已对齐"表述全档修正，未用对方数据标"暂代实现"。
-6. 附身弓手拖拽弹道 UI：随弓操控改造做（[拉弓操控逆向](../../项目/审计/SWL拉弓操控逆向_2026-09-19.md)差距对照）。
+6. 接管弓手拖拽弹道 UI：随弓操控改造做（[拉弓操控逆向](../../项目/审计/SWL拉弓操控逆向_2026-09-19.md)差距对照）。
 7. SWL 弓手专属 Run 姿 / 城弓兵种 / ragdoll：S1 落地、S2 机制换血后重评。
 
 ## 10. 三轮俯仰返工的教训（防再犯）

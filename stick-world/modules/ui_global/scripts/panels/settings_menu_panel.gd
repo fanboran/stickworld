@@ -147,7 +147,7 @@ func _rebuild_content() -> void:
 		var tip := Label.new()
 		tip.text = "提示：%s 打开大世界导航 · %s 切换战斗模式 · 顶栏「编制」编队" \
 				% [KeyBindingRegistry.action_key_hint("common/toggle_world_map"),
-				KeyBindingRegistry.action_key_hint("possess/toggle_combat")]
+				KeyBindingRegistry.action_key_hint("user_control/toggle_combat")]
 		tip.add_theme_font_size_override("font_size", StickTokens.FONT_HINT)
 		tip.modulate = StickTokens.TEXT_DIM
 		_content_vbox.add_child(tip)
@@ -314,9 +314,9 @@ func _apply_live_setting(key: String, value: Variant) -> void:
 	match key:
 		"game/auto_save_interval_sec", "game/auto_pause_battle":
 			pass  # 消费方（SaveManager / TimeManager）实时读 ConfigManager
-		"game/slow_on_possess":
+		"game/slow_on_user_control":
 			if TimeManager:
-				TimeManager.auto_slow_on_possess = bool(value)
+				TimeManager.auto_slow_on_user_control = bool(value)
 		"video/window_mode":
 			if ConfigManager and ConfigManager.has_method("apply_window_mode"):
 				ConfigManager.apply_window_mode(int(value))
@@ -474,7 +474,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		"fields": [
 			{"key": "game/auto_save_interval_sec", "label": "自动存档间隔（秒）", "type": "slider", "min": 30, "max": 600, "step": 30, "default": 60},
 			{"key": "game/auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
-			{"key": "game/slow_on_possess", "label": "附身微操时自动减速", "type": "toggle", "default": true},
+			{"key": "game/slow_on_user_control", "label": "接管微操时自动减速", "type": "toggle", "default": true},
 			{"key": "game/ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true, "implemented": false},
 		],
 	},

@@ -36,7 +36,7 @@ TimeManager 自造暂停（`is_paused()` + EventBus `game_paused/game_resumed` �
 |------|--------|------|
 | 硬暂停（玩家按 ‖ / 模态自动暂停） | **引擎** | `SceneTree.paused = true`，世界子树整体冻结，零逐系统检查。模态自动暂停仅游戏内生效：`StickScreen.open()` 的暂停簿记以"树里存在 UIRoot"为闸（主菜单复用该基类但没有游戏时间可暂停，拉总闸只会冻结主菜单自身） |
 | 倍速（1x/2x/4x） | TimeManager | 模拟系统统一经 `TimeManager.sim_delta(delta)` 取步长（delta × 速度因子） |
-| 附身微操减速 | TimeManager | 倍速的一种预设值（如 0.3x），不新造机制 |
+| 接管微操减速 | TimeManager | 倍速的一种预设值（如 0.3x），不新造机制 |
 
 `process_mode` 分层表（声明集中在 game_root.tscn / ui_root.tscn 两处，禁止散设）：
 

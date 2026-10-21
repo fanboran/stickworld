@@ -10,7 +10,7 @@ extends RefCounted
 ##
 ## 落点取舍（为何择班评估在 formation_system 而不在 ai_controller / team_ai）：
 ##   择班是"编制成员构成"的变化，权威值的三个计价项（班长 / 组织指挥官 / 玩家光环）
-##   全部由宿主持有（_squads.leader、_org_api、is_possessed），迁移动作也只有宿主
+##   全部由宿主持有（_squads.leader、_org_api、is_user_controlled），迁移动作也只有宿主
 ##   能一次做全（org 分配 + 槽位重算）。放 L1 控制器会让每个单位各自查班、各自迁移，
 ##   产生重复迁移动线与组织侧失步。
 ##
@@ -177,7 +177,7 @@ func prune_registry() -> void:
 
 
 ## 单位是否允许转投（「不该动的别动」硬守卫；任一命中即本拍不换班）：
-##   1. 玩家附身单位 = 玩家本体，AI 不搬动玩家
+##   1. 玩家接管单位 = 玩家本体，AI 不搬动玩家
 ##   2. 班长 / 组织在册指挥官本人——RWR max_leader_authority_willing_to_join_another_squad
 ##      语义（班长权威高于阈值才肯放人）：本班权威值高于 authority_leader_release_threshold
 ##      者视为骨干，不被抽走
@@ -185,7 +185,7 @@ func prune_registry() -> void:
 ##   4. 接战中（主手射程内有敌）：交还战斗行为，不当场换班
 ##   5. 玩家手动号令保护期内（复用 TeamAi 既有保护期状态）
 func may_switch(u: Node, squad_id: String) -> bool:
-	if u.has_method("is_possessed") and u.is_possessed():
+	if u.has_method("is_user_controlled") and u.is_user_controlled():
 		return false
 	if is_leader_or_commander(u, squad_id):
 		return false
@@ -236,21 +236,21 @@ func is_manual_order_guarded(u: Node, squad_id: String) -> bool:
 
 
 ## 玩家所在班（跳槽吸引力 / 黏性加成的判定口径）。
-## 排除"班长被附身"这一情形：该情形已由宿主 get_squad_authority 的
+## 排除"班长被接管"这一情形：该情形已由宿主 get_squad_authority 的
 ## AUTHORITY_PLAYER_BONUS 计价，此处不重复叠加。剩余两种情形在此计价：
 ##   - 该班处于"跟随玩家"模式（玩家点选跟随的班）
-##   - 玩家实体在该班（任一非班长成员被附身）
+##   - 玩家实体在该班（任一非班长成员被接管）
 func is_player_squad(squad_id: String) -> bool:
 	var squad: Dictionary = _host._squads.get(squad_id, {})
 	if squad.is_empty():
 		return false
 	var leader: Node = squad.get("leader", null)
 	if leader != null and is_instance_valid(leader) \
-			and leader.has_method("is_possessed") and leader.is_possessed():
+			and leader.has_method("is_user_controlled") and leader.is_user_controlled():
 		return false
 	if bool(squad.get("follow_player", false)):
 		return true
 	for u in squad.get("units", []):
-		if is_instance_valid(u) and u.has_method("is_possessed") and u.is_possessed():
+		if is_instance_valid(u) and u.has_method("is_user_controlled") and u.is_user_controlled():
 			return true
 	return false

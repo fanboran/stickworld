@@ -112,7 +112,7 @@ func setup(map: Node2D) -> void:
 	_cover = ScriptCoverSystem.new()
 	_cover.setup(map)
 	# D 刀 A/B 开关：启用时参战 AI 单位模拟状态进 BattleSim（移动/分离/冷却/
-	# 命中时序批处理）；附身单位不注册（玩家交互链不动）
+	# 命中时序批处理）；接管单位不注册（玩家交互链不动）
 	if ScriptBattleSim.is_enabled() and map != null and is_instance_valid(map):
 		_sim = ScriptBattleSim.new()
 		_sim.set_bounds(
@@ -121,7 +121,7 @@ func setup(map: Node2D) -> void:
 				float(map.ground_y) if "ground_y" in map else 450.0,
 				float(map.ground_bottom) if "ground_bottom" in map else 882.0)
 	# §十四 小兵渲染代理：启用时小兵 rig 退居代理（全局 4 桶 MultiMesh 批渲染，
-	# 动画代码插值）；附身单位在 add_unit 排除。y 分带边界 = 地面纵深；
+	# 动画代码插值）；接管单位在 add_unit 排除。y 分带边界 = 地面纵深；
 	# MMI 容器挂 EntityHost（与实体同父、同 canvas 同 y-sort 上下文）。
 	if ScriptCrowdRenderer.is_enabled() and map != null:
 		_crowd = ScriptCrowdRenderer.new()
@@ -150,11 +150,11 @@ func add_unit(unit: Node, faction: int) -> void:
 			unit.set_battle_sim(_sim, sid)
 		elif sid >= 0:
 			_sim.unregister_unit(unit)  # 非 StickmanEntity 测试桩：不入 sim
-	# §十四 小兵渲染代理：非附身实体注册代理（附身/玩家交互链保持富管线）。
+	# §十四 小兵渲染代理：非接管实体注册代理（接管/玩家交互链保持富管线）。
 	# HD-2D billboard 图跳过（单位 2D 骨架已删——crowd 槽会持已删 rig 引用，
 	# 渲染由地图宿主的 billboard 通道承担）
 	var _on_billboard: bool = unit.has_method("is_on_billboard_map") and unit.is_on_billboard_map()
-	if _crowd != null and not _on_billboard 			and not (unit.has_method("is_possessed") and unit.is_possessed()):
+	if _crowd != null and not _on_billboard 			and not (unit.has_method("is_user_controlled") and unit.is_user_controlled()):
 		var slot: Dictionary = _crowd.register_unit(unit)
 		if not slot.is_empty():
 			unit.set_meta("crowd_slot", slot)

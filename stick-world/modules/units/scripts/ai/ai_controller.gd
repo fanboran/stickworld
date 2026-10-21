@@ -6,7 +6,7 @@ extends Node
 ## 职责：
 ##   1. 持有 BehaviorStateMachine，注册并调度行为
 ##   2. 每决策周期检查当前状态，决定是否切换行为
-##   3. 玩家附身时暂停 AI，取消附身时恢复
+##   3. 玩家 User Control 时暂停 AI，取消 User Control 时恢复
 ##
 ## P0 阶段实现最简决策：
 #   - work（有派工）优先级最高
@@ -85,8 +85,8 @@ var _jitter_rng := RandomNumberGenerator.new()
 ## 实例 id 派生（同 _resolve_jitter_seed 惯例），测试重掷 _dice_rng.seed 可复现）
 var _dice_rng := RandomNumberGenerator.new()
 var _dice_seeded: bool = false
-## 上一帧是否被附身（用于检测附身状态变化）
-var _was_possessed: bool = false
+## 上一帧是否被接管（用于检测 User Control 状态变化）
+var _was_user_controlled: bool = false
 # ── 9h 卡死看门狗（O(1)：只记上次采样位置 + 累计计时，不扫描不查询邻居）──
 ## 有移动意图（实体速度 > 档案阈值）但窗口内净位移 ≈ 0 → 强制重决策。
 var _wd_timer: float = 0.0
@@ -158,16 +158,16 @@ func physics_update_inner(delta: float) -> void:
 	if _state_machine == null:
 		return
 
-	# 附身检测
-	var possessed: bool = _entity.is_possessed()
-	if possessed:
-		if not _was_possessed:
-			_was_possessed = true
-		return  # 附身时暂停 AI
+	# 接管检测
+	var user_controlled: bool = _entity.is_user_controlled()
+	if user_controlled:
+		if not _was_user_controlled:
+			_was_user_controlled = true
+		return  # User Control 时暂停 AI
 
-	if _was_possessed:
-		# 刚取消附身，恢复 AI 从 idle 开始
-		_was_possessed = false
+	if _was_user_controlled:
+		# 刚取消接管，恢复 AI 从 idle 开始
+		_was_user_controlled = false
 		_state_machine.travel("idle")
 
 	# 状态机调度

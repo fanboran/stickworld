@@ -4,7 +4,7 @@ extends Area2D
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §3.2（Chunk 末端出口触发器）。
 ## 放置在地图的 ChunkTriggers 节点下，配置 target_map_id 和 entry_side。
-## 当玩家（附身实体）进入触发区域时，通过 GameRoot 调用 SceneLoader.travel_to_map。
+## 当玩家（接管实体）进入触发区域时，通过 GameRoot 调用 SceneLoader.travel_to_map。
 
 # WorldAPI 是全局 class_name，无需 preload
 
@@ -36,10 +36,10 @@ func _ready() -> void:
 func _on_body_entered(body: Node) -> void:
 	if _triggered:
 		return
-	# 只响应被附身的实体（玩家控制的角色）
+	# 只响应被接管的实体（玩家控制的角色）
 	if not body is CharacterBody2D:
 		return
-	if not body.has_method("is_possessed") or not body.is_possessed():
+	if not body.has_method("is_user_controlled") or not body.is_user_controlled():
 		return
 	_triggered = true
 	# 通过 GameRoot 发起地图切换

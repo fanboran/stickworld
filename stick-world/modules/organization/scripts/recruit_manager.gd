@@ -78,7 +78,7 @@ func _process(delta: float) -> void:
 
 ## 招募一名民兵：扣资源 + 空闲村民变身士兵。失败返回 {ok:false, reason} 并通知。
 func recruit() -> Dictionary:
-	var player: Node2D = _possessed_entity()
+	var player: Node2D = _user_controlled_entity()
 	var barracks: Node2D = find_nearest_barracks(
 			player.global_position if player != null else Vector2.INF)
 	if barracks == null:
@@ -140,7 +140,7 @@ func find_nearest_barracks(pos: Vector2) -> Node2D:
 
 # ─────────────────────────────── 人口（再生/统计）────────────────────────────
 
-## 村民实体数（非士兵、非附身、存活；P0 村A 单地图口径）
+## 村民实体数（非士兵、非接管、存活；P0 村A 单地图口径）
 func _villager_count() -> int:
 	return _scan_villagers(null).size()
 
@@ -165,7 +165,7 @@ func _scan_villagers(exclude: Node2D) -> Array:
 		# 不引内部脚本）；据点图无村民，此处防御性排除
 		if bool(u.get_meta("garrison_unit", false)):
 			continue
-		if u.has_method("is_possessed") and u.is_possessed():
+		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			continue
 		if u.has_method("is_dead") and u.is_dead():
 			continue
@@ -186,7 +186,7 @@ func _pick_villager(player: Node2D) -> Node2D:
 			continue
 		if bool(u.get_meta(META_SOLDIER, false)):
 			continue
-		if u.has_method("is_possessed") and u.is_possessed():
+		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			continue
 		if u.has_method("is_dead") and u.is_dead():
 			continue
@@ -216,8 +216,8 @@ func _spawn_villager() -> void:
 	if npc.get("foot_offset") != null \
 			and not (npc.has_method("is_on_billboard_map") and npc.is_on_billboard_map()):
 		npc.global_position.y = spawn_y - npc.foot_offset
-	if npc.has_method("set_possessed"):
-		npc.set_possessed(false)
+	if npc.has_method("set_user_controlled"):
+		npc.set_user_controlled(false)
 	if npc.has_method("set_construction_manager") and _construction_api != null:
 		npc.set_construction_manager(_construction_api)
 	if npc.has_method("set_formation_system") and _formation_system != null:
@@ -232,11 +232,11 @@ func _current_map() -> Node2D:
 	return _scene_loader.get_current_map()
 
 
-func _possessed_entity() -> Node2D:
+func _user_controlled_entity() -> Node2D:
 	var map: Node2D = _current_map()
-	if map == null or not map.has_method("get_possessed_entity"):
+	if map == null or not map.has_method("get_user_controlled_entity"):
 		return null
-	return map.get_possessed_entity()
+	return map.get_user_controlled_entity()
 
 
 ## 失败统一出口：通知 + 结构化返回（交互层零通知职责）

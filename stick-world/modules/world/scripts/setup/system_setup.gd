@@ -10,7 +10,7 @@ extends Node
 ## - system_setup_core_systems.gd   战斗/资源/框选/组织/编队/战术/指挥传输/征服/招兵/上报叙事
 ## - system_setup_ui_panels.gd      界面根/调试层/战斗·编队·组织面板/战略总览/指挥链视图/设置·暂停菜单/TeamAi HUD/班组卡/缩放条
 ## - system_setup_strategic_map.gd  小地图/战略图 L1·L3/地图缩略窗/Tab 三态与 M 键运行时/边界检测/地图旅行
-## - system_setup_extras.gd         附身界面·面板/探索交互/游戏 UI/调试绘制器注册/Demo 目标链/后处理/地图过渡/单位 LOD
+## - system_setup_extras.gd         接管界面·面板/探索交互/游戏 UI/调试绘制器注册/Demo 目标链/后处理/地图过渡/单位 LOD
 ##
 ## 模块自装配器（AR-1 装配下沉，随迁随增）：inventory / construction 等模块的
 ## setup.gd::assemble 自持实例化，本宿主只保留步骤表编排与跨模块接线。
@@ -39,8 +39,8 @@ const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/mi
 const _MinimapWindowScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap_window.gd")
 const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thumbnail.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
-const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
-const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
+const _UserControlInterfaceScript: GDScript = preload("res://modules/player_control/scripts/user_control_interface.gd")
+const _UserControlPanelScript: GDScript = preload("res://modules/player_control/ui/user_control_panel.gd")
 const _FxPoolScript: GDScript = preload("res://modules/fx/scripts/fx_pool.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
@@ -218,8 +218,8 @@ func _step_table() -> Array:
 		["战略图 L3", _setup_l3_strategic_map],
 		["地图缩略窗", _open_tab_map_default],
 		["背包", _setup_inventory],
-		["附身界面", _setup_possession_interface],
-		["附身面板", _setup_possess_panel],
+		["接管界面", _setup_user_control_interface],
+		["User Control 面板", _setup_user_control_panel],
 		["探索交互", _register_explore_handler],
 		["边界检测", _setup_boundary_detector],
 		["游戏 UI", _setup_game_ui],
@@ -392,16 +392,16 @@ func _setup_boundary_detector() -> void:
 
 # ─────────────────── 壳方法：玩家交互与环境域（转发 system_setup_extras.gd） ───────────────────
 
-func _setup_possession_interface() -> void:
-	_extras()._setup_possession_interface()
+func _setup_user_control_interface() -> void:
+	_extras()._setup_user_control_interface()
 
 
-func _setup_possess_panel() -> void:
-	_extras()._setup_possess_panel()
+func _setup_user_control_panel() -> void:
+	_extras()._setup_user_control_panel()
 
 
-func _setup_possess_panel_deferred() -> void:
-	_extras()._setup_possess_panel_deferred()
+func _setup_user_control_panel_deferred() -> void:
+	_extras()._setup_user_control_panel_deferred()
 
 
 func _register_explore_handler() -> void:

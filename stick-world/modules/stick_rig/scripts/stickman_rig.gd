@@ -90,12 +90,12 @@ var _finished_sent_state: String = ""
 ## hook 有效 = 本 rig 退居代理模式：AnimationTree 停用、rig 隐藏（武器由
 ## 代理 reparent 出去自驱）、play/play_hit 播报给代理；animation_finished
 ## 由代理检测 t ≥ 动画时长后经本信号补发（消费方无感知）。解除 hook
-## （附身/退出代理）即恢复富管线。
+## （接管/退出代理）即恢复富管线。
 var _crowd_hook: Callable = Callable()
 
 
 ## 进入/退出小兵代理模式。进入时停动画、藏 rig；退出时恢复（可见 + LOD
-## 下一拍自动重设动画频率；附身单位勿进入代理）。
+## 下一拍自动重设动画频率；接管单位勿进入代理）。
 func set_crowd_hook(hook: Callable) -> void:
 	_crowd_hook = hook
 	var on: bool = hook.is_valid()
@@ -106,7 +106,7 @@ func set_crowd_hook(hook: Callable) -> void:
 		if _anim_tree != null and _anim_tree.active:
 			_anim_tree.active = false
 	else:
-		# 恢复：交给 LOD 下一拍重设（或立即全速，附身场景由实体侧再调）
+		# 恢复：交给 LOD 下一拍重设（或立即全速，接管场景由实体侧再调）
 		visible = true
 
 

@@ -494,7 +494,7 @@ func _update_aim_rhythm(delta: float) -> bool:
 	if not _aiming:
 		_aiming = true
 		_aim_timer = _gauss((hold.x + hold.y) * 0.5, maxf(0.05, (hold.y - hold.x) / 3.0))
-		# AI 附身技能档位（SWL Personality.UserControlSkill）：LIMITED 拉弓更拖沓、
+		# AI 接管技能档位（SWL Personality.UserControlSkill）：LIMITED 拉弓更拖沓、
 		# PRO 更果断（默认中位 ×1.0 零回归）
 		_aim_timer *= float(ScriptBehaviorProfiles.SKILL_AIM_HOLD_MULT.get(
 				int(_profile.get("user_control_skill", 1)), 1.0))
@@ -750,8 +750,8 @@ func _spawn_minidons(count: int) -> Array:
 		var e_foot: float = float(e.get("foot_offset")) if "foot_offset" in e else 0.0
 		e.global_position = Vector2(entity.global_position.x + facing * 72.0,
 				feet_y + lateral_y - e_foot)
-		if e.has_method("set_possessed"):
-			e.set_possessed(false)
+		if e.has_method("set_user_controlled"):
+			e.set_user_controlled(false)
 		if e.has_method("set_faction") and entity.has_method("get_faction"):
 			e.set_faction(entity.get_faction())
 		# 参战注册（BattleInstance.add_unit：内部会回填 battle_instance 引用）

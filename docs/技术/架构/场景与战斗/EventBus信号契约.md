@@ -20,14 +20,14 @@
 
 > Chunk 加载/卸载不经 EventBus：走 `scene_loader.gd` 自带 `chunk_loaded/chunk_unloaded` 信号（chunk 流式为预留接口，生产消费方连本地信号）。
 
-### 14.2 输入模式/附身事件
+### 14.2 输入模式/接管事件
 
 > 模式切换走 InputDispatcher 本地信号 `mode_changed(old_mode, new_mode)`（装配时注入连接），不进 EventBus。
 
 | 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
 |------|------|--------|--------|---------|
-| `possession_started` | entity | PossessionInterface | UI、Units、TimeManager | 玩家附身 |
-| `possession_ended` | entity | PossessionInterface | UI、Units、TimeManager | 退出附身 |
+| `user_control_started` | entity | UserControlInterface | UI、Units、TimeManager | 玩家接管 |
+| `user_control_ended` | entity | UserControlInterface | UI、Units、TimeManager | 退出接管 |
 
 ### 14.3 建筑/室内事件
 

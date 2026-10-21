@@ -86,8 +86,8 @@ func _update_text() -> void:
 		var e: Node2D = _hovered_entity
 		lines.append("悬停: %s" % e.name)
 		lines.append("  坐标: (%d, %d)" % [int(e.global_position.x), int(e.global_position.y)])
-		if "possessed" in e:
-			lines.append("  状态: %s" % ("[主控]" if e.possessed else "[AI]"))
+		if "user_controlled" in e:
+			lines.append("  状态: %s" % ("[主控]" if e.user_controlled else "[AI]"))
 		if e.has_method("get_current_anim"):
 			lines.append("  动画: %s" % e.get_current_anim())
 		if e.has_method("get_facing"):

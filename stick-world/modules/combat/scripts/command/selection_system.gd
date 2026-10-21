@@ -27,14 +27,14 @@ const CLICK_TOLERANCE: float = 45.0
 const BOX_BORDER_COLOR: Color = Color(0.4, 0.85, 1.0, 0.9)
 ## 选中框填充颜色
 const BOX_FILL_COLOR: Color = Color(0.4, 0.85, 1.0, 0.15)
-## possessed 玩家四角框颜色（与选中框同白）
-const POSSESSED_COLOR: Color = Color(1.0, 1.0, 1.0, 0.95)
-## possessed 框比碰撞箱水平外扩的像素
-const POSSESSED_EXPAND_X: float = 6.0
-## possessed 框的半高
-const POSSESSED_HALF_H: float = 16.0
-## possessed 框角臂长
-const POSSESSED_ARM: float = 9.0
+## user_controlled 玩家四角框颜色（与选中框同白）
+const USER_CONTROLED_COLOR: Color = Color(1.0, 1.0, 1.0, 0.95)
+## user_controlled 框比碰撞箱水平外扩的像素
+const USER_CONTROLED_EXPAND_X: float = 6.0
+## user_controlled 框的半高
+const USER_CONTROLED_HALF_H: float = 16.0
+## user_controlled 框角臂长
+const USER_CONTROLED_ARM: float = 9.0
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 选择变化时发射，参数为选中单位的 instance_id 数组
@@ -57,8 +57,8 @@ var _selected_units: Array = []
 var _selectable_faction: int = 0
 ## GameRoot 引用（用于查找当前地图；由 SystemSetup 装配时注入，2026-08 收敛）
 var _game_root: Node = null
-## 上帧是否有 possessed 玩家（用于"消失时补一次清屏"的零重绘判定）
-var _last_had_possessed: bool = false
+## 上帧是否有 user_controlled 玩家（用于"消失时补一次清屏"的零重绘判定）
+var _last_had_user_controlled: bool = false
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
@@ -67,7 +67,7 @@ func _ready() -> void:
 	# 不拦截 UI 事件，仅通过 _unhandled_input 处理游戏世界点击
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	# _process 常开（possessed 四角框在 EXPLORE 模式也要跟随），内部按 _active 自门控；
+	# _process 常开（user_controlled 四角框在 EXPLORE 模式也要跟随），内部按 _active 自门控；
 	# 仅输入处理等 BATTLE 模式激活再开启
 	set_process_unhandled_input(false)
 
@@ -263,14 +263,14 @@ func _get_selectable_units() -> Array:
 	return units
 
 
-## 死亡/释放的单位自动移除；同时驱动 possessed 四角框跟随重绘
+## 死亡/释放的单位自动移除；同时驱动 user_controlled 四角框跟随重绘
 func _process(_delta: float) -> void:
-	# possessed 玩家逐帧跟随（EXPLORE/BATTLE 都显示）；无附身时零重绘
-	var possessed: Node2D = _get_possessed_entity()
-	var has_possessed: bool = possessed != null and is_instance_valid(possessed)
-	if has_possessed or _last_had_possessed:
+	# user_controlled 玩家逐帧跟随（EXPLORE/BATTLE 都显示）；无 User Control 时零重绘
+	var user_controlled: Node2D = _get_user_controlled_entity()
+	var has_user_controlled: bool = user_controlled != null and is_instance_valid(user_controlled)
+	if has_user_controlled or _last_had_user_controlled:
 		queue_redraw()
-	_last_had_possessed = has_possessed
+	_last_had_user_controlled = has_user_controlled
 	if not _active:
 		return
 	if _selected_units.is_empty():
@@ -311,15 +311,15 @@ func _screen_to_world(screen_pos: Vector2) -> Vector2:
 # ─────────────────────────────── 绘制 ────────────────────────────────
 
 func _draw() -> void:
-	# possessed 玩家脚下的白色四角线框（原 PossessionIndicator 职责归并于此）。
-	# HD-2D 图跳过：possessed 框由角色 billboard 的 3D 脚下框承担——
+	# user_controlled 玩家脚下的白色四角线框（原 UserControlIndicator 职责归并于此）。
+	# HD-2D 图跳过：user_controlled 框由角色 billboard 的 3D 脚下框承担——
 	# 2D 画布坐标与 3D billboard 投影的速度/位置不一致，画了反而错位。
 	# 2D 卷轴图照画：脚底 = 实体原点向下 foot_offset（Entity 的 global_position
 	# 是腰部参照，Collider 是居中碰撞箱，都需显式下移 foot_offset）。
 	var map_now := _get_current_map()
 	var use_2d_bracket: bool = not (map_now != null and map_now.has_method("wants_3d_bracket"))
 	if use_2d_bracket:
-		var p: Node2D = _get_possessed_entity()
+		var p: Node2D = _get_user_controlled_entity()
 		if p != null and is_instance_valid(p):
 			var col_w: float = 24.0
 			var col: CollisionShape2D = p.get_node_or_null("Collider") as CollisionShape2D
@@ -328,7 +328,7 @@ func _draw() -> void:
 			var foot_off: float = float(p.get("foot_offset")) if "foot_offset" in p else 0.0
 			var foot: Vector2 = p.global_position + Vector2(0.0, foot_off)
 			_draw_corner_bracket(get_viewport().get_canvas_transform() * foot,
-					col_w * 0.5 + POSSESSED_EXPAND_X, POSSESSED_HALF_H, POSSESSED_ARM, POSSESSED_COLOR)
+					col_w * 0.5 + USER_CONTROLED_EXPAND_X, USER_CONTROLED_HALF_H, USER_CONTROLED_ARM, USER_CONTROLED_COLOR)
 	# 拖拽中的选中框
 	if _dragging:
 		var rect := Rect2(_drag_start_screen, _drag_current_screen - _drag_start_screen).abs()
@@ -362,13 +362,13 @@ func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: fl
 		draw_line(corner, corner - Vector2(0, c.y * arm), col, 2.0, true)
 
 
-## 当前附身实体（无则 null）
-func _get_possessed_entity() -> Node2D:
+## 当前接管实体（无则 null）
+func _get_user_controlled_entity() -> Node2D:
 	var map: Node2D = _get_current_map()
 	if map == null:
 		return null
-	if map.has_method("get_possessed_entity"):
-		return map.get_possessed_entity()
+	if map.has_method("get_user_controlled_entity"):
+		return map.get_user_controlled_entity()
 	return null
 
 

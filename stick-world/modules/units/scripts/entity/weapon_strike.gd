@@ -147,12 +147,12 @@ func do_strike() -> void:
 		p.crit_self_damage = _mount.crit_bonus_damage_inflicted_to_self
 		p.head_shot_bonus_damage = _mount.head_shot_bonus_damage
 		# 超出"能打中人数"的部分按溅射系数结算（NumberOfUnitsThatCanHitWithSplash）；
-		# 附身挥击的额外目标走原版附身溅射系数（USER_CONTROLLED_SPLASH_MODIFIER）
+		# 接管挥击的额外目标走原版接管溅射系数（USER_CONTROLLED_SPLASH_MODIFIER）
 		if i >= _mount.number_of_units_that_can_hit:
 			p.amount *= _mount.splash_modifier
 			p.type = DamagePipeline.DAMAGE_TYPE.SPLASH
 			p.is_blockable = false
-			if owner_entity.has_method("is_possessed") and owner_entity.is_possessed():
+			if owner_entity.has_method("is_user_controlled") and owner_entity.is_user_controlled():
 				p.amount *= _mount.USER_CONTROLLED_SPLASH_MODIFIER / maxf(_mount.splash_modifier, 0.01)
 		DamagePipeline.apply(victim, p)
 		if owner_entity.has_method("get_battle_instance"):
@@ -192,12 +192,12 @@ func has_reached_hit_frame() -> bool:
 func collect_strike_targets(owner_entity: Node, main_target: Node) -> Array:
 	if owner_entity == null or main_target == null:
 		return [main_target] if main_target != null else []
-	# 附身溅射（SWL USER_CONTROLLED_SPLASH_HIT_LIMIT）：玩家附身挥击扇形
+	# 接管溅射（SWL USER_CONTROLLED_SPLASH_HIT_LIMIT）：玩家接管挥击扇形
 	# 额外多收 4 个溅射目标
-	var possessed_bonus: int = _mount.USER_CONTROLLED_SPLASH_HIT_LIMIT \
-			if owner_entity.has_method("is_possessed") and owner_entity.is_possessed() else 0
+	var user_controlled_bonus: int = _mount.USER_CONTROLLED_SPLASH_HIT_LIMIT \
+			if owner_entity.has_method("is_user_controlled") and owner_entity.is_user_controlled() else 0
 	var max_count: int = _mount.number_of_units_that_can_hit \
-			+ _mount.number_of_units_that_can_hit_with_splash + possessed_bonus
+			+ _mount.number_of_units_that_can_hit_with_splash + user_controlled_bonus
 	if max_count <= 1:
 		return [main_target]
 	var facing: Vector2 = _owner_facing(owner_entity, main_target)

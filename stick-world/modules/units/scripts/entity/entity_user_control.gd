@@ -1,5 +1,5 @@
 extends RefCounted
-## 火柴人附身输入助手 —— 从 stickman_entity 拆出的玩家控制逻辑（§7.5）。
+## 火柴人 User Control 输入助手 —— 从 stickman_entity 拆出的玩家控制逻辑（§7.5）。
 ##
 ## 职责：
 ## - 玩家移动输入（WASD/方向键，_handle_player_input，InputMap action）
@@ -57,13 +57,13 @@ func _handle_player_input(delta: float) -> void:
 	if _charge_active:
 		_update_aim()
 	var dir := Vector2.ZERO
-	if Input.is_action_pressed("possess/move_left"):
+	if Input.is_action_pressed("user_control/move_left"):
 		dir.x -= 1.0
-	if Input.is_action_pressed("possess/move_right"):
+	if Input.is_action_pressed("user_control/move_right"):
 		dir.x += 1.0
-	if Input.is_action_pressed("possess/move_up"):
+	if Input.is_action_pressed("user_control/move_up"):
 		dir.y -= 1.0
-	if Input.is_action_pressed("possess/move_down"):
+	if Input.is_action_pressed("user_control/move_down"):
 		dir.y += 1.0
 	_entity._apply_movement(delta, dir, false, not _entity._walk_only)
 
@@ -126,7 +126,7 @@ func _is_ranged_weapon() -> bool:
 
 # ─────────────────────────────── 攻击按下/松开（按武器分流）────────────────
 
-## 左键按下分流（InputMap possess_attack）：
+## 左键按下分流（InputMap user_control/attack）：
 ## - 弓/矛/杖：进入蓄力态（拉弓动画 + 朝向跟随），冷却门在此判；
 ## - 剑/镐等近战：保持"按下即攻击"（旧行为，零延迟）。
 ## 搬运材料时双手被占用（放下前不可攻击）。
@@ -182,12 +182,12 @@ func _begin_charge(weapon_mount: Node2D) -> void:
 	_update_aim()
 
 
-## 玩家附身单位是否蓄力瞄准中（hitstop 互斥查询口；实体薄壳转发）
+## 玩家接管单位是否蓄力瞄准中（hitstop 互斥查询口；实体薄壳转发）
 func is_aim_charging() -> bool:
 	return _charge_active
 
 
-## 强制收口（附身退出/死亡等异常路径）：只清状态，不出手。
+## 强制收口（接管退出/死亡等异常路径）：只清状态，不出手。
 func cancel_charge() -> void:
 	if not _charge_active:
 		return
@@ -211,7 +211,7 @@ func _set_player_blocking(v: bool) -> void:
 
 
 ## 切换建造/战斗模式：EXPLORE <-> BATTLE。
-## 由 Q 键触发（仅附身时）。BATTLE 模式下玩家保持附身（ExploreHandler 不释放），
+## 由 Q 键触发（仅 User Control 时）。BATTLE 模式下玩家保持接管（ExploreHandler 不释放），
 ## 左键 = 挥砍攻击；EXPLORE 模式下左键用于交互/框选。
 func _toggle_combat_mode() -> void:
 	var dispatcher: Node = _find_input_dispatcher()
@@ -232,7 +232,7 @@ func _find_input_dispatcher() -> Node:
 	return PlayerControlAPI.get_input_dispatcher()
 
 
-## 玩家附身时近战/旧路径攻击：找最近敌人InRange并执行攻击。
+## 玩家 User Control 时近战/旧路径攻击：找最近敌人InRange并执行攻击。
 ## 搬运材料时双手被占用（放下前不可攻击）。
 func _player_attack() -> void:
 	if _entity.is_carrying():

@@ -77,7 +77,7 @@ func _run_tests_async() -> void:
 	# 等待地图加载和实体生成
 	for i in 8:
 		await get_tree().process_frame
-	_unpossess_player()
+	_release_user_control_player()
 	for i in 2:
 		await get_tree().process_frame
 
@@ -111,13 +111,13 @@ func _get_current_map() -> Node2D:
 	return null
 
 
-func _unpossess_player() -> void:
+func _release_user_control_player() -> void:
 	var map := _get_current_map()
 	if map == null:
 		return
 	for e in map.get_entities():
-		if e is ScriptStickmanEntity and e.has_method("is_possessed") and e.is_possessed():
-			e.set_possessed(false)
+		if e is ScriptStickmanEntity and e.has_method("is_user_controlled") and e.is_user_controlled():
+			e.set_user_controlled(false)
 
 
 ## 生成一个战斗单位，设置低 HP 加速战斗
@@ -128,9 +128,9 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
 	# 修正 Y：让脚部对齐
 	if e.get("foot_offset") != null:
 		e.global_position.y = pos.y - e.foot_offset
-	# 取消附身（AI 接管）
-	if e.has_method("set_possessed"):
-		e.set_possessed(false)
+	# 取消接管（AI 接管）
+	if e.has_method("set_user_controlled"):
+		e.set_user_controlled(false)
 	# 设置低 HP 加速战斗
 	if e.has_method("get_health"):
 		var h: Node = e.get_health()

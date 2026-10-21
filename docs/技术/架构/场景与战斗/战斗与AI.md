@@ -17,7 +17,7 @@ StickmanEntity (CharacterBody2D)        ← 物理+碰撞
 ├── HealthComponent (Node)              ← HP
 ├── AIController (Node)                 ← 决策大脑
 │   └── BehaviorStateMachine
-└── PossessionInterface (Node)          ← 玩家附身接口
+└── UserControlInterface (Node)          ← 玩家 User Control 接口
 ```
 
 **关键**：`StickmanRig` 不动（已实现的 IK/动画保留），外层包一个 `CharacterBody2D` 承担物理与移动。AI 通过 `rig.play("walk")` + `rig.set_anim_speed(...)` 驱动渲染，通过 `CharacterBody2D.velocity` 驱动物理。
@@ -116,13 +116,13 @@ func _is_in_passage_barrier() -> bool:
 - 方案：平时**局部避障（raycast + 切线滑动 + separation 分离）**，契合模拟 Tag / RimWorld pawn 移动模型；障碍复杂/密集时用**简单 A\* 网格**兜底，两者结合
 - 详见 `docs/项目/P0收口执行计划.md` §13.4
 
-#### 7.1.3 附身接口
+#### 7.1.3 User Control 接口
 
-`PossessionInterface` 提供：
-- `set_possessed(bool)`：切换玩家控制
-- `is_possessed() -> bool`
-- 附身时：读取 WASD 输入驱动 `velocity`，`AIController` 暂停
-- 取消附身：`AIController` 恢复控制
+`UserControlInterface` 提供：
+- `set_user_controlled(bool)`：切换玩家控制
+- `is_user_controlled() -> bool`
+- User Control 时：读取 WASD 输入驱动 `velocity`，`AIController` 暂停
+- 取消接管：`AIController` 恢复控制
 
 ### 7.2 行为状态机
 
@@ -295,13 +295,13 @@ MissingArrowsTolerance；伪 = 犹豫/规避/包抄，RWR 血统自创）。随�
 
 **卡死看门狗**：`ai_controller._watchdog_tick` O(1)（只记上次采样位置 + 计时，零扫描零分配）——有移动意图（>10px/s）但窗口 2s 内净位移 <12px 判卡死，处置 = 重进 attack（enter 清目标/持瞄，下一拍重选）+ 0.25s 随机方向分离推力；无移动意图自动清零豁免（站桩输出/压制/硬直/待命不误伤）。档案键 `stuck_watchdog_*` 五键（12-游戏AI系统.md §7.3）。
 
-### 7.5 玩家附身
+### 7.5 玩家接管
 
-`PossessionInterface`：
+`UserControlInterface`：
 ```gdscript
-func possess(unit_id: int) -> void:
+func control(unit_id: int) -> void:
     # 1. 暂停该单位的 AIController
-    # 2. InputDispatcher.set_mode(POSSESS)
+    # 2. InputDispatcher.set_mode(USER_CONTROL)
     # 3. CameraRig.follow(entity)
     # 4. 路由 WASD/鼠标到该 entity 的 velocity/weapon
 
@@ -309,12 +309,12 @@ func release() -> void:
     # 反向恢复
 ```
 
-附身时：
+User Control 时：
 - WASD → `CharacterBody2D.velocity`
 - 鼠标左键 → 攻击
 - 鼠标右键 → 瞄准/格挡
 - Tab → 打开该层级管理面板
-- ESC → 退出附身
+- ESC → 退出接管
 
 ---
 
@@ -395,7 +395,7 @@ modules/combat/
 - 同图按两指挥官实体位置的真实距离；跨图按驻地（location）间距离
 - 媒介速度查表（BalanceConfig，按科技阶段换代：传令兵跑步 → 骑马传令 → 后续通信科技）
 - **层级数本身不产生延迟**——同层远距两节点可以比跨层相邻两节点更慢
-- 玩家附身某指挥官亲自下令 → 该环节无传播（玩家的话已在那个人嘴里）
+- 玩家接管某指挥官亲自下令 → 该环节无传播（玩家的话已在那个人嘴里）
 - 信使实体化（真实跑动/可截杀/阵亡丢令）为后续信使任务，接口见 [`组织系统架构.md §4.2`](../组织系统架构.md)
 
 ### 8.6 最高指挥单位与军衔体系（斩首规则）
@@ -438,7 +438,7 @@ modules/combat/
 
 **运动质感四机制**（批3 治"热锅蚂蚁"，SWL 语义同构，`entity_motion.gd`/`stickman_entity.gd`/`battle_sim.gd`）：
 
-- **facing 滞回**（`note_move_facing`，0.25s）：反向移动意图连续持续才放行翻面请求——0.5s 节流只限速率（意图高频反号时每个节流窗放行一次照样甩头），滞回让瞬时反号攒不满窗。附身豁免；`face_battle_dir` 等稳定朝向源不经此闸（直接走节流）。
+- **facing 滞回**（`note_move_facing`，0.25s）：反向移动意图连续持续才放行翻面请求——0.5s 节流只限速率（意图高频反号时每个节流窗放行一次照样甩头），滞回让瞬时反号攒不满窗。接管豁免；`face_battle_dir` 等稳定朝向源不经此闸（直接走节流）。
 - **分离不反转意图**（`_sep_no_reverse`，sim/节点双链同口径）：SWL PushApart 推的是刚体位置、从不反转移动意图——旧归一混合下逆意图推力压过意图即倒走（朝向翻转源头之一）。现反向推力压过走力 = **零速顶住**（velocity=0 自动落进卡死看门狗的无意图豁免，压阵单位不再被误判卡死吃随机推力），否则按横向分量偏航全速前进。前向/顶住二值，硬重叠归位置修正。
 - **分离错峰**：节点链扫描按实例奇偶相位错开（`_sep_phase`）；sim 链配对半交替（每对重叠偶轮低 sid 侧吃全额修正、奇轮高 sid 侧——两轮合计仍推完整重叠量，全场不再 15Hz 同刻同拍弹开成波浪）。
 - **换档斜坡**（`_speed_mult_chain` 单点维护倍率链）：run 档进/退/强制跑全部加速度限幅逼近不瞬跳（SWL walkPower/Run 力模型的连续速度观感等价物），退档减速带内维持跑步步态（步频随速度联动），掉进走速带自然换 walk。

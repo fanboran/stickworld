@@ -4,10 +4,10 @@ extends RefCounted
 ## 职责：按 UnitLodDirector 下发的档位调整表现层频率/可见性（rig 动画频率、
 ## 血条频率与显隐）。只动表现层——物理与战斗逻辑不受影响：命中帧结算走 rig
 ## 播放位置轮询，节流后事件最多晚 1 个节拍、不丢失不重发。
-## 死亡/附身优先于 LOD：死者不触碰（尸体血条语义由死亡收口权威管理），
-## 附身单位恒近景全速（玩家视点所在身体）。
+## 死亡/接管优先于 LOD：死者不触碰（尸体血条语义由死亡收口权威管理），
+## 接管单位恒近景全速（玩家视点所在身体）。
 ##
-## 纪律：无自持状态，rig/_health_bar/possessed 全经 _entity 回引。
+## 纪律：无自持状态，rig/_health_bar/user_controlled 全经 _entity 回引。
 
 ## 实体回引（构造注入；Node 不参与引用计数，无循环持有）
 var _entity: Node = null
@@ -37,7 +37,7 @@ const LOD_HZ_BAR_MID: float = 10.0
 func set_perf_tier(tier: int, anim_hz: float = -1.0) -> void:
 	if _entity.is_dead() or _entity.is_queued_for_deletion():
 		return
-	if _entity.possessed:
+	if _entity.user_controlled:
 		tier = PERF_TIER_NEAR
 	match tier:
 		PERF_TIER_MID:

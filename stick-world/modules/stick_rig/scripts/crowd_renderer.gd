@@ -185,7 +185,7 @@ func _band_of(y: float) -> int:
 
 
 ## 注册小兵：按 y 分带、带内池分配槽位、初始化动画状态、挂 rig 播报 hook。
-## 返回槽位句柄（Dictionary；unregister 时交回）。附身单位不应注册。
+## 返回槽位句柄（Dictionary；unregister 时交回）。接管单位不应注册。
 func register_unit(entity: Node) -> Dictionary:
 	var rig: Node = null
 	if entity.has_method("get_node_or_null"):
@@ -218,7 +218,7 @@ func register_unit(entity: Node) -> Dictionary:
 		"band": band,
 		"band_idx": band_idx,
 		"weapons": _adopt_weapons(entity, rig),
-		"renderer": weakref(self),  # 实体 _exit_tree/_on_possession_changed 经此注销
+		"renderer": weakref(self),  # 实体 _exit_tree/_on_user_control_changed 经此注销
 	}
 	_slots[slot["slot"]] = slot
 	# 阴影进 crowd 桶：原 ContactShadow Sprite 停用（注销/回退时恢复）

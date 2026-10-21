@@ -20,7 +20,7 @@ const PICKAXE: int = 3
 const STAFF: int = 4
 const MERIC: int = 5
 
-# ── AI 附身技能三档（SWL Personality.UserControlSkill 直译：LIMITED /
+# ── AI 接管技能三档（SWL Personality.UserControlSkill 直译：LIMITED /
 #    USES_IT_BUT_NOT_WELL / PRO——原版 AI 单位按性格等级使用玩家同款技能，
 #    PRO 档"会用得很好"。本项目映射到射击精度/持瞄节奏：档位乘数作用于
 #    aim_scatter（越小越准）与 aim_hold（越短拉弓越果断）。默认中位档
@@ -124,7 +124,7 @@ const BASELINE: Dictionary = {
 	"spawn_jitter_ratio": 0.5,              ## 假偏移比例：首次到期 = now + interval×(1 - ratio×rand%)（WorldBox rand(0, 0.5×cd) 真值）
 	"probe_fail_cooldown_enabled": false,   ## 域级探测失败也入短冷却（false=失败下一拍即重试=既有语义；WorldBox M6 cooldown_on_launch_failure）
 	"job_scan_interval": 0.5,               ## 派工/采集探测间隔（s，job 域失败冷却长度；语义推断初值待实测校准）
-	# ── AI 附身技能档位（SWL Personality.UserControlSkill；消费点 weapon_ranged
+	# ── AI 接管技能档位（SWL Personality.UserControlSkill；消费点 weapon_ranged
 	#    散布/behavior_attack 持瞄节奏。默认中位 ×1.0 零回归，精英单位经
 	#    BalanceConfig 行覆写升 PRO）──
 	"user_control_skill": 1,                ## UserControlSkill 枚举值（0 有限/1 会用但不精/2 精通）

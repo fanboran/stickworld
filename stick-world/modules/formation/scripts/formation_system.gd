@@ -565,7 +565,7 @@ func get_squad_leader(squad_id: String) -> Node:
 const AUTHORITY_LEADER_BASE: float = 1.0
 ## 组织指挥官已任命加成（编制在册 = 班有"官"）
 const AUTHORITY_COMMANDER_BONUS: float = 0.5
-## 玩家光环加成（班长被玩家附身；RWR favor_joining_player_squad_value_increase 0.2 直译）
+## 玩家光环加成（班长被玩家接管；RWR favor_joining_player_squad_value_increase 0.2 直译）
 const AUTHORITY_PLAYER_BONUS: float = 0.2
 ## 换班权威差容限（RWR authority_margin 0.07 直译：新班须高出当前班此值才值得换，
 ## 滞回防两边来回跳）
@@ -592,7 +592,7 @@ func _org_data(org_id: String) -> Dictionary:
 	return raw
 
 
-## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家附身
+## 小队权威值评分（R4 择班内核）：班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家接管
 ## 0.2；组织查询不可用（_org_api 缺载/无该方法）时跳过指挥官项；小队不存在返回 -INF
 ##（调用方以"可入"语义处理无班情况）。
 func get_squad_authority(squad_id: String) -> float:
@@ -603,7 +603,7 @@ func get_squad_authority(squad_id: String) -> float:
 	var leader: Node = squad.get("leader", null)
 	if leader != null and is_instance_valid(leader):
 		score += AUTHORITY_LEADER_BASE
-		if leader.has_method("is_possessed") and leader.is_possessed():
+		if leader.has_method("is_user_controlled") and leader.is_user_controlled():
 			score += AUTHORITY_PLAYER_BONUS
 	var org: Dictionary = _org_data(squad_id)
 	if not org.is_empty() and str(org.get("commander_id", "")) != "":

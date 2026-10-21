@@ -32,7 +32,7 @@ const MORNING_HOUR := 8.0
 # ─────────────────────────────── 内部状态 ────────────────────────────────
 var _canvas_modulate: CanvasModulate = null
 
-## 跟随玩家（附身实体）的暖光（PLACEHOLDER 素材 2026-08-22；替换项 P2）：
+## 跟随玩家（接管实体）的暖光（PLACEHOLDER 素材 2026-08-22；替换项 P2）：
 ## 夜晚玩家自带的营火/灯笼光。位置跟踪玩家而非镜头——玩家不在场（主菜单/战斗空场）
 ## 时降为微光并在玩家出现前不移动。贴图为运行时生成的径向渐变，非手绘资产。
 var _camp_light: PointLight2D = null
@@ -110,7 +110,7 @@ func _ensure_camp_light() -> void:
 	add_child(_camp_light)
 
 
-## 光强随环境亮度反相（越夜越亮），位置跟踪玩家（附身实体）脚下。
+## 光强随环境亮度反相（越夜越亮），位置跟踪玩家（接管实体）脚下。
 ## 默认关闭（camp_light_enabled=false）：energy 归零，仅保留节点供调试面板读取。
 func _update_camp_light() -> void:
 	if _canvas_modulate == null or _camp_light == null:
@@ -129,17 +129,17 @@ func _update_camp_light() -> void:
 	_camp_light.global_position = _camp_light.global_position.lerp(target_pos, 0.12)
 
 
-## 找玩家（附身）实体：优先 GameRoot.get_entity 系的附身实体；无则先找当前附身单位
+## 找玩家（接管）实体：优先 GameRoot.get_entity 系的接管实体；无则先找当前接管单位
 ## （EnvironmentSystem 与 units 解耦经 GameRoot 路径，若多个都找不到返回 null → 光静止）
 func _find_player_entity() -> Node2D:
 	var gr := get_tree().root.get_node_or_null("GameRoot")
 	if gr == null:
 		return null
-	# 1. 附身实体（最常用路径）：GameRoot → PossessionInterface.get_possessed_entity
-	if gr.has_method("get_possession_interface"):
-		var pi = gr.get_possession_interface()
-		if pi != null and pi.has_method("get_possessed_entity"):
-			var p = pi.get_possessed_entity()
+	# 1. 接管实体（最常用路径）：GameRoot → UserControlInterface.get_user_controlled_entity
+	if gr.has_method("get_user_control_interface"):
+		var pi = gr.get_user_control_interface()
+		if pi != null and pi.has_method("get_user_controlled_entity"):
+			var p = pi.get_user_controlled_entity()
 			if p != null and is_instance_valid(p):
 				return p as Node2D
 	# 2. 兜底：玩家实体

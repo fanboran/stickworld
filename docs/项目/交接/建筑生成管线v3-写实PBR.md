@@ -379,12 +379,12 @@ python probe_city_plan.py                                  # 城市平面图（�
   - 玩家=2D 火柴人浮于 3D 街景之上（canvas 层），WASD 可走——**最小可玩版**；3D 相机固定，玩家横移无视差（待接：玩家 x 映射 3D 相机横移）；
   - 验证探针 `tests/dev/verify_hd2d_map.tscn`（GameRoot 完整装配链加载 hd2d_street → 截图 → 退出），实跑无报错、玩家生成、游戏 HUD/3D 街景同屏。
 - **天空复用**：`assets/sky/bg_mountain_far/bg_trees_far.png`（SkyDecor 同源贴图）做成剪影 quad 立于背景之后——剪影 PNG 必须开 `TRANSPARENCY_ALPHA`（否则透明区渲成黑带）；高度/饱和度按空气透视压低压淡。
-- 验收产物：`temp/proto_hd2d/hd2d_g6_sky.png`（街景成图）、`temp/proto_hd2d/verify_hd2d_map.png`（**游戏内实机截图**，完整 HUD+3D 街景+附身玩家）。
+- 验收产物：`temp/proto_hd2d/hd2d_g6_sky.png`（街景成图）、`temp/proto_hd2d/verify_hd2d_map.png`（**游戏内实机截图**，完整 HUD+3D 街景+接管玩家）。
 
 **第四轮（2026-09-14，六项返修 + 游戏接入深化）**
 - **背景重复度**：烘焙清单扩到 19 张卡（新增 barn12/gatehouse8/alchemy8/library12/mage_tower6 等；chapel 无装配器、mage_tower 仅 6 格档——顺序勿改错）。背景改**主题组合段**：西段教堂天际线 / 中段市集街屋 / 东段田园作坊，卡按 x 段从池顺位取（防邻重）；bg2/bg3 均带补洞（阈值 9.8=最小画面宽 cottage_w6 9.1+0.6 缝）。
 - **道具穿模根因**：`bake_props` 的 anchor 语义=「画面中心对应点」（与 blender_proto 的落地线 anchor 不同），沿用建筑卡落位公式导致卡底入地（桶 -0.44 格、推车 -0.62、市集摊 -0.94）。修复=**卡底贴地落位**：pos.y=地面高+cosθ·半高、pos.z=基线−sinθ·半高。
-- **附身指示**：脚下黄椭圆（`possession_indicator.gd`，二分法定位）改**白色四角线框**；RTS 选中环（`selection_system.gd`）同步改白四角框统一风格。
+- **接管指示**：脚下黄椭圆（`user_control_indicator.gd`，二分法定位）改**白色四角线框**；RTS 选中环（`selection_system.gd`）同步改白四角框统一风格。
 - **假火柴人**：静默常驻模式不再 spawn 演示 CHARS（出图模式保留用于遮挡验证）；连带修 `_apply_light/_apply_stage/_build_world` 对 `_char_host` 的空引用。
 - **碰撞**：`proto_hd2d.get_solid_rects()`（前排建筑按格宽对齐中心+道具收窄 15%，灯笼不挡）→ 宿主 `Hd2dStreetMap._build_solid_bodies()` 生成 2D StaticBody 碰撞墙（y 688~1080 行走带后段，前景留横穿），玩家不再穿透建筑/摆件。
 - **出生点**：`GameRoot._on_map_loaded` 加 `map.has_method("get_spawn_point")` 钩子（向后兼容），HD2D 宿主返回街中心前景 (0,1010)。
@@ -398,7 +398,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 
 创始人补充指令：「村A不用像原来一样简陋，可以弄的规模大一点」→ 街长铺满村A全域 ±67 格（不压缩进单屏），配套把「玩家 x → 3D 相机横移」一并实装（否则大场景看不到）。
 
-1. **指示器归并 ✔**：possessed 白四角框并入 `selection_system.gd`（`_process` 常开自门控、`_draw_corner_bracket` 复用），`possession_indicator.gd` 退役删除。
+1. **指示器归并 ✔**：user_controlled 白四角框并入 `selection_system.gd`（`_process` 常开自门控、`_draw_corner_bracket` 复用），`user_control_indicator.gd` 退役删除。
 2. **main 合并 ✔**：本地 main 领先 96 提交（音频线/UI 顶栏/交接文档）零冲突并入（`2a44f77f`）。
 3. **语义翻译调研 ✔**（Explore 子代理）：关键发现——①recruit/conquest 两处 `HOME_MAP_ID="village_a"` 硬编码（招兵再生/败仗回村会送回旧图）；②昼夜真钟是 EnvironmentSystem 走 CanvasModulate（2D only），`WorldState.game_time` 单位即小时（0~24）；③HD-2D 图上跑 `spawn_npcs` 会全员待业（无工位/资源点）、`spawn_initial_warehouse` 静默失败（无 PlacementGrid）。
 4. **手工摆主场景 ✔**：FRONT_ROW 随机轮转改 9 栋语义清单（西村口民居@-51→石造仓库@-34→铁匠铺@-17→宅邸@+1（guildhall 代 manor，v3 无此装配器）→东民居@+17→谷仓@+33→酒馆@+48→城门塔@+59，两端 cottage/树补景）；道具改绝对坐标随楼；补烘 house_w16/warehouse_w16（修 library 档位 KeyError、剔 chapel 死引用，重烘 20 卡）。

@@ -6,7 +6,7 @@ extends RefCounted
 ##     （先例 debug_info_panel._append_ai_info 读 _get_behavior_profile /
 ##     _squad_phase_plans），**不写任何 AI 状态、不触发决策**；
 ##   - 切换原因推断在信号到达时点做（ai_viz_window 订阅 EventBus），瞬时态
-##     （看门狗推力/附身恢复）过后即逝，轮询侧补推不准——快照层只提供
+##     （看门狗推力/接管恢复）过后即逝，轮询侧补推不准——快照层只提供
 ##     describe_switch_reason 供信号时点调用；
 ##   - 任一环查询不可用即跳过该字段（调试面板不倒逼战斗侧改结构，同 W1 口径）。
 ##
@@ -129,7 +129,7 @@ static func flag_glyphs(e: Node, ai: Node) -> String:
 		g += "避"
 	if e.has_method("is_in_hit_stun") and e.is_in_hit_stun():
 		g += "晕"
-	if e.has_method("is_possessed") and e.is_possessed():
+	if e.has_method("is_user_controlled") and e.is_user_controlled():
 		g += "附"
 	return g
 
@@ -146,7 +146,7 @@ static func unit_detail(e: Node) -> Dictionary:
 		"pos": e.global_position if e is Node2D else Vector2.ZERO,
 		"facing": int(e.get_facing()) if e.has_method("get_facing") else 0,
 		"speed": e.velocity.length() if "velocity" in e else 0.0,
-		"possessed": bool(e.is_possessed()) if e.has_method("is_possessed") else false,
+		"user_controlled": bool(e.is_user_controlled()) if e.has_method("is_user_controlled") else false,
 		"hit_stun": bool(e.is_in_hit_stun()) if e.has_method("is_in_hit_stun") else false,
 		"hp": hp_pair(e),
 	}
@@ -354,8 +354,8 @@ static func _order_params_brief(params: Dictionary) -> String:
 # ─────────────────────────────── 切换原因推断 ────────────────────────────────
 
 ## 切换原因推断（**须在 ai_behavior_switched 信号到达时点调用**——看门狗推力/
-## 附身恢复是瞬时态，事后补推不准）。只读 AIController 公开面 + 两个私有观测
-## 字段（_wd_nudge_until/_was_possessed，调试读先例 _squad_phase_plans）。
+## 接管恢复是瞬时态，事后补推不准）。只读 AIController 公开面 + 两个私有观测
+## 字段（_wd_nudge_until/_was_user_controlled，调试读先例 _squad_phase_plans）。
 ## 返回短句（详情日志行用）。
 static func describe_switch_reason(e: Node, ai: Node, to: String, params: Dictionary) -> String:
 	if e == null or not is_instance_valid(e):
@@ -411,7 +411,7 @@ static func describe_switch_reason(e: Node, ai: Node, to: String, params: Dictio
 			return "号令行军"
 		_:
 			pass
-	# 未识别路径（附身恢复等非常规切换无独立真值面，不硬猜）
+	# 未识别路径（接管恢复等非常规切换无独立真值面，不硬猜）
 	return "—"
 
 

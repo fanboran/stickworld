@@ -27,9 +27,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	print("[verify_hd2d] 地图=%s" % map.name)
-	# 玩家生成（附身实体）
-	var player: Node2D = map.get_possessed_entity()
-	_check(player != null, "玩家附身实体已生成")
+	# 玩家生成（接管实体）
+	var player: Node2D = map.get_user_controlled_entity()
+	_check(player != null, "玩家接管实体已生成")
 	# 资源点（树/矿采集交互）：resource_node 组
 	var nodes := get_tree().get_nodes_in_group("resource_node")
 	_check(nodes.size() >= 10, "采集资源点已布置（实得 %d）" % nodes.size())

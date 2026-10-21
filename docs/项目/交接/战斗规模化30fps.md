@@ -366,7 +366,7 @@ Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理�
   finished`（攻击播完回切/移动锁）由 CrowdRenderer 检测 t ≥ 动画时长
   回调实体，语义与 rig 的 LOOP_NONE 完成检测一致。命中帧时序已归 sim
   （D 刀），渲染零依赖。
-- **骨骼富管线只留玩家附身单位与英雄**（个位数）。小兵 rig visible=
+- **骨骼富管线只留玩家接管单位与英雄**（个位数）。小兵 rig visible=
   false + 动画停用 + 批渲染层 discard；血条/阴影照旧（阴影已合批）。
 - **模拟侧零变化**：sim 已是位置/朝向/动画状态权威，AI/DamagePipeline/
   行为链全部不动。
@@ -395,7 +395,7 @@ Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理�
    骨骼先序 + 部件预烘表（复用 Skel.SKELETON_DATA 与 batch_rig 数学）、
    y 分带 12×4 桶 MMI、tick 推进插值写 buffer、animation_finished 回调。
 2. **接线**：rig.play/play_hit 播报（set_crowd_hook 代理模式）、
-   battle_instance 装配代理 + 小兵 rig 停用、附身豁免、env 开关。
+   battle_instance 装配代理 + 小兵 rig 停用、接管豁免、env 开关。
    ✅ 已完成（2026-09-11 深夜）：核心+接线全通，16v16 渲染态
    **fps_avg 94.6 / median 99（历史新高，基线富管线同刻 96.9）**、
    draw_calls 616（富管线同刻 815）。
@@ -465,7 +465,7 @@ Skeleton2D + AnimationTree 逐单位采样 + 叠加层 + 武器挂点 + 物理�
      **最终 diff = 0（1920×1080 全帧逐像素一致，双跑稳定复现）**；
      draw_calls_median 588（覆盖层 6 组×(8 相位+plain) 槽，+38 在预算内）。
      **验证**：diff=0 复现（`python stick-world/tools/diff_png.py`，任意 cwd）；
-     unit 批量 + 6 个受影响集成套件（ai_behaviors / possession /
+     unit 批量 + 6 个受影响集成套件（ai_behaviors / user_control /
      melee_combat / combat_feedback / combat_control / placement_grid_units）
      全绿；`check_godot_errors.sh` 干净。⚠ `test_ai_enhance.gd` 偶发 FAIL
      （"硬直结束后应恢复目标获取"）经 stash A/B 对照证实为**既有 flake**
@@ -593,7 +593,7 @@ STICK_BATTLE_SIM 兜底），关闭时走旧实体链（A/B 与回滚）。
   phys ≤10ms、96 phys ≤30ms，fps 显著上升，移动观感无漂移，套件绿。
 - 批 2：武器冷却/命中/击退/死亡迁移（sim 驱动命中帧事件）。验收：战斗
   全流程（伤害数字/击退/爆头/插箭/胜负）与旧路径行为一致，phys 进一步下降。
-- 批 3：AI 决策/行为意图读写改 sim + 目标选择批化 + 附身/工作/搬运等
+- 批 3：AI 决策/行为意图读写改 sim + 目标选择批化 + 接管/工作/搬运等
   非战斗行为兼容。验收：全行为回归 + 96 满编 ≥20fps。
 - 批 4：打磨（尸体/淡出/多战场实例/存档兼容）+ 全套件 + 总验收。
 
@@ -641,7 +641,7 @@ STICK_BATTLE_SIM 兜底），关闭时走旧实体链（A/B 与回滚）。
   动画仍在播）；perform_attack/perform_swing/_attack_ranged 三入口登记
   sim 并写 sim 冷却（`_cooldown_timer` 字段 sim 模式下不再推进，
   get_cooldown_remaining 消费方注意）。
-- **范围裁剪**：附身单位不注册（`_on_possession_changed` 附身即注销交还
+- **范围裁剪**：接管单位不注册（`_on_user_control_changed` 接管即注销交还
   旧链）；非参战单位（工人/村民）不注册；AI 决策/行为状态机/DamagePipeline/
   箭矢弹道/状态效果/士气保持 Node 侧（低频事件链，HealthComponent 仍血量
   权威）。`AIController._count_enemies_near` 等仍走 map 网格（未迁移）。

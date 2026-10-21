@@ -34,7 +34,7 @@
 | `resources`            | 资源库存/价格/消耗/产出               | ✅ 在役（town_life 经济产出端） |
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
 | `hd2d`                 | HD-2D 街景渲染栈（3D 世界 + 烘焙卡 + 角色 billboard，供 world 地图宿主消费） | ✅ 在役     |
-| `player_control`       | 输入分发 + 附身                    | ✅ P0.7 完整   |
+| `player_control`       | 输入分发 + 接管                    | ✅ P0.7 完整   |
 | `ui_global`           | 全局 UI 容器（UIRoot/HUD/弹窗层）+ 通用控件（小地图/缩放条/资源条） | ✅ P0 完整     |
 | `debug_gui`            | F3 调试覆盖层（占地/障碍/触发器可视化）      | ✅ P0 完整     |
 | `fx`                   | 战斗特效（粒子池 FxPool + FxLibrary 效果配置：血溅/火花/飘字等） | ✅ 在役     |
@@ -127,7 +127,7 @@ GameRoot
 ├── EnvironmentSystem   # 跨场景光照/天气（P0 仅 CanvasModulate）
 ├── CameraRig            # 水平卷轴 + 1/4 区域跟随 + 缩放/震屏
 ├── SceneLoader          # 地图加载（地图间切换已实现，地图内 Chunk 流式为占位）
-├── InputDispatcher      # 模式路由（EXPLORE/BUILD/BATTLE/POSSESS/INDOOR/UI）
+├── InputDispatcher      # 模式路由（EXPLORE/BUILD/BATTLE/USER_CONTROL/INDOOR/UI）
 ├── WorldChunkHost       # 当前 MapInstance 挂载点
 ├── UIRoot               # 三层 UI 容器
 └── BattleDirector       # 多战场调度
@@ -208,7 +208,7 @@ StickmanEntity (CharacterBody2D)
 │   └── BehaviorStateMachine
 │       ├── BehaviorIdle / Move / Wander / Work
 │       ├── BehaviorAttack / SeekCover / Retreat / Flee
-└── PossessionInterface (Node)       # 玩家附身接口
+└── UserControlInterface (Node)       # 玩家 User Control 接口
 ```
 
 **行为状态机**（详见 §4.2 Stickman 状态机）。
@@ -227,7 +227,7 @@ StickmanEntity (CharacterBody2D)
 
 **公共 API**（节选）：
 
-- `StickmanEntity.set_possessed(bool)` / `is_possessed()` / `get_facing()`
+- `StickmanEntity.set_user_controlled(bool)` / `is_user_controlled()` / `get_facing()`
 - `StickmanEntity.ai_move(dir, run)` / `ai_stop()` / `set_ground_constraints(...)`
 - `StickmanRig.play(anim)` / `get_current_anim()` / `get_bone_by_id(id)`
 - 常量：`ANIM_IDLE/WALK/ATTACK/DEAD`、`WeaponType`、`WALK_SPEED/RUN_SPEED`
@@ -244,7 +244,7 @@ StickmanEntity (CharacterBody2D)
 
 - **战斗实例 vs 战场场景解耦**：`battle_instance.gd`（纯逻辑）拥有 `BattleAnchor` 节点（渲染战场），不依赖具体场景
 - **三层命令系统**（详见 units）：玩家指令 → 编制默认 → 单位本能
-- **指挥链延迟**：`base_delay × tier_diff × commander_efficiency_modifier`，玩家附身该层级时延迟为 0
+- **指挥链延迟**：`base_delay × tier_diff × commander_efficiency_modifier`，玩家接管该层级时延迟为 0
 - **战场导演**（`battle_ai_director.gd`）：每 2-5s 给单位打情绪标签（HESITANT/EXCITED/PANICKED/STEADY）→ 灵动性
 - **队伍类型编制**（2026-08 新增）：编队由**编制预设**驱动（`config/formations/formation_presets.tres`），预设定义组织标签 + 职责范围（工作类型 WORK_COMBAT/BUILD/HAUL/FORAGE）+ 成员角色；职责范围可调整（`set_squad_work_types`）；AIController 决策按队伍职责过滤（建造队不参战/战斗班不接建造派工，未编队全能）；TacticalOrders 拒绝非战斗职责小队号令。UI 见 [`modules/formation/ui` 编制管理窗口（FormationPanel）](#modulesformation--战斗阵列模块)
 
@@ -428,7 +428,7 @@ L4 攻占北方行省
 #### `modules/inventory/` — 玩家背包与装备（items 域消费者）
 
 **职责**：列表制背包（无总数量限制）+ 5 装备槽 + Hotbar 指派（10 格，仅武器/工具/消耗品）+
-装备→附身实体桥接（weapon_type/盾/护甲聚合/武器 stats 乘子）+ 翻包与村仓 UI。
+装备→接管实体桥接（weapon_type/盾/护甲聚合/武器 stats 乘子）+ 翻包与村仓 UI。
 
 **核心件**：`PlayerInventory`（纯数据模型：背包+装备+wield+滚轮循环切武器）·
 `InventoryService`（运行时中枢：桥接/消耗品治疗/开局发放/world_state 表存档）·
@@ -436,7 +436,7 @@ UI 四件套：`inventory_screen`（背包·角色合一，StatsScreen 已并入
 `hotbar`（三段式，可视 8 格滑动窗口）/ `container_screen`（双栏转移：翻包/村仓共用）/
 `building_menu_screen`（建筑交互菜单，actions 数据驱动预制）。
 
-**交互**：E 背包 / 滚轮切武器（附身态，Shift+滚轮缩放）/ 数字键 1-9/0 /
+**交互**：E 背包 / 滚轮切武器（接管态，Shift+滚轮缩放）/ 数字键 1-9/0 /
 F 翻检遗物与建筑菜单。详见其 README 与 [14-背包与装备系统.md](../docs/设计/系统/14-背包与装备系统.md)。
 
 ***
@@ -445,7 +445,7 @@ F 翻检遗物与建筑菜单。详见其 README 与 [14-背包与装备系统.m
 
 #### `modules/player_control/` — 玩家输入与控制
 
-**职责**：输入分发、附身操控。框选/编队/战术指令实现在 combat 模块（`scripts/command/`，经装配注入协同）。
+**职责**：输入分发、User Control 操控。框选/编队/战术指令实现在 combat 模块（`scripts/command/`，经装配注入协同）。
 
 **输入模式枚举**：
 
@@ -454,16 +454,16 @@ F 翻检遗物与建筑菜单。详见其 README 与 [14-背包与装备系统.m
 | `EXPLORE` | 探索（默认）          | 启动 / 离开交互区            |
 | `BUILD`   | 建设（选址中）         | 按 B 或点建造菜单            |
 | `BATTLE`  | 战斗（可框选/下令）      | 城镇被袭 / 进入战场           |
-| `POSSESS` | 附身单兵            | BattlePanel "附身选中单位"  |
+| `USER_CONTROL` | 接管单兵            | BattlePanel "接管选中单位"  |
 | `INDOOR`  | 室内（EXPLORE 子模式） | 进入/离开 InteractionZone |
 | `UI`      | 模态弹窗            | 打开暂停菜单/战略图            |
 
-**附身流程**：
+**接管流程**：
 
 1. BATTLE 模式框选单位
-2. BattlePanel "附身选中单位" → `InputDispatcher.enter_possess_mode()`
-3. `PossessionInterface._on_mode_activated` 从 SelectionSystem 取选中单位
-4. `entity.set_possessed(true)` + CameraRig 居中跟随 + TimeManager 降速
+2. BattlePanel "接管选中单位" → `InputDispatcher.enter_user_control_mode()`
+3. `UserControlInterface._on_mode_activated` 从 SelectionSystem 取选中单位
+4. `entity.set_user_controlled(true)` + CameraRig 居中跟随 + TimeManager 降速
 5. WASD 移动 / 鼠标左键攻击 / ESC 退出
 6. 退出时恢复之前模式和时间速度
 
@@ -476,7 +476,7 @@ F 翻检遗物与建筑菜单。详见其 README 与 [14-背包与装备系统.m
 ```
 UIRoot
 ├── GlobalHUD              # 顶层常驻：时间速度、资源数、通知、居中模式
-├── ModePanel              # 模式容器：Village/Battle/Possess 槽位（内容由各模块装配）
+├── ModePanel              # 模式容器：Village/Battle/UserControl 槽位（内容由各模块装配）
 ├── ContextPanel           # 上下文容器：选中什么显示什么
 ├── HudOverlay             # HUD 槽：Minimap / ZoomBar / ResourceBar / ClockWidget 等部件挂此槽，
 │                            屏幕定位全部交 hud_zone_layout.gd zone 注册表（place_in_zone）
@@ -488,7 +488,7 @@ UIRoot
 | 归属 | 内容 |
 |------|------|
 | `modules/ui_global/` | 容器（UIRoot/HUD/ModePanel/ContextPanel/ModalOverlay）、通用 HUD 控件（小地图/缩放条/时钟/资源条）、游玩指示器、全局弹窗（设置/存档，不绑业务模块） |
-| `modules/<模块>/ui/` | 深度耦合该模块 API 的业务面板（如 `combat/ui/` 战斗面板、`formation/ui/` 编制窗口、`construction/ui/` 建造菜单、`player_control/ui/` 附身面板、`world_map/ui/` 战略图面板） |
+| `modules/<模块>/ui/` | 深度耦合该模块 API 的业务面板（如 `combat/ui/` 战斗面板、`formation/ui/` 编制窗口、`construction/ui/` 建造菜单、`player_control/ui/` User Control 面板、`world_map/ui/` 战略图面板） |
 
 **依赖注入约定**（2026-08 审计后统一）：
 
@@ -778,7 +778,7 @@ Technology  (1) ──unlocks───→ (N) Building/Equipment/Ability
 | 第4层 行省级     | ✅ L2 地区  | 看一个地区，地块多边形 + Q版图标              | `RegionData`     |
 | 第3层 城市/郡县级  | ✅ L1 地块  | 看一个地块，聚落点位 + 道路 + 资源            | `MapTileData`    |
 | 第2层 镇/村级    | ❌ 切到场景图  | 进入聚落 = `SceneLoader.load_map()` | `VillageMap` 等六类 |
-| 第1层 个体/班组   | ❌ 场景图内附身 | `PossessionInterface`           | `StickmanEntity` |
+| 第1层 个体/班组   | ❌ 场景图内接管 | `UserControlInterface`           | `StickmanEntity` |
 
 > **关键设计原则**：战略图的"缩放"不是连续的相机 zoom，而是**离散的粒度切换**。从 L1 地块再往下缩放，就跳出战略图，进入场景图。
 
@@ -975,7 +975,7 @@ config/
 | 场景/旅行 | `travel_requested(map_id, travel_mode)` / `travel_started(from_id, to_id, mode)` / `travel_completed(to_id)` / `map_loaded(map_id, map_type)` / `map_unloaded(map_id)` |
 | 战略图 | `strategic_map_opened` / `strategic_map_closed` / `settlement_updated(settlement_id, population_score)` |
 | 领地归属/解锁 | `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
-| 附身 | `possession_started(entity)` / `possession_ended(entity)` |
+| 接管 | `user_control_started(entity)` / `user_control_ended(entity)` |
 | UI | `ui_notification(title, body, level)` |
 | 其他 | `balance_changed` / `debug_visibility_changed(visible)` |
 

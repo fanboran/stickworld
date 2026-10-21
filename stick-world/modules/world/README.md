@@ -1,7 +1,7 @@
 # world：场景图组合根 —— 常驻主场景与地图体系
 
 > 本模块是场景图（卷轴地图，玩家在其中）的组合根：
-> - `scripts/game_root.gd` + `scenes/game_root.tscn`：常驻主场景（项目入口），装配建造/战斗/组织/资源/背包/附身/战略图等全部跨场景子系统
+> - `scripts/game_root.gd` + `scenes/game_root.tscn`：常驻主场景（项目入口），装配建造/战斗/组织/资源/背包/接管/战略图等全部跨场景子系统
 > - `scripts/map/`：地图宿主（HD-2D 街景 `hd2d_street_map.gd` 及其战场/资源图变体）与布景组件（资源点/城门交互/算法村生成）——旧 2D 村图/道路/守城/2D 天空宿主已于 2026-09-16 随旧 2D 图清退删除
 > - `scripts/setup/`：系统装配器、存档、传送、初始内容生成、Demo 目标链
 > - 地图场景清单、注册表与切换流程见 [scenes/README.md](scenes/README.md)
@@ -37,7 +37,7 @@ modules/world/
     ├── loading/
     │   ├── scene_loader.gd             #   SceneLoader：map_id 注册表 + 出口表 + travel_to_map 统一入口 + EventBus 转发
     │   ├── world_chunk_host.gd         #   WorldChunkHost：当前地图实例挂载点
-    │   └── chunk_trigger.gd            #   ChunkTrigger：地图边缘出口触发器（只响应附身实体）
+    │   └── chunk_trigger.gd            #   ChunkTrigger：地图边缘出口触发器（只响应接管实体）
     ├── map/                            # 地图宿主与布景组件
     │   ├── map_base.gd                 #   MapBase 基类：元数据 / spawn_entity / 实体缓存与空间网格 / 视觉域坐标协议
     │   ├── hd2d_street_map.gd          #   Hd2dStreetMap：HD-2D 街景宿主（3D 场景接入 / 角色进 3D / 城门传送带 / 昼夜）
@@ -69,7 +69,7 @@ modules/world/
 ### 地图宿主 duck API（MapBase 及子类）
 
 外部对地图实例的全部消费走 duck 方法（`has_method` 防御），由 MapBase 统一供给：
-`spawn_entity` / `get_entities`（每物理帧缓存一次）/ `query_neighbors`（空间网格邻域查询）/ `get_possessed_entity` / `get_walk_barriers` / `get_passage_barriers` / 元数据 getter（`ground_y`、`ground_ratio`、`map_left`、`map_right`、`ground_bottom`）。
+`spawn_entity` / `get_entities`（每物理帧缓存一次）/ `query_neighbors`（空间网格邻域查询）/ `get_user_controlled_entity` / `get_walk_barriers` / `get_passage_barriers` / 元数据 getter（`ground_y`、`ground_ratio`、`map_left`、`map_right`、`ground_bottom`）。
 视觉域坐标协议 `remap_fx_pos` / `unmap_fx_pos` / `entity_hover_rect`：2D 图恒等，HD-2D 图覆写——一切锚定实体位置的画布元素（悬浮框/飘字/粒子/点选判定）必须经此组方法进同一域，禁止手搓投影公式。
 
 ### SceneLoader（本地信号 + EventBus 同名转发）

@@ -227,13 +227,13 @@ func _test_r4_authority() -> void:
 			"work_types": [], "role": "fighter", "name": "s1",
 			"follow_squad_id": "", "follow_gap": 0.0, "slots": {}}
 	_runner.assert_approx(fs.get_squad_authority("s1"), 0.0, 0.001, "空班 = 0")
-	# 班长在场 → 1.0；附身 → +0.2 玩家光环
+	# 班长在场 → 1.0；接管 → +0.2 玩家光环
 	var leader := _FakeUnit.new()
 	fs._squads["s1"]["leader"] = leader
 	_runner.assert_approx(fs.get_squad_authority("s1"), 1.0, 0.001, "有班长 = 1.0")
-	leader.possessed = true
-	_runner.assert_approx(fs.get_squad_authority("s1"), 1.2, 0.001, "班长被附身 = +0.2 玩家光环")
-	leader.possessed = false
+	leader.user_controlled = true
+	_runner.assert_approx(fs.get_squad_authority("s1"), 1.2, 0.001, "班长被接管 = +0.2 玩家光环")
+	leader.user_controlled = false
 	# 组织指挥官在册 → +0.5
 	org.commander_id = "7"
 	_runner.assert_approx(fs.get_squad_authority("s1"), 1.5, 0.001, "指挥官在册 = +0.5")
@@ -267,7 +267,7 @@ class _FakeHealTarget extends Node2D:
 
 class _FakeUnit extends Node2D:
 	var faction: int = 0
-	var possessed: bool = false
+	var user_controlled: bool = false
 
 	func is_dead() -> bool:
 		return false
@@ -275,8 +275,8 @@ class _FakeUnit extends Node2D:
 	func get_faction() -> int:
 		return faction
 
-	func is_possessed() -> bool:
-		return possessed
+	func is_user_controlled() -> bool:
+		return user_controlled
 
 	func get_hp_ratio() -> float:
 		return 1.0

@@ -48,7 +48,7 @@
 | FormationPanel / DebugToolsPanel | `StickWindow`（FLOATING） |
 | BuildMenu 列表窗（BuildListWindow，首个 DOCK 业务面板） | `StickWindow`（DOCK，右下停靠+安全矩形） |
 | world_map 三件（travel_dialog / settlement_tooltip / map_legend） | 挂 StickTheme |
-| BattlePanel / PossessPanel | HUD 底栏部件标准（PanelContainer + window_panel_light，槽容器承载） |
+| BattlePanel / UserControlPanel | HUD 底栏部件标准（PanelContainer + window_panel_light，槽容器承载） |
 | ContextPanel / ModePanel | 结构合规（.tscn 槽容器，经 UIRoot 挂 StickTheme，无代码建控件） |
 
 POPOVER 行为已实现、暂无业务面板（接首个下拉/选择器时验证）。

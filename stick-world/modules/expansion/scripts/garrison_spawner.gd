@@ -120,8 +120,8 @@ func _spawn_unit(map: Node2D, pos: Vector2, profile: String) -> Node2D:
 	if u.get("foot_offset") != null:
 		u.global_position.y = pos.y - u.foot_offset
 	_apply_weapon(u, profile)
-	if u.has_method("set_possessed"):
-		u.set_possessed(false)
+	if u.has_method("set_user_controlled"):
+		u.set_user_controlled(false)
 	return u
 
 

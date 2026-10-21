@@ -49,7 +49,7 @@ modules/formation/
 - **结构列阵**：每列 UNITS_PER_COLUMN、列距 ROW_GAP、横向间距 SPREAD_SPACING（默认值全在 formation_spacing.gd，横向/列距可经 `balance.variables` 的 `var_spread_spacing` / `var_row_gap` 覆盖）；槽位随成员增减自动重算（列收缩不留空列 + 贪心换位缩短行军穿插）；`get_squad_dest mode="formation"` 取槽位落点，距落点过远转奔跑追赶，落定不重发号令；小队可锚定跟随另一小队（前队质心 − 行进方向 × gap，死区防抖，前队全灭自动解除）。
 - **间距不变式**（改数值前必读 formation_spacing.gd 文件头）：碰撞体宽 < 分离半径 < 横向间距 ≤ 列间距；跟队死区 < 横向间距；到位容差 ≥ 2×横向间距。分离半径曾有三份副本且换轨只改到一份，导致分离力持续对抗槽位、队列被推散（"阵型混乱"根因）——此后只在本模块维护、消费方经 api.gd 取值。
 - **队伍级共享目标**：每 0.5s 为每个战斗小队选共享攻击目标，队员在攻击行为里优先集火。选型走 tactics `TargetFinder.find_target`（经 `../tactics/api.gd` 的 Finder 常量；缺省 opts = 最近存活敌人，与单测/独立环境语义一致）。
-- **权威值择班**：`get_squad_authority` = 班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家附身 0.2；`should_switch_squad` 滞回 authority_margin=0.07。自主跳槽（authority_switch_enabled）按宿主节拍周期评估：邻近班权威对比 + 玩家班吸引/黏性加成 + 单位冷却与错峰相位 + 班长放人阈值 + 单拍迁出上限；迁移复用既有 add_unit（组织同步/角色/槽位一次做全）。
+- **权威值择班**：`get_squad_authority` = 班长在场 1.0 + 组织指挥官在册 0.5 + 班长被玩家接管 0.2；`should_switch_squad` 滞回 authority_margin=0.07。自主跳槽（authority_switch_enabled）按宿主节拍周期评估：邻近班权威对比 + 玩家班吸引/黏性加成 + 单位冷却与错峰相位 + 班长放人阈值 + 单拍迁出上限；迁移复用既有 add_unit（组织同步/角色/槽位一次做全）。
 - **小队相位计划**（phase_plan_enabled）：推进类号令激活、其余号令撤销（推进类枚举值由装配层注入，见下）；成员分 CORE/SCOUT/左右翼四角色（编队槽位列序 × 素质代理双维），CORE_LEAP→CORE_WAIT→FLANK_LEAP→FLANK_WAIT 交替掩护跃进直至终点；到位容差取 formation_spacing.gd 的 ARRIVE_TOLERANCE（`config/ai/squad_phase_plan.tres` 覆盖）。计划逻辑全在 squad_phase_plan.gd（纯逻辑无自转），本系统只做参数装载/号令触发/节拍驱动/查询出口；跟随玩家或锚定跟队的小队不激活。
 - **跨图携带**：export_squads / disband_all_squads / restore_squads（CombatApi 透传，换图前导出、新图按快照重建）。
 

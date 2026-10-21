@@ -32,8 +32,8 @@ func _ready() -> void:
 	var script_path: String = str(map.get_script().resource_path)
 	_check(script_path.contains("hd2d_battlefield_map"), "宿主应为 Hd2dBattlefieldMap（实得 %s）" % script_path)
 	# 玩家：从主街方向进（LEFT）→ 落战场西缘入口
-	var player: Node2D = map.get_possessed_entity()
-	_check(player != null, "玩家附身实体已生成")
+	var player: Node2D = map.get_user_controlled_entity()
+	_check(player != null, "玩家接管实体已生成")
 	if player != null:
 		var expect_x: float = float(map.get("map_left")) + 150.0
 		_check(absf(player.global_position.x - expect_x) < 10.0,

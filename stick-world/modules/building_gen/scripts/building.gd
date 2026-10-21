@@ -405,16 +405,16 @@ func set_map_reference(map: Node) -> void:
 
 ## 判定 body 是否为当前玩家实体（供 InteractionZone 触发过滤：NPC 不触发透明化）
 func _is_player_entity(body: Node2D) -> bool:
-	# 通过地图的 get_possessed_entity 获取当前附身实体（VillageMap/RoadMap 均实现）
+	# 通过地图的 get_user_controlled_entity 获取当前接管实体（VillageMap/RoadMap 均实现）
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		push_warning("[Building] 地图引用未注入，无法判定玩家实体: %s" % name)
 		return false
-	if not _map_ref.has_method("get_possessed_entity"):
+	if not _map_ref.has_method("get_user_controlled_entity"):
 		return false
-	var possessed: Node2D = _map_ref.get_possessed_entity()
-	if possessed == null or not is_instance_valid(possessed):
+	var user_controlled: Node2D = _map_ref.get_user_controlled_entity()
+	if user_controlled == null or not is_instance_valid(user_controlled):
 		return false
-	return possessed == body
+	return user_controlled == body
 
 
 ## 设置透明化状态（Tween 渐变 WallFront.alpha + Interior.visible）
@@ -476,9 +476,9 @@ func _on_enter_trigger_body_entered(body: Node2D) -> void:
 func is_player_inside_interaction_zone() -> bool:
 	if _interaction_zone == null:
 		return false
-	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_ref.has_method("get_possessed_entity"):
+	if _map_ref == null or not is_instance_valid(_map_ref) or not _map_ref.has_method("get_user_controlled_entity"):
 		return false
-	var player: Node2D = _map_ref.get_possessed_entity()
+	var player: Node2D = _map_ref.get_user_controlled_entity()
 	if player == null or not is_instance_valid(player):
 		return false
 	var bodies: Array = _interaction_zone.get_overlapping_bodies()

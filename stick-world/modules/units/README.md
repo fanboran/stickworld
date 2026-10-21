@@ -11,7 +11,7 @@
 >
 > 对外契约见 [api.gd](api.gd)（UnitsAPI）：外部实例化实体一律用 `UnitsAPI.STICKMAN_ENTITY_SCENE`，
 > 其余经全局 class_name（StickmanEntity / HealthComponent…）的公共方法交互。
-> 常用出口：StickmanEntity 的 `set_possessed` / `get_facing` / `ai_move` / `set_ground_constraints` /
+> 常用出口：StickmanEntity 的 `set_user_controlled` / `get_facing` / `ai_move` / `set_ground_constraints` /
 > `set_formation_system` / `set_battle_sim`；骨架动画经 StickRigAPI 的 `play()` /
 > `animation_finished` / `animation_event`。模块自身不向 EventBus 发射信号。
 >
@@ -30,7 +30,7 @@ modules/units/
 │   └── components/
 │       └── arrow.tscn                    # 箭矢投影物场景（GripPoint 语义；武器/盾表现组件在 stick_rig）
 └── scripts/
-    ├── stickman_entity.gd                # StickmanEntity：物理外壳（附身输入/AI 移动/地面约束/群体分离/受击反馈/尸体消隐/接触阴影/平衡数据装载）
+    ├── stickman_entity.gd                # StickmanEntity：物理外壳（User Control 输入/AI 移动/地面约束/群体分离/受击反馈/尸体消隐/接触阴影/平衡数据装载）
     ├── entity/
     │   ├── visual_controller.gd          # 动画播放组件（搬运映射/动作锁定/待机变体/受击插播/持盾姿态/头顶进度条）
     │   ├── interaction_controller.gd     # 按 F 交互（工地交付与建造/仓库取放/兵营招兵/资源采集）+ 交互提示弹窗
@@ -38,7 +38,7 @@ modules/units/
     │   ├── action_progress_indicator.gd  # 头顶动作进度条（搬运/建造，行为脚本经 set_action_progress 更新）
     │   ├── weapon_mount.gd               # 武器挂载/攻击执行/命中帧事件/格挡/放箭/召唤与法术（类型/场景映射经 StickRigAPI 转发）
     │   ├── block_resolver.gd             # 盾牌格挡纯判定（正面扇区 + 概率掷骰，无状态）
-    │   ├── hitstop_controller.gd         # 命中顿帧（仅附身命中触发，全局最小间隔节流）
+    │   ├── hitstop_controller.gd         # 命中顿帧（仅接管命中触发，全局最小间隔节流）
     │   ├── hitbox.gd                     # 受击判定 Area2D + 碰撞层 bit 常量
     │   ├── status_effects.gd             # 状态效果（BURN/POISON/SLOW/STUN/HEAL；压制机制已删）
     │   ├── incoming_threat_ledger.gd     # 在飞箭矢账本（伤害估计 + 威胁时刻）
@@ -102,7 +102,7 @@ modules/units/
 
 实际移速 = 基速 × 多级乘子，逐级独立可调：
 
-- 基速：`WALK_SPEED=160` / `RUN_SPEED=320` px/s（run=步行×2 的常识比例；balance.variables 的 var_walk_speed / var_run_speed / var_base_scale 可覆盖；附身时 Alt 切散步模式锁 walk）。
+- 基速：`WALK_SPEED=160` / `RUN_SPEED=320` px/s（run=步行×2 的常识比例；balance.variables 的 var_walk_speed / var_run_speed / var_base_scale 可覆盖；User Control 时 Alt 切散步模式锁 walk）。
 - 乘子链（`_apply_movement`）：地形倍率（地图查询）× `move_speed_mult`（行为档案 move_mult 写入，兵种机动性差异）× 状态减速（SLOW ×0.5）× 举盾倍率 × `armor_speed_factor`（背包装备三件 speed_penalty 乘积）。
 - 动画联动：walk 动画播放速率随速度缩放（速度 100px/s 对应 1.0×，整体再 ×1.4，下限 0.6×）；run 动画速率随跑速等比缩放（跑速 208px/s 对应 1.0×，同 ×1.4），低于 `IDLE_THRESHOLD=5` px/s 回 idle。
 

@@ -13,7 +13,7 @@
 | 层 | 目录 | 依赖 | 特征 | 示例 |
 |----|------|------|------|------|
 | **Unit 单元** | `tests/unit/` | 无 GameRoot，纯对象/纯函数 | 快、确定性、隔离、AAA | 指挥链延迟公式、战斗胜负判定、士气数值、资源扣减、编队增删 |
-| **Integration 集成** | `tests/integration/` | 最小场景树 fixture（自建自毁） | await 就绪信号+超时 | 战斗循环、附身流程、跨图旅行、建造循环、近战剑击 |
+| **Integration 集成** | `tests/integration/` | 最小场景树 fixture（自建自毁） | await 就绪信号+超时 | 战斗循环、接管流程、跨图旅行、建造循环、近战剑击 |
 | **Smoke 冒烟** | `tests/smoke/` | 完整 GameRoot | 数量少、每条带超时、只验"不崩+关键里程碑" | 新游戏启动 60s 零 ERROR、跨图旅行不崩 |
 | **Dev 开发调试** | `tests/dev/` | 完整 GameRoot + 启动参数 | **不进 CI**，手动体验用 | 一键直达遭遇战（编队→跨图→4v4） |
 
@@ -80,7 +80,7 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 | T0-4 | integration：建造循环 + 室内系统（smoke） | ✅ |
 | T0-5 | smoke：新游戏 60s 冒烟 + `run_all.ps1` 聚合器 | ✅ |
 | T0-6 | 清理孤儿 uid、`*_result.txt`、硬编码路径 | ✅ |
-| T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_possession、08→smoke/test_cross_map_travel | ✅ |
+| T0-7 | **数字标号全部清除**：test_stage_01~08 全部迁移完成——01→integration/test_game_root_assembly、02→integration/test_village_map、03→integration/test_ai_behaviors、05→integration/test_battle_lifecycle、06→integration/test_selection_formation、07→integration/test_user_control、08→smoke/test_cross_map_travel | ✅ |
 | T0-8 | **单元覆盖补齐（2026-08 审计）**：organization_manager（15 用例，含 insert_tier 修复回归 + WorldState 容器同步 + 序列化 round-trip）、entity_states（7 用例，WorldState 状态类序列化）、resources_api（6 用例，信号转发层）——补测过程揪出并修复 2 个真实 bug：`get_child_orgs` 返回类型崩溃、`from_dict` typed Array 赋值崩溃 | ✅ 3 文件 28 用例 |
 
 **当前结构（unit 批量 + integration + smoke 三层，`run_all.sh` 编排；套件数与结果以 Test Runner 实跑为准，integration 套件清单唯一真相源 = `run_all.sh` 的 `INTEGRATION_SUITES`；4 个集成校准待办见 [世界模型整合 §五](../../docs/项目/交接/世界模型整合.md)）**：

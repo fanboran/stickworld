@@ -86,7 +86,7 @@ func _find_player() -> Node2D:
 	if host == null:
 		return null
 	for u in host.get_children():
-		if is_instance_valid(u) and u.has_method("is_possessed") and u.is_possessed():
+		if is_instance_valid(u) and u.has_method("is_user_controlled") and u.is_user_controlled():
 			return u
 	return null
 

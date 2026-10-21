@@ -8,19 +8,19 @@ signal test_done(code: int)
 ## ② 手动放箭弹道（fire_arrow_manual：方向=鼠标指向、速度=力度映射、
 ##    draw_power 传播伤害公式、零散布——玩家拖拽即精确）
 ## ③ 蓄力投矛（throw_spear_manual：矛投射物生成与初速）
-## ④ 蓄力状态机（entity_possession：press→拉弓态、release→出手+清态、
+## ④ 蓄力状态机（entity_user_control：press→拉弓态、release→出手+清态、
 ##    cancel→强制收口；begin_player_draw 不进冷却，出手时刻才进）
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const WeaponMountScript := preload("res://modules/units/scripts/entity/weapon_mount.gd")
-const PossessionScript := preload("res://modules/units/scripts/entity/entity_possession.gd")
+const UserControlScript := preload("res://modules/units/scripts/entity/entity_user_control.gd")
 const BehaviorProfilesScript := preload("res://modules/units/scripts/ai/behavior_profiles.gd")
 
 ## 桩宿主实体：CharacterBody2D 外壳 + play_attack 计数（攻击动画起播断言）
 ## + _visual 表现写入面桩（WeaponMount._play_via_visual 的消费口，拉弓保持段
 ## 等直推 VisualController 的动画在此记账）
-## + entity_possession 消费的接口面（is_carrying/weapon_mount/朝向族）
+## + entity_user_control 消费的接口面（is_carrying/weapon_mount/朝向族）
 class StubVisual:
 	extends Node
 
@@ -183,19 +183,19 @@ func _test_begin_draw_no_cooldown() -> void:
 func _test_press_release_cycle() -> void:
 	var kit: Dictionary = _make_mount(2)  # BOW
 	var owner: Node = kit["owner"]
-	var possession: RefCounted = PossessionScript.new(owner)
-	possession._player_attack_press()
-	_runner.assert_true(possession.is_aim_charging(), "按下（弓）应进入拉弓态")
-	possession._player_attack_release()
-	_runner.assert_false(possession.is_aim_charging(), "松手应清拉弓态")
+	var user_control: RefCounted = UserControlScript.new(owner)
+	user_control._player_attack_press()
+	_runner.assert_true(user_control.is_aim_charging(), "按下（弓）应进入拉弓态")
+	user_control._player_attack_release()
+	_runner.assert_false(user_control.is_aim_charging(), "松手应清拉弓态")
 	var arrows: Array = _projectiles_of(kit)
 	_runner.assert_equal(arrows.size(), 1, "松手应放出一支箭（立即松 = 最小力度软箭）")
 	if not arrows.is_empty():
 		# 立即松手：held_ms ≈ 0 → power = CHARGE_MIN_POWER（轻点不是哑火）
-		var expected_speed: float = (owner.weapon_mount as Node).charge_launch_speed(possession.CHARGE_MIN_POWER)
+		var expected_speed: float = (owner.weapon_mount as Node).charge_launch_speed(user_control.CHARGE_MIN_POWER)
 		_runner.assert_approx((arrows[0] as Node)._vel.length(), expected_speed, 1.0,
 				"轻点 = 最小力度快速平射（ArrowSpeedMinPower 语义）")
-	possession._player_attack_release()
+	user_control._player_attack_release()
 	_runner.assert_equal(_projectiles_of(kit).size(), 1,
 			"非蓄力态重复松手应静默（不补射）——上一支箭仍在树内计数不变")
 	for a in _projectiles_of(kit):
@@ -207,14 +207,14 @@ func _test_press_blocked_by_cooldown() -> void:
 	var kit: Dictionary = _make_mount(2)  # BOW
 	var owner: Node = kit["owner"]
 	var wm: Node = kit["wm"]
-	var possession: RefCounted = PossessionScript.new(owner)
+	var user_control: RefCounted = UserControlScript.new(owner)
 	# 先放一箭进入冷却
 	var aim := Vector2(1.0, 0.0)
 	wm.release_player_shot(aim, 1.0)
 	for a in _projectiles_of(kit):
 		a.queue_free()
-	possession._player_attack_press()
-	_runner.assert_false(possession.is_aim_charging(),
+	user_control._player_attack_press()
+	_runner.assert_false(user_control.is_aim_charging(),
 			"冷却中按下不应进入蓄力态（冷却门在按下时刻判）")
 	kit["box"].queue_free()
 
@@ -222,12 +222,12 @@ func _test_press_blocked_by_cooldown() -> void:
 func _test_cancel_charge() -> void:
 	var kit: Dictionary = _make_mount(2)  # BOW
 	var owner: Node = kit["owner"]
-	var possession: RefCounted = PossessionScript.new(owner)
-	possession._player_attack_press()
-	_runner.assert_true(possession.is_aim_charging(), "前置：按下进入拉弓态")
-	possession.cancel_charge()
-	_runner.assert_false(possession.is_aim_charging(), "强制收口应清拉弓态")
-	_runner.assert_equal(_projectiles_of(kit).size(), 0, "收口不出手（退出附身防误射）")
+	var user_control: RefCounted = UserControlScript.new(owner)
+	user_control._player_attack_press()
+	_runner.assert_true(user_control.is_aim_charging(), "前置：按下进入拉弓态")
+	user_control.cancel_charge()
+	_runner.assert_false(user_control.is_aim_charging(), "强制收口应清拉弓态")
+	_runner.assert_equal(_projectiles_of(kit).size(), 0, "收口不出手（退出接管防误射）")
 	_runner.assert_approx(Engine.time_scale, 1.0, 0.001,
 			"收口后 time_scale 保持常速（蓄力链路不碰 time_scale，回归哨兵）")
 	kit["box"].queue_free()

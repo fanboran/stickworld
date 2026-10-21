@@ -8,7 +8,7 @@ extends StickWindow
 ## 纯观测（零行为改动）：
 ##   - 列表/详情每 0.25s 只读轮询（ai_viz_snapshot 快照层，全 duck 调用）；
 ##   - 状态切换日志订阅 EventBus.ai_behavior_switched（BehaviorStateMachine.travel
-##     唯一入口埋点），**原因推断在信号到达时点做**（看门狗推力/附身恢复是瞬时态）；
+##     唯一入口埋点），**原因推断在信号到达时点做**（看门狗推力/接管恢复是瞬时态）；
 ##   - 本窗口只在挂载它的调试场景（观察场等）活跃，无全局常驻成本。
 ##
 ## 信息密度布局（对标 LimboAI 调试器：树视图→本作注册表扁平等价物）：
@@ -421,8 +421,8 @@ func _detail_bbcode(d: Dictionary) -> String:
 		states.append("近身被威胁")
 	if bool(d.get("hit_stun", false)):
 		states.append("受击硬直")
-	if bool(d.get("possessed", false)):
-		states.append("玩家附身（AI 暂停）")
+	if bool(d.get("user_controlled", false)):
+		states.append("玩家接管（AI 暂停）")
 	if not states.is_empty():
 		lines.append("特殊态: %s" % " · ".join(states))
 	return "\n".join(lines)

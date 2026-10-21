@@ -67,7 +67,7 @@ func face_towards(pos: Vector2) -> void:
 	_force_facing(1 if dx > 0.0 else -1)
 
 
-## 朝向变更节流（SW3 直译，帧号制）：移动翻面唯一入口。玩家附身豁免
+## 朝向变更节流（SW3 直译，帧号制）：移动翻面唯一入口。玩家接管豁免
 ##（手控输入不经 AI 节拍）。返回是否生效（false=节流窗内，保持原朝向）
 func try_set_facing(new_facing: int) -> bool:
 	if new_facing == _entity._facing:
@@ -89,7 +89,7 @@ func _force_facing(new_facing: int) -> bool:
 
 func _set_facing_rate_limited(new_facing: int) -> bool:
 	var pf := Engine.get_physics_frames()
-	if not _entity.is_possessed() and _last_direction_change_frame >= 0 \
+	if not _entity.is_user_controlled() and _last_direction_change_frame >= 0 \
 			and pf - _last_direction_change_frame < FACING_RATE_LIMIT_FRAMES:
 		return false
 	_last_direction_change_frame = pf
@@ -100,10 +100,10 @@ func _set_facing_rate_limited(new_facing: int) -> bool:
 
 ## 移动侧意图喂入（批3 facing 滞回，_apply_movement 每物理帧调用）：
 ## 返回该侧翻面请求是否放行——反向意图连续 ≥ FACING_PERSIST_SECS 才 true。
-## 附身豁免（手控直给）；face_battle_dir 等稳定朝向源不经本闸（直接走
+## 接管豁免（手控直给）；face_battle_dir 等稳定朝向源不经本闸（直接走
 ## try_set_facing 的节流），站定收口不被移动滞回卡住。
 func note_move_facing(side: int, delta: float) -> bool:
-	if _entity.is_possessed() or side == 0 or side == _entity._facing:
+	if _entity.is_user_controlled() or side == 0 or side == _entity._facing:
 		_facing_desire_acc = 0.0
 		return true
 	if _first_move_facing_frame < 0:

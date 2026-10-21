@@ -5,7 +5,7 @@ extends Node
 ##   - 硬暂停（空格/模态自动暂停/战斗自动暂停）→ 引擎 SceneTree.paused，
 ##     世界子树（process_mode PAUSABLE）整体冻结，零逐系统检查；
 ##   - 倍速（X1/X2/X4）→ 模拟系统统一经 sim_delta(delta) 取步长；
-##   - 附身微操减速 → 倍速的一种预设值（X1），不新造机制。
+##   - 接管微操减速 → 倍速的一种预设值（X1），不新造机制。
 ##
 ## EventBus game_paused / game_resumed 保留为 UI 反应通道（"已暂停"提示、
 ## HUD 状态刷新），不再承担冻结职责。
@@ -23,13 +23,13 @@ enum Speed {
 
 var current_speed: Speed = Speed.X1
 
-## 附身（possess）时是否自动降速为 X1。
-var auto_slow_on_possess: bool = true
+## User Control 时是否自动降速为 X1。
+var auto_slow_on_user_control: bool = true
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
-## 启动时应用设置面板持久化项（附身自动减速）。
+## 启动时应用设置面板持久化项（接管自动减速）。
 func _ready() -> void:
 	# 暂停驱动方：引擎总闸由本单例翻转，翻转动作本身与信号发射不受暂停影响
 	# （自动加载不在 game_root/ui_root 两棵子树内，无法随场景声明，此处为
@@ -44,8 +44,8 @@ func _ready() -> void:
 	# 兜底下界），2026-10-05 观感重构批0
 	Engine.max_physics_steps_per_frame = 4
 	if ConfigManager:
-		if ConfigManager.has_key("game/slow_on_possess"):
-			auto_slow_on_possess = bool(ConfigManager.get_value("game/slow_on_possess"))
+		if ConfigManager.has_key("game/slow_on_user_control"):
+			auto_slow_on_user_control = bool(ConfigManager.get_value("game/slow_on_user_control"))
 	if EventBus and EventBus.has_signal("battle_started"):
 		EventBus.battle_started.connect(_on_battle_started)
 

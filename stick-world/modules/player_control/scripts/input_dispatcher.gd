@@ -114,8 +114,8 @@ func enter_battle_mode() -> void:
 	set_mode(PlayerControlAPI.Mode.BATTLE)
 
 
-func enter_possess_mode() -> void:
-	set_mode(PlayerControlAPI.Mode.POSSESS)
+func enter_user_control_mode() -> void:
+	set_mode(PlayerControlAPI.Mode.USER_CONTROL)
 
 
 func enter_indoor_mode() -> void:

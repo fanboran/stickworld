@@ -3,7 +3,7 @@ extends BehaviorBase
 ## 跟随行为 -- 小队启用"跟随玩家"后，成员自动尾随玩家（保持距离，separation 防叠）。
 ##
 ## 详见 docs/技术/架构/场景与战斗/战斗与AI.md §7.2。
-## 目标：玩家实体（地图上 possessed 的单位）。玩家 70px 内停步，超出则靠近。
+## 目标：玩家实体（地图上 user_controlled 的单位）。玩家 70px 内停步，超出则靠近。
 ## 战斗中由 AIController 决策优先切走（_try_combat 高于跟随）。
 ##
 ## 完成条件（finish 后由 AIController 决策切换）：
@@ -46,7 +46,7 @@ func update(delta: float) -> void:
 		_target = _find_player()
 		_target_timer = TARGET_REFRESH_INTERVAL
 	if _target == null or not is_instance_valid(_target):
-		# 玩家不存在（如未附身）：原地待命
+		# 玩家不存在（如未接管）：原地待命
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
 		return
@@ -65,7 +65,7 @@ func update(delta: float) -> void:
 			entity.ai_stop()
 
 
-## 查找玩家实体（地图上 possessed 的单位）。
+## 查找玩家实体（地图上 user_controlled 的单位）。
 func _find_player() -> Node:
 	if entity == null:
 		return null
@@ -74,6 +74,6 @@ func _find_player() -> Node:
 	var map: Node2D = entity.get_map()
 	if map == null or not is_instance_valid(map):
 		return null
-	if map.has_method("get_possessed_entity"):
-		return map.get_possessed_entity()
+	if map.has_method("get_user_controlled_entity"):
+		return map.get_user_controlled_entity()
 	return null

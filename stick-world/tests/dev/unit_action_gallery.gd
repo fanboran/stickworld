@@ -146,7 +146,7 @@ func _spawn_units() -> void:
 		e.call("set_ground_constraints", FEET_Y - 1.0, FEET_Y + 1.0,
 				x - SPACING_X * 0.5, x + SPACING_X * 0.5)
 		e.global_position = Vector2(x, FEET_Y - float(e.get("foot_offset")))
-		e.call("set_possessed", false)
+		e.call("set_user_controlled", false)
 		var wm: Node = e.get_node_or_null("WeaponMount")
 		if wm != null:
 			wm.set("weapon_type", int(def["weapon"]))

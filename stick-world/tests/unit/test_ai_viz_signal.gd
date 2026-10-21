@@ -45,7 +45,7 @@ class FakeUnit:
 	func is_dead() -> bool:
 		return _dead
 
-	func is_possessed() -> bool:
+	func is_user_controlled() -> bool:
 		return false
 
 	func ai_stop() -> void:

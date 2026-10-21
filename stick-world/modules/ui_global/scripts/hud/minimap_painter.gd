@@ -89,7 +89,7 @@ static func photo_pos(world_pos: Vector2, rect: Rect2, snap: Dictionary) -> Vect
 
 
 ## 实体点集（每个绘制帧现取，位置随时变）：[{x, y, faction, player}]
-## 阵营判定只认 entity.get_faction()（BattleInstance 分配的 id）与 is_possessed()；
+## 阵营判定只认 entity.get_faction()（BattleInstance 分配的 id）与 is_user_controlled()；
 ## 玩家自身阵营由调用方经 player_faction_of() 取，用于"敌我"分辨。
 static func collect_points(map: Node2D) -> Array:
 	var out: Array = []
@@ -99,17 +99,17 @@ static func collect_points(map: Node2D) -> Array:
 		if e == null or not is_instance_valid(e) or not e is Node2D:
 			continue
 		var faction: int = int(e.get_faction()) if e.has_method("get_faction") else 0
-		var possessed: bool = e.has_method("is_possessed") and bool(e.is_possessed())
+		var user_controlled: bool = e.has_method("is_user_controlled") and bool(e.is_user_controlled())
 		out.append({
 			"x": (e as Node2D).global_position.x,
 			"y": (e as Node2D).global_position.y,
 			"faction": faction,
-			"player": possessed,
+			"player": user_controlled,
 		})
 	return out
 
 
-## 本方阵营 id：附身实体所属阵营；无附身（观战/战场看全局）返回 null
+## 本方阵营 id：接管实体所属阵营；无接管（观战/战场看全局）返回 null
 static func player_faction_of(points: Array) -> Variant:
 	for p: Dictionary in points:
 		if bool(p["player"]):
@@ -288,7 +288,7 @@ static func _draw_points(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: 
 ##
 ## 敌我判定两种口径：
 ##   - my_faction 非空（玩家在场）：同阵营 = 蓝、异阵营 = 红；
-##   - my_faction 为空（**观战 / 战场看全局**，无附身单位）：退回固定阵营色表
+##   - my_faction 为空（**观战 / 战场看全局**，无接管单位）：退回固定阵营色表
 ##     ——否则两边都是"非我方"，会各画一片红，敌我不可分（兵力配置读不出来）。
 static func point_color(faction: int, my_faction: Variant) -> Color:
 	if faction == 0:

@@ -101,9 +101,9 @@ func _speed_mult_chain() -> float:
 	if se != null and _entity._se_has_speed_mult:
 		slow_mult = se.get_speed_mult()
 	# 主控移速加成（SWL USER_CONTROLLED_SPEED=1.3 真值直译，翻译档 §7.1.1）：
-	# 附身单位全移速 ×1.3——操控"身手更矫健"的三特权之一（伤害 ×2 在
+	# 接管单位全移速 ×1.3——操控"身手更矫健"的三特权之一（伤害 ×2 在
 	# damage_pipeline、攻速 ×1.3 在 weapon_mount 冷却链）
-	var uc_mult: float = 1.3 if _entity.possessed else 1.0
+	var uc_mult: float = 1.3 if _entity.user_controlled else 1.0
 	return _terrain_speed_mult() * _entity.move_speed_mult * slow_mult \
 			* _blocking_speed_mult() * _entity.armor_speed_factor * uc_mult
 

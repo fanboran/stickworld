@@ -334,8 +334,8 @@ static func draw_entity_states(control: Control, ctx: Dictionary) -> void:
 		var screen_pos := world_to_screen(Vector2(
 				entity.global_position.x, _ground_y(map, entity.global_position.y)), ctx)
 		var info := "pos:(%d,%d)" % [int(entity.global_position.x), int(entity.global_position.y)]
-		if "possessed" in entity:
-			info += " %s" % ("[P]" if entity.possessed else "[AI]")
+		if "user_controlled" in entity:
+			info += " %s" % ("[P]" if entity.user_controlled else "[AI]")
 		if entity.has_method("get_current_anim"):
 			info += " %s" % entity.get_current_anim()
 		if entity.has_method("get_facing"):

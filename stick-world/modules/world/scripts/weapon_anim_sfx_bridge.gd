@@ -22,7 +22,7 @@ extends Node
 ##
 ## 已知边界（【提案/待定】听感验收）：玩家手动放箭（release_player_shot）箭在
 ## 松手瞬间离弦，而释放段动画的 Hit 在 0.5333s——音效比箭晚约 0.5s（AI 路径
-## 放箭计时与 Hit 同帧，无此问题）。修齐需动 entity_possession 链，归附身重构。
+## 放箭计时与 Hit 同帧，无此问题）。修齐需动 entity_user_control 链，归接管重构。
 ## 空挥（无目标出招）也会响一声"触石"——AI 出手前有距离门禁，空挥罕见，可接受。
 
 ## stick_rig 动画库（rigless 事件直读；L3 装配层经 stick_rig/api.gd 契约取用）

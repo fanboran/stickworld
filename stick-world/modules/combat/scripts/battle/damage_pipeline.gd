@@ -86,10 +86,10 @@ static func apply(target: Node, p: Params) -> float:
 	if p.is_crit:
 		final_amount *= p.crit_damage_multiplier
 	# 主控伤害加成（SWL userControlledDamageMultiplier=2 真值直译，翻译档
-	# §7.1.1）：附身单位直伤翻倍——"一人成军"的爽感来源（攻速 ×1.3 在
+	# §7.1.1）：接管单位直伤翻倍——"一人成军"的爽感来源（攻速 ×1.3 在
 	# weapon_mount 冷却链、移速 ×1.3 在 entity_motion 速度链，三特权同批）
 	if p.inflictor != null and is_instance_valid(p.inflictor) \
-			and p.inflictor.has_method("is_possessed") and p.inflictor.is_possessed():
+			and p.inflictor.has_method("is_user_controlled") and p.inflictor.is_user_controlled():
 		final_amount *= 2.0
 	# 单位类型减伤（原版：雕像 0.3 / 巨人 0.66，仅对可格挡类直伤生效；
 	# 创始人裁决 2026-10-16：×0.3 扩展到**一切建筑**——箭矢打建筑钝化）

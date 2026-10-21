@@ -198,7 +198,7 @@
 | 攻击 | Attack / AttackFromRange / GetTargetAttackSpot | behavior_attack 攻击段 + 远程延迟发射 + 攻击槽位外圈 | ✅ |
 | 溃逃 | NeedsToRunAway / IsUnderThreat | ai_controller 士气分支 + behavior_retreat（11a：`_is_under_threat` THREAT_RANGE 内存活敌人真值化，无威胁不溃逃） | ✅ |
 | 面向 | FaceDirection / SetNaturalFacingDirection / Face | behavior_base `face_target`/`face_position` 统一入口（11a：AI 面向调用全部收口） | ✅ |
-| 主控 | IsBeingUserControlledByPro | possessed + USER_CONTROLLED_ATTACK_SPEED 1.3 | ✅ |
+| 主控 | IsBeingUserControlledByPro | user_controlled + USER_CONTROLLED_ATTACK_SPEED 1.3 | ✅ |
 | 杂项 | DetermineXRunPower / IsPositionBacktracking / AlwaysAttacks / ShouldStand* 3 虚函数 | DetermineXRunPower 已入接近段（11a）；IsPositionBacktracking/AlwaysAttacks/ShouldStand* 散布在档案或未做 | ◐ |
 
 ### 兵种 Ai 类缺口（批次方案）

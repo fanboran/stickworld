@@ -36,7 +36,7 @@ func setup(entity: Node2D) -> void:
 
 # ─────────────────────────────── 玩家交互（按F）────────────────────────────────
 
-## 玩家附身时按F：仓库取放材料、工地交付/建造、资源点采集。
+## 玩家 User Control 时按F：仓库取放材料、工地交付/建造、资源点采集。
 ## （原为 E 键，E 让位背包装备系统）
 func try_interact() -> void:
 	var info: Dictionary = _find_interact_target()
@@ -129,9 +129,9 @@ func _open_region_storage() -> void:
 
 ## 按住 F 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
 ## 单次按下仍走 try_interact（_unhandled_input），本方法只负责"按住"的续采。
-## 键位走 InputMap action（possess/interact，InputBindings 单一真相源）。
+## 键位走 InputMap action（user_control/interact，InputBindings 单一真相源）。
 func try_hold_interact() -> void:
-	if not Input.is_action_pressed("possess/interact"):
+	if not Input.is_action_pressed("user_control/interact"):
 		return
 	# 敲击动作锁期间不重复触发（1.8s 一拍，与单次交互同节奏）
 	if float(_entity.get("_player_build_timer")) > 0.0:
@@ -409,10 +409,10 @@ func _hide_interact_hint() -> void:
 		_interact_hint_node.visible = false
 
 
-## 更新交互提示（玩家附身时，靠近仓库/工地/资源点在目标上方显示弹窗）。
+## 更新交互提示（玩家 User Control 时，靠近仓库/工地/资源点在目标上方显示弹窗）。
 ## 由实体 _physics_process 每帧调用。
 func update_hint() -> void:
-	if not _entity.is_possessed() or _entity.get_map() == null:
+	if not _entity.is_user_controlled() or _entity.get_map() == null:
 		_hide_interact_hint()
 		return
 	_ensure_interact_hint()

@@ -67,7 +67,7 @@ func _scored_neighbors() -> Array:
 
 
 ## 提示条：最强邻近班经 should_switch_squad 滞回判定够格时，统计本班有意转投人数。
-## N = 通过「不该动的别动」守卫（班长/附身/溃逃找掩体/被压制）且落在候选半径内的成员数。
+## N = 通过「不该动的别动」守卫（班长/接管/溃逃找掩体/被压制）且落在候选半径内的成员数。
 func _refresh_defect_hint(current: float, scored: Array, units: Array) -> void:
 	if scored.is_empty():
 		_host._defect_hint.visible = false
@@ -93,7 +93,7 @@ func _switch_intent_count(best_id: String, units: Array) -> int:
 	for u in units:
 		if u == null or not is_instance_valid(u):
 			continue
-		if u.has_method("is_possessed") and bool(u.is_possessed()):
+		if u.has_method("is_user_controlled") and bool(u.is_user_controlled()):
 			continue
 		if u == self_leader:
 			continue  # 班长本人不被抽走（A9 同守卫）

@@ -90,7 +90,7 @@ func _frames(n: int) -> void:
 		await get_tree().process_frame
 
 
-## 生成一个 NPC 单位（非附身、指定阵营）
+## 生成一个 NPC 单位（非接管、指定阵营）
 func _spawn_unit(x: float, faction: int) -> Node2D:
 	var map := _get_map()
 	var e: Node2D = map.spawn_entity(STICKMAN_SCENE, Vector2(x, _spawn_y()))
@@ -98,8 +98,8 @@ func _spawn_unit(x: float, faction: int) -> Node2D:
 		return null
 	if e.get("foot_offset") != null:
 		e.global_position.y = _spawn_y() - e.foot_offset
-	if e.has_method("set_possessed"):
-		e.set_possessed(false)
+	if e.has_method("set_user_controlled"):
+		e.set_user_controlled(false)
 	if e.has_method("set_faction"):
 		e.set_faction(faction)
 	return e

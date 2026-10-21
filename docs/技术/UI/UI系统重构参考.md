@@ -73,7 +73,7 @@ Tooltip 挂在**专门层（Tooltip=39）** + 一整套屏幕适配：
 |----|------|
 | LayerOrder 层号常量 | ✅ 已落地（layer_order.gd；WorldLoading/DebugOverlay/UiInspector/战略图三视图控制器/启动跳板层 BOOT_LOADING 均已引用） |
 | SystemOverlay 系统层槽 + toast/confirm 挂载 | ✅ 已落地（UIRoot.SystemOverlay z=90；StickKit.toast/confirm 经 `_system_overlay()` 挂它，无 UIRoot 场景回退调用者） |
-| UIModalStack 模态栈（缺口 2） | ✅ 已落地（ui_modal_stack.gd：层键字典 push/pop/pop_until + ESC 统一退栈；`GameRoot._handle_escape` 仅保留 POSSESS 特判与空栈开暂停菜单；确认框栈化 `StickConfirmDialog`；占位面板同类单例） |
+| UIModalStack 模态栈（缺口 2） | ✅ 已落地（ui_modal_stack.gd：层键字典 push/pop/pop_until + ESC 统一退栈；`GameRoot._handle_escape` 仅保留 USER_CONTROL 特判与空栈开暂停菜单；确认框栈化 `StickConfirmDialog`；占位面板同类单例） |
 | 输入屏蔽随栈统一 | ✅ 已落地（首个非活层入栈自动暂停、栈内无非活层恢复；压上层自动盖住下层防双重遮罩；遮罩消费鼠标保持逐层） |
 | 强/弱模态分级 + 战略图并入层键 | ✅ 已落地（STRONG_LAYERS 载入屏屏蔽 ESC；STRATEGIC_MAP 活层三视图互斥同键自注册；GameRoot 战略图特判删除） |
 | StrategicMap 层号并入常量 | ✅ 已落地（三控制器 `_ready` 设 `canvas.layer = LayerOrder.STRATEGIC_*`——.tscn 写不了脚本常量，由脚本侧设层，数字仅 .tscn 内留对照注释） |

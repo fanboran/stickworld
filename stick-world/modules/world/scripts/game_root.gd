@@ -120,7 +120,7 @@ var _minimap: Control = null
 @warning_ignore("unused_private_class_variable")
 var _zoom_bar: Control = null
 
-## 背包服务（InventoryService；装备→附身实体桥接，SystemSetup 装配）
+## 背包服务（InventoryService；装备→接管实体桥接，SystemSetup 装配）
 var inventory_service: Node = null
 ## 背包界面（InventoryScreen；E 键开关，SystemSetup 装配；shortcuts 助手经 _host 读写）
 @warning_ignore("unused_private_class_variable")
@@ -132,11 +132,11 @@ var _hotbar: Control = null
 var observer_view: bool = false
 @warning_ignore("unused_private_class_variable")
 
-# ─────────────────────────────── 附身系统（§15 阶段 0.7）────────────────────────────────
-## PossessionInterface 实例引用（运行时由 SystemSetup 装配）
-var _possession_interface: Node = null
-## PossessPanel 实例引用（运行时由 SystemSetup 装配）
-var _possess_panel: Control = null
+# ─────────────────────────────── User Control 系统（§15 阶段 0.7）────────────────────────────────
+## UserControlInterface 实例引用（运行时由 SystemSetup 装配）
+var _user_control_interface: Node = null
+## UserControlPanel 实例引用（运行时由 SystemSetup 装配）
+var _user_control_panel: Control = null
 
 # ─────────────────────────────── 资源系统（P0-9）────────────────────────────────
 ## ResourcesApi 实例引用（运行时由 SystemSetup 装配）
@@ -455,14 +455,14 @@ func get_minimap() -> Control:
 	return _minimap
 
 
-## 获取 PossessionInterface 引用（供测试和 Building 调用）
-func get_possession_interface() -> Node:
-	return _possession_interface
+## 获取 UserControlInterface 引用（供测试和 Building 调用）
+func get_user_control_interface() -> Node:
+	return _user_control_interface
 
 
-## 获取 PossessPanel 引用（供测试用）
-func get_possess_panel() -> Control:
-	return _possess_panel
+## 获取 UserControlPanel 引用（供测试用）
+func get_user_control_panel() -> Control:
+	return _user_control_panel
 
 
 ## 获取 BattleDirector 引用（供测试用）
@@ -780,7 +780,7 @@ func _open_placeholder_panel(preset_id: String) -> void:
 
 
 ## ESC 语义（统一模态栈逐层退栈）：有模态 → 退栈顶；无模态 → 开暂停菜单。
-## 附身模式返回 false（ESC 留给退出附身，不消费）。
+## User Control 模式返回 false（ESC 留给退出接管，不消费）。
 ## 逻辑在 game_root_shortcuts.gd（薄壳转发，测试直调签名不变）。
 func _handle_escape() -> bool:
 	return _shortcuts._handle_escape()

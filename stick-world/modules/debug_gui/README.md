@@ -20,8 +20,22 @@ modules/debug_gui/
     ├── debug_drawers.gd            # DebugDrawers：13 个静态绘制函数（签名 func(control, ctx)）
     ├── debug_panel.gd              # 可拖动开关面板（绘制器中文复选框 + 工具面板开关）
     ├── debug_info_panel.gd         # FPS/实体数/鼠标悬停单位文本框（随 F3 + entity_info 开关）
-    └── debug_tools_panel.gd        # F4 四页签：特效试放 / 资源×区域市场表 / 时间轴环境 / 建筑升级修理
+    ├── debug_tools_panel.gd        # F4 四页签：特效试放 / 资源×区域市场表 / 时间轴环境 / 建筑升级修理
+    ├── ai_viz_window.gd            # AI 决策观察窗（StickWindow FLOATING）：单位列表→选中详情（行为注册表/目标理由/阈值余量）+ 切换日志
+    ├── ai_viz_snapshot.gd          # 观测快照层（纯只读静态查询库：实体枚举/行摘要/详情快照/切换原因推断）
+    └── dev_scene_escape.gd         # 开发场景 ESC 统一弹窗拦截
 ```
+
+---
+
+## AI 决策观察窗（ai_viz_*）
+
+信息密度对标 LimboAI 调试器：单位列表 → 选中看详情（当前行为/目标及选择理由/
+关键阈值余量/决策时钟）+ 状态切换日志。**纯观测零行为改动**——唯一 AI 侧改动是
+`BehaviorStateMachine.travel` 末尾发射 `EventBus.ai_behavior_switched`（唯一入口埋点，
+无订户零成本），切换原因由观测侧在信号时点推断（瞬时态事后不可考）。窗口由调试
+场景自行挂开关（默认关）：观察场 V 键；观测数据面详见
+[UI.md §10.5.9](../../docs/技术/架构/场景与战斗/UI.md)。
 
 ---
 

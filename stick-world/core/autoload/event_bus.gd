@@ -65,6 +65,13 @@ extends Node
 # battle_id 经施法者 get_battle_instance().get_battle_id()；caster/target 用 instance_id；
 # anim_name ∈ {"heal_meric_1","heal_meric_2"}（随机分布统计源，spec §5.4.3）
 @warning_ignore("unused_signal") signal heal_cast(battle_id: String, caster_id: int, target_id: int, anim_name: String)
+# 单位行为状态机切换（BehaviorStateMachine.travel -> AI 决策可视化，纯可观测性）：
+# entity = 所属单位（含 AIController），from/to_behavior = 切换前后行为名
+#（from 可为空 = 初始 travel），params = travel 透传参数（诊断上下文，只读勿改）。
+# 每次切换必发（含号令/看门狗/决策层路径——travel 是唯一入口）；无订户零成本，
+# 决策逻辑零改动（埋点只在 travel 末尾追加 emit）。
+## 发射方：BehaviorStateMachine.travel
+@warning_ignore("unused_signal") signal ai_behavior_switched(entity, from_behavior: String, to_behavior: String, params: Dictionary)
 
 # ─────────────────────────────── Demo 引导（演示冲刺）────────────────────────────────
 

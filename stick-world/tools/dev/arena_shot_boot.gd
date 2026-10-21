@@ -21,6 +21,7 @@ const FACINGPROBE_DRIVER := preload("res://tools/dev/arena_facingprobe.gd")
 const OVERLAPPROBE_DRIVER := preload("res://tools/dev/arena_overlapprobe.gd")
 const FLICKERPROBE_DRIVER := preload("res://tools/dev/arena_flickerprobe.gd")
 const BURSTCAPTURE_DRIVER := preload("res://tools/dev/arena_burstcapture.gd")
+const AIVIZ_DRIVER := preload("res://tools/dev/arena_aiviz_shot.gd")
 
 var _preset := 1
 var _secs := 20
@@ -38,6 +39,7 @@ var _facingprobe := false
 var _overlapprobe := false
 var _flickerprobe := false
 var _burstcapture := false
+var _aiviz := false
 var _lineup := false
 
 
@@ -82,6 +84,8 @@ func _ready() -> void:
 				_flickerprobe = true; i += 1
 			"--burstcapture":
 				_burstcapture = true; i += 1
+			"--aiviz":
+				_aiviz = true; i += 1
 			"--lineup":
 				_lineup = true; i += 1
 			_:
@@ -99,6 +103,8 @@ func _start() -> void:
 	var driver_name := "ArenaShotDriver"
 	if _burstcapture:
 		script = BURSTCAPTURE_DRIVER; driver_name = "ArenaBurstCaptureDriver"
+	elif _aiviz:
+		script = AIVIZ_DRIVER; driver_name = "ArenaAiVizDriver"
 	elif _flickerprobe:
 		script = FLICKERPROBE_DRIVER; driver_name = "ArenaFlickerProbeDriver"
 	elif _overlapprobe:

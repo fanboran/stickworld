@@ -58,7 +58,7 @@ const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hu
 const _SquadCardScene: PackedScene = preload("res://modules/formation/ui/squad_card.tscn")
 
 # 模块自装配器（AR-1 装配下沉）：各模块 setup.gd 自持实例化，本宿主只编排步骤
-# 时序与跨模块接线；懒初始化见各 _xxx_setup() getter
+# 时序与跨模块接线；实例懒初始化见各 _xxx_assembler() getter
 const _InventorySetupScript: GDScript = preload("res://modules/inventory/setup.gd")
 const _ConstructionSetupScript: GDScript = preload("res://modules/construction/setup.gd")
 const _ResourcesSetupScript: GDScript = preload("res://modules/resources/setup.gd")

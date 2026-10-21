@@ -22,7 +22,10 @@ const ScriptTownLifeAPI := preload("res://modules/town_life/api.gd")
 
 const SLOT := 9
 const MAP_ID := "test_street"
-const DB_PATH := "user://temp/test_townlife_save_persistence.db"
+## 带进程号隔离（var 而非 const——要调 OS.get_process_id）：多实例并行（多会话各自跑
+## unit 批）时共用一个 user:// 临时库会在"删除重建 + Windows 文件锁"上互撞
+## （2026-10-22 并行 3 验证轮 4/6 复现）；各自开库互不干扰
+var DB_PATH := "user://temp/test_townlife_save_persistence.p%d.db" % OS.get_process_id()
 
 ## 与 SaveManager 建表同构的最小 entities 表（本套件只用到该表）
 const ENTITIES_SQL := """
@@ -52,6 +55,9 @@ func _ready() -> void:
 	_runner.add_test("未知职业 id：回待业池且不挂装具", _test_unknown_profession)
 	_runner.run()
 	print(_runner.summary())
+	# 自清临时库（per-pid 文件名，套件收尾删净，避免 user://temp 常驻累积）
+	if FileAccess.file_exists(DB_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(DB_PATH))
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 

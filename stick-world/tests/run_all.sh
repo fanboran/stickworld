@@ -39,6 +39,9 @@ if [ -z "${TMP_BASE:-}" ]; then
 fi
 TMP_DIR="$TMP_BASE/sw_tests_$$"
 
+# class_name 全局类缓存预检/自愈（脚本编译层守门，函数与根因档案见 tests/lib/class_cache_guard.sh）
+source "$SCRIPT_DIR/lib/class_cache_guard.sh"
+
 FILTER=""
 MATCH=""
 CHANGED=""
@@ -344,6 +347,9 @@ esac
 
 manifest_check
 
+# 类缓存预检（对全部层生效：integration/smoke 的 tscn 装载同样吃这份缓存）
+ensure_class_cache "$GODOT"
+
 if [ -n "$CHANGED" ]; then
 	changed_files=$(git -C "$PROJECT_DIR" diff --name-only "$CHANGED" 2>/dev/null)
 	if [ -z "$changed_files" ]; then
@@ -375,7 +381,7 @@ declare -a report_entries=()
 # unit 层：单进程批量
 if [ "$run_unit" -eq 1 ]; then
 	t0=$(date +%s%3N)
-	unit_count=$(grep -c 'res://tests/unit/' "$SCRIPT_DIR/batch_runner.gd")
+	unit_count=$(grep -c '"res://tests/unit/' "$SCRIPT_DIR/batch_runner.gd")
 	if "$GODOT" --headless --path "$PROJECT_DIR_WIN" res://tests/batch_runner.tscn >"$TMP_DIR/unit.out" 2>"$TMP_DIR/unit.err"; then
 		t1=$(date +%s%3N)
 		total_pass=$((total_pass + 1))

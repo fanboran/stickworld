@@ -868,11 +868,13 @@ func unregister_worker(worker: Node) -> void:
 	_assigner.unregister_worker(worker)
 
 
-## 自动派工：为工人找一个匹配项目
-func try_assign_worker(worker: Node) -> bool:
+## 自动派工（Job 板认领）：为工人挑最近项目并按提示词定族（build/haul）。
+## hint = {"can_build": bool, "can_haul": bool, "has_warehouse": bool}，
+## 缺省两族皆可（与旧派工调用面兼容）。
+func try_assign_worker(worker: Node, hint: Dictionary = {}) -> bool:
 	if _assigner == null:
 		return false
-	return _assigner.try_assign(worker)
+	return _assigner.try_assign(worker, hint)
 
 
 ## 空闲工人名单（拷贝；招兵/人口统计消费）
@@ -882,7 +884,22 @@ func get_available_workers() -> Array:
 	return _assigner.get_available_workers()
 
 
-## 获取工人当前派工的项目（无返回 null）
+## 工人当前持有的 Job 板任务（{kind: "build"/"haul", project}；未派工返回 {}）
+func get_worker_job(worker: Node) -> Dictionary:
+	if _assigner == null:
+		return {}
+	return _assigner.get_worker_job(worker)
+
+
+## 持有任务的族别刷新（材料到货/耗尽在 build ↔ haul 间换向，项目内原地换）。
+## 返回刷新后的任务视图（无可领族/未持任务返回 {}）。
+func refresh_worker_job(worker: Node, hint: Dictionary = {}) -> Dictionary:
+	if _assigner == null:
+		return {}
+	return _assigner.refresh_job(worker, hint)
+
+
+## 获取工人当前派工的项目（无返回 null；两族任务都绑定项目，消费面不变）
 func get_worker_project(worker: Node) -> ScriptConstructionProject:
 	if _assigner == null:
 		return null

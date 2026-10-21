@@ -2,7 +2,7 @@ class_name BehaviorHaul
 extends BehaviorBase
 ## 搬运行为 -- 工人从仓库取建材运往工地。
 ##
-## 工人被派工到 ConstructionProject 且项目需要材料时进入此行为：
+## 工人持 Job 板的 haul 任务（项目缺料时由 WorkCrewAssigner 派发）时进入此行为：
 ##   1. 走向最近的仓库（TO_WAREHOUSE）
 ##   2. 取货后走向工地（TO_SITE）
 ##   3. 到达工地交付建材（project.deliver_material）
@@ -12,8 +12,7 @@ extends BehaviorBase
 ##   - project: 建造项目对象（由 construction 模块经 AIController 注入；本行为只做鸭子类型调用，
 ##     不引用 construction 内部类，保持 units→construction 无编译期依赖）
 ##
-## 搬运工认领由 AIController 在 travel("haul") 前完成（try_claim_hauler），
-## exit 时释放认领。搬运时切换为 carry 动画。
+## 多工人各自往返（不限制搬运工数量）；搬运时切换为 carry 动画。
 
 
 # ─────────────────────────────── 常量 ────────────────────────────────

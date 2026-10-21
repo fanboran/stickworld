@@ -50,6 +50,10 @@ const WorkTypeCombat := "WORK_COMBAT"
 const WorkTypeBuild := "WORK_BUILD"
 const WorkTypeHaul := "WORK_HAUL"
 const WorkTypeForage := "WORK_FORAGE"
+## Job 板任务族（construction api get_worker_job 返回的 kind 值；本地常量
+## 避免跨模块依赖，与 WorkCrewAssigner.JOB_BUILD/JOB_HAUL 同值）
+const JobKindBuild := "build"
+const JobKindHaul := "haul"
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 所属实体引用
@@ -510,9 +514,13 @@ func _try_job_probes() -> bool:
 	return false
 
 
-## 尝试进入 work 行为。如果工人被派工到活跃项目，travel("work", {project})。
-## 返回 true 表示已切换到 work。
-## 职责过滤：队伍职责不含 WORK_BUILD/WORK_HAUL 的单位不接建造派工（如战斗班）。
+## 尝试进入 work/haul 行为（Job 板消费端）。工人持有任务的族别决定行为：
+## build → travel("work", {project})，haul → travel("haul", {project})。
+## 决策（谁去哪个项目、做什么族）归 construction 侧 Job 板（WorkCrewAssigner），
+## 本层只持提示词认领/刷新 + 按族转发——搬运是板上独立任务族，不再是
+## 同一项目里"缺料就去搬"的硬编码行为分支。
+## 职责过滤：入口门禁 WORK_BUILD 保持既有口径（战斗班/劳工队不接建造派工；
+## 板的提示词机制已支持 haul-only 认领，入口放开归后续行为树演进定夺）。
 func _try_work() -> bool:
 	if _entity == null or not is_instance_valid(_entity):
 		return false
@@ -523,30 +531,39 @@ func _try_work() -> bool:
 	var manager: Node = _entity.get_construction_manager()
 	if manager == null:
 		return false
-	if not manager.has_method("get_worker_project"):
+	if not manager.has_method("get_worker_job"):
 		return false
-	var project: RefCounted = manager.get_worker_project(_entity)
-	if project == null:
-		# 没有派工，尝试自动派工
-		if manager.has_method("try_assign_worker"):
-			if manager.try_assign_worker(_entity):
-				project = manager.get_worker_project(_entity)
+	# Job 板消费：未持任务 → 认领；已持任务 → 族别随项目状态刷新
+	#（材料耗尽 build→haul、材料到货 haul→build，均在原项目内换族）
+	var job: Dictionary = manager.get_worker_job(_entity)
+	if job.is_empty():
+		if manager.has_method("try_assign_worker") \
+				and manager.try_assign_worker(_entity, _job_hint()):
+			job = manager.get_worker_job(_entity)
+	elif manager.has_method("refresh_worker_job"):
+		job = manager.refresh_worker_job(_entity, _job_hint())
+	var project: RefCounted = job.get("project")
 	if project == null:
 		return false
 	# 检查项目是否还在接受工人（PLANNED 或 UNDER_CONSTRUCTION）
 	if not project.is_accepting_workers():
 		return false
-	# 职责过滤按实际行为分支判断：需要材料时按 WORK_HAUL 过滤，否则按 WORK_BUILD 过滤。
-	# 修复：此前入口处只校验 WORK_BUILD，导致仅含 WORK_HAUL 的工人队（fp_worker_crew）无法搬运。
-	var can_build: bool = _can_work(WorkTypeBuild)
-	var can_haul: bool = _can_work(WorkTypeHaul)
-	if project.needs_material() and can_haul and _has_warehouse():
+	# 按族转发行为（行为层不问族别，只执行；缺料时 work 行为自会 finish 换向）
+	if String(job.get("kind", JobKindBuild)) == JobKindHaul:
 		_state_machine.travel("haul", {"project": project})
-		return true
-	if can_build:
+	else:
 		_state_machine.travel("work", {"project": project})
-		return true
-	return false
+	return true
+
+
+## Job 板认领提示词：本单位的族能力（编队职责过滤）+ 仓库可达性（搬运链前提）。
+## 板据提示词定族：haul 可领 = 项目缺料 && can_haul && has_warehouse；否则 build。
+func _job_hint() -> Dictionary:
+	return {
+		"can_build": _can_work(WorkTypeBuild),
+		"can_haul": _can_work(WorkTypeHaul),
+		"has_warehouse": _has_warehouse(),
+	}
 
 
 ## 是否存在可用的仓库建筑（搬运取货点）。

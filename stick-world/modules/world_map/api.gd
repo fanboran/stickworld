@@ -470,6 +470,46 @@ func get_settlement_ref(settlement_id: String) -> SettlementRef:
 	return _data.get_settlement(settlement_id)
 
 
+## 两区域世界坐标直线距离（px，战略图底图坐标系）。
+## 消费方：指挥链传输层 region_distance_provider（组织系统架构 §4.2.2 跨图驻地距离）。
+## 区域标识两级（org.location 口径）：
+##   settlement_id（"settlement_<tile_id>_<idx>"，定居点级）→ SettlementRef.position
+##   map_id（地图根级，如 "l1_settlement_02"）→ 反查持有该 map_id 的聚落锚点
+## 返回 -1 = 任一区域解析失败（战略图未初始化/跨 L1 未加载/战略图外场景
+## （hd2d_street、road_* 道路图无静态锚点）/未知标识）——消费方按 fallback 常数处理。
+func region_distance(from_loc: String, to_loc: String) -> float:
+	var from_pos := _region_world_position(from_loc)
+	var to_pos := _region_world_position(to_loc)
+	if not (from_pos.is_finite() and to_pos.is_finite()):
+		return -1.0
+	return from_pos.distance_to(to_pos)
+
+
+## 区域标识 → 战略图世界坐标；Vector2.INF = 解析失败。
+## 查找顺序：当前 L1 → 出生 L1（组织实体只在玩家可及的图，出生包为权威兜底，
+## 与 set_player_map 聚落判定口径一致）。
+func _region_world_position(loc: String) -> Vector2:
+	if loc.is_empty():
+		return Vector2.INF
+	var datasets: Array = [_data]
+	if _birth_data != null and _birth_data != _data:
+		datasets.append(_birth_data)
+	for data in datasets:
+		var l1: L1WorldData = data
+		if l1 == null:
+			continue
+		# 定居点级：settlement_id 直查
+		var s: SettlementRef = l1.get_settlement(loc)
+		if s != null:
+			return s.position
+		# 地图根级：反查持有该 map_id 的聚落（1 地块 = 1 聚落）
+		for tile in l1.tiles:
+			var t: L1TileDef = tile
+			if t.settlement != null and t.settlement.map_id == loc:
+				return t.settlement.position
+	return Vector2.INF
+
+
 ## 获取所有地块（L1 多边形 + 聚落）
 func get_tiles() -> Array:
 	if _data == null:

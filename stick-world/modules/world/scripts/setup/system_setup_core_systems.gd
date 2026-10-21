@@ -192,6 +192,7 @@ func _setup_tactical_system() -> void:
 
 ## 传输层三 provider + cmd 属性 provider 注入（架构文档 §4.2.1/§4.3.1）：
 ## organization 保持零出向依赖——实体坐标/玩家位置/属性查询在此装配（world 侧高视角取值）。
+## 同时接 org_created → location 回填（org.location 语义源，§4.2.2 建队回填起步）。
 func _setup_command_transport() -> void:
 	var api: Node = _host._root._organization_api
 	if api == null or not api.has_method("set_transport_providers"):
@@ -199,10 +200,28 @@ func _setup_command_transport() -> void:
 	api.set_transport_providers(
 		_org_commander_position,
 		_player_command_position,
-		_region_distance_stub,
+		_region_distance,
 	)
 	if api.has_method("set_attribute_provider"):
 		api.set_attribute_provider(_stickman_cmd_attribute)
+	# org.location 语义源（§4.2.2 建队回填起步）：组织诞生即在当前场景图——
+	# org_created 统一回填 location = current_map_id（FormationSystem 建队/
+	# OrgPanel 手建/insert_tier 同口径；读档恢复不走 create_organization 不触发）
+	if api.has_signal("org_created") and not api.org_created.is_connected(_on_org_created_backfill_location):
+		api.org_created.connect(_on_org_created_backfill_location)
+
+
+## org_created 回填：location = 当前场景图 map_id（地图根级区域标识，战略图
+## settlement.map_id 反查可得锚点）；战略图外场景（hd2d_street/road_*）无锚点，
+## 传输层查 -1 走 fallback 常数——语义正确
+func _on_org_created_backfill_location(org_id: String) -> void:
+	var api: Node = _host._root._organization_api
+	if api == null or not api.has_method("set_organization_location"):
+		return
+	var map_id := ""
+	if _host._root.scene_loader != null and "current_map_id" in _host._root.scene_loader:
+		map_id = _host._root.scene_loader.current_map_id
+	api.set_organization_location(org_id, map_id)
 
 
 ## 组织指挥官实体坐标（同图）；无指挥官/实体不在场 → Vector2.INF（走跨图分支，不掺假距离）。
@@ -236,10 +255,18 @@ func _player_command_position() -> Vector2:
 	return Vector2.INF
 
 
-## 跨图驻地距离 v1 收口（§4.2.2）：world_map 侧取数接口未立——恒 -1 走 fallback 常数
-##（balance var_command_cross_map_distance）；接口落地后换真值（待办已登记）
-func _region_distance_stub(_from_loc: String, _to_loc: String) -> float:
-	return -1.0
+## 跨图驻地距离（§4.2.2 真值）：world_map api.region_distance——两区域
+## （settlement_id/map_id）战略图世界坐标直线距离；战略图未装配/未初始化/
+## 区域无锚点 → -1 走 fallback 常数（balance var_command_cross_map_distance）
+func _region_distance(from_loc: String, to_loc: String) -> float:
+	var sm: Node = _host._root._strategic_map
+	if sm == null:
+		return -1.0
+	var content: Node = sm.get_node_or_null("Content")
+	var map_api: Node = content.get_node_or_null("Api") if content != null else null
+	if map_api == null or not map_api.has_method("region_distance"):
+		return -1.0
+	return float(map_api.region_distance(from_loc, to_loc))
 
 
 ## cmd 属性查询（补位排序，§4.3.1）：instance_id 字符串 → attributes.cmd；失败 -1 沉底

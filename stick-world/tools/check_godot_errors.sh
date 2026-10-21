@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Godot 报错检查（bash 版，替代原 check_godot_errors.ps1）。
-# 两个来源：
+# 三个来源：
 #   1. 运行日志扫描：user://logs（godot.log + 轮转 godot<时间戳>.log）
-#   2. 编辑器启动模拟（默认开）：删 .godot/editor/filesystem_cache10 强制全量重扫，
+#   2. 测试运行日志扫描：$TMP/sw_tests_last/*.out|*.err（run_all.sh 退出时移交的
+#      最近一次测试 stdout/stderr——headless 测试进程不写 user://logs，测试期
+#      SCRIPT ERROR 只落在这里；run_all 未跑过则目录不存在，静默跳过）
+#   3. 编辑器启动模拟（默认开）：删 .godot/editor/filesystem_cache10 强制全量重扫，
 #      再跑 `godot --headless --editor --quit` 复现编辑器启动错误
 #      （BOM tscn / GDExtension 加载失败 / 插件 @tool 错误等）。约 15s。
 # 用法：
@@ -10,8 +13,8 @@
 #   tools/check_godot_errors.sh -Quick    # 仅日志扫描
 #   tools/check_godot_errors.sh -Warnings # 含 WARNING
 #   tools/check_godot_errors.sh -Since <epoch秒>  # 只扫 mtime 晚于该时刻的日志
-#     （gate 隔离窗口：多会话并行共用 user://logs，防止别的 worktree 同时跑
-#      Godot 写入的日志把本仓门禁打红——日志目录按项目名跨 worktree 共享）
+#     （gate 隔离窗口：多会话并行共用 user://logs 与 sw_tests_last，防止别的
+#      worktree 同时跑 Godot/测试写入的日志把本仓门禁打红）
 # 退出码：1 有错误，0 干净。
 
 set -u
@@ -94,10 +97,15 @@ count_as_error() {
 	esac
 }
 
-# ───────────────────────────── 1. 日志扫描 ─────────────────────────────
-if [ -d "$LOG_DIR" ]; then
-	oldest=""
-	# 按修改时间取最近 MAX_FILES 个日志；-Since 窗口外（mtime 更早）的不扫
+# ──────────────────── 1. 日志扫描（user://logs + 测试运行日志）────────────────────
+# scan_dir <目录> <glob> <标签>：目录内按 mtime 取最近 MAX_FILES 个文件，
+# 命中行打印并计错（-Since 窗口外/known 噪声白名单同语义）
+scan_dir() {
+	local dir="$1" glob="$2" tag="$3" f line hits n mtime
+	if [ ! -d "$dir" ]; then
+		echo "[check] 无日志目录: $dir"
+		return
+	fi
 	while IFS= read -r f; do
 		if [ "$SINCE" -gt 0 ]; then
 			mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
@@ -111,7 +119,7 @@ if [ -d "$LOG_DIR" ]; then
 		if [ -n "$hits" ]; then
 			n=$(printf '%s' "$hits" | grep -c .)
 			echo ""
-			echo "== [log] $(basename "$f") ($n hits) =="
+			echo "== [$tag] $(basename "$f") ($n hits) =="
 			while IFS= read -r line; do
 				[ -z "$line" ] && continue
 				if is_known_noise "$line"; then
@@ -122,10 +130,13 @@ if [ -d "$LOG_DIR" ]; then
 				echo "  $line"
 			done <<<"$hits"
 		fi
-	done < <(ls -t "$LOG_DIR"/*.log 2>/dev/null | head -n "$MAX_FILES")
-else
-	echo "[check] 无日志目录: $LOG_DIR"
-fi
+	done < <(ls -t "$dir"/$glob 2>/dev/null | head -n "$MAX_FILES")
+}
+
+scan_dir "$LOG_DIR" '*.log' 'log'
+# headless 测试运行日志（run_all.sh 移交的 sw_tests_last）：.out=stdout / .err=stderr
+#（glob 字符类匹配 .out/.err，排除同目录的 .res 结果标记文件）
+scan_dir "$TMP_BASE/sw_tests_last" '*.[oe]*' 'test'
 
 # ───────────────────── 2. 编辑器启动模拟 ─────────────────────
 if [ "$QUICK" -eq 0 ]; then

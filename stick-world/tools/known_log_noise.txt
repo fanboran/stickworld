@@ -28,3 +28,15 @@ already has a parent 'CaseRoot'
 # 本仓现行代码 RIG_SCENE 已指 res://modules/stick_rig/scenes/（批0 修复），
 # 此旧路径非本仓可产生；gate 报错扫描另有 -Since 窗口过滤兜底。随该 worktree 收线可删。
 res://modules/units/scenes/stickman_test.tscn
+
+# batch_runner 退出期 RID 泄漏计数（P11GodotBody2D=PhysicsBody2D 夹具 / DummyMeshE=
+# headless 渲染哑元网格）：单测夹具进程退出不逐个释放的既有测试台债务，非功能回归；
+# 测试运行日志（sw_tests_last/unit.out）可见化后按定性收录。真实泄漏（非测试进程）不在此列。
+RID allocations of type 'P11GodotBody2D' were leaked at exit
+RID allocations of type 'N13RendererDummy9DummyMeshE' were leaked at exit
+
+# test_ai_param_panel R2 缺载回退负路径：JSON.parse_string 喂空/缺档文本，解析失败即断言对象
+Parse JSON failed. Error at line 0: Expected key
+
+# batch_runner 退出期资源占用计数：与上两条 RID 泄漏同性质（测试台退出债务，非功能回归）
+resources still in use at exit

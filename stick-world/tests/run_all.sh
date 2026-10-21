@@ -293,8 +293,13 @@ classify_pool() {
 
 # ─────────────────────────────── 主流程 ───────────────────────────────
 
+# TMP_DIR 带 PID 隔离（并行 run_all 互不干扰写中途文件）；退出时整体移交到
+# 固定名 sw_tests_last（最近一次测试运行的完整 stdout/stderr 落盘）——
+# check_godot_errors.sh 第三扫描源（headless 测试进程不写 user://logs，
+# 测试期 SCRIPT ERROR 只存在于这里的 .out/.err）。并行时最后完成者胜。
+LAST_DIR="$TMP_BASE/sw_tests_last"
 mkdir -p "$TMP_DIR"
-trap 'rm -rf "$TMP_DIR"' EXIT
+trap 'rm -rf "$LAST_DIR"; mv "$TMP_DIR" "$LAST_DIR"' EXIT
 
 # ─────────────────────────── 清单自检（静默漏测盲区）───────────────────────────
 

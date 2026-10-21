@@ -31,7 +31,17 @@
 - `push_error()` / `push_warning()` 主动上报
 - WARNING 行（非致命，但应关注，如 `safe_emit` 参数超限）
 
-**落盘位置**：从编辑器运行时，游戏进程输出被编辑器捕获并**追加到同一 `godot.log`**；headless 运行时直接输出到 stdout/stderr。
+**落盘位置**：从编辑器运行时，游戏进程输出被编辑器捕获并**追加到同一 `godot.log`**；headless 运行时直接输出到 stdout/stderr——**headless 进程不写 `user://logs`**（实测：跑 headless 测试后日志目录无变化），测试期输出经 `run_all.sh` 重定向到临时目录（见下）。
+
+### 3. headless 测试运行输出（`run_all.sh` 落盘）
+
+测试进程的 stdout/stderr 由 `run_all.sh` 逐进程重定向到 `$TMP/sw_tests_<pid>/` 下的
+`.out`/`.err` 文件（unit 批量为 `unit.out`/`unit.err`，integration/smoke 为每套件一对）。
+运行退出时整个目录**移交**到固定路径 `$TMP/sw_tests_last/`（最近一次测试运行的完整输出；
+并行多次 run_all 时最后完成者胜，PID 隔离保证运行中互不干扰）。
+
+这是测试期 `SCRIPT ERROR` 的唯一落盘位置——`check_godot_errors.sh` 的第三扫描源。
+
 
 ---
 
@@ -60,9 +70,6 @@ bash tools/check_godot_errors.sh -Quick
 
 # 连 WARNING 一起看（改代码后建议带 -Warnings）
 bash tools/check_godot_errors.sh -Warnings
-
-# 只看最近 N 条错误摘要
-bash tools/check_godot_errors.sh -Head 10
 ```
 
 ### 检测原理（2026-08 实验验证）
@@ -71,7 +78,8 @@ bash tools/check_godot_errors.sh -Head 10
 
 | 检测方式 | 覆盖 | 局限 |
 |---|---|---|
-| 读 `logs/godot.log` | 最近一次运行的错误 | 会被后续运行轮转覆盖（保留最近若干次）；编辑器没再启动就没有新日志 |
+| 读 `logs/godot.log` | 最近一次运行的错误 | 会被后续运行轮转覆盖（保留最近若干次）；编辑器没再启动就没有新日志；headless 测试进程不写此目录 |
+| 读 `$TMP/sw_tests_last/` | 最近一次 `run_all.sh` 的测试期报错（SCRIPT ERROR/Parse Error 等） | 只保留最近一次；未跑过 run_all 则目录不存在；另有 `-Since` 窗口隔离并行会话 |
 | `godot --headless --import` | 全量资源导入解析 | **有缓存跳过**：只解析"首次/变更"文件，重复跑不报 |
 | `godot --headless --editor --quit` | 完整编辑器启动（扫描/全局类名/GDExtension/插件/资源解析） | 同样受缓存影响：失败状态会被 `.godot` 缓存记住，第二次跑不报 |
 | 普通无头测试（run_all） | 测试加载到的代码路径 | **资源解析严格度不同**：普通运行路径容忍 UTF-8 BOM，编辑器启动路径严格报 Parse Error；且只加载测试场景 |

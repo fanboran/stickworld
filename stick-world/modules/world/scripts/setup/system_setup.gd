@@ -41,8 +41,6 @@ const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thum
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
-const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
-const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 const _FxPoolScript: GDScript = preload("res://modules/fx/scripts/fx_pool.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
@@ -63,6 +61,7 @@ const _SquadCardScene: PackedScene = preload("res://modules/formation/ui/squad_c
 # 时序与跨模块接线；懒初始化见各 _xxx_setup() getter
 const _InventorySetupScript: GDScript = preload("res://modules/inventory/setup.gd")
 const _ConstructionSetupScript: GDScript = preload("res://modules/construction/setup.gd")
+const _ResourcesSetupScript: GDScript = preload("res://modules/resources/setup.gd")
 
 # 域助手（同模块内 preload，非跨模块依赖；实例懒初始化见各 _xxx_part() getter）
 const _CorePartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_core_systems.gd")
@@ -103,6 +102,7 @@ var _extras_part = null
 # 模块自装配器实例（AR-1 装配下沉，随迁随增）
 var _inventory_setup = null
 var _construction_setup = null
+var _resources_setup = null
 
 
 func _core():
@@ -145,6 +145,13 @@ func _construction_assembler():
 	if _construction_setup == null:
 		_construction_setup = _ConstructionSetupScript.new()
 	return _construction_setup
+
+
+## resources 模块自装配器（AR-1 下沉样板；RefCounted 无需 bind）
+func _resources_assembler():
+	if _resources_setup == null:
+		_resources_setup = _ResourcesSetupScript.new()
+	return _resources_setup
 
 
 func setup(root: GameRoot) -> void:

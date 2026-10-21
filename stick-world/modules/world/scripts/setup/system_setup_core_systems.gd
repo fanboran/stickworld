@@ -61,14 +61,12 @@ func _setup_combat_api_deferred() -> void:
 
 # ─────────────────────────────── 资源系统装配（P0-9）────────────────────────────────
 
-## 实例化 ResourcesApi 作为子节点，并注入 ResourceManager。
+## ResourcesApi 实例化与 ResourceManager 注入已下沉 modules/resources/setup.gd
+## （AR-1 装配下沉首批）；本步骤保留粒子特效池创建（fx 基础设施，PLACEHOLDER
+## 素材见 fx_library.gd 头注释）与跨模块接线编排。
 func _setup_resources_system() -> void:
-	var api := Node.new()
-	api.set_script(_host._ResourcesApiScript)
-	api.name = "ResourcesApi"
-	_host._root.add_child(api)
-	_host._root._resources_api = api
-	# 粒子特效池（PLACEHOLDER 素材，见 fx_library.gd 头注释）
+	_host._resources_assembler().assemble(_host._root)
+	# 粒子特效池（原随资源步骤创建，原位原序不动——composition root 装配）
 	var fx := Node.new()
 	fx.set_script(_host._FxPoolScript)
 	fx.name = "FxPool"
@@ -77,13 +75,10 @@ func _setup_resources_system() -> void:
 
 
 func _setup_resources_api_deferred() -> void:
-	if _host._root._resources_api == null:
+	if _host._root._resources_api == null or not _host._root._resources_api.has_method("setup"):
 		return
-	if not _host._root._resources_api.has_method("setup"):
-		return
-	var mgr = _host._ResourcesManagerScript.new()
-	_host._root._resources_api.setup(mgr)
-	# P0-9 注入到 ConstructionManager（若已就绪）
+	_host._resources_assembler().api_deferred(_host._root)
+	# P0-9 注入到 ConstructionManager（若已就绪）——跨模块接线留装配编排
 	if _host._root._construction_manager != null and _host._root._construction_manager.has_method("set_resources_api"):
 		_host._root._construction_manager.set_resources_api(_host._root._resources_api)
 	# 阶段 E：给玩家初始资源（P0 简化，资源不持久化，每次启动重置）

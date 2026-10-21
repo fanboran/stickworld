@@ -54,7 +54,7 @@ func _ready() -> void:
 	_runner.add_test("归属行骨架：真值源接入前恒隐藏", _test_territory_tooltip_line, true)
 	_runner.add_test("P4 染色：政治填充按已占地块逐格覆盖（占多少染多少）", _test_owned_tile_dyeing, true)
 	_runner.add_test("P4 染色：政治图例含「我方疆域」条目（无则不空留）", _test_legend_player_entry, true)
-	_runner.add_test("邻省上下文：政权色暗一阶 + 水体矢量 + 切省箭头环", _test_province_context, true)
+	_runner.add_test("邻省上下文：邻省纯灰阶 + 水体矢量 + 切省箭头环", _test_province_context, true)
 	_runner.add_test("水体矢量：政治模式河湖数据就绪（湖多边形界内 / 河宽 EDT）", _test_water_vector, true)
 	_runner.add_test("L2 打开：层级指示 + 当前地区号", _test_l2_indicator, true)
 	_runner.add_test("L3 打开：层级指示 + 关闭提示", _test_l3_indicator, true)
@@ -525,8 +525,9 @@ func _find_label_text(node: Node, needle: String) -> bool:
 	return false
 
 
-## 邻省上下文 + 切省箭头环（本批：灰色邻块 → 地形 + 暗一阶政权色；每个相邻省份一个
-## 箭头排在地图内虚拟圆环上、背离圆心指向该省）。
+## 邻省上下文 + 切省箭头环（邻块 = 侧表政权色**纯灰阶**暗一阶：色相归零、明度随政权色，
+## 创始人 2026-09-29 三轮定案「邻省=纯灰地块」；每个相邻省份一个箭头排在地图内虚拟
+## 圆环上、背离圆心指向该省）。
 ## 断言走真实数据与真实链路：ProvincePolitics 侧表 → 邻块取色；控制器 _arrow_ring_config
 ## → 箭头环；switch_province → api 实际换包且不改 ESC 语义。
 func _test_province_context() -> void:
@@ -578,23 +579,39 @@ func _test_province_context() -> void:
 			"圆环圆心 = context 中心（实测 %s）" % center)
 	_runner.assert_true(radius > 0.0 and radius < minf(center.x, center.y),
 			"圆环半径落在图内（r=%.0f 中心距边 %.0f）" % [radius, minf(center.x, center.y)])
-	# 邻块取色 = 侧表政权色暗一阶（不是旧平灰）
+	# 邻块取色 = 侧表政权色纯灰阶暗一阶（色相归零——MapTokens.L1_NEIGHBOR_DESAT，
+	# 明度仍随各自主导政权色；不是旧平灰 0.45，也不是饱和政权色）。期望色按
+	# 取色唯一出口 neighbor_block_color 的公式在测试侧复算，守常量回归
 	var pol := ProvincePolitics.load_shared()
 	_runner.assert_true(pol != null, "省份政治面侧表装载成功")
 	var renderer: MapRenderer = _l1_content.get_node_or_null("MapRenderer") as MapRenderer
+	_runner.assert_true(renderer != null, "前置：L1 Content 应挂 MapRenderer")
 	if pol != null and renderer != null:
-		var nb: Dictionary = (_l1_api.get_data() as L1WorldData).neighbors[0]
+		var data: L1WorldData = _l1_api.get_data()
+		var nb: Dictionary = data.neighbors[0]
 		var nb_label := int(nb.get("label", 0))
 		var got: Color = _Geo.neighbor_block_color(renderer, nb)
-		var want: Color = pol.color_of(nb_label).darkened(MapTokens.L1_NEIGHBOR_DIM)
+		var want: Color = pol.color_of(nb_label)
+		want.s *= MapTokens.L1_NEIGHBOR_DESAT
+		want = want.darkened(MapTokens.L1_NEIGHBOR_DIM)
 		_runner.assert_true(got.a > 0.0 and got.is_equal_approx(want),
-				"邻省块色 = 政权色暗一阶（#%d 实测 %s / 期望 %s）" % [nb_label, got, want])
+				"邻省块色 = 政权色纯灰阶暗一阶（#%d 实测 %s / 期望 %s）" % [nb_label, got, want])
 		_runner.assert_true(not got.is_equal_approx(MapTokens.L1_NEIGHBOR_COLOR),
 				"邻省不再是平灰")
-		# 邻块多边形轴序回归：邻块必须与会块一样是 [x,y]（曾被漏转 to_xy → 沿对角轴翻转）
-		var ext := _ring_extent(nb.get("polygons", []))
-		_runner.assert_true(ext.x > 0.0 and ext.x > ext.y,
-				"邻块 #%d 形状横向为主（轴序未翻转；实测 bbox %.0f×%.0f）" % [nb_label, ext.x, ext.y])
+		# 邻块多边形轴序契约：顶点一律 [x,y]（mesh_extract 产出 (y,x)，漏 to_xy 曾致
+		# 整块沿主对角轴翻转，2ca22cd 根治）。翻转不变量 = 「碎片贴省质心」：碎片是
+		# 省 ∩ 本包窗口，正确轴序下碎片中心（世界坐标）落在省全局质心近旁（三邻块实测
+		# ~260-290 世界px），翻转后落到对角位（实测 3400+）——形状横竖是几何属性不是
+		# 轴序属性，不作断言
+		var bbox := _ring_bbox(nb.get("polygons", []))
+		_runner.assert_true(bbox.size.x > 0.0 and bbox.size.y > 0.0,
+				"邻块 #%d 多边形非空（实测 %s）" % [nb_label, bbox.size])
+		var frag_center: Vector2 = Vector2(data.world_origin) + bbox.get_center()
+		var cen: Vector2 = pol.centroid_of(nb_label)
+		var ctx_side := float(maxi(data.context_size.x, data.context_size.y))
+		_runner.assert_true(frag_center.distance_to(cen) < ctx_side * 0.75,
+				"邻块 #%d 碎片贴省质心（轴序 [x,y] 未翻转；实测距 %.0f / 阈 %.0f）"
+						% [nb_label, frag_center.distance_to(cen), ctx_side * 0.75])
 	# 切省：api 实际换包 + 指示器跟随 + ESC 语义不变（仍为直开关闭）
 	var probe: int = int(BIRTH_NEIGHBORS[BIRTH_NEIGHBORS.size() - 1])
 	var switched: bool = _l1_content.call("switch_province", probe)
@@ -614,8 +631,8 @@ func _test_province_context() -> void:
 	_l1_content.call("close")
 
 
-## 多边形点列的包围盒尺寸（点列为 [x,y] 数组）
-func _ring_extent(polys: Array) -> Vector2:
+## 多边形点列的包围盒（点列为 [x,y] 数组；position=左上、size=宽高）
+func _ring_bbox(polys: Array) -> Rect2:
 	var lo := Vector2.INF
 	var hi := -Vector2.INF
 	for ring in polys:
@@ -624,8 +641,8 @@ func _ring_extent(polys: Array) -> Vector2:
 			lo = lo.min(v)
 			hi = hi.max(v)
 	if lo == Vector2.INF:
-		return Vector2.ZERO
-	return hi - lo
+		return Rect2()
+	return Rect2(lo, hi - lo)
 
 
 ## 水体矢量后处理（水陆同源 D3）：政治模式水 = 河流 polyline（EDT 实测宽）+

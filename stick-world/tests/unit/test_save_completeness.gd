@@ -38,9 +38,10 @@ func _ready() -> void:
 
 # ─────────────────────────── 桩件 ───────────────────────────
 
-## 桩组织 api（duck 契约：create/get/disband/assign/set_personnel/assign_commander）
+## 桩组织 api（duck 契约：create/get/disband/assign/set_personnel/assign_commander）。
+## extends Node：FormationSystem.setup 形参强类型 Node，RefCounted 桩会被类型系统拒绝。
 class FakeOrgApi:
-	extends RefCounted
+	extends Node
 	var orgs: Dictionary = {}
 	var personnel_log: Dictionary = {}   # org_id -> 最近一次 set_personnel 入参
 	var commanders: Dictionary = {}      # org_id -> 最近一次 assign_commander 的 sid
@@ -74,9 +75,10 @@ class FakeOrgApi:
 		return {"ok": true}
 
 
-## 桩单位（纯 Node + 可选角色；formation 各内部函数对裸桩有 has_method/in 守卫）
-func _make_stub(name_str: String) -> Node:
-	var u := Node.new()
+## 桩单位（Node2D + 无脚本；formation 内部读 global_position 等空间属性，
+## 裸 Node 会报脚本错；各内部函数对无脚本桩有 has_method/in 守卫）
+func _make_stub(name_str: String) -> Node2D:
+	var u := Node2D.new()
 	u.name = name_str
 	return u
 
@@ -115,10 +117,13 @@ func _test_parse_extra_field_guards() -> void:
 
 func _test_parse_extra_field_hit() -> void:
 	var sh: Node = ScriptSaveHandler.new()
-	_runner.assert_equal(sh._parse_extra_field({"extra_data": "{\"faction_id\":2}"}, "faction_id"), 2,
-		"正常字典取值（float 2）")
-	_runner.assert_equal(sh._parse_extra_field({"extra_data": "{\"faction_id\":0}"}, "faction_id"), 0,
-		"零值字段存在 = 取到 0（非 null，读侧照常回填）")
+	# JSON 数字解码恒为 float：先断非 null（防 null 被 int() 吞成 0 假绿），再 int 化比较
+	var fid: Variant = sh._parse_extra_field({"extra_data": "{\"faction_id\":2}"}, "faction_id")
+	_runner.assert_not_null(fid, "正常字典取到值")
+	_runner.assert_equal(int(fid), 2, "正常字典取值（JSON float 2.0 → int 2，读侧 int(fid) 同式）")
+	var fz: Variant = sh._parse_extra_field({"extra_data": "{\"faction_id\":0}"}, "faction_id")
+	_runner.assert_not_null(fz, "零值字段存在（非 null，读侧照常回填）")
+	_runner.assert_equal(int(fz), 0, "零值字段取到 0")
 	sh.free()
 
 
@@ -199,6 +204,7 @@ func _test_export_for_save() -> void:
 	_runner.assert_equal(platoons[0]["squads"], [w["s1"], w["s2"]], "排所属班导出")
 	_runner.assert_equal(int(platoons[0]["leader_iid"]), w["u2"].get_instance_id(), "排长 iid 导出")
 	fs.free()
+	org_api.free()
 
 
 ## restore_from_save：换算落档 → 模拟重启动（新宿主 + 桩组织收编档内组织）→ 重建
@@ -253,6 +259,8 @@ func _test_restore_from_save() -> void:
 	_runner.assert_equal(fs2.get_platoon_leader("platoon_1"), n2, "排长恢复")
 	_runner.assert_equal(fs2.get_squad_name(s1), "squad_alpha", "班名还原")
 	fs2.free()
+	org_api.free()
+	org_api2.free()
 
 
 func _test_restore_skip_guards() -> void:
@@ -279,6 +287,7 @@ func _test_restore_skip_guards() -> void:
 	# 空行/缺键 → 零恢复不崩
 	_runner.assert_equal(fs2.restore_from_save({}, {}), 0, "空行零恢复")
 	fs2.free()
+	org_api2.free()
 
 
 func _test_counter_advance() -> void:
@@ -311,3 +320,4 @@ func _test_counter_advance() -> void:
 	_runner.assert_false(fs_new_squad.is_empty(), "读档后可新建班")
 	_runner.assert_false(String(fs2.create_platoon([fs_new_squad], "")).is_empty(), "读档后可新建排")
 	fs2.free()
+	org_api2.free()

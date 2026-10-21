@@ -453,6 +453,29 @@ func disband_all_squads() -> void:
 	_unit_to_fireteam.clear()
 
 
+## 读档清场：disband_all_squads 的"不触组织侧"变体（读档完整性批次，save_handler
+## 存档恢复编排专用）。mid-session 读档时 game_loaded 已把 WorldState 容器覆盖为
+## 档内组织，而班 id = 组织 id 必然与旧班撞车——若经 disband_organization 解散旧班，
+## 会把档内组织从容器反注销（组织链断，编队恢复整批跳过）。本方法只清班/排/火力组
+## 本地态并广播 squad_disbanded，组织账面交由编排中随后的 OrganizationApi 收编
+## （restore_from_world）整体覆盖：旧班对应的旧组织随工作集清空消亡，无需逐个解散。
+func clear_squads_for_load() -> void:
+	for squad_id in _squads.keys():
+		var squad: Dictionary = _squads[squad_id]
+		for u in squad["units"]:
+			if is_instance_valid(u):
+				_unit_to_squad.erase(u.get_instance_id())
+				if u.has_method("set_role"):
+					u.set_role("")
+		squad_disbanded.emit(squad_id)
+	_squads.clear()
+	_unit_to_squad.clear()
+	_platoons.clear()
+	_squad_to_platoon.clear()
+	_fireteams.clear()
+	_unit_to_fireteam.clear()
+
+
 ## 任命小队长（班长，rank 1）。返回是否成功。
 func assign_leader(squad_id: String, leader: Node) -> bool:
 	if not _squads.has(squad_id):

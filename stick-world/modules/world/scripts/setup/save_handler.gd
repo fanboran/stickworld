@@ -326,12 +326,14 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 	if _root._construction_api != null and _root._construction_api.has_method("load_from_db"):
 		_root._construction_api.load_from_db(db, slot_id, map_id)
 	# 3. 编队清场 + 组织收编（读档完整性批次，顺序不可换）：
-	#    先解散全部旧班（mid-session 读档的悬挂旧班，其组织 id 可能与档内组织撞车，
-	#    收编后解散会误删档内恢复的同名组织），再从 WorldState 容器收编档内组织
-	#    （game_loaded 时容器已被 WorldState 回读覆盖，此处同步本模块工作集）。
+	#    先清编队本地态（clear_squads_for_load：不触组织侧——mid-session 读档时
+	#    game_loaded 已把 WorldState 容器覆盖为档内组织，班 id = 组织 id 与旧班撞车，
+	#    经 disband_organization 解散旧班会把档内组织从容器反注销，收编即断链），
+	#    再从 WorldState 容器收编档内组织（game_loaded 时容器已被回读覆盖，此处
+	#    同步本模块工作集；旧班对应的旧组织随工作集整体覆盖消亡）。
 	#    boot 读档两步皆空操作；旧档无编队数据时也照常执行（清残留语义）。
-	if _root._combat_api != null and _root._combat_api.has_method("disband_all_squads"):
-		_root._combat_api.disband_all_squads()
+	if _root._combat_api != null and _root._combat_api.has_method("clear_squads_for_load"):
+		_root._combat_api.clear_squads_for_load()
 	if _root._organization_api != null and _root._organization_api.has_method("restore_from_world"):
 		_root._organization_api.restore_from_world()
 	# 4. 恢复玩家 + NPC（返回 entity_id → 实体映射，编队回读用）

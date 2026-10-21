@@ -140,3 +140,10 @@ func restore_from_save(data: Dictionary, entity_map: Dictionary) -> int:
 	if _formation.has_method("restore_from_save"):
 		return _formation.restore_from_save(data, entity_map)
 	return 0
+
+
+## 读档清场（读档完整性批次）：只清编队本地态、不触组织侧——语义与撞车根因见
+## FormationSystem.clear_squads_for_load。存档恢复编排用本方法替代 disband_all_squads。
+func clear_squads_for_load() -> void:
+	if _formation != null and _formation.has_method("clear_squads_for_load"):
+		_formation.clear_squads_for_load()

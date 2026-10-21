@@ -38,13 +38,6 @@ const WANDER_PROBABILITY: float = 0.0
 ## 用 var 便于测试注入 0/1 做确定性断言。
 var villager_wander_probability: float = 0.5
 
-## TeamAi 姿态枚举（对齐 TeamAi.STANCE_* / dump Team.Stance 序；本地常量避免跨模块依赖。
-## 3=ROUT 敌将撤仗终态，本作扩展——出征与领地架构 §4.2）
-const TEAM_AI_STANCE_GARRISON: int = 0
-const TEAM_AI_STANCE_DEFEND: int = 1
-const TEAM_AI_STANCE_ATTACK: int = 2
-const TEAM_AI_STANCE_ROUT: int = 3
-
 ## 威胁判定距离（SWL Ai.IsUnderThreat：近身有活敌即被威胁；
 ## dump 无数值真值，待实测校准）
 const THREAT_RANGE: float = 140.0
@@ -105,7 +98,7 @@ var _wd_nudge_until: float = -1.0e9
 var _wd_nudge_dir: Vector2 = Vector2.ZERO
 ## 撤离行为态（retreat 行为 enter/exit 置位清位，"谁执行谁置位"单一真相源；
 ## is_disengaging() 对外查询）。**自动避战已根除**（创始人裁决）：本态只由
-## 命令撤离（RETREAT 号令/TeamAi ROUT 战役撤仗）进入，单位不再自发脱战
+## 命令撤离（RETREAT 号令）进入，单位不再自发脱战
 var _disengaging: bool = false
 ## 遇阻接战"打通"态（创始人口径：任务路上被敌拦住且无法简单绕过 → 攻击路径上
 ## 的敌人）：由 behavior_move 请求置位（request_breach_engagement），拦路者作为
@@ -501,18 +494,6 @@ func _note_probe_failure(ch: String) -> void:
 ## 到期世界时刻/当前间隔/是否已错峰。纯查询零副作用，档案缺载降级安全默认。
 func get_decision_timing_state() -> Dictionary:
 	return _decision_clock.get_decision_timing_state()
-
-
-## 查询所属阵营的 TeamAi 姿态（duck 调用 + has_method 防御；未注册/查询不可用降级 DEFEND）
-func _query_team_stance(bi: Node) -> int:
-	if _entity == null or not is_instance_valid(_entity) or not _entity.has_method("get_faction"):
-		return TEAM_AI_STANCE_DEFEND
-	if bi == null or not is_instance_valid(bi) or not bi.has_method("get_team_ai"):
-		return TEAM_AI_STANCE_DEFEND
-	var tai: Variant = bi.get_team_ai(_entity.get_faction())
-	if tai == null or not is_instance_valid(tai) or not tai.has_method("get_stance"):
-		return TEAM_AI_STANCE_DEFEND
-	return int(tai.get_stance())
 
 
 ## 尝试 job 域探测组（W2 域级节流出口）：派工探测失败再试采集探测，两者皆空才

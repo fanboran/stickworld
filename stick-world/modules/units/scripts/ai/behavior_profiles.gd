@@ -114,7 +114,7 @@ const BASELINE: Dictionary = {
 	#    数值为语义映射初值待实测校准；总开关默认关 = 零回归。
 	#    消费点：ai_controller._try_combat 掷骰 + behavior_retreat fallback 档 +
 	#    _travel_disengage 统一出口（优先 seek_cover；裁决【删溃逃、立避战】后
-	#    C6 不再下发 withdraw——该档保留为命令路径语义：可下令的 RETREAT/TeamAi ROUT））──
+	#    C6 不再下发 withdraw——该档保留为命令路径语义：可下令的 RETREAT））──
 	# （压制机制键族已整体删除＝创始人裁决；RL层级指挥训练v3 设计档同口径）
 	# ── W2 · WorldBox 决策冷却错峰（M4/Top2；消费点 ai_controller 决策时钟族。
 	#    冷却记"世界时刻"不记剩余秒数；成批出生预置假偏移，读档按存档相位回填

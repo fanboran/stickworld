@@ -464,8 +464,10 @@ static func _make_system(host: Node2D, meas: Dictionary, lifetime: float, tier: 
 	p.lifetime = lifetime
 	# ⚠️ CPUParticles2D 连续发射密度下限 = 1/lifetime；原版极稀速率靠多对象叠加
 	p.amount = maxi(int(ceilf(rate * lifetime)), 1)
-	# 原版 prewarm=true（tier20 除外）；按层错相——同寿命同相位会整簇同步熄灭
-	p.preprocess = 0.0 if tier == 20 else lifetime * float(layer % 6) / 6.0
+	# 原版 prewarm=true（tier20 除外）；按层错相——同寿命同相位会整簇同步熄灭。
+	# (layer+1)%6：基础层(0)与强度层(1..5)共 6 层各得一个互异相位
+	# （直接 layer%6 时基础层恒 0，错相对基础层失效）
+	p.preprocess = 0.0 if tier == 20 else lifetime * float((layer + 1) % 6) / 6.0
 	# 发射区对齐宿主轮廓中心
 	p.position = meas["center"]
 

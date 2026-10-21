@@ -634,7 +634,7 @@ func _draw() -> void:
 
 
 func _draw_l2_borders() -> void:
-	var bw := BORDER_WIDTH()
+	var bw := _border_width()
 	for r in _data.regions:
 		for poly in r.get("land_polygons", [r.get("land_polygon", [])]):
 			if poly.size() < 3:
@@ -826,7 +826,7 @@ func _weld_mark(weld: Dictionary, mid: Vector2, label: int) -> void:
 	weld["%d,%d" % [gx, gy]] = label
 
 
-func BORDER_WIDTH() -> float:
+func _border_width() -> float:
 	# 地图固定宽 9；放大超 16 屏像素时 clamp（极端放大防糊屏）
 	if _camera != null and _camera.has_method("get_zoom"):
 		var z: float = _camera.get_zoom()

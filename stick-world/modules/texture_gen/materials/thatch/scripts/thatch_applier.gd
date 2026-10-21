@@ -212,8 +212,10 @@ func _draw_brush_stroke_opaque(
 
 		for dy_off in range(-ir, ir + 1):
 			for dx_off in range(-ir, ir + 1):
-				var px_i: int = int(cx) + dx_off
-				var py_i: int = int(cy) + dy_off
+				# floori 取像素覆盖区间下界：int() 对负坐标向零截断（-0.3→0），
+				# 笔触越出左/上缘时产生 1px 错位
+				var px_i: int = floori(cx) + dx_off
+				var py_i: int = floori(cy) + dy_off
 				if px_i < 0 or px_i >= w or py_i < 0 or py_i >= h:
 					continue
 

@@ -84,15 +84,16 @@ static func make_gate(w: int, h: int, seed_value: int = 0, opening: Vector2i = V
 	var img := make_wall(w, h, seed_value, Vector2i(64, 30), false, palette)
 	var cx := w / 2
 	var ow := opening.x / 2   # 半宽
-	var oh := opening.y       # 直壁段高（从底边向上）
+	var oh := opening.y       # 直壁段高（从底边起算）
 	# 门洞 = 直壁矩形 + 顶部半圆（半径 ow，圆心在直壁顶）
-	for yy in range(h - oh, h):
-		for xx in range(cx - ow, cx + ow):
+	# opening 超图幅时逐边钳进画布（与 carve_arch_opening 同惯例，防 set_pixel 报错刷屏）
+	for yy in range(maxi(h - oh, 0), h):
+		for xx in range(maxi(cx - ow, 0), mini(cx + ow, w)):
 			img.set_pixel(xx, yy, Color(0.20, 0.16, 0.12))
-	for yy in range(h - oh - ow, h - oh):
+	for yy in range(maxi(h - oh - ow, 0), mini(h - oh, h)):
 		var dy := (h - oh) - yy
 		var half := int(sqrt(maxf(float(ow * ow - dy * dy), 0.0)))
-		for xx in range(cx - half, cx + half):
+		for xx in range(maxi(cx - half, 0), mini(cx + half, w)):
 			img.set_pixel(xx, yy, Color(0.20, 0.16, 0.12))
 	# 门洞边缘描一圈受光砖边（拱圈石：径向楔形石块的暗缝暗示）
 	_ring(img, cx, h - oh, ow + 7, 10, pal)

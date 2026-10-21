@@ -13,12 +13,16 @@ extends BehaviorBase
 ##     不引用 construction 内部类，保持 units→construction 无编译期依赖）
 ##
 ## 多工人各自往返（不限制搬运工数量）；搬运时切换为 carry 动画。
+## 移动接入静态障碍避障（寻路方案A，steering_wall_avoid）：直线驱动叠加切向
+## 滑动/绕行意向；持续推墙超限判不可达 finish（决策层重派），不再无限推墙。
 
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 const CELL_SIZE: float = 24.0
 const ARRIVE_THRESHOLD: float = 28.0
 const WORK_OFFSET_Y: float = 40.0
+
+const ScriptWallAvoid := preload("res://modules/units/scripts/ai/steering_wall_avoid.gd")
 
 # ─────────────────────────────── 状态 ────────────────────────────────
 enum Phase { TO_WAREHOUSE, PICKING, TO_SITE, DELIVERING }
@@ -35,6 +39,8 @@ var _phase: int = Phase.TO_WAREHOUSE
 var _warehouse_pos: Vector2 = Vector2.ZERO
 var _site_pos: Vector2 = Vector2.ZERO
 var _action_timer: float = 0.0
+## 静态障碍避障组件（enter 懒初始化——直构造不进树的测试路径同样可用）
+var _wall_avoid: RefCounted = null
 
 
 func _ready() -> void:
@@ -55,6 +61,9 @@ func enter(previous: String, params: Dictionary) -> void:
 	_warehouse_pos = _compute_warehouse_pos()
 	_site_pos = _compute_site_pos()
 	_phase = Phase.TO_WAREHOUSE
+	if _wall_avoid == null:
+		_wall_avoid = ScriptWallAvoid.new(entity)
+	_wall_avoid.arm()
 	# 进入搬运状态（播放 carry 动画）
 	if entity != null and entity.has_method("set_carrying"):
 		entity.set_carrying(true)
@@ -79,7 +88,7 @@ func update(delta: float) -> void:
 	match _phase:
 		Phase.TO_WAREHOUSE:
 			_warehouse_pos = _compute_warehouse_pos()
-			_move_to(_warehouse_pos)
+			_move_to(delta, _warehouse_pos)
 		Phase.PICKING:
 			# 取货停留
 			if entity != null and entity.has_method("ai_stop"):
@@ -96,7 +105,7 @@ func update(delta: float) -> void:
 				_phase = Phase.TO_SITE
 		Phase.TO_SITE:
 			_site_pos = _compute_site_pos()
-			_move_to(_site_pos)
+			_move_to(delta, _site_pos)
 		Phase.DELIVERING:
 			# 交付停留
 			if entity != null and entity.has_method("ai_stop"):
@@ -129,11 +138,22 @@ func exit(next: String) -> void:
 
 # ─────────────────────────────── 内部 ────────────────────────────────
 
-## 走向目标点，到达后触发对应阶段完成逻辑。
-func _move_to(target: Vector2) -> void:
+## 走向目标点，到达后触发对应阶段完成逻辑。直线方向叠加静态障碍避障
+##（方案A）：切向滑动/绕行意向修正；持续推墙超限 → 判不可达 finish 放弃
+## 本行为（决策层重派/换向），不再无限推墙卡死。
+func _move_to(delta: float, target: Vector2) -> void:
 	var dist: float = entity.global_position.distance_to(target)
 	if dist > ARRIVE_THRESHOLD:
 		var dir: Vector2 = (target - entity.global_position).normalized()
+		_wall_avoid.update(delta, dir, target)
+		if _wall_avoid.is_unreachable():
+			if entity.has_method("ai_stop"):
+				entity.ai_stop()
+			print("[BehaviorHaul] 搬运目标不可达（推墙 %.1fs 放弃，决策层重派）: pos=%v target=%v"
+					% [float(_wall_avoid.push_time()), entity.global_position, target])
+			finish()
+			return
+		dir = _wall_avoid.steer(delta, dir)
 		if entity.has_method("ai_move"):
 			entity.ai_move(dir)
 	else:

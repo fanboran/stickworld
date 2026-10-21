@@ -131,16 +131,19 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 ├── behavior_base.gd                 ✅ 行为基类（enter/update/exit）
 ├── behavior_idle.gd                 ✅ 闲置（默认空闲，P0 原地待机）
 ├── behavior_wander.gd               ✅ 漫游（P0 默认关闭 WANDER_PROBABILITY=0，仅显式调用）
-├── behavior_move.gd                 ✅ 移动（含简单寻路）
+├── behavior_move.gd                 ✅ 移动（直线 + 遇阻接战 §7.2.3 + 静态避障 §7.2.4）
 ├── behavior_follow.gd               ✅ 跟随（小队"跟随玩家"）
 ├── behavior_attack.gd               ✅ 攻击（命中帧→伤害事件）
 ├── behavior_seek_cover.gd           ✅ 找掩体
 ├── behavior_retreat.gd              ✅ 撤退/避战（fallback 档=避战：RA 压制式脱离，不走向地图边缘）
 ├── behavior_work.gd                 ✅ 建造（build 动画驱动，受材料进度限制）
-├── behavior_haul.gd                 ✅ 搬运（仓库↔工地往返）
+├── behavior_haul.gd                 ✅ 搬运（仓库↔工地往返，移动接静态避障 §7.2.4）
+├── behavior_harvest.gd              ✅ 采集/劳作循环（小镇生活，旅行段接静态避障 §7.2.4）
 ├── behavior_suppress.gd             📋 火力压制（设计未实现）
 ├── behavior_flank.gd               ❌ 侧翼包抄（已取消立项——裁决#32：SWL/SW3 dump 无包抄机制，接敌走位仅 y 纵深对齐）
 ├── behavior_flee.gd                 📋 独立溃逃（已随裁决【删溃逃、立避战】取消立项——溃逃永久退役，避战由 retreat fallback 档承担）
+├── steering_stuck.gd                ✅ 卡住检测三件套公共组件（wander/避障共用，§7.2.4）
+├── steering_wall_avoid.gd           ✅ 静态障碍避障组件（方案A，§7.2.4）
 └── behavior_state_machine.gd        ✅ 状态机调度
 ```
 
@@ -237,31 +240,42 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 - **集体语义**：一个班多单位同时被拦时各自独立判定（涌现出班级接战线），不做
   班级协同决策。
 
-#### 7.2.3 遇阻接战（局部绕行 + 打通，不做 A*）
+#### 7.2.4 静态障碍避障（寻路方案A：切向滑动 + 绕行意向 + 卡住升级）
 
-移动执行（behavior_move）途中的敌挡路处置，创始人口径：「前往任务目标的路上如果被
-敌人拦住且无法简单绕过，就像一般 RTS 一样攻击路径上的敌人」。寻路 = 局部绕行 +
-遇阻接战的组合；**命令有粘性**：接战拦路者是号令的临时插叙，任务持续执行到完成或
-失效，不高频翻改。
+移动执行途中的**静态墙**（建筑 PassageBarrier / HD2DSolids 等 StaticBody2D）处置，
+与 §7.2.3 敌挡路（单位）互补的两半：敌挡路归接战，墙归本节。方案论证与分期见
+[寻路避障调研.md](../寻路避障调研.md)（P0 = 局部避障，不铺 A*；P1 触发条件见调研 §三）。
 
-- **挡路判定**：前进锥面扫描（口径同 entity_motion 友军让路 `_ally_yield_lateral`：
-  前向点积 > YIELD_AHEAD_DOT，敌我区分），挡路判定距离 180px
-  【提案/待定·待实测校准】。与"接敌即战"（engage_in_range）共用 0.2s 节流拍，
-  挡路处置优先——路径上的敌人不走"接敌即战 finish 清令"路径。
-- **决策序**（behavior_move._handle_path_block）：
-  1. 远程特例（弓/杖）：拦路者在射程内 → 边走边射不停车（复用 kite 边打边走的
-     衔接；不进 attack 行为即不触发后撤风筝/持瞄，两条链路不打架）；
-  2. 侧向有空隙（探测窗 120px【提案/待定】内有净空）→ 局部绕行（复用让路横分量
-     几何的敌挡路版，与目标方向点乘恒 0 不减速；侧别优先挡路者反侧，对称僵局按
-     实例奇偶拆半）；
-  3. 无法简单绕过（两侧被占 / 敌已贴身 ≤70px / 绕行超 3s）→ 请求 AIController
-     转入攻击拦路者（**打通态**）。
-- **打通态粘性**（ai_controller._breach_target / _breach_tick）：原号令
-  `_ordered_behavior/_ordered_params` 不清空不降级；攻击行为经 `forced_target`
-  锁定拦路者；击杀或脱离（>320px【提案/待定】）后清态，命令覆盖段自动续行原
-  move 号令——恢复的目标点仍是原号令目标。新号令（set_order）显式接管时插叙作废。
-- **集体语义**：一个班多单位同时被拦时各自独立判定（涌现出班级接战线），不做
-  班级协同决策。
+- **公共组件**（`modules/units/scripts/ai/`）：
+  - `steering_stuck.gd`：卡住检测三件套（0.2s/3px 检测、120°~240° 掉头、0.5s 冷却），
+    从 behavior_wander 抽出，wander 与避障两边复用；
+  - `steering_wall_avoid.gd`：静态障碍避障组件（RefCounted，行为层内嵌）——读
+    `move_and_slide` 碰撞法线（零成本，物理帧已算好；单位碰撞体 CharacterBody2D
+    过滤，只认墙），内部 0.2s 节流拍做全部决策（不每帧全量，无 raycast）。
+- **三段机制**：
+  1. **切向滑动**：斜碰时把移动意图投影到墙面切线沿墙滑（wall-slide 模型）；
+  2. **短时绕行意向**：正对面墙（切向分量 < 0.25）织 0.8s 沿墙回避方向压制原方向，
+     侧别 = 实例奇偶拆半（与让路/遇阻绕行同惯例），卡住触发即换侧重织；
+  3. **卡住升级**："碰墙 + 目标进度停滞 < 12px/s"累计 ≥ 5s → 判**目标不可达**置位
+     上报（把不可达从"无限推墙"变成"有限尝试后失败"），滑墙有进展则账本衰减。
+- **墙的两种来源**：物理碰撞法线（建筑/工地 StaticBody2D，过滤 CharacterBody2D
+  单位碰撞体）+ **行走带边界虚拟墙**（Y/X 越界由 entity 每帧钳位兜底、无碰撞
+  法线——贴近边界且意图朝外时合成指向带内的虚拟法线，clamp 盲区走同一条
+  避障链；边界口径与 entity 钳位一致，origin space 旗标 defensive 读）。
+- **消费方与放弃口径**：behavior_move / behavior_haul（搬运两段）/ behavior_follow
+  （跟随只用绕行不吃放弃——玩家目标持续移动，组件随目标变更自动复位账本）/
+  behavior_harvest（旅行段；不可达时**拉黑该资源点换点重寻**——拉黑挂 entity
+  meta 跨行为会话持久 + 120s TTL，拉黑后无可换点或工位目标依旧才 finish——
+  墙带装饰性资源点对步行单位几何不可达，不拉黑会永远挑回同一点）。
+  **engage_in_range 战斗推进令不吃"不可达放弃"**——接战语义归 §7.2.3 遇阻接战与
+  9h 看门狗，推进令不因地形静默终止；几何绕行（滑动/绕行意向）两态都吃（贴墙
+  滑进不顶墙）。
+- **参数**（`steering_wall_avoid.gd` 头部常量，【提案/待定·待实测校准】）：扫描拍
+  0.2s / 推墙点积阈 -0.2 / 切向下限 0.25 / 绕行时长 0.8s / 进度下限 12px/s /
+  放弃时限 5s（验收口径：不允许 >5s 持续推墙，寻路调研 §三）。
+- **凹形陷阱**（U 形建筑群/城墙门洞内）绕不出去时靠升级检测兜底报不可达，全局
+  寻路归 P1 AStarGrid2D（触发条件：城墙门洞防线 / 常驻单位 >100 / 搬运穿越建筑群
+  成常态）；主街城墙穿越当前由 gate_router 门洞引导承担（behavior_harvest 消费）。
 
 ### 7.3 三层命令系统（决策来源）
 

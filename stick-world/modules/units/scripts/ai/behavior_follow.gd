@@ -22,6 +22,11 @@ var _target_timer: float = 0.0
 ## 目标刷新间隔（秒）
 const TARGET_REFRESH_INTERVAL: float = 0.5
 
+const ScriptWallAvoid := preload("res://modules/units/scripts/ai/steering_wall_avoid.gd")
+## 静态障碍避障组件（方案A；目标（玩家）持续移动 → 组件随目标变更自动复位
+## 进度账本，跟随只用切向滑动/绕行意向绕墙——不吃"不可达放弃"）
+var _wall_avoid: RefCounted = null
+
 
 func _ready() -> void:
 	behavior_name = "follow"
@@ -31,6 +36,9 @@ func enter(previous: String, params: Dictionary) -> void:
 	super.enter(previous, params)
 	_target = null
 	_target_timer = 0.0
+	if _wall_avoid == null:
+		_wall_avoid = ScriptWallAvoid.new(entity)
+	_wall_avoid.arm()
 
 
 func update(delta: float) -> void:
@@ -55,11 +63,14 @@ func update(delta: float) -> void:
 			entity.ai_stop()
 		finish()
 		return
-	# 朝玩家移动，进入停步半径即站定
+	# 朝玩家移动，进入停步半径即站定（直线方向叠加静态障碍避障：绕墙不顶墙）
 	var to_target: Vector2 = _target.global_position - entity.global_position
 	if to_target.length() > FOLLOW_STOP_RADIUS:
+		var dir: Vector2 = to_target.normalized()
+		_wall_avoid.update(delta, dir, _target.global_position)
+		dir = _wall_avoid.steer(delta, dir)
 		if entity.has_method("ai_move"):
-			entity.ai_move(to_target.normalized(), false)
+			entity.ai_move(dir, false)
 	else:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()

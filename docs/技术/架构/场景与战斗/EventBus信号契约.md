@@ -50,3 +50,4 @@
 | `squad_created` | squad_id, unit_ids | FormationSystem | UI、Organization | 编队创建 |
 | `order_issued` | order_type, target_squad_id, source_tier | TacticalOrders | UI、Units | 下达号令。两条路径共用：`issue`（target=L1 小队 id，现场指挥零延迟）与 `issue_to_org`（target=组织根 id，逐层传播接力）——target 字段按下达路径分别为 squad_id / org_id（3-F2） |
 | `commander_assigned` | squad_id, unit_id | FormationSystem、organization 补位引擎 | UI、FormationSystem | 任命指挥官（ FormationSystem.assign_leader）与组织侧伤亡补位成功（manager 内聚触发）都会发射；FormationSystem 订阅回写 squad.leader（排长 UI/光环自动恢复，3-F2） |
+| `ai_behavior_switched` | entity, from_behavior, to_behavior, params | BehaviorStateMachine.travel（唯一入口埋点） | AI 决策观察窗（modules/debug_gui）、测试断言 | 单位行为切换。每次切换必发（决策层/号令/看门狗/打通态全路径），无订户零成本；切换原因由观测侧在信号时点结合 AIController 状态推断（瞬时态事后不可考） |

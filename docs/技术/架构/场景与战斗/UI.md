@@ -368,6 +368,22 @@ hide_legend()
 - `ResourceNode` 的调试标签（资源类型中文名）由 `DebugApi.visibility_changed` 信号驱动，不再每帧 `_process` 检查
 - F3 关闭调试时标签隐藏，开启时显示
 
+#### 10.5.9 AI 决策观察窗（AiVizWindow）
+
+实时看每个单位的 AI 在想什么（信息密度对标 LimboAI 调试器）。**纯观测零行为改动**：
+列表/详情经 `ai_viz_snapshot.gd` 只读快照层轮询（0.25s 节流，全 duck 调用），状态切换
+订阅 `EventBus.ai_behavior_switched`（`BehaviorStateMachine.travel` 唯一入口埋点，
+无订户零成本），**切换原因在信号到达时点推断**（看门狗推力/附身恢复是瞬时态，事后不可考）。
+
+- 窗体：`StickWindow` FLOATING 模板（可拖/无遮罩/ESC 自关），`UIKit.full_rect()` 合规出口装配
+- 左栏：单位列表（阵营色/兵种/当前行为/特殊态徽标[令·通·避·晕·附]/HP），全部/蓝方/红方/接战中过滤
+- 右栏：选中详情——行为注册表（当前 ▶ 高亮，LimboAI 树视图的扁平等价物）/
+  目标及选择理由（前向最近/全域回退/打通强制/锁定驻留时长）/ 阈值余量（撤退安全线
+  320、武器冷却、射程余量、持瞄进度、下次决策倒计时与拍数）/ 号令 / 特殊态；
+  下半为该单位切换日志（最近 10 条：时刻 from→to 原因）
+- 挂载：调试场景自行挂开关（默认关）。观察场（battle_arena）V 键切换；验收出图
+  走 `arena_shot_boot.tscn -- --aiviz`（tools/dev/arena_aiviz_shot.gd driver）
+
 ### 10.6 建造进度条与交互弹窗
 
 #### 10.6.1 建筑头顶双进度条

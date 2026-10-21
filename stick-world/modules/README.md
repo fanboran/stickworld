@@ -977,7 +977,6 @@ config/
 | 领地归属/解锁 | `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
 | 附身 | `possession_started(entity)` / `possession_ended(entity)` |
 | UI | `ui_notification(title, body, level)` |
-| 室内交互 | `interior_entered(building_id)` / `interior_exited(building_id)` / `mega_interior_entered(building_id, map_id)` / `mega_interior_exited(return_map_id)` |
 | 其他 | `balance_changed` / `debug_visibility_changed(visible)` |
 
 **信号准则**：

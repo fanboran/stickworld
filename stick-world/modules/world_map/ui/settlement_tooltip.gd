@@ -15,7 +15,6 @@ class_name SettlementTooltip
 ## 鼠标指针到面板左上角的偏移（面板出现在指针右下侧）
 const CURSOR_OFFSET := Vector2(18.0, 18.0)
 
-<<<<<<< HEAD
 ## 同地块悬停期间的内容重算周期（秒）：战斗开始/结束、到访、玩家位置变化
 ## 都会改旅行提示文案；get_travel_status 含路网寻路，逐帧重算太浪费，按周期轮询
 const REFRESH_INTERVAL := 0.5

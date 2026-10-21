@@ -23,7 +23,7 @@ variables = {
 			"speed_mult": 0.9,
 			"range_bonus": 0,
 			"armor_penetration": 5,
-			"asphalt_cost": 30,
+			"mana_cost": 30,
 			"weight": 5,
 			"icon_path": "res://assets/icons/weapons/sword_iron.png"
 		},
@@ -35,7 +35,7 @@ variables = {
 			"speed_mult": 1,
 			"range_bonus": 3,
 			"armor_penetration": 2,
-			"asphalt_cost": 25,
+			"mana_cost": 25,
 			"weight": 2,
 			"icon_path": "res://assets/icons/weapons/bow_short.png"
 		},
@@ -47,7 +47,7 @@ variables = {
 			"speed_mult": 0.8,
 			"range_bonus": 2,
 			"armor_penetration": 10,
-			"asphalt_cost": 40,
+			"mana_cost": 40,
 			"weight": 3,
 			"icon_path": "res://assets/icons/weapons/staff_apprentice.png"
 		},
@@ -59,7 +59,7 @@ variables = {
 			"speed_mult": 1,
 			"range_bonus": 0,
 			"armor_penetration": 0,
-			"asphalt_cost": 0,
+			"mana_cost": 0,
 			"weight": 0,
 			"icon_path": null
 		}

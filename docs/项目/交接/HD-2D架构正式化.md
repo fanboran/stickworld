@@ -1,7 +1,7 @@
 # HD-2D 架构正式化
 
-> **状态**：迁址批次已验证完成，合回 main 待并行会话窗口；职责拆分缓期（成果已归档）。
-> **worktree**：`.temp/hd2d-promotion`（分支 `agent/hd2d-promotion`）。
+> **状态**：迁址批次已合入 main；职责拆分 v2 已执行（2026-10-21），分支 `agent/hd2d-split-v2` 待创始人验收后合 main。
+> **worktree**：`.temp/wf-hd2d`（分支 `agent/hd2d-split-v2`）。
 
 ## 一、任务与裁决
 
@@ -27,26 +27,24 @@
    合并后须**随迁**隔壁的未跟踪文件：`tests/dev/proto_hd2d/tex/proto_hd2d/hd2d_layouts/hd2d_street.json`
    → `stick-world/modules/hd2d/assets/tex/proto_hd2d/hd2d_layouts/`（旧 tex 目录已随迁址删除）。
    合并在 main 工作区做：`git merge agent/hd2d-promotion` → 重跑双探针 + 自检 → 提交。
-2. **职责拆分 v2**（缓期，待城镇生成器/投影收线批次收口、函数面稳定后启动）：
-   - 成果存档：分支 `agent/hd2d-split-wip`（②a 组件拆分 ab94689d + ②b Hd2dMapBase 基类 d9a311eb，
-     基于旧 proto 版本，仅作结构与脚本参考，不可直接合）
-   - **组件映射表 v2**（新函数 → 目的地）：
-
-| 现在的位置（proto_hd2d.gd/hd2d_world.gd） | 拆分去向 |
-|---|---|
-| 常量/锚点落位/卡材质/接地影/画面宽 | `hd2d_cards.gd` |
-| 前排意图表+摆位求解器 `_resolve_front_row`/背景排 `_pick_bg_card`/`spawn_bg_for_front`/`get_layout_props` | `hd2d_street_placer.gd` |
-| `_place_clouds`/`_bake_cloud_texture`/`_apply_cloud_light`/`_drift_clouds`（逐帧漂移） | 新组件 `hd2d_clouds.gd`（Node，自带 _process） |
-| `get_ground_lift_world/px`、台面/镶边/底衬/天空背板 | `hd2d_ground.gd` |
-| `get_solid_rects`/`get_building_rects`/`_building_solid_rect`/`_apply_hide_groups`/`get_fg_bg_boundary_y`/`_wall_x`/相机/光照档/`_apply_stage` | `hd2d_world.gd`（根门面保留） |
-| `_card_bottom_pad`/`_card_base_cut`/`_card_image`/`_card_visual_height` | `hd2d_cards.gd` |
-| 宿主公共代码（3D 挂载/碰撞映射/传送带/出口/资源算法/角色同步/相机镜像/昼夜） | `modules/world/scripts/map/hd2d_map_base.gd`（②b 已验证的实现可参考） |
-
-   - 拆分方法论：脚本化块抽取（按函数名分派+标识符加前缀+裸引用检查器），
-     见 `agent/hd2d-split-wip` 的提交方式；行为与公共 API 不变、测试零改动为验收线。
+2. **职责拆分 v2**（2026-10-21 解缓执行完毕，分支 `agent/hd2d-split-v2` 待验收合 main）：
+   - 旧成果存档分支 `agent/hd2d-split-wip`（基于旧 proto 版本）已无参考价值，随本批执行作废
+   - **落地结构**：门面 `hd2d_world.gd`（世界编排 `_build_world`/solids/相机/光照/小地图烘焙/出图）
+     + `scripts/` 职责子目录六组件（`cards/`卡呈现、`placer/`摆街、`ground/`地面、
+     `walls/`城墙、`char_stage/`角色舞台、`clouds/`云牌），组件经门面回引 `w` 互访，
+     对外 duck API（api.gd）与探针可见内部成员原样留门面
+   - **与映射表 v2 的出入**（现状为准）：
+     · 卡库字典 `_cards/_props/_nature` 与贴图解析（`_tex_abs` 系）留门面（多组件共享词汇），卡呈现逻辑进 cards
+     · 共享常量（SKYLINE_Z/BG_*/WALL_*/S/TILT_DEG 等）全部留门面，组件经 `w.` 只读——避免双份漂移
+     · `_spawn_bg_card`/`_place_props`/`_place_nature`/`spawn_nature_card_at` 归 placer（映射表未指派，按"摆街"域归并）
+     · `_spawn_building_shadow`（接地影）归 cards（映射表"接地影→cards"指此处，原表写的是常量行）
+     · 死代码随域迁移不删：`_pick_card`/`_add_ground_plane`/`_add_decal`/`_add_sidewalk`/`_prop_slots`（写只读无）等保持原样
+     · 云组件节点即 `Clouds` 容器（CLOUD_ROOT_NAME），门面 `_place_clouds` 只做组件创建委托
+     · 宿主公共代码（3D 挂载/碰撞映射/传送带/出口/资源算法/角色同步/相机镜像/昼夜）
+       在 `modules/world/scripts/map/hd2d_map_base.gd`——基类已在役，本批不动
 
 ## 四、新会话恢复指引
 
-1. `git worktree list` 找 `.temp/hd2d-promotion`；读本文档 + `git log agent/hd2d-promotion -5`。
-2. 查隔壁在途批是否已提交（`git -C F:/VSCode/game-2 status --short`）→ 执行三、1。
-3. 拆分启动时：从当时的 main 新开分支，按映射表 v2 重新脚本化抽取（不要直接复用 wip 分支内容）。
+1. `git worktree list` 找 `.temp/wf-hd2d`（拆分分支）或 `.temp/hd2d-promotion`（迁址分支，已合 main）。
+2. 拆分批验收：读本文档 + [`../待办/HD2D代码拆分v2.md`](../待办/HD2D代码拆分v2.md) +
+   `git log agent/hd2d-split-v2`；验收过则合 main（合并后同步归档待办条目）。

@@ -44,7 +44,7 @@
 
 ## 二、EventBus 事件目录（现行）
 
-> 与 `core/autoload/event_bus.gd` 逐条对齐。共 39 个信号。
+> 与 `core/autoload/event_bus.gd` 逐条对齐（信号数以该文件实声明为准）。
 
 ### 2.1 生命周期事件
 
@@ -75,7 +75,6 @@
 | `battle_started` | battle_id: String | 战斗系统 | UI、扩张系统 | 战斗开始 |
 | `battle_ended` | battle_id: String, victory: bool | 战斗系统 | UI、扩张系统 | 战斗结束 |
 | `team_ai_stance_changed` | battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String | TeamAi | 调试 HUD、测试断言 | 阵营 AI 姿态切换（单向广播，暂无生产订户；0=GARRISON/1=DEFEND/2=ATTACK） |
-| `heal_cast` | battle_id: String, caster_id: int, target_id: int, anim_name: String | WeaponMount | battle_sim 采样 | 治疗施放（单向广播，可观测性通道；anim_name ∈ {heal_meric_1, heal_meric_2}） |
 
 ### 2.4 编队事件
 

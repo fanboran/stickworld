@@ -7,18 +7,19 @@ extends Node
 ## - 装配状态持有（Tab 三态 / L1 缩略窗 / 班组卡引用等）
 ##
 ## 各步骤函数体按域下沉到同目录 RefCounted 助手（bind(host) 回引宿主，宿主壳一行转发）：
-## - system_setup_core_systems.gd   建造/战斗/资源/框选/组织/编队/战术/指挥传输/征服/招兵/上报叙事
-## - system_setup_ui_panels.gd      界面根/调试层/战斗·编队·组织面板/战略总览/指挥链视图/设置·暂停菜单/TeamAi HUD/班组卡/缩放条/背包
+## - system_setup_core_systems.gd   战斗/资源/框选/组织/编队/战术/指挥传输/征服/招兵/上报叙事
+## - system_setup_ui_panels.gd      界面根/调试层/战斗·编队·组织面板/战略总览/指挥链视图/设置·暂停菜单/TeamAi HUD/班组卡/缩放条
 ## - system_setup_strategic_map.gd  小地图/战略图 L1·L3/地图缩略窗/Tab 三态与 M 键运行时/边界检测/地图旅行
-## - system_setup_extras.gd         附身界面·面板/探索交互/游戏 UI/建造菜单/调试绘制器注册/Demo 目标链/后处理/地图过渡/单位 LOD
+## - system_setup_extras.gd         附身界面·面板/探索交互/游戏 UI/调试绘制器注册/Demo 目标链/后处理/地图过渡/单位 LOD
+##
+## 模块自装配器（AR-1 装配下沉，随迁随增）：inventory / construction 等模块的
+## setup.gd::assemble 自持实例化，本宿主只保留步骤表编排与跨模块接线。
 ##
 ## 由 GameRoot._ready 挂载为 SystemSetup 子节点并调用 setup(root)。
 ## 只做装配，不做业务逻辑；业务逻辑保持在 GameRoot 主脚本与各子系统内。
 
 const _ExploreHandlerScript: GDScript = preload("res://modules/player_control/scripts/explore_handler.gd")
 const _DebugDrawers: GDScript = preload("res://modules/debug_gui/scripts/debug_drawers.gd")
-const _ConstructionManagerScript: GDScript = preload("res://modules/construction/scripts/construction_manager.gd")
-const _ConstructionApiScript: GDScript = preload("res://modules/construction/api.gd")
 const _BattleDirectorScript: GDScript = preload("res://modules/combat/scripts/battle/battle_director.gd")
 const _CombatApiScript: GDScript = preload("res://modules/combat/api.gd")
 const _SelectionSystemScript: GDScript = preload("res://modules/combat/scripts/command/selection_system.gd")
@@ -38,15 +39,8 @@ const _MinimapScript: GDScript = preload("res://modules/ui_global/scripts/hud/mi
 const _MinimapWindowScript: GDScript = preload("res://modules/ui_global/scripts/hud/minimap_window.gd")
 const _L1ThumbnailScript: GDScript = preload("res://modules/world_map/ui/l1_thumbnail.gd")
 const _ZoomBarScript: GDScript = preload("res://modules/ui_global/scripts/hud/zoom_bar.gd")
-const _InventoryServiceScript: GDScript = preload("res://modules/inventory/scripts/inventory_service.gd")
-const _InventoryScreenScript: GDScript = preload("res://modules/inventory/ui/inventory_screen.gd")
-const _HotbarScript: GDScript = preload("res://modules/inventory/ui/hotbar.gd")
-const _ContainerScreenScript: GDScript = preload("res://modules/inventory/ui/container_screen.gd")
-const _BuildingMenuScript: GDScript = preload("res://modules/inventory/ui/building_menu_screen.gd")
 const _PossessionInterfaceScript: GDScript = preload("res://modules/player_control/scripts/possession_interface.gd")
 const _PossessPanelScript: GDScript = preload("res://modules/player_control/ui/possess_panel.gd")
-const _ResourcesManagerScript: GDScript = preload("res://modules/resources/scripts/resource_manager.gd")
-const _ResourcesApiScript: GDScript = preload("res://modules/resources/api.gd")
 const _FxPoolScript: GDScript = preload("res://modules/fx/scripts/fx_pool.gd")
 const _MapBoundaryDetectorScript: GDScript = preload("res://modules/world/scripts/travel/map_boundary_detector.gd")
 const _StrategicMapScene: PackedScene = preload("res://modules/world_map/scenes/strategic_map.tscn")
@@ -54,7 +48,6 @@ const _StrategicMapL3Scene: PackedScene = preload("res://modules/world_map/scene
 const _StrategicMapL2Scene: PackedScene = preload("res://modules/world_map/scenes/strategic_map_l2.tscn")
 const _HoverIndicatorScript: GDScript = preload("res://modules/ui_global/scripts/indicators/hover_indicator.gd")
 const _MiddleScrollOverlayScript: GDScript = preload("res://modules/ui_global/scripts/indicators/middle_scroll_overlay.gd")
-const _BuildMenuScript: GDScript = preload("res://modules/construction/ui/build_menu.gd")
 const _UIRootScene: PackedScene = preload("res://modules/ui_global/scenes/ui_root.tscn")
 const _DebugOverlayScene: PackedScene = preload("res://modules/debug_gui/scenes/debug_overlay.tscn")
 const _BattleBannerScript: GDScript = preload("res://modules/ui_global/scripts/overlays/battle_banner.gd")
@@ -63,6 +56,12 @@ const _RecruitManagerScript: GDScript = preload("res://modules/organization/scri
 const _OrgReportNarratorScript: GDScript = preload("res://modules/organization/ui/org_report_narrator.gd")
 const _TeamAiHudScene: PackedScene = preload("res://modules/combat/ui/team_ai_hud.tscn")
 const _SquadCardScene: PackedScene = preload("res://modules/formation/ui/squad_card.tscn")
+
+# 模块自装配器（AR-1 装配下沉）：各模块 setup.gd 自持实例化，本宿主只编排步骤
+# 时序与跨模块接线；实例懒初始化见各 _xxx_assembler() getter
+const _InventorySetupScript: GDScript = preload("res://modules/inventory/setup.gd")
+const _ConstructionSetupScript: GDScript = preload("res://modules/construction/setup.gd")
+const _ResourcesSetupScript: GDScript = preload("res://modules/resources/setup.gd")
 
 # 域助手（同模块内 preload，非跨模块依赖；实例懒初始化见各 _xxx_part() getter）
 const _CorePartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_core_systems.gd")
@@ -100,6 +99,11 @@ var _panels_part = null
 var _map_part = null
 var _extras_part = null
 
+# 模块自装配器实例（AR-1 装配下沉，随迁随增）
+var _inventory_setup = null
+var _construction_setup = null
+var _resources_setup = null
+
 
 func _core():
 	if _core_part == null:
@@ -127,6 +131,27 @@ func _extras():
 		_extras_part = _ExtrasPartScript.new()
 		_extras_part.bind(self)
 	return _extras_part
+
+
+## inventory 模块自装配器（AR-1 下沉样板；RefCounted 无需 bind）
+func _inventory_assembler():
+	if _inventory_setup == null:
+		_inventory_setup = _InventorySetupScript.new()
+	return _inventory_setup
+
+
+## construction 模块自装配器（AR-1 下沉样板；RefCounted 无需 bind）
+func _construction_assembler():
+	if _construction_setup == null:
+		_construction_setup = _ConstructionSetupScript.new()
+	return _construction_setup
+
+
+## resources 模块自装配器（AR-1 下沉样板；RefCounted 无需 bind）
+func _resources_assembler():
+	if _resources_setup == null:
+		_resources_setup = _ResourcesSetupScript.new()
+	return _resources_setup
 
 
 func setup(root: GameRoot) -> void:
@@ -210,11 +235,14 @@ func _step_table() -> Array:
 # ─────────────────── 壳方法：核心系统域（转发 system_setup_core_systems.gd） ───────────────────
 
 func _setup_construction_system() -> void:
-	_core()._setup_construction_system()
+	_construction_assembler().assemble(_root)
+	# api.setup 必须在 manager._ready 后调用（_ready 中初始化 _assigner），
+	# 这里用 call_deferred 保证顺序
+	call_deferred("_setup_construction_api_deferred")
 
 
 func _setup_construction_api_deferred() -> void:
-	_core()._setup_construction_api_deferred()
+	_construction_assembler().api_deferred(_root)
 
 
 func _setup_combat_system() -> void:
@@ -332,7 +360,7 @@ func _setup_zoom_bar() -> void:
 
 
 func _setup_inventory() -> void:
-	_panels()._setup_inventory()
+	_inventory_assembler().assemble(_root)
 
 
 # ─────────────────── 壳方法：战略图域（转发 system_setup_strategic_map.gd） ───────────────────
@@ -385,11 +413,13 @@ func _setup_game_ui() -> void:
 
 
 func _setup_build_menu() -> void:
-	_extras()._setup_build_menu()
+	_construction_assembler().build_menu(_root)
+	# 延迟 setup 等 ConstructionManager 就绪
+	call_deferred("_setup_build_menu_deferred")
 
 
 func _setup_build_menu_deferred() -> void:
-	_extras()._setup_build_menu_deferred()
+	_construction_assembler().build_menu_deferred(_root)
 
 
 ## 注册调试绘制器到 DebugApi（详见 §10.5.7；GameRoot._ready 调用）

@@ -1,7 +1,7 @@
 extends RefCounted
 ## SystemSetup 玩家交互与环境装配助手 —— 承接宿主分帧步骤表中的函数体
-## （附身界面·面板 / 探索交互 / 游戏 UI / 建造菜单 / 后处理 / 地图过渡 / 单位 LOD）
-## 及调试绘制器注册、Demo 目标链装配。
+## （附身界面·面板 / 探索交互 / 游戏 UI / 后处理 / 地图过渡 / 单位 LOD）
+## 及调试绘制器注册、Demo 目标链装配（建造菜单已下沉 modules/construction/setup.gd）。
 ##
 ## 纪律：
 ## - 状态全部留在宿主（system_setup.gd），本助手经 _host 回引读写，不另立状态；
@@ -92,25 +92,8 @@ func _setup_game_ui() -> void:
 		_host._root.add_child(_host._root._middle_scroll_overlay)
 
 
-# ─────────────────────────────── 阶段 E：建造菜单装配 ────────────────────────────────
-
-## 实例化建造菜单并挂到 UIRoot，延迟 setup 等 ConstructionManager 就绪。
-func _setup_build_menu() -> void:
-	if _host._root.ui_root == null:
-		return
-	# P1 + P2：全屏 UI 根一律用 UIKit.full_rect（强制 FULL_RECT，杜绝"Control.new()
-	# 丢 anchor → 按钮静默不可见"），并挂到 HudOverlay 槽（槽位化路由）
-	_host._root._build_menu = UIKit.full_rect(_host._BuildMenuScript, "BuildMenu")
-	_host._root.ui_root.add_to_slot("HudOverlay", _host._root._build_menu)
-	_host.call_deferred("_setup_build_menu_deferred")
-
-
-func _setup_build_menu_deferred() -> void:
-	if _host._root._build_menu == null:
-		return
-	if _host._root._build_menu.has_method("setup"):
-		_host._root._build_menu.setup(_host._root)
-
+# 建造菜单装配已下沉 modules/construction/setup.gd（AR-1 装配下沉首批），
+# SystemSetup 步骤表「建造菜单」步骤直达模块自装配器。
 
 # ─────────────────────────────── 调试绘制器注册 ────────────────────────────────
 

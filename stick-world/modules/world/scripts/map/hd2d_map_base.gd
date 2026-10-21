@@ -25,7 +25,8 @@ extends MapBase
 ## Hd2dResourceMap（城外资源图）/ Hd2dBattlefieldMap（城郊战场图）。
 ## 3D 世界场景与卡资产在 modules/hd2d（本模块只做 2D 宿主，不依赖其内部）。
 
-const _HD2D_WORLD_SCENE := preload("res://modules/hd2d/scenes/hd2d_world.tscn")
+## 3D 世界场景经 Hd2dAPI 契约取（不跨模块 preload hd2d 内部路径，audit_deps 口径）
+const _HD2D_WORLD_SCENE: PackedScene = preload("res://modules/hd2d/api.gd").WORLD_SCENE
 ## 城门选项框（玩家走近弹窗出城；村民走静默传送带）
 const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_prompt.gd")
 ## 野外资源分布算法（world 模块内，群落散布+林区梯度）

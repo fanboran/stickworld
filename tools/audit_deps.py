@@ -21,9 +21,9 @@
 已知豁免：装配器（system_setup.gd）需按具体类型做依赖注入，其跨模块 preload
 属设计使然，单独统计不混入越界违规清单。
 
-棘轮红线（AR-6 方向）：KNOWN_CYCLES / PRELOAD_VIOL_BASELINE / STRING_VIOL_BASELINE
-登记当前在册债务，只降不升——新环或超基线即 exit 1；低于基线时提示收缩基线，
-防止「零依赖环」验收标准与工具输出长期脱节。
+棘轮红线（AR-6）：KNOWN_CYCLES / PRELOAD_VIOL_BASELINE / STRING_VIOL_BASELINE /
+ASSEMBLER_PRELOAD_BASELINE 登记当前在册债务，只降不升——新环或超基线即 exit 1；
+低于基线时提示收缩基线，防止「零依赖环」验收标准与工具输出长期脱节。
 """
 import re, os, sys
 from collections import defaultdict
@@ -41,9 +41,14 @@ KNOWN_CYCLES = {
     ("town_life", "units"),
     ("world", "world_map"),
 }
-PRELOAD_VIOL_BASELINE = 6   # 在册越界 preload（hd2d→ui_global 云朵 / world→hd2d 场景 /
-                            # demo_quest→ui_global×4；AR-1 已清偿后收缩）
-STRING_VIOL_BASELINE = 2    # 裸字符串跨模块越界（debug_gui×2 下行低危；AR-1 清偿后收缩）
+PRELOAD_VIOL_BASELINE = 0   # 在册越界 preload（AR-1 已清偿归零：hd2d 场景/云牌改经
+                            # Hd2dAPI/UIAPI 契约，demo_quest 随演示目标链根除）
+STRING_VIOL_BASELINE = 0    # 裸字符串跨模块越界（AR-1 已清偿归零：dev_scene_escape
+                            # 路径常量迁 UIAPI）
+# 装配器深路径 preload 红线（AR-6）：composition root（system_setup.gd）豁免的
+# 跨模块 preload 总数只降不升——模块自装配下沉（AR-1）应让它持续收缩，
+# 新增装配需求走对应模块 setup.gd，不在装配器堆深路径 preload
+ASSEMBLER_PRELOAD_BASELINE = 37
 
 
 def module_of(path: str):
@@ -276,6 +281,9 @@ if len(preload_viol) > PRELOAD_VIOL_BASELINE:
     failures.append(f"越界 preload {len(preload_viol)} 处超基线 {PRELOAD_VIOL_BASELINE}")
 if len(string_viol) > STRING_VIOL_BASELINE:
     failures.append(f"裸字符串越界 {len(string_viol)} 处超基线 {STRING_VIOL_BASELINE}")
+if assembler_preloads > ASSEMBLER_PRELOAD_BASELINE:
+    failures.append(f"装配器深路径 preload {assembler_preloads} 处超基线 {ASSEMBLER_PRELOAD_BASELINE}"
+                    "（AR-1：新增装配走模块 setup.gd，装配器只编排）")
 print("\n=== 棘轮红线 ===")
 if failures:
     for msg in failures:
@@ -285,9 +293,10 @@ print("  [PASS] 无新增环、越界未超基线")
 cycle_set = {tuple(c) for c in cycles}
 fixed_cycles = [c for c in KNOWN_CYCLES if c not in cycle_set]
 if len(preload_viol) < PRELOAD_VIOL_BASELINE or len(string_viol) < STRING_VIOL_BASELINE \
-        or fixed_cycles:
+        or assembler_preloads < ASSEMBLER_PRELOAD_BASELINE or fixed_cycles:
     print(f"  [提示] 债务低于基线（环 {len(cycles)} / preload {len(preload_viol)}/{PRELOAD_VIOL_BASELINE}"
           f" / 字符串 {len(string_viol)}/{STRING_VIOL_BASELINE}"
+          f" / 装配器 {assembler_preloads}/{ASSEMBLER_PRELOAD_BASELINE}"
           + (f" / 已消环 {['<->'.join(c) for c in fixed_cycles]}" if fixed_cycles else "")
           + "），可收缩脚本头部的棘轮基线")
 sys.exit(0)

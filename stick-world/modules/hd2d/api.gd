@@ -11,8 +11,9 @@ extends RefCounted
 ##
 ## 外部模块通过本文件记载的常量与 duck 方法交互；修改公共 API 需同步更新本文件。
 
-## 3D 世界场景（宿主 instantiate 后 add_child；节点名由宿主自定，如 "HD2DWorld"）
-const WORLD_SCENE := "res://modules/hd2d/scenes/hd2d_world.tscn"
+## 3D 世界场景（宿主 instantiate 后 add_child；节点名由宿主自定，如 "HD2DWorld"）。
+## 消费方经本契约取 PackedScene，不跨模块 preload 场景内部路径（audit_deps 口径）
+const WORLD_SCENE: PackedScene = preload("res://modules/hd2d/scenes/hd2d_world.tscn")
 
 # ─────────────────────────────── 模式注入（add_child 前设属性）────────────────────────────────
 ## 布局驱动模式（算法村）：layout_name = tex 布局 JSON 名（hd2d_layouts/<名>.json）；

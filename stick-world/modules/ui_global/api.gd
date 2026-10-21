@@ -35,3 +35,14 @@ const PATH_MODAL_OVERLAY := "ModalOverlay"
 static func create_save_panel() -> Control:
 	const SavePanelScript := preload("res://modules/ui_global/scripts/menus/save_panel.gd")
 	return UIKit.full_rect(SavePanelScript, "SavePanel")
+
+# ─────────────────────────────── 场景与组件路径 ────────────────────────────────
+# 跨模块取用本层场景/组件一律经本契约常量，消费方不写 ui_global 内部路径
+# （audit_deps 口径：跨模块路径字符串指向非 api.gd 文件记越界）。
+
+## 主菜单场景（dev_scene_escape ESC 回主页等切场景入口）
+const MAIN_MENU_SCENE := "res://modules/ui_global/scenes/menus/main_menu.tscn"
+## 界面模板陈列目录（dev 浏览族场景前缀；DevSceneEscape ESC 拦截判定用）
+const TEMPLATE_SCENE_DIR := "res://modules/ui_global/scenes/templates/"
+## 手绘云组件（sketch 族；hd2d 云牌烘贴图用，程序化画风实现归本层 sketch/）
+const SKETCH_CLOUD: GDScript = preload("res://modules/ui_global/scripts/sketch/sketch_cloud.gd")

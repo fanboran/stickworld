@@ -13,7 +13,7 @@ extends Node
 ## - 单向广播（生产 emit 无订户，2026-08 审计标注，UI/外部接入时连接）：
 ##   game_saved（SaveManager 广播）、balance_changed（热重载预留）、
 ##   battle_started/battle_ended（战斗生命周期）、selection_changed/squad_created/order_issued（编队 UI 数据通道）、
-##   team_ai_stance_changed/heal_cast（战斗可观测性：调试 HUD/测试断言接入时连接）
+##   team_ai_stance_changed（战斗可观测性：调试 HUD 接入时连接）
 ## - chunk_loaded/chunk_unloaded 不走 EventBus：scene_loader 自带同名信号是唯一通道
 ##   （chunk 流式为预留接口，EventBus 版零订户已下线）
 
@@ -60,10 +60,6 @@ extends Node
 # 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序
 # 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）
 @warning_ignore("unused_signal") signal team_ai_stance_changed(battle_id: String, faction: int, from_stance: int, to_stance: int, reason: String)
-# 治疗施放（WeaponMount.cast_heal -> battle_sim 采样/可观测性，P7 批次 7b）：
-# battle_id 经施法者 get_battle_instance().get_battle_id()；caster/target 用 instance_id；
-# anim_name ∈ {"heal_meric_1","heal_meric_2"}（随机分布统计源，spec §5.4.3）
-@warning_ignore("unused_signal") signal heal_cast(battle_id: String, caster_id: int, target_id: int, anim_name: String)
 # 单位行为状态机切换（BehaviorStateMachine.travel -> AI 决策可视化，纯可观测性）：
 # entity = 所属单位（含 AIController），from/to_behavior = 切换前后行为名
 #（from 可为空 = 初始 travel），params = travel 透传参数（诊断上下文，只读勿改）。

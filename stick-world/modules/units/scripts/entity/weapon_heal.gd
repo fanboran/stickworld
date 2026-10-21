@@ -3,8 +3,7 @@ extends RefCounted
 ## Meric 实体层 CastHeal/CanCastHeal/IsCastingHeal 直译；无自持状态）。
 ##
 ## 职责：can_cast_heal（冷却满 ∧ 非施法中）/ cast_heal（随机注入治疗动画 →
-## 播放 → apply_status(HEAL) HOT 均分 → 刷新计时 → 发射 EventBus.heal_cast）/
-## is_casting_heal。
+## 播放 → apply_status(HEAL) HOT 均分 → 刷新计时）/ is_casting_heal。
 ##
 ## 纪律：治疗状态（_heal_anim_playing/_last_heal_time/_last_heal_effect_spawn/
 ## healing_animation；_heal_anim_playing 与 _last_heal_time 被 tests/unit/
@@ -41,7 +40,7 @@ func can_cast_heal() -> bool:
 ## CastHeal 直译；签名差异声明：原版无参目标由宿主字段隐含，本项目显式传 target
 ## 保类型安全，语义等价。dump 无方法体真值，语义推断（待实测校准）。
 ## 流程：target 防御 → 随机注入 healing_animation → 播放 → apply_status(HEAL)
-## → 刷新计时 → 发射 EventBus.heal_cast
+## → 刷新计时
 func cast_heal(target: Node) -> void:
 	if target == null or not is_instance_valid(target):
 		return
@@ -67,17 +66,6 @@ func cast_heal(target: Node) -> void:
 	# 刷新计时（dump lastHealTime/lastHealEffectSpawn 直译）
 	_mount._last_heal_time = _mount._now()
 	_mount._last_heal_effect_spawn = _mount._now()
-	# 发射治疗施放信号（spec §5.4.3 可观测性）
-	var eb: Node = _mount.get_node_or_null("/root/EventBus")
-	if eb != null and eb.has_signal("heal_cast"):
-		var battle_id: String = ""
-		if owner_entity != null and owner_entity.has_method("get_battle_instance"):
-			var bi: Node = owner_entity.get_battle_instance()
-			if bi != null and bi.has_method("get_battle_id"):
-				battle_id = bi.get_battle_id()
-		var caster_id: int = owner_entity.get_instance_id() if owner_entity != null else 0
-		var target_id: int = target.get_instance_id()
-		eb.heal_cast.emit(battle_id, caster_id, target_id, _mount.healing_animation)
 
 
 ## IsCastingHeal 直译：返回施法标志位（比查询 rig 动画名更可测，unit 测试直接置位）。

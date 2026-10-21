@@ -231,6 +231,7 @@ func _on_menu_pressed(item: Dictionary) -> void:
 ## 文名，未登记场景以文件名入列（下划线前缀 = 内部辅助件，不入列）。
 const DEV_SCENE_NAMES: Dictionary = {
 	"res://tests/dev/battle_arena.tscn": "大乱斗观察场（12v12 混编自动互殴）",
+	"res://tests/dev/duel_arena.tscn": "单挑观察场（1v1 兵种对位开局即战）",
 	"res://tests/dev/unit_action_gallery.tscn": "单位动作画廊（全员单位×全部动作对比）",
 	"res://tests/dev/sketch_compare.tscn": "手绘皮肤全族陈列（自绘沸腾 + StickHand 字体）",
 	"res://tests/dev/sketch_cloud_gallery.tscn": "手绘云候选陈列（动漫体积/油画厚涂）",
@@ -259,7 +260,8 @@ const TEMPLATE_SCENES: Array[Dictionary] = [
 ## 界面模板组置顶（组件展示是 UI 门面活文档，不藏末位）
 const SCENE_GROUPS: Array[Dictionary] = [
 	{"id": "templates", "title": "界面模板", "templates": true},
-	{"id": "play", "title": "试玩与观测", "names": ["battle_arena", "unit_action_gallery",
+	{"id": "play", "title": "试玩与观测", "names": ["battle_arena", "duel_arena",
+		"unit_action_gallery",
 		"dev_playtest", "battle_sim", "battle_perf", "world_perf",
 		"record_demo"]},
 	{"id": "gallery", "title": "画廊陈列", "names": ["sketch_compare", "sketch_cloud_gallery",

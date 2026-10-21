@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/dev/duel_arena.gd" id="1_duel"]
+
+[node name="DuelArena" type="Node"]
+script = ExtResource("1_duel")

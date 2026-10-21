@@ -271,7 +271,7 @@ DEFS = {
     # mint（铸币厂，任务书 §五）：铁栅重门+铸币烟囱，capital 起（生产带低权重投放）。
     "mint":          dict(cn="铸币厂",   widths=[12, 16],          wall_h=422, roof=96,
                           depth=8, wall_mat="brick", roof_mat="slate", variant="a"),
-    # ── 批 2 装配器（驿站族/赌场族/科研族/花店；窗口按修订版任务书，与文档命名
+    # ── 批 2 装配器（驿站族/科研族/花店；窗口按修订版任务书，与文档命名
     #    有差异处以装配器实名为准） ─────────────────────────────────────────
     # 窗口里的 town/city 属既有档：零漂移硬约束下不动其抽签池——窗口先在此登记、
     # 接线从新四档（townlet/burgh/capital/metropolis）起步，既有档待漂移预算审批。
@@ -286,10 +286,6 @@ DEFS = {
                           variant="a"),
     "coach_house":   dict(cn="车马行",   widths=[12, 16],         wall_h=300, roof=118,
                           depth=10, wall_mat="brick", roof_mat="slate", variant="a"),
-    "gambling_den":  dict(cn="赌坊",     widths=[8, 12],          wall_h=220, roof=98,
-                          depth=7, wall_mat="wood", roof_mat="tile", variant="a"),
-    "grand_casino":  dict(cn="大赌场",   widths=[16],             wall_h=428, roof=100,
-                          depth=9, wall_mat="plaster", roof_mat="copper", variant="a"),
     "academy":       dict(cn="学院",     widths=[12, 16],         wall_h=418, roof=96,
                           depth=8, wall_mat="stone", roof_mat="slate", variant="a"),
     # observatory：收分圆塔 → 登记天际线有效体量（塔身+铜穹顶+尖顶 390，压在教堂
@@ -321,7 +317,6 @@ DEPTH_BY_WIDTH = {
     # 此处供 J3 投放与登记复核；inn_post/coach_house 的 depth 字段已是总延伸）。
     "inn_post":     {12: 9, 16: 10},           # D 204/232 + 翼前伸 64/72
     "coach_house":  {12: 9, 16: 10},           # D 198/226 + 翼前伸 58/64
-    "grand_casino": {16: 9},                   # D 236 + 门楼前凸 26
     "academy":      {12: 7, 16: 8},            # D：196 / 224
     "flower_shop":  {8: 6, 12: 7},             # D：158 / 196
 }
@@ -503,11 +498,11 @@ ZONE_POOLS = {
     #   + city_hall（行政 L3，过渡期 guildhall[16] 兼当装配）。
     "burgh": {
         "core":        dict(forced=["church", "city_hall"], weight=[("chapel", 1)]),
-        # 批 2 窗口（burgh 起）：赌坊/花店/客栈入市场带，学院入工匠带（core 候补
+        # 批 2 窗口（burgh 起）：花店/客栈入市场带，学院入工匠带（core 候补
         # 待 core_count 参数化后再进 core），路驿入生产带。
         "market":      dict(forced=["tavern", "bakery"],
                             weight=[("shop", 5), ("market_stall", 3),
-                                    ("gambling_den", 1), ("flower_shop", 1),
+                                    ("flower_shop", 1),
                                     ("inn_post", 1)]),
         "artisan":     dict(forced=["smithy2", "smithy3"],
                             weight=[("smithy4", 2), ("stable", 3), ("hayloft", 1),
@@ -522,12 +517,11 @@ ZONE_POOLS = {
     #   J3 频率 library 2 / barracks 2 / warehouse 2 / belfry 加密。
     "capital": {
         "core":        dict(forced=["church", "governor_palace"], weight=[("chapel", 1)]),
-        # 批 2 窗口（city 起，city 属既有档故从 capital 落地）：赌坊/花店/客栈/
-        # 大赌场入市场带，车马行入工匠带；academy 接管 library 的学术位（library
+        # 批 2 窗口（city 起，city 属既有档故从 capital 落地）：花店/客栈入
+        # 市场带，车马行入工匠带；academy 接管 library 的学术位（library
         # 的 capital freq 撤除，town/city/metropolis 不变）。
         "market":      dict(forced=["tavern", "bakery"],
                             weight=[("shop", 5), ("market_stall", 3),
-                                    ("gambling_den", 1), ("grand_casino", 1),
                                     ("flower_shop", 1), ("inn_post", 1)]),
         "artisan":     dict(forced=["smithy2", "smithy3"],
                             weight=[("smithy1", 2), ("smithy4", 3), ("stable", 2),
@@ -546,7 +540,6 @@ ZONE_POOLS = {
         # 批 2 窗口：与 capital 同批入带（academy 权重降为 1，library 保留 2）。
         "market":      dict(forced=["tavern", "bakery"],
                             weight=[("shop", 5), ("market_stall", 3),
-                                    ("gambling_den", 1), ("grand_casino", 1),
                                     ("flower_shop", 1), ("inn_post", 1)]),
         "artisan":     dict(forced=["smithy2", "smithy3"],
                             weight=[("smithy1", 2), ("smithy4", 3), ("stable", 2),

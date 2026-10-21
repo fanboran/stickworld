@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
-"""probe_batch2.py —— 分级批次 2 出图（驿站族 3 / 赌场族 2 / 科研 2 / 花店 1）
+"""probe_batch2.py —— 分级批次 2 出图（驿站族 3 / 科研 2 / 花店 1）
 
 渲染内容
 --------
-* `pbr_b2x_<def>_w<N>.png`  14 张 2.6x 特写（8 个新 def × 各宽度档），每张含
+* `pbr_b2x_<def>_w<N>.png`  11 张 2.6x 特写（6 个新 def × 各宽度档），每张含
   **门口并排火柴人**（无门开敞件站棚下）
 * `pbr_b2x_family_post.png`   驿站族三件同框从小到大（waystation w6 → inn_post w12 →
   coach_house w16）+ 火柴人
-* `pbr_b2x_family_casino.png` 赌场两件同框（gambling_den w8 → grand_casino w16）+ 火柴人
 * `pbr_b2x_edge.png`          棱线高光门禁图（抽 inn_post w12，强侧光特写，
   口径同 probe_bevel：所有可见棱须呈"亮→暗"高光渐变带，死线即打回）
 * stdout 逐件 check_spec 实测表 + PROBE_OK
@@ -45,14 +44,11 @@ BAY_GAP = 60.0
 CLOSE_LIST = [("waystation", 6), ("waystation", 8),
               ("inn_post", 12), ("inn_post", 16),
               ("coach_house", 12), ("coach_house", 16),
-              ("gambling_den", 8), ("gambling_den", 12),
-              ("grand_casino", 16),
               ("academy", 12), ("academy", 16),
               ("observatory", 8),
               ("flower_shop", 8), ("flower_shop", 12)]
 #: 家族对比（从小到大）
-FAMILIES = [("post", [("waystation", 6), ("inn_post", 12), ("coach_house", 16)]),
-            ("casino", [("gambling_den", 8), ("grand_casino", 16)])]
+FAMILIES = [("post", [("waystation", 6), ("inn_post", 12), ("coach_house", 16)])]
 #: 棱线门禁抽验件（挑附属件最密的驿站 Lv2）
 EDGE_SUBJECT = ("inn_post", 12)
 

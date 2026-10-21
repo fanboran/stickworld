@@ -3,7 +3,7 @@
 
 ⚠ 状态（2026-09-15）：运行时真相源已移交 stick-world/modules/world/scripts/map/
 city_gen.gd（首次进入按种子生成，池子按聚落等级窗口表实时取）。本脚本的
-分区池已落后于 GD 版（capital/metropolis/赌场/学院/街具节奏未同步），
+分区池已落后于 GD 版（capital/metropolis/学院/街具节奏未同步），
 仅作离线参考；重新启用前须先对表。
 
 与 city_layout.py（镜像五带/固定宽度）的口径差异，本脚本按新裁决实现：

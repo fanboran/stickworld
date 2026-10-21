@@ -107,12 +107,10 @@ DEF_MAP = {
     # 天际线点缀/首府公共建筑（SPECIAL_DEFS 投放；装配器同批交付）
     "belfry":         ("belfry", [4, 6]),
     "mint":           ("mint", [12, 16]),
-    # 批 2（驿站族/赌场族/科研族/花店，装配器同批交付实名）
+    # 批 2（驿站族/科研族/花店，装配器同批交付实名）
     "waystation":     ("waystation", [6, 8]),
     "inn_post":       ("inn_post", [12, 16]),
     "coach_house":    ("coach_house", [12, 16]),
-    "gambling_den":   ("gambling_den", [8, 12]),
-    "grand_casino":   ("grand_casino", [16]),
     "academy":        ("academy", [12, 16]),
     "observatory":    ("observatory", [8]),
     "flower_shop":    ("flower_shop", [8, 12]),
@@ -175,10 +173,9 @@ DRESS_BY_DEF = {
     "governor_palace": "cathedral", "imperial_palace": "cathedral",
     "belfry": "tower", "mint": "smithy",
     # 批 2（配方取 props.DRESS 既有键；inn_post→townhouse 取挂招牌灯笼同源，
-    # academy/observatory→library 取书堆星盘学术件，grand_casino→cathedral 取
-    # 柱廊灯柱长凳门面前场）
+    # academy/observatory→library 取书堆星盘学术件）
     "waystation": "barn", "inn_post": "townhouse", "coach_house": "barn",
-    "gambling_den": "shop", "grand_casino": "cathedral", "academy": "library",
+    "academy": "library",
     "observatory": "library", "flower_shop": "shop",
 }
 

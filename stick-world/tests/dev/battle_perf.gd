@@ -27,8 +27,12 @@ var _max_frame_ms: float = 0.0
 var _draw_samples: Array[float] = []
 var _done: bool = false
 ## 实验开关（诊断瓶颈用；正常跑不带参数）：
-##   --anim-off   开战 5s 后冻结全部 AnimationTree（动画处理成本归零，渲染仍在）
-##   --rig-hidden 开战 5s 后隐藏全部骨架（渲染+动画归零，仅剩模拟）
+##   --anim-off   开战 5s 后冻结全部 AnimationTree（动画处理成本归零，渲染仍在）。
+##                覆盖两条渲染链：2D 富管线（RigHost）与 HD-2D billboard 链
+##                （JointRigHosts 隐藏求解画布里的每单位 AnimationTree/Player）
+##   --rig-hidden 开战 5s 后隐藏全部骨架（渲染+动画归零，仅剩模拟）。
+##                2D 链隐藏 RigHost；HD-2D 链 set_chars_visible(false) 停写
+##                MultiMesh 行 + 隐藏宿主（阴影/血条随宿主消失）+ 停隐藏 rig 动画
 ##   --bodies-ghost 开战 5s 后单位碰撞 mask 只留地形（单位间物理互撞归零）
 ##   --no-ai      开战 5s 后禁用全部 AIController 物理处理（单位站桩）
 ##   --freeze-entities 实体及其全部子孙的物理处理停跑（战斗侧系统照常 tick）
@@ -176,13 +180,71 @@ func _apply_experiment() -> void:
 		if _rig_hidden:
 			r.visible = false
 		elif _anim_off:
-			var at: Node = r.get_node_or_null("OutlineGroup/StickmanRig/AnimationTree")
-			if at != null:
-				at.active = false
-			var ap: Node = r.get_node_or_null("OutlineGroup/StickmanRig/AnimationPlayer")
-			if ap != null:
-				ap.paused = true
-	print("[PERF-EXPERIMENT] rigs=%d mode=%s" % [rigs.size(), "hidden" if _rig_hidden else "anim-off"])
+			_pause_rig_anim(r)
+	# HD-2D billboard 链（观察场/实战当前渲染路径，2026-10 战场观感重构后）：
+	# 每单位一个 char_rig_3d 宿主（duck 探测 set_chars_visible），行写进全局
+	# MultiMesh 桶；求解 rig 藏在 JointRigHosts 隐藏画布（CanvasLayer.visible=false）
+	var hosts: Array = []
+	if _anim_off or _rig_hidden:
+		_collect_char_hosts(get_tree().root, hosts)
+		for h in hosts:
+			if not is_instance_valid(h):
+				continue
+			if _rig_hidden:
+				if h.has_method("set_chars_visible"):
+					h.set_chars_visible(false)
+				h.visible = false
+		var paused := _pause_joint_rig_anims()
+		print("[PERF-EXPERIMENT] rigs2d=%d char_hosts=%d joint_anims_paused=%d mode=%s" % [
+				rigs.size(), hosts.size(), paused,
+				"hidden" if _rig_hidden else "anim-off"])
+	else:
+		print("[PERF-EXPERIMENT] rigs2d=%d mode=none" % rigs.size())
+
+
+## 2D 富管线单只 rig 的动画冻结（AnimationTree 失活 + Player 暂停）
+func _pause_rig_anim(r: Node) -> void:
+	var at: Node = r.get_node_or_null("OutlineGroup/StickmanRig/AnimationTree")
+	if at != null:
+		at.active = false
+	var ap: Node = r.get_node_or_null("OutlineGroup/StickmanRig/AnimationPlayer")
+	if ap != null:
+		ap.active = false   # AnimationMixer 基类属性（无 paused 属性）
+
+
+## char_rig_3d 宿主收集（HD-2D 链；duck 探测 set_chars_visible，免跨模块 preload）
+func _collect_char_hosts(node: Node, out: Array) -> void:
+	if node.has_method("set_chars_visible") and node is Node3D:
+		out.append(node)
+		return   # 宿主子树不再嵌套宿主
+	for c in node.get_children():
+		_collect_char_hosts(c, out)
+
+
+## JointRigHosts 隐藏求解画布下的全部 AnimationTree/Player 冻结（返回计数）
+func _pause_joint_rig_anims() -> int:
+	var count := 0
+	for jh in _find_named(get_tree().root, "JointRigHosts", []):
+		count += _pause_anims_under(jh)
+	return count
+
+
+func _pause_anims_under(node: Node) -> int:
+	var count := 0
+	for c in node.get_children():
+		if (c.name == "AnimationTree" and c is AnimationTree) 				or (c.name == "AnimationPlayer" and c is AnimationPlayer):
+			c.active = false   # AnimationMixer 基类属性（无 paused 属性）
+			count += 1
+		count += _pause_anims_under(c)
+	return count
+
+
+func _find_named(node: Node, wanted: String, out: Array) -> Array:
+	if node.name == wanted:
+		out.append(node)
+	for c in node.get_children():
+		_find_named(c, wanted, out)
+	return out
 
 
 func _find_entity_hosts(node: Node, out: Array = []) -> Array:
@@ -230,4 +292,32 @@ func _report() -> void:
 		"fps_p05": p05,
 		"worst_frame_ms": snappedf(_max_frame_ms, 0.1),
 		"draw_calls_median": int(draws_med),
+		"census": _draw_census(),
 	}))
+
+
+## 可见绘制节点普查（draw 归因辅助：数「谁在场」，draws 归引擎管线统计）。
+## 只数可见（is_visible_in_tree）的绘制承担者，按类聚合；char 宿主另计。
+func _draw_census() -> Dictionary:
+	var counts := {}
+	_census_walk(get_tree().root, counts)
+	return counts
+
+
+func _census_walk(node: Node, counts: Dictionary) -> void:
+	if node is GeometryInstance3D or node is CanvasItem:
+		var vis: bool = node.is_visible_in_tree()
+		if vis and node is MeshInstance3D:
+			counts["MeshInstance3D"] = int(counts.get("MeshInstance3D", 0)) + 1
+		elif vis and node is MultiMeshInstance3D:
+			counts["MultiMeshInstance3D"] = int(counts.get("MultiMeshInstance3D", 0)) + 1
+		elif vis and node is Sprite2D:
+			counts["Sprite2D"] = int(counts.get("Sprite2D", 0)) + 1
+		elif vis and node is Line2D:
+			counts["Line2D"] = int(counts.get("Line2D", 0)) + 1
+		elif vis and node is Polygon2D:
+			counts["Polygon2D"] = int(counts.get("Polygon2D", 0)) + 1
+	if node.has_method("set_chars_visible") and node is Node3D:
+		counts["char_rig_3d_hosts"] = int(counts.get("char_rig_3d_hosts", 0)) + 1
+	for c in node.get_children():
+		_census_walk(c, counts)

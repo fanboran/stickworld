@@ -19,9 +19,16 @@ var _samples: PackedFloat32Array = PackedFloat32Array()
 var _proc_ms: PackedFloat32Array = PackedFloat32Array()
 var _phys_ms: PackedFloat32Array = PackedFloat32Array()
 var _max_frame_ms: float = 0.0
+## --hold=N：报告输出后常驻到开局第 N 秒再退出（PerfProbe 探针驱动用——
+## 命令通道按相 mark/sysoff 差分需要进程活着；默认 -1 = 测完即退，行为不变）
+var _hold_seconds: float = -1.0
+var _reported: bool = false
 
 
 func _ready() -> void:
+	for a in OS.get_cmdline_user_args():
+		if str(a).begins_with("--hold="):
+			_hold_seconds = maxf(10.0, float(a.get_slice("=", 1)))
 	# 新开局语义（不读玩家存档；SaveManager 在 game_root._ready 消费此字段）。
 	# 注意：不能 change_scene_to_file——那会把本采样节点（当前场景）替换掉；
 	# 改为把 world 挂到 root 下作兄弟节点，本节点常驻采样。
@@ -49,8 +56,13 @@ func _process(_delta: float) -> void:
 	_proc_ms.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
 	_phys_ms.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
 	_max_frame_ms = maxf(_max_frame_ms, _delta * 1000.0)
-	if _world_elapsed >= MEASURE_SECONDS:
+	if _world_elapsed >= MEASURE_SECONDS and not _reported:
 		_report()
+		_reported = true
+		if _hold_seconds < 0.0:
+			get_tree().quit()
+	# hold 常驻段（探针驱动窗口）：到点退出
+	if _reported and _hold_seconds > 0.0 and _world_elapsed >= _hold_seconds:
 		get_tree().quit()
 
 

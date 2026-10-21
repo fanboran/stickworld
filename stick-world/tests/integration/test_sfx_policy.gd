@@ -42,6 +42,7 @@ func _ready() -> void:
 	_runner.add_test("定位: 有宿主走 2D，无宿主退回非定位", _test_spatial_routing, true)
 	_runner.add_test("暂停: 世界音效与雨声静音、恢复接回", _test_pause_handling, true)
 	_runner.add_test("压限: 多来源取最深者", _test_duck_request_set, false)
+	_runner.add_test("总线: BGM 挂侧链压缩机（检测源=SFX）", _test_bgm_sidechain, false)
 	_run_tests_async()
 
 
@@ -138,7 +139,7 @@ func _test_asset_accounting() -> void:
 	if not missing.is_empty():
 		print("[SfxPolicyTest] 全部变体缺失（当前不会发声）：%s" % str(missing))
 	# 少量关键事件必须在册（行为用例也依赖它们）
-	for key in [EV_MERGE, EV_INSTANT, "build_hit"]:
+	for key in [EV_MERGE, EV_INSTANT, "build_hit", "weapon_bow_fire", "weapon_pick_hit"]:
 		_runner.assert_gt(float(_variant_count(key)), 0.0,
 			"关键事件 %s 至少应有一个可用变体" % key)
 
@@ -367,6 +368,40 @@ func _test_duck_request_set() -> void:
 	AudioManager.release_music_duck(&"battle", 0.0)
 	_runner.assert_approx(AudioManager.get_music_duck_db(), 0.0, 0.001,
 		"全部撤销后应回到 0")
+
+
+## BGM 总线侧链压缩机（触发规范 §九.3 路线 B）：音效一密音乐自动让路。
+## 总线效果器在 headless 下同样可断言——机制面不依赖音频设备。
+func _test_bgm_sidechain() -> void:
+	var idx: int = AudioServer.get_bus_index("BGM")
+	_runner.assert_true(idx >= 0, "BGM 总线应存在")
+	var found: AudioEffectCompressor = null
+	for i in AudioServer.get_bus_effect_count(idx):
+		var fx: AudioEffect = AudioServer.get_bus_effect(idx, i)
+		if fx is AudioEffectCompressor:
+			found = fx
+			break
+	_runner.assert_not_null(found, "BGM 总线应挂侧链压缩机")
+	if found == null:
+		return
+	_runner.assert_true(found is AudioEffectCompressor, "挂的应是 AudioEffectCompressor")
+	# 检测源必须是 SFX 总线（侧链的语义本体；写错总线 = 永远不触发或自我检测）
+	_runner.assert_equal(String(found.sidechain), "SFX",
+		"侧链检测源应为 SFX 总线（实测 %s）" % String(found.sidechain))
+	# 参数应落在提案区间（threshold/ratio/release 实机听感标定前的护栏）
+	_assert_between(float(found.threshold), -36.0, -12.0,
+		"threshold 应在 -36~-12dB（实测 %.1f）" % float(found.threshold))
+	_assert_between(float(found.ratio), 1.5, 8.0,
+		"ratio 应在 1.5~8（实测 %.1f）" % float(found.ratio))
+	_assert_between(float(found.release_ms), 50.0, 1000.0,
+		"release 应在 50~1000ms（实测 %.1f）" % float(found.release_ms))
+	_runner.assert_approx(float(found.gain), 0.0, 0.001,
+		"不做补偿增益（压多少让多少）")
+	# 幂等：重复 _ensure_buses 不应叠挂第二台压缩机
+	var before_count: int = AudioServer.get_bus_effect_count(idx)
+	AudioManager._ensure_buses()
+	_runner.assert_equal(AudioServer.get_bus_effect_count(idx), before_count,
+		"重复 _ensure_buses 不应叠挂第二台压缩机")
 
 
 # ─────────────────────────────── 工具 ────────────────────────────────

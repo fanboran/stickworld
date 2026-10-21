@@ -52,6 +52,11 @@ extends Node
 ## 监听方不必回查已 queue_free 的 BattleInstance。
 ## 发射方：BattleInstance._end
 @warning_ignore("unused_signal") signal battle_settled(battle_id: String, summary: Dictionary)
+# 战场规模脉动（BattleInstance -> 战斗氛围层/可观测性）：alive_units = 双方**存活**
+# 单位总数（接战规模的近似口径，伤亡会自然回落）。随胜负清点同拍（0.5s）低频广播，
+# start() 时先发一次初值；battle_ended 即战场消亡，不发 0（订阅方按 ended 收声）。
+## 发射方：BattleInstance.start / _physics_tick
+@warning_ignore("unused_signal") signal battle_engagement_changed(battle_id: String, alive_units: int)
 # 阵营 AI 姿态变更（TeamAi -> 调试 HUD/测试断言）：from/to_stance 值序
 # 0=GARRISON/1=DEFEND/2=ATTACK（对齐 dump Team.Stance 枚举序）；
 # 3=ROUT 为本作扩展（敌将溃逃终态）

@@ -113,6 +113,40 @@ func _ensure_buses() -> void:
 		AudioServer.set_bus_name(idx, bus_name)
 		AudioServer.set_bus_send(idx, BUS_MASTER)
 	_ensure_sfx_limiter()
+	_ensure_bgm_sidechain()
+
+
+## BGM 总线侧链压缩机：**检测源 = SFX 总线**——音效一密，音乐自动让路；
+## 音效一停，音乐自动回来。压的量随音效实际能量连续变化，不需要调
+## "什么时候算密集"（对比：压限请求集 request_music_duck 是"状态档"，
+## 这里的侧链是"声学连续档"，两者叠加生效、互不替代）。
+## 设计依据见 docs/技术/音频/音效触发规范.md §九.3（路线 B）。
+## 参数为【提案/待定】：threshold/ratio/release 需实机听"抽吸感"标定——
+## 若听感是"每记挥击都在喘"→ 加长 attack；"战斗里音乐被压没"→ 抬 threshold。
+const BGM_SIDECHAIN_THRESHOLD_DB := -24.0
+const BGM_SIDECHAIN_RATIO := 3.0
+## attack 取引擎默认 20ms（=20000µs）：让短瞬态先过去，只对"持续密集"整体收
+const BGM_SIDECHAIN_ATTACK_US := 20000
+const BGM_SIDECHAIN_RELEASE_MS := 250
+
+func _ensure_bgm_sidechain() -> void:
+	var idx: int = AudioServer.get_bus_index(BUS_BGM)
+	if idx < 0:
+		return
+	# 幂等：已有压缩机就不重挂（_ensure_buses 会被反复调用）
+	for i in AudioServer.get_bus_effect_count(idx):
+		if AudioServer.get_bus_effect(idx, i) is AudioEffectCompressor:
+			return
+	var comp := AudioEffectCompressor.new()
+	comp.threshold = BGM_SIDECHAIN_THRESHOLD_DB
+	comp.ratio = BGM_SIDECHAIN_RATIO
+	comp.attack_us = BGM_SIDECHAIN_ATTACK_US
+	comp.release_ms = BGM_SIDECHAIN_RELEASE_MS
+	# 不做补偿增益（gain=0）：压多少让多少，音乐始终让位于音效
+	comp.gain = 0.0
+	# 检测源 = SFX 总线的**输入**（总线按名解析；上方循环已保证 SFX 总线存在）
+	comp.sidechain = BUS_SFX
+	AudioServer.add_bus_effect(idx, comp)
 
 
 ## SFX 总线末端硬限幅（安全网）：单条音效自己不会削波，但人群战斗里十几路叠加
@@ -405,6 +439,22 @@ const SFX_EVENTS := {
 		"res://assets/audio/sfx/magikill_blast_a.wav",
 		"res://assets/audio/sfx/magikill_blast_b.wav",
 	],
+	# 弓放弦 / 镐敲击（攻击动画的 Spine 源暂无 Sound 事件数据，触发点由
+	# 武器动画音效桥补位，见 modules/world/scripts/weapon_anim_sfx_bridge.gd）。
+	# 资产先复用在册变体池（分键不与近战挥击/采集互掐；专门的放弦音/触镐音
+	# 由音效资产批次产出后换指向即可，键名是契约不动调用点）：
+	# 弓=放弦风声（swoosh 池），镐=石/木材质敲击（harvest_hit 池，同 build_hit 先例）
+	"weapon_bow_fire": [
+		"res://assets/audio/sfx/swoosh_a.wav",
+		"res://assets/audio/sfx/swoosh_b.wav",
+		"res://assets/audio/sfx/swoosh_c.wav",
+		"res://assets/audio/sfx/swoosh_d.wav",
+	],
+	"weapon_pick_hit": [
+		"res://assets/audio/sfx/harvest_hit_a.wav",
+		"res://assets/audio/sfx/harvest_hit_b.wav",
+		"res://assets/audio/sfx/harvest_hit_c.wav",
+	],
 	# ── L4 环境（整片天空/世界，故意不做定位）────────────────────
 	"bird_chirp": [
 		"res://assets/audio/sfx/bird_chirp_a.wav",
@@ -445,6 +495,8 @@ const SFX_POLICY := {
 	"weapon_fall":       {"prio":  7, "min_ms": 120,  "merge_slots": 1, "jitter": 0.08, "spatial": true},
 	"weapon_headbutt":   {"prio":  7, "min_ms": 120,  "merge_slots": 1, "jitter": 0.08, "spatial": true},
 	"weapon_blast":      {"prio":  7, "min_ms": 150,  "merge_slots": 2, "jitter": 0.08, "spatial": true},
+	"weapon_bow_fire":   {"prio":  4, "min_ms": 80,   "merge_slots": 2, "jitter": 0.12, "spatial": true},
+	"weapon_pick_hit":   {"prio":  4, "min_ms": 60,   "merge_slots": 2, "jitter": 0.10, "spatial": true},
 	"bird_chirp":        {"prio":  1, "min_ms": 1200, "merge_slots": 1, "jitter": 0.05, "spatial": false, "instant": true},
 }
 

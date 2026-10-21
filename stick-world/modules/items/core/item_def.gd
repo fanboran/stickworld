@@ -14,6 +14,7 @@ enum Category {
 	ARMOR_LEGS,   ## 腿部护甲
 	CONSUMABLE,   ## 消耗品（Hotbar 数字键使用）
 	MATERIAL,     ## 材料（仅堆叠存放）
+	AMMO,         ## 弹药（远程武器耗弹；仅堆叠存放，不占装备槽）
 }
 
 @export var id: StringName = &""
@@ -27,6 +28,9 @@ enum Category {
 @export var weapon_type: int = -1
 ## WEAPON 专用：双手武器（弓）——装入主手时锁定副手，盾自动卸回背包
 @export var two_handed: bool = false
+## WEAPON 专用：弹药 def_id（远程武器射击消耗；空 = 免弹——数据开关，
+## 蓝图《武器装备与个人库存》§4.2）。AMMO 类物品自身恒空（弹药不耗弹药）
+@export var ammo_id: StringName = &""
 ## 数值参数（键语义沿用 excel weapons/armors 表：attack_mult / speed_mult /
 ## damage_reduction / speed_penalty / heal_amount…）。武器侧只入数据不应用
 ## （战斗数值由 BalanceConfig 校准管，见设计文档 §2.4）

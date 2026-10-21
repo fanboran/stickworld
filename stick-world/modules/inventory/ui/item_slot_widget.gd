@@ -189,6 +189,13 @@ func _draw_category_glyph(category: int, r: Rect2) -> void:
 			# 医疗十字
 			draw_rect(Rect2(c + Vector2(-3, -11), Vector2(6, 22)), ink)
 			draw_rect(Rect2(c + Vector2(-11, -3), Vector2(22, 6)), ink)
+		ItemDef.Category.AMMO:
+			# 箭杆 + 箭头 + 尾羽（弹药简笔）
+			draw_line(c + Vector2(-11, 11), c + Vector2(9, -9), ink, w)
+			draw_line(c + Vector2(9, -9), c + Vector2(2, -12), ink, w)
+			draw_line(c + Vector2(9, -9), c + Vector2(12, -2), ink, w)
+			draw_line(c + Vector2(-11, 11), c + Vector2(-13, 5), ink, w)
+			draw_line(c + Vector2(-11, 11), c + Vector2(-5, 13), ink, w)
 		_:
 			# 材料/未知：菱形
 			var pts2 := PackedVector2Array([

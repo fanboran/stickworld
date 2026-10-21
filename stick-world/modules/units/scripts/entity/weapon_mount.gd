@@ -132,6 +132,11 @@ var KNOCKBACK_PER_DAMAGE: float = 16.0
 var equip_attack_mult: float = 1.0
 ## 装备攻速乘子（def.speed_mult；>1 更快——有效冷却除以它；同为玩家接管专属）
 var equip_speed_mult: float = 1.0
+## 弹药容器（items 域 ItemContainer；InventoryService 接管时注入玩家背包，
+## 脱离接管清空）。射击对 def.ammo_id 非空的武器从此容器扣 1 发；
+## null = 无弹药源（NPC 无个体背包）= 免弹——E-4 loadout 弹药消耗再收紧。
+## 蓝图《武器装备与个人库存》§4.2 数据开关：ammo_id 空 = 恒免弹。
+var ammo_source: ItemContainer = null
 ## 接管近战溅射（SWL Unit 真值 USER_CONTROLLED_SPLASH_* 直译）：玩家接管单位的
 ## 近战挥击扇形额外收 4 个溅射目标、溅射伤害系数 0.2——"一人成军"的爽感来源
 const USER_CONTROLLED_SPLASH_HIT_LIMIT: int = 4
@@ -145,6 +150,12 @@ const USER_CONTROLLED_SPLASH_MODIFIER: float = 0.2
 		# 换武器 = 换攻击动画 = 命中帧事件时间要重新解析
 		_hit_time_resolved = false
 		_hit_event_time = -1.0
+		# spawn 按兵种生成个体装备记录（掉落个体化第一步）：外部 spawn 设武器
+		# 即建档（garrison/recruit/召唤）。实体侧守卫：已有记录/接管实体不建档
+		#（读档 set_loadout 先写档再设武器；玩家装备不属于 NPC 个体）
+		var owner_e := get_owner_entity()
+		if owner_e != null and owner_e.has_method("note_spawn_weapon"):
+			owner_e.note_spawn_weapon(v)
 		if is_inside_tree():
 			call_deferred("_reload_weapons")
 			# 持械站姿随武器分型（剑/矛/弓/镐/杖各一套 Stand），立即换姿
@@ -555,9 +566,14 @@ func perform_swing() -> bool:
 ## 玩家拉弓起手（SWL DrawBow：按住进入瞄准态）：弓播拉弓保持段（举弓-拉弦-
 ## 绷住，定格拉满陪按住全程）；其余武器维持旧行为（播攻击动画）。
 ## 不进冷却、不登记命中结算，冷却与出手都在松手时刻（release_player_shot）判。
+## 弹药约束：耗弹武器无弹时不起拉（射空不能射的入口门），给一声拒绝反馈。
 func begin_player_draw() -> void:
 	if weapon_type != WeaponType.BOW:
 		_play_swing()
+		return
+	if not has_ammo():
+		if AudioManager != null:
+			AudioManager.play_event("ui_denied")
 		return
 	_aim_visual_active = true
 	_aim_visual_player = true
@@ -572,6 +588,10 @@ func begin_player_draw() -> void:
 func release_player_shot(aim_dir: Vector2, power: float) -> Node2D:
 	if not can_attack():
 		_aim.end_bow_aim_visual(true)  # 出手被拒也要收弓，别把玩家钉在拉满姿态
+		return null
+	if not has_ammo():
+		# 起手门已拦，这里是兜底（蓄力途中背包被清空等边角）——拒绝且收弓
+		_aim.end_bow_aim_visual(true)
 		return null
 	var arrow: Node2D = _ranged.fire_arrow_manual(aim_dir, power)
 	# 松手 = 释放段（绷住→放）；出手被守卫拦下时 _end 已回站姿。
@@ -646,6 +666,34 @@ func get_charge_gravity() -> float:
 ## 法术 AOE 半径（杖落点圈预览与结算同源；档案 spell_aoe_radius，缺省 90）
 func get_spell_aoe_radius() -> float:
 	return float(ScriptBehaviorProfiles.get_profile(int(weapon_type)).get("spell_aoe_radius", 90.0))
+
+
+# ─────────────────────────────── 弹药约束（AMMO 接线，蓝图 §4.2）────────────────
+# 数据开关：武器 def.ammo_id 空 = 恒免弹（近战/杖/投矛现状）。设了 ammo_id 时，
+# 出箭从 ammo_source 扣 1 发、无弹不能射——只加资源约束，弹道/手感零改动。
+# NPC 无 ammo_source（个体背包 E-4）= 免弹；玩家侧由 InventoryService 注入背包。
+
+## 当前主手武器的弹药 def_id（免弹武器/无映射返回空）
+func current_ammo_id() -> StringName:
+	var wid: StringName = ItemsAPI.WEAPON_ITEM_BY_TYPE.get(int(weapon_type), &"")
+	if wid == &"":
+		return &""
+	var def: ItemDef = ItemDB.get_def(wid)
+	return def.ammo_id if def != null else &""
+
+
+## 是否还有弹药（免弹武器/无弹药源恒 true——射空不能射的判定源）
+func has_ammo() -> bool:
+	var aid := current_ammo_id()
+	return aid == &"" or ammo_source == null or ammo_source.has_item(aid)
+
+
+## 扣 1 发弹药（射击瞬间调用）。免弹/无源恒成功；容器无货失败 = 出手中止。
+func spend_ammo() -> bool:
+	var aid := current_ammo_id()
+	if aid == &"" or ammo_source == null:
+		return true
+	return ammo_source.remove(aid, 1)
 
 
 # ── 命中帧结算子域（Saga MeleeAttackSystem.Strike；逻辑下沉 weapon_strike.gd，

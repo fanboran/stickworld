@@ -5,7 +5,8 @@
 工坊仓库/载具货舱都是 `ItemContainer` 的消费者。
 
 - `api.gd` — 契约:资源品映射(resources.resource_id ↔ ItemDef.id)
-- `core/item_def.gd` — 物品定义(id/类别/max_stack/weapon_type/stats/图标)
+- `core/item_def.gd` — 物品定义(id/类别/max_stack/weapon_type/stats/ammo_id/图标;
+  AMMO 弹药品类+远程武器 ammo_id 数据开关=「弹药进 items 域」首个样板)
 - `core/item_stack.gd` — 运行时堆(def_id + count;装备槽的最小存储单元)
 - `core/item_db.gd` — 注册表(内置 GDScript 真相源,类型化导出后迁 .tres)
 - `core/item_container.gd` — 列表制容器(**无总数量限制,唯一上限=每类

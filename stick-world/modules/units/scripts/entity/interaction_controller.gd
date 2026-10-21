@@ -73,6 +73,8 @@ func try_interact() -> void:
 				AudioManager.play_event("ui_confirm" if ok else "ui_denied")
 		"resource":
 			_try_harvest_resource_node(target as Node2D)
+		"ground_item":
+			_pickup_ground_item(target as Node2D)
 		"loot":
 			_open_loot_container(target as Node2D)
 
@@ -91,6 +93,22 @@ func _open_loot_container(corpse: Node2D) -> void:
 	var screen: Node = loop.root.find_child("ContainerScreen", true, false)
 	if screen != null and screen.has_method("open_with"):
 		screen.open_with(loot, "翻检遗物")
+
+
+## 拾取地面掉落物（死亡物品直接落地）：经 InventoryAPI 取全局背包服务，
+## 列表制余量留地（超单类上限的部分留在地上）。听觉反馈：取到入账音，
+## 一件没取（该类已满）拒绝音。
+func _pickup_ground_item(item: Node2D) -> void:
+	if item == null or not is_instance_valid(item) or not item.has_method("take_all"):
+		return
+	var service: Node = InventoryAPI.get_service()
+	if service == null or service.inventory == null:
+		return
+	var taken: int = item.take_all(service.inventory.bag)
+	if taken > 0:
+		_play_world_sfx("harvest_gain")
+	else:
+		AudioManager.play_event("ui_denied")
 
 
 ## 建筑交互菜单（预制框架）：actions 数据驱动，后续建筑（工坊/商店）只注册
@@ -281,6 +299,24 @@ func _is_y_in_building_zone(top: float, bottom: float) -> bool:
 	return _entity.global_position.y >= top - INTERACT_VERT_TOL and _entity.global_position.y <= bottom + INTERACT_VERT_TOL
 
 
+## 附近地面掉落物（拾取探测；判定口径与资源点同款矩形，走 ground_item 组扫描）
+func _find_nearest_ground_item() -> Node2D:
+	var best: Node2D = null
+	var best_dist: float = INF
+	for node in _entity.get_tree().get_nodes_in_group("ground_item"):
+		var g := node as Node2D
+		if g == null or not is_instance_valid(g) or not g.is_inside_tree():
+			continue
+		var dx: float = absf(g.global_position.x - _entity.global_position.x)
+		var dy: float = absf(g.global_position.y - _entity.global_position.y)
+		if dx > HARVEST_X_RANGE or dy > HARVEST_Y_RANGE:
+			continue
+		if dx + dy < best_dist:
+			best_dist = dx + dy
+			best = g
+	return best
+
+
 ## 检测实体是否在工地交互范围内（横向中间 (width-2) 格 + 垂直在主体范围内）。
 func _is_near_project(project: RefCounted) -> bool:
 	var left_x: float = float(project.cell_x) * 24.0
@@ -340,6 +376,14 @@ func _find_interact_target() -> Dictionary:
 			var bar_bounds: Dictionary = _get_building_barrier_bounds(barracks)
 			return {"target": barracks, "kind": "barracks", "hint": String(org_api.get_recruit_hint()),
 					"center_x": float(bar_bounds.center), "hint_y": -1.0}
+	# 地面掉落物（死亡物品直接落地，按 F 拾取进背包）——就近优先于尸体遗物/资源点
+	var drop := _find_nearest_ground_item()
+	if drop != null:
+		var drop_count: int = int(drop.get("count")) if "count" in drop else 1
+		var drop_name: String = String(drop.call("get_display_name")) if drop.has_method("get_display_name") else "掉落物"
+		return {"target": drop, "kind": "ground_item",
+				"hint": "按F拾取 %s×%d" % [drop_name, drop_count],
+				"center_x": drop.global_position.x, "hint_y": drop.global_position.y - 72.0}
 	# 尸体遗物（翻包，items 域容器交互）：附近有带遗物的尸体优先于资源点
 	var corpse: Node2D = _find_nearest_lootable_corpse()
 	if corpse != null:

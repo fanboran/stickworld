@@ -10,7 +10,7 @@ extends StickScreen
 
 ## 分类标题（与 InventoryScreen 同源）
 const CATEGORY_NAMES: Array[String] = [
-	"武器", "盾", "头部护甲", "胸部护甲", "腿部护甲", "消耗品", "材料",
+	"武器", "盾", "头部护甲", "胸部护甲", "腿部护甲", "消耗品", "材料", "弹药",
 ]
 
 var _inv: PlayerInventory = null

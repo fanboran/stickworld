@@ -71,6 +71,8 @@ const _RegenScript: GDScript = preload("res://modules/units/scripts/entity/entit
 const _FacingScript: GDScript = preload("res://modules/units/scripts/entity/entity_facing.gd")
 ## 死亡与受击助手脚本（死亡收口/尸体/遗物/受击反馈，方法体所在）
 const _DeathScript: GDScript = preload("res://modules/units/scripts/entity/entity_death.gd")
+## 个体装备记录生成器（spawn 按兵种建档；显式 preload 防 headless class_name 未注册）
+const _EntityLoadoutScript: GDScript = preload("res://modules/units/scripts/entity/entity_loadout.gd")
 ## LOD 分档助手脚本（表现层性能分档，方法体所在）
 const _LodScript: GDScript = preload("res://modules/units/scripts/entity/entity_lod.gd")
 ## 数值校准助手脚本（BalanceConfig 兵种/移动调参，方法体所在）
@@ -999,9 +1001,9 @@ func get_map_reference() -> Node2D:
 
 
 ## 个体装备记录（loadout 奠基，设计文档 10 §3.4）：{main_hand/off_hand/armor_*
-## -> def_id}。spawn/读档回填时经 set_loadout 应用（main_hand 覆盖兵种默认
-## weapon_type——玩家全能换装的同一单点驱动）；死亡遗物按当前 weapon_type
-## 反查生成（_generate_loot_container）。个体背包/给 NPC 发装备→E-4 经济闭环。
+## -> def_id} + 弹药 {"ammo": {def_id: count}}。spawn/读档回填时经 set_loadout
+## 应用（main_hand 覆盖兵种默认 weapon_type——玩家全能换装的同一单点驱动）；
+## 死亡掉落按本记录个体化生成（entity_death）。
 var _loadout: Dictionary = {}
 
 
@@ -1020,6 +1022,19 @@ func set_loadout(d: Dictionary) -> void:
 
 func get_loadout() -> Dictionary:
 	return _loadout
+
+
+## spawn 按兵种生成个体装备记录（掉落个体化第一步；weapon_type setter 单点
+## 驱动——外部 spawn 设武器即建档）。守卫：接管实体不建档（玩家装备不属于
+## NPC 个体）、已有记录不覆盖（读档 set_loadout 先写档再设武器）。
+func note_spawn_weapon(weapon_type: int) -> void:
+	if user_controlled or not _loadout.is_empty():
+		return
+	var shield: bool = false
+	if weapon_mount != null and is_instance_valid(weapon_mount):
+		shield = bool(weapon_mount.equipped_shield) \
+				or (bool(weapon_mount.shield_enabled) and weapon_type == _EntityLoadoutScript.WEAPON_TYPE_SPEAR)
+	_loadout = _EntityLoadoutScript.for_spawn(weapon_type, shield)
 
 
 ## 写入职业 id（initial_content spawn 时经 TownLifeAPI 分配；弱类型协议，

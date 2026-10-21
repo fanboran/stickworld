@@ -22,6 +22,9 @@ func _ready() -> void:
 	_runner.add_test("转移: 原子双向截断", _test_transfer_atomic)
 	_runner.add_test("转移: move_all 搬空", _test_move_all)
 	_runner.add_test("映射: 资源品↔resource_id 双向", _test_resource_mapping)
+	_runner.add_test("弹药: 箭矢 def 注册（AMMO/堆叠50/非装备）", _test_ammo_def_registered)
+	_runner.add_test("弹药: 弓 ammo_id 接线 + 免弹开关", _test_ammo_weapon_wiring)
+	_runner.add_test("弹药: 容器堆叠与扣减", _test_ammo_in_container)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -144,3 +147,41 @@ func _test_resource_mapping() -> void:
 	# 映射表内的 def 必须真实存在（防漂移）
 	for def_id in ItemsAPI.RESOURCE_BY_ITEM:
 		_runner.assert_not_null(ItemDB.get_def(def_id), "映射物品 %s 已注册" % def_id)
+
+
+# ─────────────────────────────── 弹药域（AMMO 接线，蓝图 §4.2）───────────────
+
+func _test_ammo_def_registered() -> void:
+	var def: ItemDef = ItemDB.get_def(&"ammo_arrow_001")
+	_runner.assert_not_null(def, "箭矢 def 已注册")
+	if def == null:
+		return
+	_runner.assert_equal(def.category, ItemDef.Category.AMMO, "类别=AMMO")
+	_runner.assert_equal(def.max_stack, 50, "堆叠上限 50（箭进背包一叠五十）")
+	_runner.assert_false(def.is_equipment(), "弹药不占装备槽")
+	_runner.assert_not_null(def.icon, "图标接战斗箭矢贴图")
+
+
+func _test_ammo_weapon_wiring() -> void:
+	var bow: ItemDef = ItemDB.get_def(&"wpn_bow_001")
+	_runner.assert_not_null(bow, "弓 def 存在")
+	if bow != null:
+		_runner.assert_equal(bow.ammo_id, &"ammo_arrow_001", "弓耗弹指向箭矢")
+		_runner.assert_equal(int(bow.stat("spawn_ammo", 0)), 20, "弓手出生带箭 20")
+	# 免弹武器（数据开关：ammo_id 空 = 免弹）
+	for id in [&"wpn_sword_001", &"wpn_spear_001", &"wpn_staff_001", &"wpn_pickaxe_001"]:
+		var d: ItemDef = ItemDB.get_def(id)
+		_runner.assert_equal(d.ammo_id if d != null else &"<missing>", &"",
+				"%s 免弹（ammo_id 空）" % id)
+	# 弹药自身不耗弹（防自引用）
+	var arrow: ItemDef = ItemDB.get_def(&"ammo_arrow_001")
+	_runner.assert_equal(arrow.ammo_id if arrow != null else &"<missing>", &"",
+			"箭矢自身免弹")
+
+
+func _test_ammo_in_container() -> void:
+	var c := _make_container()
+	_fill(c, &"ammo_arrow_001", 50)
+	_runner.assert_equal(c.add(&"ammo_arrow_001", 1), 1, "满堆后余量返回")
+	_runner.assert_true(c.remove(&"ammo_arrow_001", 20), "扣 20 箭")
+	_runner.assert_equal(c.count_of(&"ammo_arrow_001"), 30, "剩 30 箭")

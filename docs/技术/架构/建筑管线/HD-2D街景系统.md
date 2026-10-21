@@ -15,22 +15,25 @@
 ```
 Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 ├─ buildings.py 27 装配器 → 烘建筑卡              ├─ modules/hd2d/scenes/hd2d_world.tscn  3D 世界（卡+地面+光照）
-├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world + char_rig_3d）
+├─ props.py 94 件 → 烘道具卡          ──卡库──→  ├─ modules/hd2d/scripts/（hd2d_world 门面 + 职责组件 + char_rig_3d）
 ├─ nature.py 16 类 → 烘自然物卡                  ├─ Hd2dMapBase 系宿主（world 侧，MapBase 子类）
 └─ city_layout.py 规模档布局算法                  └─ 布局 JSON ←── export_city_layout.py
 
 > **正式化**：3D 世界场景与卡资产已从 `tests/dev/proto_hd2d/` 迁入正式模块
 > `modules/hd2d/`（api.gd 契约 + scenes/scripts/shaders/assets 四类目录）；烘卡机产物 temp/
 > 优先、随包镜像 `modules/hd2d/assets/tex/` 兜底，新机器 clone 后不跑 Blender 也能玩。
-> 职责拆分（world 根编排 + cards/placer/ground/walls/char_stage 组件化）为挂起工作项，
-> 见 `docs/项目/交接/HD-2D架构正式化.md`（含组件映射表 v2）。
+> **职责拆分已落地**：`hd2d_world.gd` = 编排门面（世界搭建/solids 数据/相机/光照档/小地图
+> 烘焙），职责组件在 `scripts/` 职责子目录——`cards/`（卡呈现）、`placer/`（摆街）、
+> `ground/`（地面）、`walls/`（城墙）、`char_stage/`（角色舞台）、`clouds/`（云牌），
+> 组件经门面回引 `w` 互访（模块内部自由域）；分工与出入清单见
+> `docs/项目/交接/HD-2D架构正式化.md`。
 ```
 
 主街这张图的完整结构解剖（分层坐标 / 构图三钉 / 摆街数据流 / 光照档）见 **§六**——改布局、构图、背景前先读。
 
 ## 二、关键设计
 
-### 2.1 卡与落位（hd2d_world.gd）
+### 2.1 卡与落位（hd2d 卡域：门面 `_cards/_props/_nature` + cards/placer 组件）
 
 - 建筑卡 = Blender 正交相机（yaw 0°/tilt 26°，与游戏 3D 相机同角度）烘的透明底 PNG + glow 层。卡是 QuadMesh 贴图，**写深度**参与遮挡，吃伪法线光照。
 - **台基不烘**（创始人）：地面灰白台基在烘端不生成（`buildings.py PLINTH_ENABLED=False`），接触阴影踏面同步剥除、整楼按实测最低点下沉贴地。引擎 `base_cut` 改口径：**alpha 扫描卡底透明留白**（同 `_prop_bottom_pad`，PAD≈10px 不沉墙脚会浮空），下沉后墙脚回到与台基时代同一条基线，接地影 blob（固定 `BSHADOW_Z`）不用动。
@@ -488,7 +491,7 @@ offset/limits 变化时手搓漂、变换不会）。
 ## 六、主街结构解剖（现状基线）
 
 > 本节把"主街这张图由什么组成、每层摆在哪、为什么"一次讲全，是改布局/构图/背景前的必读底账。
-> 依据 = `modules/hd2d/scripts/hd2d_world.gd`（3D 街景本体）+ `modules/world/scripts/map/hd2d_street_map.gd`（宿主）+ `modules/world/scripts/map/city_gen.gd`（摆街数据）。
+> 依据 = `modules/hd2d/scripts/hd2d_world.gd`（门面：世界编排/solids/相机/光照）+ 其职责组件（`scripts/cards|placer|ground|walls|clouds/`）+ `modules/world/scripts/map/hd2d_street_map.gd`（宿主）+ `modules/world/scripts/map/city_gen.gd`（摆街数据）。
 > 战场/资源图 = 同一场景的 `battlefield`/`resource_field` 开关（无墙无街的开阔野地，铺装与摆位走分支），本节只解剖主街形态。
 
 ### 6.1 坐标与相机

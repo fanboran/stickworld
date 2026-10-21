@@ -1,6 +1,7 @@
 extends RefCounted
 ## SystemSetup 核心系统装配助手 —— 承接宿主分帧步骤表中核心系统域各步骤的函数体
-## （建造 / 战斗 / 资源 / 框选 / 组织 / 编队 / 战术 / 指挥传输 / 征服 / 招兵 / 上报叙事）。
+## （战斗 / 资源 / 框选 / 组织 / 编队 / 战术 / 指挥传输 / 征服 / 招兵 / 上报叙事；
+## 建造已下沉 modules/construction/setup.gd，AR-1 装配下沉首批）。
 ##
 ## 纪律：
 ## - 状态全部留在宿主（system_setup.gd），本助手经 _host 回引读写，不另立状态；
@@ -14,48 +15,9 @@ func bind(host: Node) -> void:
 	_host = host
 
 
-# ─────────────────────────────── 建造系统装配 ────────────────────────────────
-
-## 实例化 ConstructionManager + api.gd 作为子节点，并互相 setup。
-## 详见 §15 阶段 0.4。
-func _setup_construction_system() -> void:
-	# 实例化 ConstructionManager
-	var mgr := Node.new()
-	mgr.set_script(_host._ConstructionManagerScript)
-	mgr.name = "ConstructionManager"
-	_host._root.add_child(mgr)
-	_host._root._construction_manager = mgr
-	# 实例化 api.gd（公共接口契约）
-	var api := Node.new()
-	api.set_script(_host._ConstructionApiScript)
-	api.name = "ConstructionApi"
-	_host._root.add_child(api)
-	_host._root._construction_api = api
-	# api.setup 必须在 manager._ready 后调用（_ready 中初始化 _assigner）
-	# 这里用 call_deferred 保证顺序
-	_host.call_deferred("_setup_construction_api_deferred")
-
-
-func _setup_construction_api_deferred() -> void:
-	if _host._root._construction_api == null or _host._root._construction_manager == null:
-		return
-	if not _host._root._construction_api.has_method("setup"):
-		return
-	_host._root._construction_api.setup(_host._root._construction_manager)
-	# 建造完工 → 音效事件（跨模块经 AudioManager 框架，资产未就位时静默）
-	if _host._root._construction_api.has_signal("building_completed") and AudioManager != null:
-		_host._root._construction_api.building_completed.connect(
-				func(_building_id: String, _region_id: String) -> void:
-					AudioManager.play_event("build_complete"))
-	# 建造完工 → 尘土特效（经 FxPool 组查找，无池环境静默）
-	if _host._root._construction_api.has_signal("building_completed") and _host._root._construction_manager != null:
-		var mgr: Node = _host._root._construction_manager
-		_host._root._construction_api.building_completed.connect(
-				func(building_id: String, _region_id: String) -> void:
-					var b: Node = mgr.get_building_node(building_id)
-					if b is Node2D:
-						FxPool.spawn_burst(b.get_tree(), FxLibrary.BUILD_DUST, (b as Node2D).global_position))
-
+# 建造系统装配已下沉 modules/construction/setup.gd（AR-1 装配下沉首批）：
+# manager/api 互装与完工呈现接线（音效/尘土）随迁模块自持，
+# SystemSetup 步骤表「建造系统」步骤直达模块自装配器。
 
 # ─────────────────────────────── 战斗系统装配 ────────────────────────────────
 

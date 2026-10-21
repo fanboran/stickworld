@@ -76,6 +76,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_settlement_blob.gd",
 	"res://tests/unit/test_road_parse.gd",
 	"res://tests/unit/test_travel_planner.gd",
+	"res://tests/unit/test_world_map_region_distance.gd",
 	"res://tests/unit/test_political_data.gd",
 	"res://tests/unit/test_political_mesh.gd",
 	"res://tests/unit/test_province_politics.gd",

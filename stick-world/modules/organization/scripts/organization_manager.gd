@@ -320,6 +320,19 @@ func set_default_behavior(org_id: String, behavior: Dictionary) -> Dictionary:
 	return {"ok": true, "data": {}}
 
 
+## 设置组织驻地（org.location 语义源，组织系统架构 §4.2.2）。
+## 区域标识两级：settlement_id（定居点级）或 map_id（地图根级）——
+## 传输层跨图分支经 region_distance_provider 消费（world_map.region_distance 解析）。
+## 赋值方 = 装配层 org_created 回填（建队回填起步）；「驻地随实体移动更新」为
+## 后续语义（架构 §八 开放问题），不在本 setter 扩展。
+func set_location(org_id: String, location: String) -> Dictionary:
+	var org := _get_org(org_id)
+	if org == null:
+		return {"ok": false, "error": "组织不存在: %s" % org_id}
+	org.location = location
+	return {"ok": true, "data": {}}
+
+
 # ===== 人事 =====
 
 ## 任命指挥官

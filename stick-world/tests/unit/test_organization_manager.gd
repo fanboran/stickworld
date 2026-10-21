@@ -116,8 +116,13 @@ func _test_query_by_tag_region() -> void:
 	_runner.assert_equal(m.get_orgs_by_tag("MILITARY").size(), 3, "MILITARY 应有 3 个")
 	_runner.assert_equal(m.get_orgs_by_tag("RESEARCH"), ["org_4"], "RESEARCH 应为 [org_4]")
 	_runner.assert_equal(m.get_orgs_by_tag("INVALID"), [], "无效 tag 查询返回空")
-	# location 恒为空（无 set_location API），区域查询返回空
+	# location 默认空：区域查询不命中
 	_runner.assert_equal(m.get_orgs_in_region("r1"), [], "无区域定位时应为空")
+	# set_location（org.location 语义源，§4.2.2）：settlement_id / map_id 两级标识皆可
+	_runner.assert_true(m.set_location("org_4", "l1_settlement_02").get("ok", false), "set_location 成功")
+	_runner.assert_equal(m.get_orgs_in_region("l1_settlement_02"), ["org_4"], "按区域命中已定位组织")
+	_runner.assert_equal(m.get_organization("org_4").data.location, "l1_settlement_02", "location 保真")
+	_runner.assert_true(m.set_location("org_999", "x").get("ok", false) == false, "不存在组织 set_location 失败")
 
 
 # ─────────────── 编制 / 人事 ───────────────

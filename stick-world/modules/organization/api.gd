@@ -191,6 +191,14 @@ func set_default_behavior(org_id: String, behavior: Dictionary) -> Dictionary:
 	return _manager.set_default_behavior(org_id, behavior)
 
 
+## 设置组织驻地（org.location 语义源；区域标识两级：settlement_id / map_id，
+## 消费见传输层 region_distance_provider）。赋值方 = 装配层 org_created 回填。
+func set_organization_location(org_id: String, location: String) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	return _manager.set_location(org_id, location)
+
+
 ## 读取默认行为（只读深拷贝；未配置/组织不存在返回空字典）。
 ## GK-5：创建期写入方按 config/ai/org_default_behavior.tres 填充，此入口供消费端/UI
 ## 取只读视图（utility_scorer v2 schema 见 modules/combat/scripts/battle/utility_scorer.gd 类头）

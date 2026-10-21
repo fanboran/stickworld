@@ -12,7 +12,7 @@ extends RefCounted
 ##   · 背景两层（row1/row2）随分区锚点落。
 ##
 ## 选池铁律（级别窗口表 §三）：铁匠 3 级封顶、草棚/干草棚村舍进城消亡、
-## 赌场 city 起、花店 town 起（DRESS）、仓库 city 起——别把村舍摆进首都。
+## 花店 town 起（DRESS）、仓库 city 起——别把村舍摆进首都。
 ## 行政槽：每档主街中心必有一件当级行政建筑（§二），候选按优先级取
 ## 第一张**已烘卡**（未烘自动降级，不阻塞生成）。
 ##
@@ -88,7 +88,6 @@ const ZONE_POOLS := {
 	},
 	"city": {
 		"core": ["guildhall_w12"],
-		"float_extra": ["gambling_den_w8"],
 		"market": ["rowhouse_w12", "tavern_w12", "bakery_w8", "shop_w8", "flower_shop_w8"],
 		"craft": ["smithy1_w8", "smithy2_w8", "smithy3_w8", "smithy4_w12", "alchemy_w8"],
 		"living": ["house_w16", "house_w8", "townhouse_w12", "rowhouse_w12", "townhouse_w12",
@@ -139,11 +138,11 @@ const FLOAT_DEFS := {
 	"townlet": ["abbey_w24", "cathedral_w8", "mage_tower_w8", "tower_w6"],
 	"town": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
 	"burgh": ["cathedral_w16", "mage_tower_w8", "tower_w6"],
-	"city": ["cathedral_w16", "mage_tower_w8", "tower_w6", "library_w12", "gambling_den_w8"],
+	"city": ["cathedral_w16", "mage_tower_w8", "tower_w6", "library_w12"],
 	"capital": ["cathedral_w16", "mage_tower_w8", "tower_w6", "academy_w12",
-		"gambling_den_w12", "mint_w12", "belfry_w6"],
+		"mint_w12", "belfry_w6"],
 	"metropolis": ["cathedral_w16", "mage_tower_w8", "tower_w6", "academy_w12",
-		"grand_casino_w16", "mint_w12", "belfry_w6", "observatory_w8"],
+		"mint_w12", "belfry_w6", "observatory_w8"],
 }
 const GATE_DEF := "gatehouse_w8"
 const DOOR_DEFS := ["guildhall", "gatehouse", "shop", "tavern", "smithy1", "council_hall"]

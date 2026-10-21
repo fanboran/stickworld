@@ -21,14 +21,13 @@ const TYPE_CIVIC := "civic"               ## 市政/宗教
 const TYPE_MILITARY := "military"         ## 军事
 const TYPE_MISC := "misc"                 ## 其他
 
-## 近似世界材质色（木构暖褐 / 深木 / 灰石 / 深石 / 青灰瓦 / 市集赭 / 砖）
+## 近似世界材质色（木构暖褐 / 深木 / 灰石 / 深石 / 青灰瓦 / 市集赭）
 const C_WOOD_WARM := Color(0.62, 0.45, 0.28)
 const C_WOOD_DARK := Color(0.45, 0.33, 0.22)
 const C_STONE := Color(0.63, 0.61, 0.56)
 const C_STONE_DARK := Color(0.47, 0.46, 0.43)
 const C_SLATE := Color(0.42, 0.44, 0.48)
 const C_OCHRE := Color(0.70, 0.56, 0.32)
-const C_BRICK := Color(0.60, 0.42, 0.35)
 const C_GREEN := Color(0.45, 0.58, 0.36)
 const C_WATER := Color(0.36, 0.50, 0.62)
 
@@ -74,8 +73,6 @@ const STYLE: Dictionary = {
 	"inn_post": [TYPE_COMMERCIAL, C_OCHRE],
 	"waystation": [TYPE_COMMERCIAL, C_OCHRE],
 	"coach_house": [TYPE_COMMERCIAL, C_OCHRE],
-	"gambling_den": [TYPE_COMMERCIAL, C_BRICK],
-	"grand_casino": [TYPE_COMMERCIAL, C_BRICK],
 	"flower_shop": [TYPE_COMMERCIAL, C_GREEN],
 	# ── 市政/宗教（灰石 → 宫殿深石）──
 	"guildhall": [TYPE_CIVIC, C_STONE],

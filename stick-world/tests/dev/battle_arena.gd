@@ -56,6 +56,9 @@ const _MainMenuScene := "res://modules/ui_global/scenes/menus/main_menu.tscn"
 const _TacticalOrders := preload("res://modules/tactics/scripts/tactical_orders.gd")
 ## tactics 模块契约出口（夺点/意图规划器资产；跨模块 preload 走 api.gd 惯例）
 const _TacticsAPI: GDScript = preload("res://modules/tactics/api.gd")
+## AI 决策观察窗（V 键开关，默认关）：调试场景工具件，浮窗 FLOATING 先例，
+## 纯只读观测（ai_viz_snapshot 快照层 + EventBus 切换信号）
+const _AiVizWindowScript: GDScript = preload("res://modules/debug_gui/scripts/ai_viz_window.gd")
 
 ## 武器类型（对齐 WeaponMount.WeaponType：0 剑 1 矛 2 弓 3 镐 4 杖）
 const W_SWORD: int = 0
@@ -251,6 +254,8 @@ var _cam_anchor: Vector2 = Vector2.ZERO
 var _camera_following: bool = false
 ## 开场遮罩（防闪现主场景：GameRoot 先装配默认村图数帧才切 battlefield）
 var _cover: ColorRect = null
+## AI 决策观察窗（V 键开关，默认关——任务口径：观察场挂开关默认不启用）
+var _ai_viz_window: Control = null
 
 
 func _ready() -> void:
@@ -889,6 +894,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				_toggle_pause()
 			KEY_1, KEY_2, KEY_3:
 				_switch_preset(int(event.keycode) - int(KEY_1))
+			KEY_V:
+				_toggle_ai_viz()
+
+
+## AI 决策观察窗开关（V 键；默认关。窗口 ESC 自关由 StickWindow 消费，
+## 不会落到这里触发返回主菜单——先窗后场景的 ESC 优先序）
+func _toggle_ai_viz() -> void:
+	if _ai_viz_window != null and is_instance_valid(_ai_viz_window):
+		_ai_viz_window.toggle()
 
 
 ## 切换对战预设并立即重开（static _preset_idx 跨 reload 保持所选档位）。
@@ -936,7 +950,11 @@ func _build_hud() -> void:
 	_flag_label = _make_label(board_v, Vector2.ZERO, Color(0.92, 0.85, 0.5), StickTokens.FONT_HUD)
 	_ft_label = _make_label(board_v, Vector2.ZERO, Color(0.75, 0.9, 0.75), StickTokens.FONT_HUD)
 	_hint_label = _make_label(board_v, Vector2.ZERO, Color(0.8, 0.8, 0.8), StickTokens.FONT_HINT)
-	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
+	_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
+	# AI 决策观察窗（V 键开关，默认关）：UIKit.full_rect 合规出口装配（全屏 Control
+	# 根 + 内部绝对定位浮窗，先例 DebugOverlay 装配 DebugToolsPanel），挂 HUD 层
+	_ai_viz_window = UIKit.full_rect(_AiVizWindowScript, "AiVizWindow")
+	ui_root.add_child(_ai_viz_window)
 	# 控制面板（底部居中）：对战预设按钮组 + 重开按钮——点按立即重开
 	var panel := SketchPanel.new()
 	panel.name = "ControlPanel"
@@ -989,7 +1007,7 @@ func _update_hud() -> void:
 	if _attacker.is_empty() or _defender.is_empty():
 		_left_alive_label.text = "蓝方（攻）集结中"
 		_right_alive_label.text = "红方（守）集结中"
-		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
 		return
 	var la := _count_alive(_attacker)
 	var ra := _count_alive(_defender)
@@ -998,7 +1016,7 @@ func _update_hud() -> void:
 	if la == 0 or ra == 0:
 		_hint_label.text = "战斗结束：%s 获胜 —— R 重开 / 换预设" % ("蓝方" if ra == 0 else "红方")
 	else:
-		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放"
+		_hint_label.text = "演练场：ESC 返回 · R 重开 · 1/2/3 换预设 · 空格 暂停 · 滚轮缩放 · V AI 决策观察"
 
 
 func _count_alive(units: Array) -> int:

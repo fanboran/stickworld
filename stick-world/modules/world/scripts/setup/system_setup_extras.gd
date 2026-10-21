@@ -1,6 +1,6 @@
 extends RefCounted
 ## SystemSetup 玩家交互与环境装配助手 —— 承接宿主分帧步骤表中的函数体
-## （附身界面·面板 / 探索交互 / 游戏 UI / 后处理 / 地图过渡 / 单位 LOD）
+## （接管界面·面板 / 探索交互 / 游戏 UI / 后处理 / 地图过渡 / 单位 LOD）
 ## 及调试绘制器注册、Demo 目标链装配（建造菜单已下沉 modules/construction/setup.gd）。
 ##
 ## 纪律：
@@ -15,7 +15,7 @@ func bind(host: Node) -> void:
 	_host = host
 
 
-# ─────────────────────────────── 附身系统装配（§15 阶段 0.7）────────────────────────────────
+# ─────────────────────────────── User Control 系统装配（§15 阶段 0.7）────────────────────────────────
 
 ## 实例化 UserControlInterface，注册为 USER_CONTROL 模式 handler。
 func _setup_user_control_interface() -> void:

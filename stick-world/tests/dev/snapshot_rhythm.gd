@@ -147,7 +147,7 @@ func _reset_villagers(map: Node2D) -> void:
 			ctl.get_state_machine().travel("idle")
 
 
-## 村民列表（EntityHost 内非附身、有职业的实体）
+## 村民列表（EntityHost 内非接管、有职业的实体）
 func _villagers(map: Node2D) -> Array:
 	var result: Array = []
 	var host: Node = map.get_node_or_null("EntityHost")

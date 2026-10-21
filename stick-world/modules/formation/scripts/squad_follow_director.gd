@@ -103,7 +103,7 @@ func update_follow(squad_id: String, follow_default_gap: float, catchup_run_dist
 	var anchor: Vector2 = front_centroid
 	if not front_engaged:
 		anchor = front_centroid - dir.normalized() * float(squad.get("follow_gap", follow_default_gap))
-	# 成员号令下发（接战/撤退/找掩体/被附身成员不打断；玩家号令不覆盖）
+	# 成员号令下发（接战/撤退/找掩体/被接管成员不打断；玩家号令不覆盖）
 	for u in members:
 		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			continue

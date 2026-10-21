@@ -59,7 +59,7 @@ func set_spell_aoe(center: Vector2, radius: float) -> void:
 	queue_redraw()
 
 
-## 隐藏预览（松手/取消附身；由实体侧统一收口）
+## 隐藏预览（松手/取消接管；由实体侧统一收口）
 func set_trajectory_active(v: bool) -> void:
 	if not v:
 		_active = false

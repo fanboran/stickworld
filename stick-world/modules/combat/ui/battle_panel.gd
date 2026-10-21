@@ -118,12 +118,12 @@ func _build_ui() -> void:
 	# 分隔线
 	StickKit.vseparator(hbox)
 
-	# ── 5. 附身按钮 ──
-	var user_control_section := StickKit.section(hbox, "附身")
+	# ── 5. 接管按钮 ──
+	var user_control_section := StickKit.section(hbox, "接管")
 	var user_control_hbox := HBoxContainer.new()
 	user_control_hbox.add_theme_constant_override("separation", 6)
 	user_control_section.add_child(user_control_hbox)
-	_user_control_btn = StickKit.sketch_button(user_control_hbox, "附身选中单位", _on_user_control_pressed)
+	_user_control_btn = StickKit.sketch_button(user_control_hbox, "接管选中单位", _on_user_control_pressed)
 
 
 func _create_order_button(parent: Container, text: String, order_type: int) -> void:
@@ -211,7 +211,7 @@ func _refresh_buttons() -> void:
 			can_order = (not sid.is_empty()) and _formation.is_combat_squad(sid)
 	for btn in _order_buttons.values():
 		btn.disabled = not can_order
-	# 附身按钮：有选中单位时可用
+	# 接管按钮：有选中单位时可用
 	if _user_control_btn != null:
 		_user_control_btn.disabled = not has_selection
 
@@ -274,7 +274,7 @@ func _compute_advance_target(units: Array) -> Vector2:
 	return Vector2(avg_x + ADVANCE_OFFSET_X, avg_y)
 
 
-## 附身选中单位：切换到 USER_CONTROL 模式
+## 接管选中单位：切换到 USER_CONTROL 模式
 func _on_user_control_pressed() -> void:
 	if _selection == null:
 		return
@@ -286,7 +286,7 @@ func _on_user_control_pressed() -> void:
 	if not is_instance_valid(unit):
 		return
 	if unit.has_method("is_dead") and unit.is_dead():
-		_show_notify("不能附身已死亡的单位")
+		_show_notify("不能接管已死亡的单位")
 		return
 	# 切换到 USER_CONTROL 模式
 	if _game_root != null and _game_root.has_method("get") and _game_root.get("input_dispatcher") != null:

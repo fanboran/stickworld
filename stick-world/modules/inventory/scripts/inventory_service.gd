@@ -4,10 +4,10 @@ extends Node
 ##
 ## 职责（设计文档 docs/设计/系统/14-背包与装备系统.md §2.3）：
 ##   1. 持有唯一的玩家 PlayerInventory（背包跟着玩家走，不跟火柴人）
-##   2. 监听装备变化 → 写入当前附身实体（weapon_type / 盾 / 护甲聚合 /
+##   2. 监听装备变化 → 写入当前接管实体（weapon_type / 盾 / 护甲聚合 /
 ##      武器 stats 乘子——attack_mult/speed_mult 经 weapon_mount 乘子字段生效）
-##   3. 附身边界：附身记录实体原武器状态，脱离恢复（NPC 不感知背包）
-##   4. 消耗品使用效果（绷带治疗 → 附身实体）
+##   3. 接管边界：接管记录实体原武器状态，脱离恢复（NPC 不感知背包）
+##   4. 消耗品使用效果（绷带治疗 → 接管实体）
 ##   5. 初始装备发放 + 存档序列化（world_state 表 module_name="inventory"，
 ##      game_saving/game_loaded 信号直写——WorldState 同款契约）
 ## SystemSetup 装配后挂 GameRoot 下。
@@ -35,9 +35,9 @@ const STARTER_HOTBAR: Array[StringName] = [
 var inventory: PlayerInventory = null
 
 var _game_root: Node = null
-## 当前桥接的附身实体（null = 未附身，装备变化只改数据不落地）
+## 当前桥接的接管实体（null = 未接管，装备变化只改数据不落地）
 var _entity: Node = null
-## 附身前的实体武器状态（脱离时恢复）
+## User Control 前的实体武器状态（脱离时恢复）
 var _orig_weapon_type: int = -1
 var _orig_shield_enabled: bool = true
 
@@ -69,21 +69,21 @@ func setup(game_root: Node) -> void:
 
 # ─────────────────────────────── 对外操作 ────────────────────────────────
 
-## 数字键 1-9/0 / Hotbar 点击使用指派格（武器=换装，消耗品=使用需附身实体承接）。
+## 数字键 1-9/0 / Hotbar 点击使用指派格（武器=换装，消耗品=使用需接管实体承接）。
 ## 返回发生动作的物品 id（空 StringName = 无事发生）
 func use_hotbar_slot(index: int) -> StringName:
 	var id: StringName = inventory.hotbar[index] if index >= 0 and index < PlayerInventory.HOTBAR_SIZE else &""
 	if id == &"":
 		return &""
 	var def: ItemDef = ItemDB.get_def(id)
-	# 消耗品需要附身实体承接治疗效果；武器换装随时可行
+	# 消耗品需要接管实体承接治疗效果；武器换装随时可行
 	if def != null and def.category == ItemDef.Category.CONSUMABLE \
 			and (_entity == null or not is_instance_valid(_entity)):
 		return &""
 	return inventory.use_hotbar_slot(index)
 
 
-## 滚轮切换武器（附身态滚轮语义，09 文档 §二）：循环下一个武器指派格并换装
+## 滚轮切换武器（接管态滚轮语义，09 文档 §二）：循环下一个武器指派格并换装
 func cycle_weapon(dir: int) -> StringName:
 	return inventory.hotbar_cycle_weapon(dir)
 
@@ -93,7 +93,7 @@ func _on_bag_contents_changed() -> void:
 	inventory.inventory_changed.emit()
 
 
-# ─────────────────────────────── 附身边界 ────────────────────────────────
+# ─────────────────────────────── 接管边界 ────────────────────────────────
 
 func _on_user_control_started(entity: Node) -> void:
 	_entity = entity
@@ -134,7 +134,7 @@ func _apply_equipment_to_entity() -> void:
 		if wdef != null:
 			wm.weapon_type = wdef.weapon_type
 			# 武器 stats 乘子（数据化应用：attack_mult/speed_mult 经乘子字段
-			# 生效，不动基础值——battle_sim 校准锚点零影响，附身实体专属）
+			# 生效，不动基础值——battle_sim 校准锚点零影响，接管实体专属）
 			if "equip_attack_mult" in wm:
 				wm.equip_attack_mult = maxf(0.05, wdef.stat("attack_mult", 1.0))
 			if "equip_speed_mult" in wm:
@@ -145,7 +145,7 @@ func _apply_equipment_to_entity() -> void:
 				wm.equip_attack_mult = 1.0
 			if "equip_speed_mult" in wm:
 				wm.equip_speed_mult = 1.0
-		# 附身期间兵种默认盾让位装备语义（否则矛兵卸盾后模型还在）；
+		# User Control 期间兵种默认盾让位装备语义（否则矛兵卸盾后模型还在）；
 		# 脱离时 _on_user_control_ended 恢复原 shield_enabled
 		wm.shield_enabled = false
 		wm.equipped_shield = inventory.has_shield()
@@ -166,7 +166,7 @@ func _on_item_used(def_id: StringName) -> void:
 			_apply_heal(def)
 
 
-## 治疗类消耗品：回复附身实体生命（StatusEffects 正向入口，不走 DamagePipeline）
+## 治疗类消耗品：回复接管实体生命（StatusEffects 正向入口，不走 DamagePipeline）
 func _apply_heal(def: ItemDef) -> void:
 	var amount: float = def.stat("heal_amount", 0.0)
 	if amount <= 0.0 or _entity == null or not is_instance_valid(_entity):

@@ -150,7 +150,7 @@ func _run_phase_1_tests() -> void:
 	_runner.begin_test("初始地图: 玩家已生成")
 	if map:
 		var player: Node2D = map.get_user_controlled_entity()
-		_runner.assert_true(player != null, "应有玩家附身实体")
+		_runner.assert_true(player != null, "应有玩家接管实体")
 	_runner.end_test()
 
 
@@ -186,7 +186,7 @@ func _run_phase_2_tests() -> void:
 	_runner.begin_test("聚落B: 玩家已生成（出生点附近）")
 	if map:
 		var player: Node2D = map.get_user_controlled_entity()
-		_runner.assert_true(player != null, "应有玩家附身实体")
+		_runner.assert_true(player != null, "应有玩家接管实体")
 		if player and map.has_method("get_spawn_point"):
 			var sp: Vector2 = map.get_spawn_point()
 			_runner.assert_true(absf(player.global_position.x - sp.x) < 10.0,
@@ -223,7 +223,7 @@ func _run_phase_3_tests() -> void:
 	var map := _get_current_map()
 	if map:
 		var player: Node2D = map.get_user_controlled_entity()
-		_runner.assert_true(player != null, "应有玩家附身实体")
+		_runner.assert_true(player != null, "应有玩家接管实体")
 		if player and map.has_method("get_spawn_point"):
 			# HD-2D 图按设计用自定义出生点（get_spawn_point 覆盖边缘入口落点）
 			var sp: Vector2 = map.get_spawn_point()

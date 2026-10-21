@@ -11,7 +11,7 @@ extends RefCounted
 ## 跨模块三 provider 由装配层（system_setup）注入——organization 保持零出向依赖：
 ##   position_provider(org_id) -> Variant      Vector2=该组织指挥官实体坐标（同图）；
 ##                                             Vector2.INF = 不在当前图/无指挥官实体
-##   player_position_provider() -> Vector2     玩家附身实体坐标；未附身=相机视野中心
+##   player_position_provider() -> Vector2     玩家接管实体坐标；未接管=相机视野中心
 ##   region_distance_provider(from_loc, to_loc) -> float  跨图驻地距离（米/px）；-1=未知对
 ##
 ## location 来源实施补全（3-F1）：决策树②需要「两组织 location 比较」，location 是

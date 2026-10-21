@@ -75,7 +75,7 @@ func on_died() -> void:
 	if bi != null and is_instance_valid(bi):
 		if bi.has_method("on_unit_died"):
 			bi.on_unit_died(_entity)
-	# 尸体遗物（翻包式掉落，items 域容器）：玩家附身实体不掉（装备属于玩家
+	# 尸体遗物（翻包式掉落，items 域容器）：玩家接管实体不掉（装备属于玩家
 	# 背包）；NPC 按武器/盾生成遗物容器挂 meta("loot")。
 	# 滞留/淡出由 _physics_process 死亡分支的物理帧计时**唯一驱动**
 	#（A1b：旧 tween 与物理计时双驱动打架——有遗物尸体在 alpha≈0.36 被物理

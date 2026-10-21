@@ -7,7 +7,7 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 ##
 ## 测试覆盖：
-##   - Q 键切换建造/战斗模式（BATTLE 模式保持玩家附身）
+##   - Q 键切换建造/战斗模式（BATTLE 模式保持玩家接管）
 ##   - 小队跟随：开启跟随后成员进入 follow 行为并尾随玩家
 ##   - 攻击展开：保角环绕使各攻击者从不同方位接近目标（防 1 字长蛇）
 ##
@@ -31,7 +31,7 @@ func _ready() -> void:
 
 
 func _register_tests() -> void:
-	_tests.append({"name": "Q键: 切换战斗模式且保持附身", "fn": Callable(self, "_test_q_toggle_mode"), "async": true})
+	_tests.append({"name": "Q键: 切换战斗模式且保持接管", "fn": Callable(self, "_test_q_toggle_mode"), "async": true})
 	_tests.append({"name": "跟随: 小队开启跟随进入 follow 行为", "fn": Callable(self, "_test_follow_behavior"), "async": true})
 	_tests.append({"name": "跟随: 成员尾随玩家移动", "fn": Callable(self, "_test_follow_moves"), "async": true})
 	_tests.append({"name": "展开: 保角环绕从不同方位接近", "fn": Callable(self, "_test_attack_spread"), "async": true})
@@ -61,13 +61,13 @@ func _run_tests_async() -> void:
 	get_tree().quit(exit_code)
 
 
-## Q 键：玩家附身时切换 EXPLORE<->BATTLE，BATTLE 模式保持附身
+## Q 键：玩家 User Control 时切换 EXPLORE<->BATTLE，BATTLE 模式保持接管
 func _test_q_toggle_mode() -> void:
 	var dispatcher: Node = _helper.game_root.input_dispatcher
 	if dispatcher == null:
 		_runner.assert_true(false, "InputDispatcher 为空")
 		return
-	# 让第一个单位成为"玩家"（附身）
+	# 让第一个单位成为"玩家"（接管）
 	var player: Node = _helper.units[0]
 	if player == null:
 		_runner.assert_true(false, "单位缺失")
@@ -81,13 +81,13 @@ func _test_q_toggle_mode() -> void:
 		player._toggle_combat_mode()
 	await get_tree().process_frame
 	_runner.assert_equal(dispatcher.get_mode(), PlayerControlAPI.Mode.EXPLORE, "第一次 Q 应切回 EXPLORE 模式")
-	_runner.assert_true(player.is_user_controlled(), "EXPLORE 模式下玩家应保持附身")
+	_runner.assert_true(player.is_user_controlled(), "EXPLORE 模式下玩家应保持接管")
 	# 第二次 Q 进入 BATTLE（战斗姿态）
 	player._toggle_combat_mode()
 	await get_tree().process_frame
 	_runner.assert_equal(dispatcher.get_mode(), PlayerControlAPI.Mode.BATTLE, "第二次 Q 应切换到 BATTLE 模式")
-	_runner.assert_true(player.is_user_controlled(), "BATTLE 模式下玩家应保持附身（可左键挥砍）")
-	# 还原：切回 EXPLORE 并取消附身
+	_runner.assert_true(player.is_user_controlled(), "BATTLE 模式下玩家应保持接管（可左键挥砍）")
+	# 还原：切回 EXPLORE 并取消接管
 	player._toggle_combat_mode()
 	await get_tree().process_frame
 	player.set_user_controlled(false)
@@ -102,7 +102,7 @@ func _test_follow_behavior() -> void:
 	if _formation == null:
 		_runner.assert_true(false, "FormationSystem 为空")
 		return
-	# 用例前置自足：重置参与者瞬态（清附身/残余速度），不依赖前序用例的结束状态
+	# 用例前置自足：重置参与者瞬态（清接管/残余速度），不依赖前序用例的结束状态
 	var player: Node = _helper.units[0]
 	_helper.reset_units([player, _helper.units[1], _helper.units[2]])
 	# 用 units[1..2] 建小队（无战斗职责的工人队即可）
@@ -123,7 +123,7 @@ func _test_follow_behavior() -> void:
 		return
 	var behavior: String = ai.get_current_behavior()
 	_runner.assert_equal(behavior, "follow", "成员行为应为 follow，实际: %s" % behavior)
-	# 清理：关闭跟随、解散小队、取消附身——小队/附身残留会改变后续用例前提
+	# 清理：关闭跟随、解散小队、取消接管——小队/接管残留会改变后续用例前提
 	# （BehaviorFollow 按 map.get_user_controlled_entity() 找跟随目标，依赖 user_controlled 实体）
 	_formation.set_squad_follow(squad_id, false)
 	if player.has_method("set_user_controlled"):
@@ -137,7 +137,7 @@ func _test_follow_moves() -> void:
 		_runner.assert_true(false, "FormationSystem 为空")
 		return
 	var player: Node = _helper.units[0]
-	# 用例前置自足：自行附身 + 自建小队（不复用上一用例的"随行队"——
+	# 用例前置自足：自行接管 + 自建小队（不复用上一用例的"随行队"——
 	# 那是隐式顺序依赖：上一用例不建队/已解散时本用例直接"找不到随行队"）
 	_helper.reset_units([player, _helper.units[1]])
 	if player.has_method("set_user_controlled"):
@@ -156,7 +156,7 @@ func _test_follow_moves() -> void:
 	await get_tree().create_timer(2.5).timeout
 	var dist_after: float = _helper.units[1].global_position.distance_to(player.global_position)
 	_runner.assert_true(dist_after < dist_before, "成员应向玩家靠近，before=%.0f after=%.0f" % [dist_before, dist_after])
-	# 清理：跟随/附身/小队全撤，不把移动中状态留给展开用例
+	# 清理：跟随/接管/小队全撤，不把移动中状态留给展开用例
 	_formation.set_squad_follow(squad_id, false)
 	if player.has_method("set_user_controlled"):
 		player.set_user_controlled(false)
@@ -173,7 +173,7 @@ func _test_attack_spread() -> void:
 	if attacker_a == null or attacker_b == null or target == null:
 		_runner.assert_true(false, "单位缺失")
 		return
-	# 用例前置自足：清前序用例残留（附身/残余速度/AI 移动分量），重置后最后摆位
+	# 用例前置自足：清前序用例残留（接管/残余速度/AI 移动分量），重置后最后摆位
 	_helper.reset_units([attacker_a, attacker_b, target])
 	attacker_a.global_position = Vector2(1000, 500)
 	attacker_b.global_position = Vector2(1000, 400)  # 相对目标 (1200,500) 方位约 26.5°

@@ -8,7 +8,7 @@ extends Object
 ##
 ## 信号（转发自 PlayerInventory，UI 订阅刷新）：
 ##   inventory_changed  —— 背包格内容变化
-##   equipment_changed  —— 装备槽变化（已同步落地到附身实体）
+##   equipment_changed  —— 装备槽变化（已同步落地到接管实体）
 ##   item_used(def_id)  —— 消耗品被使用（效果已结算）
 
 

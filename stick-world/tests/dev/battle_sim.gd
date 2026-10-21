@@ -297,7 +297,7 @@ func _run_scenario(sc: Dictionary) -> Dictionary:
 	return result
 
 
-## 出生一个单位（照抄 battle_arena：脚底对齐 + 不附身 + 设武器 + hp 兜底）
+## 出生一个单位（照抄 battle_arena：脚底对齐 + 不接管 + 设武器 + hp 兜底）
 func _spawn_unit(pos: Vector2, wtype: int) -> Node2D:
 	var e: Node2D = _map.spawn_entity(_StickmanScene, pos)
 	if e == null:

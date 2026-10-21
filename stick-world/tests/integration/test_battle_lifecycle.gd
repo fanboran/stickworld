@@ -128,7 +128,7 @@ func _spawn_battle_unit(map: Node2D, pos: Vector2) -> Node:
 	# 修正 Y：让脚部对齐
 	if e.get("foot_offset") != null:
 		e.global_position.y = pos.y - e.foot_offset
-	# 取消附身（AI 接管）
+	# 取消接管（AI 接管）
 	if e.has_method("set_user_controlled"):
 		e.set_user_controlled(false)
 	# 设置低 HP 加速战斗

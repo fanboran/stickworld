@@ -24,7 +24,7 @@ const ATTR_NAMES: Dictionary = {
 const EFFECT_NAMES: Dictionary = {
 	0: "燃烧", 1: "中毒", 2: "迟缓", 3: "眩晕", 4: "治疗中",
 }
-## 角色卡刷新间隔（附身实体状态是活的）
+## 角色卡刷新间隔（接管实体状态是活的）
 const REFRESH_INTERVAL: float = 0.25
 
 const EQUIP_ROWS: Array = [
@@ -112,7 +112,7 @@ func _make_equip_widget(slot: int, cap: String) -> ItemSlotWidget:
 ## 角色卡（吸收原 StatsScreen：生命/属性/伤痕状态）
 func _build_stats_card(parent: VBoxContainer) -> void:
 	parent.add_child(SketchSeparator.new())
-	_no_entity_hint = StickKit.label(parent, "未附身任何火柴人", StickKit.LabelKind.HINT)
+	_no_entity_hint = StickKit.label(parent, "未接管任何火柴人", StickKit.LabelKind.HINT)
 	var hp_row := StickKit.row(parent)
 	_hp_bar = SketchProgress.new()
 	_hp_bar.custom_minimum_size = Vector2(150, 12)

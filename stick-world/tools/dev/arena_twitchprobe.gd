@@ -270,7 +270,7 @@ func _phase_twitch_sample(secs: int) -> void:
 						gaps.append(i - last_flip)
 					last_flip = i
 			print("[TwitchProbe]   worst翻面者帧距: %s（节流生效=全部≥30）" % str(gaps.slice(0, 12)))
-			# 翻面点前后 3 帧的节流时戳与附身标志（判节流为何未拦）
+			# 翻面点前后 3 帧的节流时戳与接管标志（判节流为何未拦）
 			var flip_frames: Array = []
 			last_flip = -1
 			for i in range(wd.size()):

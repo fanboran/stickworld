@@ -8,7 +8,7 @@ const StickProf := preload("res://core/services/stick_prof.gd")
 ## 武器/盾牌贴图由 tools/baking/extract_weapons.gd 从解包 universal 图集裁剪
 ## （Swordbasic/Spear/Shield/Bow/Pickaxe/Magicstaff），场景带 GripPoint 对齐握把。
 ##
-## 攻击流程（由 behavior_attack / 玩家附身调用）：
+## 攻击流程（由 behavior_attack / 玩家接管调用）：
 ##   1. can_attack() 检查冷却
 ##   2. perform_attack(target) 按距离 + 命中率判定，命中则 target.apply_hit_reaction()
 ##   3. 攻击动画（按武器类型选，见 StickmanAnims.WEAPON_ATTACK_ANIM）驱动手臂挥砍，
@@ -128,11 +128,11 @@ var HITSTOP_MIN_INTERVAL: float = 0.3
 ## 受击击退力度（与伤害正相关）
 var KNOCKBACK_PER_DAMAGE: float = 16.0
 ## 装备伤害乘子（InventoryService 按主手武器 def.attack_mult 写入；玩家
-## 附身实体专属——不动基础值，battle_sim 校准锚点零影响，脱离附身复位 1.0）
+## 接管实体专属——不动基础值，battle_sim 校准锚点零影响，脱离接管复位 1.0）
 var equip_attack_mult: float = 1.0
-## 装备攻速乘子（def.speed_mult；>1 更快——有效冷却除以它；同为玩家附身专属）
+## 装备攻速乘子（def.speed_mult；>1 更快——有效冷却除以它；同为玩家接管专属）
 var equip_speed_mult: float = 1.0
-## 附身近战溅射（SWL Unit 真值 USER_CONTROLLED_SPLASH_* 直译）：玩家附身单位的
+## 接管近战溅射（SWL Unit 真值 USER_CONTROLLED_SPLASH_* 直译）：玩家接管单位的
 ## 近战挥击扇形额外收 4 个溅射目标、溅射伤害系数 0.2——"一人成军"的爽感来源
 const USER_CONTROLLED_SPLASH_HIT_LIMIT: int = 4
 const USER_CONTROLLED_SPLASH_MODIFIER: float = 0.2
@@ -243,10 +243,10 @@ var _hit_time_resolved: bool = false
 var _aim_visual_active: bool = false
 ## 表现窗截止时刻（_now() 秒）。AI 路径 = 瞄准开始 + 超时兜底（点射停顿 +
 ## 冷却残段最长 ~4.9s，超时收弓防行为切换后残窗把人钉在拉满姿态）；
-## 玩家蓄力路径 = 无穷大（松手才收弓）+ 附身丢失守卫（cancel_charge 不经过
-## 本挂载，附身退出/死亡时靠 _process 的 is_user_controlled 检查收弓）。
+## 玩家蓄力路径 = 无穷大（松手才收弓）+ 接管丢失守卫（cancel_charge 不经过
+## 本挂载，接管退出/死亡时靠 _process 的 is_user_controlled 检查收弓）。
 var _aim_visual_until: float = -1.0e9
-## 表现窗来源：true = 玩家蓄力路径（无超时，靠附身守卫收口）；false = AI 持瞄（超时兜底）
+## 表现窗来源：true = 玩家蓄力路径（无超时，靠接管守卫收口）；false = AI 持瞄（超时兜底）
 var _aim_visual_player: bool = false
 ## 移动判定阈值（速度平方）：与 hd2d 镜像的 moving 口径一致（25 = 5px/s）。
 ## 瞄窗仲裁（weapon_bow_aim）与出手路径（perform_attack/release_player_shot/
@@ -529,7 +529,7 @@ func perform_attack(target: Node) -> Dictionary:
 	return result
 
 
-## 空挥（复刻原版 User Control：附身单位无目标也可出攻击动作）。
+## 空挥（复刻原版 User Control：接管单位无目标也可出攻击动作）。
 ## 播对应武器攻击动画 + 进冷却；不登记目标 → 命中帧 _strike() 无结算
 ## （弓空挥 = 拉弓不放箭，与原版一致）。返回是否成功起挥（冷却中为 false）。
 func perform_swing() -> bool:
@@ -561,7 +561,7 @@ func begin_player_draw() -> void:
 		return
 	_aim_visual_active = true
 	_aim_visual_player = true
-	_aim_visual_until = 1.0e9  # 玩家按住全程无超时，松手/附身丢失才收弓
+	_aim_visual_until = 1.0e9  # 玩家按住全程无超时，松手/接管丢失才收弓
 	_aim.set_bow_aim_walk_override(true)  # 玩家窗同享持瞄保持行走（移动走 walk_bow_hold）
 	_aim.play_via_visual(Anims.ANIM_ATTACK_BOW_HOLD)
 
@@ -830,7 +830,7 @@ func _get_health(target: Node) -> Node:
 	return target.get_node_or_null("HealthComponent")
 
 
-## 实际冷却（附身攻速乘子 × 装备攻速乘子；speed_mult>1 更快 → 冷却变短）
+## 实际冷却（接管攻速乘子 × 装备攻速乘子；speed_mult>1 更快 → 冷却变短）
 func _get_effective_cooldown() -> float:
 	var base: float = cooldown * _user_controlled_speed_mult()
 	# 装备攻速乘子（speed_mult>1 更快 → 冷却变短；缺省 1.0 零回归）

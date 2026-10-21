@@ -1,22 +1,22 @@
 class_name UserControlPanel
 extends Control
-## 附身面板 -- USER_CONTROL 模式下的底部 HUD。
+## User Control 面板 -- USER_CONTROL 模式下的底部 HUD。
 ##
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §10.1、§7.5。
-## 显示附身单位的状态信息：
+## 显示接管单位的状态信息：
 ##   - HP
 ##   - 武器冷却 / 情绪标签
 ##   - 当前行为 / 朝向
 ##   - 坐标
-## 提供"退出附身"按钮（ESC 同效）。
+## 提供"退出接管"按钮（ESC 同效）。
 ##
 ## 由 GameRoot 在 _ready 中 set_script 装配，随后调用 setup(game_root)。
 ##
 ## 刷新机制（信号驱动，不再每帧字符串重建）：
-##   - HP/士气：附身开始时订阅实体 health 组件 damaged/healed/morale_changed，
-##     变化即刷新；附身结束断开。
+##   - HP/士气：接管开始时订阅实体 health 组件 damaged/healed/morale_changed，
+##     变化即刷新；接管结束断开。
 ##   - 无信号的连续值（冷却/情绪/行为/朝向/坐标）：单个 0.2s 低频 Timer 兜底
-##     （仅已附身且面板可见时跑）——字符串重建从每帧降到 5Hz。
+##     （仅已接管且面板可见时跑）——字符串重建从每帧降到 5Hz。
 
 # ─────────────────────────────── 引用 ────────────────────────────────
 var _game_root: Node = null
@@ -79,9 +79,9 @@ func _build_ui() -> void:
 	margin.add_child(hbox)
 
 	# ── 单位信息 ──
-	var info_section := StickKit.section(hbox, "附身单位")
+	var info_section := StickKit.section(hbox, "接管单位")
 	_info_label = Label.new()
-	_info_label.text = "未附身"
+	_info_label.text = "未接管"
 	info_section.add_child(_info_label)
 
 	# 分隔线
@@ -92,9 +92,9 @@ func _build_ui() -> void:
 	var action_hbox := HBoxContainer.new()
 	action_hbox.add_theme_constant_override("separation", 6)
 	action_section.add_child(action_hbox)
-	_release_btn = StickKit.sketch_button(action_hbox, "退出附身 (ESC)", _on_release_pressed)
+	_release_btn = StickKit.sketch_button(action_hbox, "退出接管 (ESC)", _on_release_pressed)
 
-	# 连续值低频兜底（默认停，附身开始才起表）
+	# 连续值低频兜底（默认停，接管开始才起表）
 	_refresh_timer = Timer.new()
 	_refresh_timer.name = "ContinuousRefresh"
 	_refresh_timer.wait_time = CONTINUOUS_REFRESH_SEC
@@ -124,10 +124,10 @@ func _on_user_control_started(_entity) -> void:
 func _on_user_control_ended(_entity) -> void:
 	_unbind_entity_signals()
 	_refresh_timer.stop()
-	_info_label.text = "未附身"
+	_info_label.text = "未接管"
 
 
-## 订阅当前附身实体的离散属性信号（HP/士气变化即刷，不等兜底节拍）
+## 订阅当前接管实体的离散属性信号（HP/士气变化即刷，不等兜底节拍）
 func _bind_entity_signals() -> void:
 	_unbind_entity_signals()
 	var entity: Node2D = _current_entity()
@@ -159,7 +159,7 @@ func _on_health_changed(_a = null, _b = null, _c = null) -> void:
 	_refresh_info()
 
 
-## 当前附身实体（含失效防护；不在附身态返回 null）
+## 当前接管实体（含失效防护；不在接管态返回 null）
 func _current_entity() -> Node2D:
 	if _user_control == null or not _user_control.has_method("get_user_controlled_entity"):
 		return null
@@ -173,7 +173,7 @@ func _current_entity() -> Node2D:
 
 ## 隐藏期跳过刷新（不可见刷了也看不见）；补「显示即刷」：user_control_started
 ## 信号先于 ModePanel 面板切换到达时，信号当拍的刷新会被隐藏守卫吞掉——
-## 不补这一笔，首屏信息停在"未附身"直到 0.2s 兜底节拍。
+## 不补这一笔，首屏信息停在"未接管"直到 0.2s 兜底节拍。
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and is_visible_in_tree():
 		_refresh_info()
@@ -184,7 +184,7 @@ func _refresh_info() -> void:
 		return
 	var entity: Node2D = _current_entity()
 	if entity == null:
-		_info_label.text = "未附身"
+		_info_label.text = "未接管"
 		return
 	# 收集单位信息
 	var parts: Array = []

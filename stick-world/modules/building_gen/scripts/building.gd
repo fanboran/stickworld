@@ -405,7 +405,7 @@ func set_map_reference(map: Node) -> void:
 
 ## 判定 body 是否为当前玩家实体（供 InteractionZone 触发过滤：NPC 不触发透明化）
 func _is_player_entity(body: Node2D) -> bool:
-	# 通过地图的 get_user_controlled_entity 获取当前附身实体（VillageMap/RoadMap 均实现）
+	# 通过地图的 get_user_controlled_entity 获取当前接管实体（VillageMap/RoadMap 均实现）
 	if _map_ref == null or not is_instance_valid(_map_ref):
 		push_warning("[Building] 地图引用未注入，无法判定玩家实体: %s" % name)
 		return false

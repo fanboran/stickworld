@@ -1,6 +1,6 @@
 {
 	"domains": [
-		{ "id": "user_control", "title": "附身", "color": "lake" },
+		{ "id": "user_control", "title": "接管", "color": "lake" },
 		{ "id": "world", "title": "世界", "color": "grass" },
 		{ "id": "common", "title": "通用", "color": "amber" },
 		{ "id": "command", "title": "指挥", "color": "brick" },
@@ -8,13 +8,13 @@
 		{ "id": "debug", "title": "调试", "color": "stone" }
 	],
 	"actions": [
-		{ "action": "user_control/move_up", "domain": "user_control", "label": "移动", "note": "附身时驱动实体",
+		{ "action": "user_control/move_up", "domain": "user_control", "label": "移动", "note": "User Control 时驱动实体",
 			"binds": [ { "physical": "W" }, { "physical": "UP" } ] },
-		{ "action": "user_control/move_down", "domain": "user_control", "label": "移动", "note": "附身时驱动实体",
+		{ "action": "user_control/move_down", "domain": "user_control", "label": "移动", "note": "User Control 时驱动实体",
 			"binds": [ { "physical": "S" }, { "physical": "DOWN" } ] },
-		{ "action": "user_control/move_left", "domain": "user_control", "label": "移动", "note": "附身时驱动实体",
+		{ "action": "user_control/move_left", "domain": "user_control", "label": "移动", "note": "User Control 时驱动实体",
 			"binds": [ { "physical": "A" }, { "physical": "LEFT" } ] },
-		{ "action": "user_control/move_right", "domain": "user_control", "label": "移动", "note": "附身时驱动实体",
+		{ "action": "user_control/move_right", "domain": "user_control", "label": "移动", "note": "User Control 时驱动实体",
 			"binds": [ { "physical": "D" }, { "physical": "RIGHT" } ] },
 		{ "action": "user_control/toggle_combat", "domain": "user_control", "label": "战斗", "note": "建造/战斗模式切换",
 			"binds": [ { "physical": "Q" } ] },

@@ -90,7 +90,7 @@ func _frames(n: int) -> void:
 		await get_tree().process_frame
 
 
-## 生成一个 NPC 单位（非附身、指定阵营）
+## 生成一个 NPC 单位（非接管、指定阵营）
 func _spawn_unit(x: float, faction: int) -> Node2D:
 	var map := _get_map()
 	var e: Node2D = map.spawn_entity(STICKMAN_SCENE, Vector2(x, _spawn_y()))

@@ -5,7 +5,7 @@ extends RefCounted
 ## - attack_ranged：弓/杖远程攻击入口（距离检查 + 延迟发射登记 + 冷却推进）；
 ## - fire_arrow：抛物线箭矢发射（SWL Arrow.launchY/AimAngle 弹道 + 散布热度）；
 ## - cast_magic / _cast_magic_core / _apply_spell_blast_at：法术结算 + 命中点爆炸 AOE（放倒一片）；
-## - fire_arrow_manual / throw_spear_manual / cast_magic_at：玩家蓄力操控手动弹道（附身态）。
+## - fire_arrow_manual / throw_spear_manual / cast_magic_at：玩家蓄力操控手动弹道（接管态）。
 ##
 ## 纪律：状态（_pending_ranged_target/_bow_fire_timer/_sustained_fire_heat/冷却
 ## 计时）全部留在宿主 WeaponMount，经 _mount 动态回引读写；
@@ -290,7 +290,7 @@ func fire_arrow(target: Node) -> void:
 	aim_point = solution["aim_point"]
 	# SWL AimAngle 散布（currentShotBodyRandomness/NextGaussian）：出弓方向加高斯扰动，
 	# σ 取兵种档案 aim_scatter（rad）× RWR sustained_fire 热度放大（连射越打越散）
-	# × AI 附身技能档位乘数（SWL Personality.UserControlSkill：LIMITED 更散、PRO 更准）——
+	# × AI 接管技能档位乘数（SWL Personality.UserControlSkill：LIMITED 更散、PRO 更准）——
 	# 箭雨自然散开，不再人人弹道全同
 	var profile: Dictionary = ScriptBehaviorProfiles.get_profile(int(_mount.weapon_type))
 	var scatter: float = float(profile.get("aim_scatter", 0.0)) \

@@ -43,7 +43,7 @@ func _physics_process(delta: float) -> void:
 	# 暂停冻结由引擎总闸负责）
 	if TimeManager != null:
 		delta = TimeManager.sim_delta(delta)
-	# 获取当前附身实体
+	# 获取当前接管实体
 	var pi: Node = _game_root.get_user_control_interface() if _game_root.has_method("get_user_control_interface") else null
 	if pi == null or not pi.has_method("get_user_controlled_entity"):
 		return

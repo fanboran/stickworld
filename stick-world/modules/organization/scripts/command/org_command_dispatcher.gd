@@ -27,7 +27,7 @@ func build_plan(organizations: Dictionary, org_id: String, order: Dictionary) ->
 
 	var hops: Array = []
 	var leaf_orgs: Array[String] = []
-	# hop 0 玩家跳：命令须物理到达根组织指挥官（玩家≠附身该指挥官时吃传播距离，§4.1.2）
+	# hop 0 玩家跳：命令须物理到达根组织指挥官（玩家≠接管该指挥官时吃传播距离，§4.1.2）
 	hops.append({
 		"from_org": "", "to_org": root.id,
 		"from_tier": 0, "to_tier": root.tier,

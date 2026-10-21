@@ -161,13 +161,13 @@ func _test_insufficient_and_soldier() -> void:
 		soldiers += 1
 		_runner.assert_false(bool(u.get_meta("garrison_unit", false)), "士兵不应带守军 meta")
 		_runner.assert_true(not u.is_dead(), "士兵应存活")
-		_runner.assert_false(u.is_user_controlled(), "士兵不应是附身态")
+		_runner.assert_false(u.is_user_controlled(), "士兵不应是接管态")
 	_runner.assert_true(soldiers >= 1, "应有可出征士兵（实得 %d）" % soldiers)
 
 
 # ─────────────────────────────── 工具 ────────────────────────────────
 
-## 村民计数（照 RecruitManager._scan_villagers 口径：非士兵/非守军/非附身/存活）
+## 村民计数（照 RecruitManager._scan_villagers 口径：非士兵/非守军/非接管/存活）
 func _villager_count() -> int:
 	var n := 0
 	for u in _host_units():

@@ -1,6 +1,6 @@
 extends Node
 ## 集成测试：AI 行为（原 test_stage_03 迁移）。
-## 覆盖：GameRoot 装配下的 AIController 决策、行为切换、附身暂停、AI 驱动移动。
+## 覆盖：GameRoot 装配下的 AIController 决策、行为切换、接管暂停、AI 驱动移动。
 ## 纯逻辑部分（状态机注册/travel）已抽到 unit/test_behavior_state_machine.gd。
 ##
 ## 运行：
@@ -40,7 +40,7 @@ func _register_tests() -> void:
 	_tests.append({"name": "BehaviorIdle: 闲置到时间后 finish", "fn": Callable(self, "_test_idle_finishes"), "async": false})
 	_tests.append({"name": "BehaviorWander: 到时间后 finish", "fn": Callable(self, "_test_wander_finishes"), "async": false})
 	_tests.append({"name": "BehaviorWander: 驱动实体移动", "fn": Callable(self, "_test_wander_moves"), "async": false})
-	_tests.append({"name": "AIController: 附身时暂停 AI", "fn": Callable(self, "_test_user_controlled_pauses"), "async": false})
+	_tests.append({"name": "AIController: User Control 时暂停 AI", "fn": Callable(self, "_test_user_controlled_pauses"), "async": false})
 
 	# 异步测试
 	_tests.append({"name": "集成: AI 控制下实体位置变化", "fn": Callable(self, "_test_ai_moves_entity"), "async": true})
@@ -66,7 +66,7 @@ func _run_tests_async() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# 取消玩家附身，让 AI 接管
+	# 取消玩家接管，让 AI 接管
 	_release_user_control_player()
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -234,14 +234,14 @@ func _test_user_controlled_pauses() -> void:
 	if ai == null:
 		_runner.assert_true(false, "AIController 为空")
 		return
-	# 重新附身
+	# 重新接管
 	e.set_user_controlled(true)
 	# AIController 在 user_controlled 时 physics_update 应直接 return，不改变状态
 	var behavior_before := ai.get_current_behavior()
 	ai.physics_update(0.016)
 	var behavior_after := ai.get_current_behavior()
-	_runner.assert_equal(behavior_before, behavior_after, "附身时行为不应变化")
-	# 取消附身恢复，并处理 user_control 状态变更（清除 _was_user_controlled 标志）
+	_runner.assert_equal(behavior_before, behavior_after, "User Control 时行为不应变化")
+	# 取消接管恢复，并处理 user_control 状态变更（清除 _was_user_controlled 标志）
 	e.set_user_controlled(false)
 	ai.physics_update(0.016)
 
@@ -275,7 +275,7 @@ func _test_ai_cycle() -> void:
 		return
 	var ai: ScriptAIController = e.get_ai_controller() as ScriptAIController
 	var sm: ScriptBehaviorStateMachine = ai.get_state_machine()
-	# 确保 AI 未被附身
+	# 确保 AI 未被接管
 	e.set_user_controlled(false)
 	# 强制重置到 idle，设短时长加速循环
 	sm.travel("idle", {"duration": 0.3})

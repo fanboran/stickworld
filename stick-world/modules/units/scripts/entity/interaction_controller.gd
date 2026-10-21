@@ -36,7 +36,7 @@ func setup(entity: Node2D) -> void:
 
 # ─────────────────────────────── 玩家交互（按F）────────────────────────────────
 
-## 玩家附身时按F：仓库取放材料、工地交付/建造、资源点采集。
+## 玩家 User Control 时按F：仓库取放材料、工地交付/建造、资源点采集。
 ## （原为 E 键，E 让位背包装备系统）
 func try_interact() -> void:
 	var info: Dictionary = _find_interact_target()
@@ -409,7 +409,7 @@ func _hide_interact_hint() -> void:
 		_interact_hint_node.visible = false
 
 
-## 更新交互提示（玩家附身时，靠近仓库/工地/资源点在目标上方显示弹窗）。
+## 更新交互提示（玩家 User Control 时，靠近仓库/工地/资源点在目标上方显示弹窗）。
 ## 由实体 _physics_process 每帧调用。
 func update_hint() -> void:
 	if not _entity.is_user_controlled() or _entity.get_map() == null:

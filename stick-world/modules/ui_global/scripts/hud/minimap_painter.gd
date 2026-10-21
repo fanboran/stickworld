@@ -109,7 +109,7 @@ static func collect_points(map: Node2D) -> Array:
 	return out
 
 
-## 本方阵营 id：附身实体所属阵营；无附身（观战/战场看全局）返回 null
+## 本方阵营 id：接管实体所属阵营；无接管（观战/战场看全局）返回 null
 static func player_faction_of(points: Array) -> Variant:
 	for p: Dictionary in points:
 		if bool(p["player"]):
@@ -288,7 +288,7 @@ static func _draw_points(ci: CanvasItem, rect: Rect2, snap: Dictionary, points: 
 ##
 ## 敌我判定两种口径：
 ##   - my_faction 非空（玩家在场）：同阵营 = 蓝、异阵营 = 红；
-##   - my_faction 为空（**观战 / 战场看全局**，无附身单位）：退回固定阵营色表
+##   - my_faction 为空（**观战 / 战场看全局**，无接管单位）：退回固定阵营色表
 ##     ——否则两边都是"非我方"，会各画一片红，敌我不可分（兵力配置读不出来）。
 static func point_color(faction: int, my_faction: Variant) -> Color:
 	if faction == 0:

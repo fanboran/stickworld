@@ -594,7 +594,7 @@ func _make_fireteams(fs: Node, squad_id: String) -> Array:
 	return ft_ids
 
 
-## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器。
+## 出生一个演练单位：脚部对齐 + 不接管 + 注入编队系统 + 设主手武器。
 ## 武器对照阵容：六兵种一排站桩（间距拉开互不遮挡），不开战不编队——
 ## 截图逐武器检查镜像挂接（握点落手骨/角度/盾位）
 func _spawn_lineup() -> void:
@@ -665,7 +665,7 @@ func _spawn_lineup() -> void:
 		print("[Arena]   first_unit=null（分组后已丢？）")
 
 
-## 出生一个演练单位：脚部对齐 + 不附身 + 注入编队系统 + 设主手武器 + 开局朝向。
+## 出生一个演练单位：脚部对齐 + 不接管 + 注入编队系统 + 设主手武器 + 开局朝向。
 ## face ±1 = 按阵营面向敌军（右军默认朝 +x 背对敌人 = 开战全员回头的半个根因；
 ## 出生首翻不受节流限，try_set_facing 直放行）；0 = 不设（lineup 站桩等）。
 func _spawn_unit(map: Node2D, pos: Vector2, wtype: int, fs: Node, face: int = 0) -> Node2D:

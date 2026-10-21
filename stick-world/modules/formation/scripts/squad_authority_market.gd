@@ -177,7 +177,7 @@ func prune_registry() -> void:
 
 
 ## 单位是否允许转投（「不该动的别动」硬守卫；任一命中即本拍不换班）：
-##   1. 玩家附身单位 = 玩家本体，AI 不搬动玩家
+##   1. 玩家接管单位 = 玩家本体，AI 不搬动玩家
 ##   2. 班长 / 组织在册指挥官本人——RWR max_leader_authority_willing_to_join_another_squad
 ##      语义（班长权威高于阈值才肯放人）：本班权威值高于 authority_leader_release_threshold
 ##      者视为骨干，不被抽走
@@ -236,10 +236,10 @@ func is_manual_order_guarded(u: Node, squad_id: String) -> bool:
 
 
 ## 玩家所在班（跳槽吸引力 / 黏性加成的判定口径）。
-## 排除"班长被附身"这一情形：该情形已由宿主 get_squad_authority 的
+## 排除"班长被接管"这一情形：该情形已由宿主 get_squad_authority 的
 ## AUTHORITY_PLAYER_BONUS 计价，此处不重复叠加。剩余两种情形在此计价：
 ##   - 该班处于"跟随玩家"模式（玩家点选跟随的班）
-##   - 玩家实体在该班（任一非班长成员被附身）
+##   - 玩家实体在该班（任一非班长成员被接管）
 func is_player_squad(squad_id: String) -> bool:
 	var squad: Dictionary = _host._squads.get(squad_id, {})
 	if squad.is_empty():

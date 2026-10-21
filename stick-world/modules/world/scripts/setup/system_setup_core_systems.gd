@@ -223,7 +223,7 @@ func _org_commander_position(org_id: String) -> Variant:
 	return (unit as Node2D).global_position
 
 
-## 玩家位置：附身实体坐标；未附身 = 相机视野中心；全不可得 → Vector2.INF
+## 玩家位置：接管实体坐标；未接管 = 相机视野中心；全不可得 → Vector2.INF
 func _player_command_position() -> Vector2:
 	var root: GameRoot = _host._root
 	var map: Node = root.get_current_map() if root.has_method("get_current_map") else null

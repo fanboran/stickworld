@@ -133,7 +133,7 @@ func _blacksmith() -> Node2D:
 	return null
 
 
-## 村民列表（EntityHost 内非附身、有职业的实体）
+## 村民列表（EntityHost 内非接管、有职业的实体）
 func _villagers() -> Array:
 	var result: Array = []
 	var map := _map()

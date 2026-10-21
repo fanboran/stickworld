@@ -4,7 +4,7 @@ extends RefCounted
 ## 从 test_selection_formation.gd 拆分（原 _run_tests_async / _spawn_test_units 逻辑），
 ## 供框选/编队/号令/战斗UI 四个测试文件复用：
 ## - 加载 game_root.tscn 并等待地图与实体生成
-## - 取消玩家附身、切换到 BATTLE 模式
+## - 取消玩家接管、切换到 BATTLE 模式
 ## - 获取 SelectionSystem / FormationSystem / TacticalOrders / CommandChain / UI 引用
 ## - 生成测试单位
 
@@ -52,7 +52,7 @@ func start(host: Node) -> void:
 	# 等待地图加载和实体生成
 	for i in 8:
 		await host.get_tree().process_frame
-	# 取消玩家附身（避免干扰）
+	# 取消玩家接管（避免干扰）
 	_release_user_control_player()
 	# 切到 BATTLE 模式激活 SelectionSystem
 	var dispatcher: Node = game_root.input_dispatcher
@@ -69,7 +69,7 @@ func start(host: Node) -> void:
 	minimap = game_root.get_minimap()
 
 
-## 生成 count 个测试单位（不附身，AI 接管），追加到 units。
+## 生成 count 个测试单位（不接管，AI 接管），追加到 units。
 func spawn_test_units(count: int) -> void:
 	if map == null:
 		return
@@ -86,7 +86,7 @@ func spawn_test_units(count: int) -> void:
 		units.append(e)
 
 
-## 取消玩家附身（避免输入干扰测试）
+## 取消玩家接管（避免输入干扰测试）
 func _release_user_control_player() -> void:
 	if map == null:
 		return
@@ -95,8 +95,8 @@ func _release_user_control_player() -> void:
 			e.set_user_controlled(false)
 
 
-## 重置单位瞬态（用例边界防残留）：清残余速度 / AI 移动分量，取消附身。
-## 不传 list 时重置全部测试单位。用于消除"前一用例的移动/击退/附身状态
+## 重置单位瞬态（用例边界防残留）：清残余速度 / AI 移动分量，取消接管。
+## 不传 list 时重置全部测试单位。用于消除"前一用例的移动/击退/User Control 状态
 ## 泄漏进后一用例"的顺序依赖（先例：test_melee_combat.gd _test_cooldown——
 ## 位置/速度须在等待上一用例效果落地后最后确定）。
 func reset_units(list: Array = []) -> void:
@@ -112,7 +112,7 @@ func reset_units(list: Array = []) -> void:
 		# 残余速度清零（CharacterBody2D.velocity）
 		if "velocity" in u:
 			u.velocity = Vector2.ZERO
-		# 取消附身（附身单位不受 AI 驱动，会改变后一用例的跟随/攻击前提）
+		# 取消接管（接管单位不受 AI 驱动，会改变后一用例的跟随/攻击前提）
 		if u.has_method("set_user_controlled"):
 			u.set_user_controlled(false)
 

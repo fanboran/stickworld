@@ -36,7 +36,7 @@ func _run() -> void:
 	# 2) 找玩家（user_controlled 实体）与其交互控制器
 	var player: Node2D = _find_player()
 	if player == null:
-		_fail("未找到附身玩家实体", failures)
+		_fail("未找到接管玩家实体", failures)
 		_quit(1)
 		return
 	var interaction: Node = player.get_node_or_null("InteractionController")

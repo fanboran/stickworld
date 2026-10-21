@@ -36,7 +36,7 @@ func process_tick(_delta: float) -> void:
 		end_bow_aim_visual(false)
 		return
 	var owner_entity: CharacterBody2D = _mount.get_owner_entity()
-	# 玩家蓄力窗的收口守卫：附身取消（cancel_charge 不经过本挂载）/ 附身丢失 /
+	# 玩家蓄力窗的收口守卫：接管取消（cancel_charge 不经过本挂载）/ 接管丢失 /
 	# 死亡，都会让"按住全程"的无限窗失去归属——立刻收弓回站姿，别钉在拉满
 	if _mount._aim_visual_player:
 		var user_controlled: bool = owner_entity != null \

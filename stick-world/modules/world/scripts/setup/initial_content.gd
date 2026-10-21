@@ -30,7 +30,7 @@ func spawn_initial_warehouse() -> void:
 
 # ─────────────────────────────── NPC 生成 ────────────────────────────────
 
-## 生成 NPC 村民，按职业分布两簇落脚（批次 4 配比分配），不附身（AI 接管）。
+## 生成 NPC 村民，按职业分布两簇落脚（批次 4 配比分配），不接管（AI 接管）。
 ##
 ## 分布设计（[提案/待定]，依据 village_a 布局：硬化区 -1280~1280、仓库
 ## X 480~992、铁匠占位工位 X=1120、右城墙 1900、左侧森林带 -2160~-1280）：
@@ -73,7 +73,7 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 					and not (npc.has_method("is_on_billboard_map") and npc.is_on_billboard_map()):
 				npc.global_position.y = y - npc.foot_offset
 			if npc.has_method("set_user_controlled"):
-				npc.set_user_controlled(false)  # NPC 不被附身，AIController 自动接管
+				npc.set_user_controlled(false)  # NPC 不被接管，AIController 自动接管
 			# 注入 ConstructionAPI 引用（统一走 api，2026-08 审计收敛），使 NPC 可被派工（§15 阶段 0.4）
 			if npc.has_method("set_construction_manager") and _root.get_construction_api() != null:
 				npc.set_construction_manager(_root.get_construction_api())
@@ -152,7 +152,7 @@ func spawn_battlefield_enemies(map: Node2D, allies: Array, count: int = 4) -> Ar
 		if e.get("foot_offset") != null \
 				and not (e.has_method("is_on_billboard_map") and e.is_on_billboard_map()):
 			e.global_position.y = spawn_y - e.foot_offset
-		# 不附身（AI 接管）
+		# 不接管（AI 接管）
 		if e.has_method("set_user_controlled"):
 			e.set_user_controlled(false)
 		enemies.append(e)

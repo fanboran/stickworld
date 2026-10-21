@@ -11,7 +11,7 @@ extends Node
 
 # PlayerControlAPI 是全局 class_name，无需 preload
 
-## 当前附身的实体
+## 当前接管的实体
 var _user_controlled_entity: Node2D = null
 ## GameRoot 引用（用于查找当前地图）
 var _game_root: Node = null
@@ -34,7 +34,7 @@ func _on_mode_activated(_mode: int) -> void:
 	_user_control_player_entity()
 
 
-## 模式停用。切到 BATTLE（玩家 Q 键进入战斗姿态）时**保持附身**——
+## 模式停用。切到 BATTLE（玩家 Q 键进入战斗姿态）时**保持接管**——
 ## 玩家继续控制火柴人（WASD 移动 + 左键挥砍），框选仅作用于其他单位。
 func _on_mode_deactivated(_mode: int, new_mode: int) -> void:
 	if new_mode == PlayerControlAPI.Mode.BATTLE:
@@ -42,12 +42,12 @@ func _on_mode_deactivated(_mode: int, new_mode: int) -> void:
 	_release_user_control()
 
 
-# ─────────────────────────────── 附身逻辑 ────────────────────────────────
+# ─────────────────────────────── 接管逻辑 ────────────────────────────────
 
 func _user_control_player_entity() -> void:
 	var entity := _find_player_entity()
 	if entity == null:
-		push_warning("[ExploreHandler] 未找到可附身实体")
+		push_warning("[ExploreHandler] 未找到可接管实体")
 		return
 	if entity.has_method("set_user_controlled"):
 		entity.set_user_controlled(true)

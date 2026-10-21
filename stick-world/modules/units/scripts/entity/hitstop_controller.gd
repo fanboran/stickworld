@@ -2,7 +2,7 @@ class_name HitstopController
 extends RefCounted
 ## 命中顿帧控制器 —— 从 weapon_mount 拆出（持有节流状态）。
 ##
-## 全局 time_scale 冻结只在**玩家附身单位命中**时触发：48 人观察场每 0.3s
+## 全局 time_scale 冻结只在**玩家接管单位命中**时触发：48 人观察场每 0.3s
 ## 冻结全世界 0.06s = "又加速又卡顿掉帧"的元凶（2026-08-31 四轮审计结论）。
 ## AI 互殴的打击感由受击硬直/击退/红闪承担（原版 SWL 也不冻结全场）。
 
@@ -10,7 +10,7 @@ extends RefCounted
 var _last_hitstop_ms: int = -999000
 
 
-## 尝试触发顿帧：headless 短路；仅附身单位命中触发；min_interval 节流。
+## 尝试触发顿帧：headless 短路；仅接管单位命中触发；min_interval 节流。
 ## 恢复定时器 ignore_time_scale=true，不受冻结影响。
 ## 蓄力瞄准中（拉弓/投矛/施法按住）不触发顿帧——玩家操作中冻结世界
 ## 会打断瞄准手感。

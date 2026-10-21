@@ -141,7 +141,7 @@ func _spawn_node(layer: Node, type: int, x: float, y: float, amount: int) -> voi
 	layer.add_child(node)
 
 
-## 村民列表（EntityHost 内非附身、非守军、有职业的实体）
+## 村民列表（EntityHost 内非接管、非守军、有职业的实体）
 func _villagers(map: Node2D) -> Array:
 	var result: Array = []
 	var host: Node = map.get_node_or_null("EntityHost") if map != null else null

@@ -142,7 +142,7 @@ func _spawn_travel_followers(map: Node2D, player: Node2D, spawn_y: float) -> Arr
 			# 修正 Y：脚部对齐
 			if f.get("foot_offset") != null:
 				f.global_position.y = spawn_y - f.foot_offset
-			# 不附身（AI 接管），注入系统引用
+			# 不接管（AI 接管），注入系统引用
 			if f.has_method("set_user_controlled"):
 				f.set_user_controlled(false)
 			if f.has_method("set_construction_manager") and _host._construction_api != null:
@@ -212,7 +212,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 修正 Y：让脚部对齐 spawn_y
 		if player.get("foot_offset") != null:
 			player.global_position.y = spawn_y - player.foot_offset
-			# 附身玩家实体（地图切换时需重新附身新实体）
+			# 接管玩家实体（地图切换时需重新接管新实体）
 		if player.has_method("set_user_controlled"):
 			player.set_user_controlled(true)
 		# 玩家也注入 ConstructionManager（按F搬运/建造交互需要）
@@ -276,7 +276,7 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 战场图（battlefield，HD-2D 城郊战场）：进图不再自动刷敌开战（出征与
 		# 领地架构 §4.3）；dev 验证走 tests/dev/verify_battle.gd 直达调
 		# InitialContent.spawn_battlefield_enemies 组织遭遇战。
-		# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可附身实体"警告）
+		# 切到 EXPLORE 模式激活 handler（此时实体已就绪，不会触发"未找到可接管实体"警告）
 	if _host.input_dispatcher and _host.input_dispatcher.has_method("set_mode"):
 		_host.input_dispatcher.set_mode(PlayerControlAPI.Mode.EXPLORE)
 	# 小地图底图首烘（"干净管线"）：只留**前排建筑 + 地面**的真渲染降采样

@@ -10,7 +10,7 @@ extends Node
 ## - system_setup_core_systems.gd   战斗/资源/框选/组织/编队/战术/指挥传输/征服/招兵/上报叙事
 ## - system_setup_ui_panels.gd      界面根/调试层/战斗·编队·组织面板/战略总览/指挥链视图/设置·暂停菜单/TeamAi HUD/班组卡/缩放条
 ## - system_setup_strategic_map.gd  小地图/战略图 L1·L3/地图缩略窗/Tab 三态与 M 键运行时/边界检测/地图旅行
-## - system_setup_extras.gd         附身界面·面板/探索交互/游戏 UI/调试绘制器注册/Demo 目标链/后处理/地图过渡/单位 LOD
+## - system_setup_extras.gd         接管界面·面板/探索交互/游戏 UI/调试绘制器注册/Demo 目标链/后处理/地图过渡/单位 LOD
 ##
 ## 模块自装配器（AR-1 装配下沉，随迁随增）：inventory / construction 等模块的
 ## setup.gd::assemble 自持实例化，本宿主只保留步骤表编排与跨模块接线。
@@ -218,8 +218,8 @@ func _step_table() -> Array:
 		["战略图 L3", _setup_l3_strategic_map],
 		["地图缩略窗", _open_tab_map_default],
 		["背包", _setup_inventory],
-		["附身界面", _setup_user_control_interface],
-		["附身面板", _setup_user_control_panel],
+		["接管界面", _setup_user_control_interface],
+		["User Control 面板", _setup_user_control_panel],
 		["探索交互", _register_explore_handler],
 		["边界检测", _setup_boundary_detector],
 		["游戏 UI", _setup_game_ui],

@@ -51,7 +51,7 @@ func _test_registry_shape() -> void:
 	var data: Dictionary = Registry.load_default()
 	_runner.assert_false(data.is_empty(), "动作表应可装载")
 	var domains: Array = data["domains"]
-	_runner.assert_equal(domains.size(), 6, "六个操作域（附身/世界/通用/指挥/战略图/调试）")
+	_runner.assert_equal(domains.size(), 6, "六个操作域（接管/世界/通用/指挥/战略图/调试）")
 	var domain_ids: Array = []
 	for d: Dictionary in domains:
 		domain_ids.append(String(d["id"]))

@@ -95,7 +95,7 @@ func _build() -> void:
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rows.add_theme_constant_override("separation", 8)
 	scroll.add_child(rows)
-	for cfg in [["战斗开始时自动暂停", true, false], ["附身微操时自动减速", true, false],
+	for cfg in [["战斗开始时自动暂停", true, false], ["接管微操时自动减速", true, false],
 			["缩放时 UI 渐隐渐显", false, true]]:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)

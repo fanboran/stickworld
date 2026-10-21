@@ -46,7 +46,7 @@ func update(delta: float) -> void:
 		_target = _find_player()
 		_target_timer = TARGET_REFRESH_INTERVAL
 	if _target == null or not is_instance_valid(_target):
-		# 玩家不存在（如未附身）：原地待命
+		# 玩家不存在（如未接管）：原地待命
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
 		return

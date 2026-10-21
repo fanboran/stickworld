@@ -129,9 +129,9 @@ extends Node
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)
-# 附身开始：UserControlInterface -> UI、Units、TimeManager
+# 接管开始：UserControlInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal user_control_started(entity)
-# 附身结束：UserControlInterface -> UI、Units、TimeManager
+# 接管结束：UserControlInterface -> UI、Units、TimeManager
 @warning_ignore("unused_signal") signal user_control_ended(entity)
 
 # ─────────────────────────────── 调试可见性（debug_gui → 生产解耦）──────────────────────────────

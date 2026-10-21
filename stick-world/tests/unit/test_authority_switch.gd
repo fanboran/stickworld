@@ -61,7 +61,7 @@ class BareOrgApi:
 		return {"id": org_id, "commander_id": commander_id}
 
 
-## 单位桩：faction / battle / ai / 附身 / 武器射程。
+## 单位桩：faction / battle / ai / 接管 / 武器射程。
 class FakeUnit:
 	extends Node2D
 	var faction_id: int = 1
@@ -176,7 +176,7 @@ func _ready() -> void:
 	_runner.add_test("约束4 排序: A(1.0)→B(1.7)；并列时玩家所在班优先吸引", _test_ordering_and_player_priority)
 	_runner.add_test("约束5 守卫: 班长本人不被抽走（RWR 放人阈值）", _test_guard_leader)
 	_runner.add_test("约束5 守卫: 组织在册指挥官本人不被抽走", _test_guard_commander)
-	_runner.add_test("约束5 守卫: 玩家附身单位（玩家本体）不被搬动", _test_guard_user_controlled)
+	_runner.add_test("约束5 守卫: 玩家接管单位（玩家本体）不被搬动", _test_guard_user_controlled)
 	_runner.add_test("约束5 守卫: 避战/找掩体（撤退类行为）中不换班", _test_guard_retreat_behavior)
 	_runner.add_test("约束5 守卫: 接战中（射程内有敌）不换班", _test_guard_engaged)
 	_runner.add_test("约束5 守卫: 玩家手动号令保护期内不换班（复用 TeamAi 查询）", _test_guard_manual_order)
@@ -417,7 +417,7 @@ func _test_guard_user_controlled() -> void:
 	var w := _guard_world()
 	w["subject"].user_controlled = true
 	_tick(w["fs"])
-	_assert_guard(w, "玩家附身单位（玩家本体）不应被 AI 搬动")
+	_assert_guard(w, "玩家接管单位（玩家本体）不应被 AI 搬动")
 
 
 func _test_guard_retreat_behavior() -> void:
@@ -664,7 +664,7 @@ func _test_resource() -> void:
 ## 指挥官在册 0.5 静默丢失（班长在场 1.0 / 玩家光环 0.2 不受影响）。
 ## 归一化取数口同时接受两种形态：本用例对同一权威值组合分别走包装与裸数据断言。
 func _test_org_query_normalization() -> void:
-	# 基线：班长在场（1.0）+ 班长被附身（+0.2 玩家光环），无组织加成
+	# 基线：班长在场（1.0）+ 班长被接管（+0.2 玩家光环），无组织加成
 	var org := FakeOrgApi.new()
 	var fs: FormationSystem = ScriptFormationSystem.new()
 	fs.setup(org)

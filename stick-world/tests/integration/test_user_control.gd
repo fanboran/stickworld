@@ -1,5 +1,5 @@
 extends Node
-## 集成测试：玩家附身（原 test_stage_07 迁移）。
+## 集成测试：玩家接管（原 test_stage_07 迁移）。
 ##
 ## 运行：
 ##   godot --headless --path stick-world res://tests/integration/test_user_control.tscn -- --fresh-start
@@ -9,19 +9,19 @@ extends Node
 ## 测试覆盖：
 ##   - UserControlInterface 装配（注册为 USER_CONTROL handler）
 ##   - UserControlPanel 装配（脚本挂载 + UI 构建）
-##   - 从 BATTLE 模式进入 USER_CONTROL：选中单位被附身
-##   - 附身后实体 is_user_controlled() == true
-##   - 附身后相机居中跟随
+##   - 从 BATTLE 模式进入 USER_CONTROL：选中单位被接管
+##   - User Control 后实体 is_user_controlled() == true
+##   - User Control 后相机居中跟随
 ##   - EventBus user_control_started 信号发射
-##   - release() 释放附身
+##   - release() 释放接管
 ##   - 释放后实体 is_user_controlled() == false
 ##   - 释放后模式恢复为 BATTLE
 ##   - EventBus user_control_ended 信号发射
 ##   - UserControlPanel 显示单位信息
 ##   - 直接 control(entity) API
-##   - 附身时时间降速（auto_slow_on_user_control）
+##   - User Control 时时间降速（auto_slow_on_user_control）
 ##   - 鼠标左键攻击（_player_attack + _find_nearest_enemy_in_range）
-##   - 死亡单位不可附身
+##   - 死亡单位不可接管
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
@@ -59,19 +59,19 @@ func _ready() -> void:
 func _register_tests() -> void:
 	_tests.append({"name": "装配: UserControlInterface 已注册", "fn": Callable(self, "_test_user_control_assembled"), "async": false})
 	_tests.append({"name": "装配: UserControlPanel 已注册", "fn": Callable(self, "_test_user_control_panel_assembled"), "async": false})
-	_tests.append({"name": "附身: 从 BATTLE 进入 USER_CONTROL 附身选中单位", "fn": Callable(self, "_test_user_control_from_battle"), "async": true})
-	_tests.append({"name": "附身: entity.is_user_controlled() == true", "fn": Callable(self, "_test_entity_user_controlled"), "async": true})
+	_tests.append({"name": "接管: 从 BATTLE 进入 USER_CONTROL 接管选中单位", "fn": Callable(self, "_test_user_control_from_battle"), "async": true})
+	_tests.append({"name": "接管: entity.is_user_controlled() == true", "fn": Callable(self, "_test_entity_user_controlled"), "async": true})
 	_tests.append({"name": "信号: user_control_started 发射", "fn": Callable(self, "_test_started_signal"), "async": true})
 	_tests.append({"name": "UI: UserControlPanel 显示单位信息", "fn": Callable(self, "_test_panel_shows_info"), "async": true})
 	_tests.append({"name": "攻击: _find_nearest_enemy_in_range 找到敌人", "fn": Callable(self, "_test_find_enemy"), "async": false})
 	_tests.append({"name": "攻击: _player_attack 对敌人造成伤害", "fn": Callable(self, "_test_player_attack"), "async": true})
-	_tests.append({"name": "释放: release() 释放附身", "fn": Callable(self, "_test_release"), "async": true})
+	_tests.append({"name": "释放: release() 释放接管", "fn": Callable(self, "_test_release"), "async": true})
 	_tests.append({"name": "释放: entity.is_user_controlled() == false", "fn": Callable(self, "_test_entity_released"), "async": true})
 	_tests.append({"name": "释放: 模式恢复为 BATTLE", "fn": Callable(self, "_test_mode_restored"), "async": true})
 	_tests.append({"name": "信号: user_control_ended 发射", "fn": Callable(self, "_test_ended_signal"), "async": true})
-	_tests.append({"name": "API: control(entity) 直接附身", "fn": Callable(self, "_test_user_control_api"), "async": true})
-	_tests.append({"name": "降速: 附身时时间降速到 X1", "fn": Callable(self, "_test_time_slow"), "async": true})
-	_tests.append({"name": "限制: 死亡单位不可附身", "fn": Callable(self, "_test_dead_unit_user_control"), "async": true})
+	_tests.append({"name": "API: control(entity) 直接接管", "fn": Callable(self, "_test_user_control_api"), "async": true})
+	_tests.append({"name": "降速: User Control 时时间降速到 X1", "fn": Callable(self, "_test_time_slow"), "async": true})
+	_tests.append({"name": "限制: 死亡单位不可接管", "fn": Callable(self, "_test_dead_unit_user_control"), "async": true})
 
 
 # ─────────────────────────────── 异步执行 ────────────────────────────────
@@ -87,7 +87,7 @@ func _run_tests_async() -> void:
 	# 等待地图加载和实体生成
 	for i in 8:
 		await get_tree().process_frame
-	# 取消玩家附身（避免干扰）
+	# 取消玩家接管（避免干扰）
 	_release_user_control_player()
 	# 切到 BATTLE 模式激活 SelectionSystem
 	var dispatcher: Node = _game_root.input_dispatcher
@@ -192,8 +192,8 @@ func _test_user_control_from_battle() -> void:
 	await get_tree().process_frame
 	# 验证
 	var entity: Node2D = _user_control.get_user_controlled_entity()
-	_runner.assert_true(entity != null, "应有附身实体")
-	_runner.assert_true(entity == _test_units[0], "应附身 unit 0")
+	_runner.assert_true(entity != null, "应有接管实体")
+	_runner.assert_true(entity == _test_units[0], "应接管 unit 0")
 	EventBus.user_control_started.disconnect(conn)
 
 
@@ -207,7 +207,7 @@ func _test_entity_user_controlled() -> void:
 		return
 	var entity: Node2D = _user_control.get_user_controlled_entity()
 	if entity == null:
-		_runner.assert_true(false, "无附身实体")
+		_runner.assert_true(false, "无接管实体")
 		return
 	_runner.assert_true(entity.is_user_controlled(), "entity.is_user_controlled() 应为 true")
 
@@ -224,10 +224,10 @@ func _test_panel_shows_info() -> void:
 		return
 	await get_tree().process_frame
 	await get_tree().process_frame
-	# 验证信息标签不为"未附身"
+	# 验证信息标签不为"未接管"
 	var label: Label = _user_control_panel.get("_info_label") if _user_control_panel.get("_info_label") != null else null
 	if label != null:
-		_runner.assert_true(label.text != "未附身", "UserControlPanel 应显示单位信息（非'未附身'）")
+		_runner.assert_true(label.text != "未接管", "UserControlPanel 应显示单位信息（非'未接管'）")
 		_runner.assert_true(label.text.findn("HP") >= 0, "信息应包含 HP")
 
 
@@ -241,7 +241,7 @@ func _test_find_enemy() -> void:
 		unit.set_faction(1)
 	if _test_units[1].has_method("set_faction"):
 		_test_units[1].set_faction(2)
-	# 重摆两单位到村东空旷带（间距 70 < 剑射程 80）：单位无附身会被 AI wander
+	# 重摆两单位到村东空旷带（间距 70 < 剑射程 80）：单位无接管会被 AI wander
 	# 溜走（小镇生活线打开 wander 后漂移超射程曾致红），且游荡村民可能比
 	# unit 1 更近——摆到 NPC 活动区（±2100）之外，保证最近敌人恰为 unit 1
 	var spawn_y: float = _map.ground_y + (_map.ground_bottom - _map.ground_y) * 0.5
@@ -357,7 +357,7 @@ func _test_user_control_api() -> void:
 	await get_tree().process_frame
 	# 验证
 	var entity: Node2D = _user_control.get_user_controlled_entity()
-	_runner.assert_true(entity == target, "应附身 unit 1")
+	_runner.assert_true(entity == target, "应接管 unit 1")
 	_runner.assert_true(target.is_user_controlled(), "unit 1 is_user_controlled() 应为 true")
 	# 释放
 	_user_control.release()
@@ -376,12 +376,12 @@ func _test_time_slow() -> void:
 	TimeManager.auto_slow_on_user_control = true
 	# 设速度为 X2
 	TimeManager.set_speed(TimeManager.Speed.X2)
-	# 附身
+	# 接管
 	_user_control.control(_test_units[2])
 	await get_tree().process_frame
 	# 验证速度降为 X1
 	var current_speed: int = TimeManager.current_speed
-	_runner.assert_equal(current_speed, TimeManager.Speed.X1, "附身后速度应为 X1")
+	_runner.assert_equal(current_speed, TimeManager.Speed.X1, "User Control 后速度应为 X1")
 	# 释放
 	_user_control.release()
 	await get_tree().process_frame
@@ -407,14 +407,14 @@ func _test_dead_unit_control() -> void:
 	# 尝试直接 user_control 死亡单位
 	_user_control.control(unit)
 	await get_tree().process_frame
-	# 死亡单位不应被附身（set_user_controlled 可能仍然设置，但 _on_user_control_changed 会处理）
+	# 死亡单位不应被接管（set_user_controlled 可能仍然设置，但 _on_user_control_changed 会处理）
 	# 更重要的验证：get_user_controlled_entity 不应是死亡单位
 	var entity: Node2D = _user_control.get_user_controlled_entity()
 	if entity == unit:
-		_runner.assert_true(false, "不应附身死亡单位")
+		_runner.assert_true(false, "不应接管死亡单位")
 	else:
-		_runner.assert_true(true, "死亡单位未被附身")
-	# 清理：如果有错误的附身，释放它
+		_runner.assert_true(true, "死亡单位未被接管")
+	# 清理：如果有错误的接管，释放它
 	if entity != null:
 		_user_control.release()
 		await get_tree().process_frame

@@ -190,7 +190,7 @@ func _retier() -> void:
 	for u in _units:
 		if not _is_trackable(u):
 			continue
-		# 附身单位是玩家视点所在身体，恒近景全速（玩家逻辑优先于 LOD）
+		# 接管单位是玩家视点所在身体，恒近景全速（玩家逻辑优先于 LOD）
 		if u.has_method("is_user_controlled") and u.is_user_controlled():
 			_apply_tier(u, Tier.NEAR, t0_hz)
 			continue

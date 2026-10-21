@@ -107,11 +107,11 @@ func _run() -> void:
 			% [r.position.x, r.end.x,
 			HudZoneLayout.TOP_CENTER_FREE_LEFT_PX, HudZoneLayout.TOP_CENTER_FREE_RIGHT_PX])
 
-	# 阵营点构成：走**真实渲染路径**取阵营口径（无附身单位 = 观战，my_faction 为空，
+	# 阵营点构成：走**真实渲染路径**取阵营口径（无接管单位 = 观战，my_faction 为空，
 	# 此时必须靠固定阵营色表分敌我——曾经两边都判"非我方"而全画成红）
 	var points: Array = MinimapPainter.collect_points(map)
 	var my_faction: Variant = MinimapPainter.player_faction_of(points)
-	_check(my_faction == null, "本工位无附身单位（观战口径，阵营色走固定表）")
+	_check(my_faction == null, "本工位无接管单位（观战口径，阵营色走固定表）")
 	var ally_color: Color = MinimapPainter.point_color(1, my_faction)
 	var enemy_color: Color = MinimapPainter.point_color(2, my_faction)
 	var ally := 0

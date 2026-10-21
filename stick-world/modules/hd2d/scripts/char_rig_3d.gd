@@ -457,7 +457,7 @@ func set_chars_visible(v: bool) -> void:
 	_hidden = not v
 
 
-# ── 3D 头顶劳作进度条 + 附身四角框（quad 方案）──
+# ── 3D 头顶劳作进度条 + 接管四角框（quad 方案）──
 
 const WP_SIZE := Vector2(1.3, 0.16)
 const WP_LIFT := -0.15
@@ -523,7 +523,7 @@ func _layout_work_bar() -> void:
 	_wp_fill.position = Vector3(anchor.x - WP_SIZE.x * 0.5 * (1.0 - r) * d, anchor.y, anchor.z + 0.02)
 
 
-## 附身四角框（user_controlled 玩家专用，贴地 quad）
+## 接管四角框（user_controlled 玩家专用，贴地 quad）
 static var _bracket_tex: ImageTexture = null
 
 static func _get_bracket_tex() -> ImageTexture:

@@ -20,7 +20,7 @@ extends RefCounted
 enum PanelType {
 	VILLAGE,    ## 聚落/城镇面板（建设菜单、村民管理、库存）
 	BATTLE,     ## 战斗面板（框选信息、指令按钮、编制树）
-	USER_CONTROL,    ## 附身面板（角色控制 HUD）
+	USER_CONTROL,    ## User Control 面板（角色控制 HUD）
 }
 
 # ─────────────────────────────── 节点路径 ────────────────────────────────

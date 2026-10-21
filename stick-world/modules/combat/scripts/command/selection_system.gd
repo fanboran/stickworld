@@ -265,7 +265,7 @@ func _get_selectable_units() -> Array:
 
 ## 死亡/释放的单位自动移除；同时驱动 user_controlled 四角框跟随重绘
 func _process(_delta: float) -> void:
-	# user_controlled 玩家逐帧跟随（EXPLORE/BATTLE 都显示）；无附身时零重绘
+	# user_controlled 玩家逐帧跟随（EXPLORE/BATTLE 都显示）；无 User Control 时零重绘
 	var user_controlled: Node2D = _get_user_controlled_entity()
 	var has_user_controlled: bool = user_controlled != null and is_instance_valid(user_controlled)
 	if has_user_controlled or _last_had_user_controlled:
@@ -362,7 +362,7 @@ func _draw_corner_bracket(center: Vector2, half_w: float, half_h: float, arm: fl
 		draw_line(corner, corner - Vector2(0, c.y * arm), col, 2.0, true)
 
 
-## 当前附身实体（无则 null）
+## 当前接管实体（无则 null）
 func _get_user_controlled_entity() -> Node2D:
 	var map: Node2D = _get_current_map()
 	if map == null:

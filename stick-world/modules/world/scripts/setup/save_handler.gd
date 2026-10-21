@@ -394,7 +394,7 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> Diction
 		# 朝向
 		if "_facing" in entity:
 			entity.set("_facing", int(row["facing"]))
-		# 玩家附身
+		# 玩家接管
 		if int(row["is_player"]) == 1 and entity.has_method("set_user_controlled"):
 			entity.set_user_controlled(true)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):

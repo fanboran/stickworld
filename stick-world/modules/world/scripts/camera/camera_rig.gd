@@ -218,8 +218,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					_manual_cooldown = 0.0
 				else:
 					_manual_cooldown = MANUAL_COOLDOWN_TIME
-		# 滚轮缩放（09 文档 §二创始人定稿：附身态滚轮默认=切武器让位，
-		# Shift+滚轮才是缩放；非附身滚轮=缩放。与 ShortcutGate 滚轮拦截双保险）
+		# 滚轮缩放（09 文档 §二创始人定稿：接管态滚轮默认=切武器让位，
+		# Shift+滚轮才是缩放；非接管滚轮=缩放。与 ShortcutGate 滚轮拦截双保险）
 		elif event.is_action_pressed("world/zoom_in"):
 			if not _user_control_wheel_weapon_mode(event):
 				_zoom_at_mouse(ZOOM_STEP * zoom_speed_mult)
@@ -230,7 +230,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ─────────────────────────────── 位置更新 ────────────────────────────────
 
-## 附身态滚轮是否已让位武器切换（滚轮非 Shift 时相机不吃事件）
+## 接管态滚轮是否已让位武器切换（滚轮非 Shift 时相机不吃事件）
 func _user_control_wheel_weapon_mode(event: InputEventMouseButton) -> bool:
 	var d: Node = PlayerControlAPI.get_input_dispatcher()
 	if d == null or not d.has_method("get_mode"):

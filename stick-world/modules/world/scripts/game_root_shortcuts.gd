@@ -4,7 +4,7 @@ extends RefCounted
 ## 职责域：
 ##   快捷键全分派（动作表驱动：存读档/面板开关/快捷栏/暂停/ESC——绑定见
 ##   assets/config/input_actions.json）→ handle_shortcuts
-##   ESC 统一模态栈逐层退栈（附身让位/暂停菜单兜底；战略图已并入层键）→ _handle_escape
+##   ESC 统一模态栈逐层退栈（接管让位/暂停菜单兜底；战略图已并入层键）→ _handle_escape
 ##   模态面板开关公共路径（背包/设置菜单）→ toggle_inventory /
 ##   toggle_settings_menu / _toggle_modal_panel
 ##   Hotbar 物品格转发与占位面板 → _use_hotbar_slot / _open_placeholder_panel
@@ -27,8 +27,8 @@ func _init(host: GameRoot) -> void:
 ## is_action_pressed 默认过滤键盘重复(echo)——按住 E/空格等不再连发切换。
 ## ESC 例外保持裸键码（模态栈语义，自带 echo 过滤）。
 func handle_shortcuts(event: InputEvent) -> void:
-	# ── 滚轮（先于键盘过滤；09 文档 §二创始人定稿：附身态滚轮默认=切武器，
-	#    Shift+滚轮=缩放放行给相机；非附身滚轮全放行=战略层缩放现状）──
+	# ── 滚轮（先于键盘过滤；09 文档 §二创始人定稿：接管态滚轮默认=切武器，
+	#    Shift+滚轮=缩放放行给相机；非接管滚轮全放行=战略层缩放现状）──
 	if event is InputEventMouseButton and event.pressed \
 			and (event.button_index == MOUSE_BUTTON_WHEEL_UP \
 			or event.button_index == MOUSE_BUTTON_WHEEL_DOWN):
@@ -114,7 +114,7 @@ func handle_shortcuts(event: InputEvent) -> void:
 			_host.get_viewport().set_input_as_handled()
 
 
-## 是否处于附身模式（滚轮切武器的门禁）
+## 是否处于 User Control 模式（滚轮切武器的门禁）
 func _is_user_control_mode() -> bool:
 	return _host.input_dispatcher != null \
 			and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.USER_CONTROL
@@ -178,8 +178,8 @@ func _open_placeholder_panel(preset_id: String) -> void:
 
 
 ## ESC 语义（统一模态栈逐层退栈）：有模态 → 退栈顶（设置→关设置、确认框→取消、
-## 占位面板→关面板，逐层返回）；无模态 → 开暂停菜单。附身模式返回 false
-## （ESC 留给退出附身，不消费）。返回是否已消费事件。
+## 占位面板→关面板，逐层返回）；无模态 → 开暂停菜单。 User Control 模式返回 false
+## （ESC 留给退出接管，不消费）。返回是否已消费事件。
 func _handle_escape() -> bool:
 	if _host.input_dispatcher != null and _host.input_dispatcher.get_mode() == PlayerControlAPI.Mode.USER_CONTROL:
 		return false

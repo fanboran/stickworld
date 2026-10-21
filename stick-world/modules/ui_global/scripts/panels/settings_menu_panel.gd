@@ -474,7 +474,7 @@ const SETTINGS_SCHEMA: Array[Dictionary] = [
 		"fields": [
 			{"key": "game/auto_save_interval_sec", "label": "自动存档间隔（秒）", "type": "slider", "min": 30, "max": 600, "step": 30, "default": 60},
 			{"key": "game/auto_pause_battle", "label": "战斗开始时自动暂停", "type": "toggle", "default": true},
-			{"key": "game/slow_on_user_control", "label": "附身微操时自动减速", "type": "toggle", "default": true},
+			{"key": "game/slow_on_user_control", "label": "接管微操时自动减速", "type": "toggle", "default": true},
 			{"key": "game/ui_fade_zoom", "label": "缩放时 UI 渐隐渐显", "type": "toggle", "default": true, "implemented": false},
 		],
 	},

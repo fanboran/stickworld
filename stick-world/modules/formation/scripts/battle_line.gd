@@ -360,7 +360,7 @@ func _engaged(u: Node) -> bool:
 	return false
 
 
-## 未接战成员的随线号令（SWL 阵线跟走）：已接战/附身/撤退类/玩家号令跳过；
+## 未接战成员的随线号令（SWL 阵线跟走）：已接战/接管/撤退类/玩家号令跳过；
 ## 槽位死区内不重发（防 travel 重入抖动）；远距奔跑追赶。
 func _issue_march_orders() -> void:
 	_march_group(_melee, _slots_melee, line_x, _upc_melee)

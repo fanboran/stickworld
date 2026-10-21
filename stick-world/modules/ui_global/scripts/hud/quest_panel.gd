@@ -88,5 +88,5 @@ func mark_done(title: String) -> void:
 ## 全部完成：当前目标区收起，标题致谢
 func show_all_done() -> void:
 	_current_title.text = "▶ 自由探索"
-	_current_desc.text = "Tab 战略图 · Q 战斗 · 附身微操 · 继续建造扩张"
+	_current_desc.text = "Tab 战略图 · Q 战斗 · 接管微操 · 继续建造扩张"
 	_progress_label.visible = false

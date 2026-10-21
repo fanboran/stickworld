@@ -494,7 +494,7 @@ func _update_aim_rhythm(delta: float) -> bool:
 	if not _aiming:
 		_aiming = true
 		_aim_timer = _gauss((hold.x + hold.y) * 0.5, maxf(0.05, (hold.y - hold.x) / 3.0))
-		# AI 附身技能档位（SWL Personality.UserControlSkill）：LIMITED 拉弓更拖沓、
+		# AI 接管技能档位（SWL Personality.UserControlSkill）：LIMITED 拉弓更拖沓、
 		# PRO 更果断（默认中位 ×1.0 零回归）
 		_aim_timer *= float(ScriptBehaviorProfiles.SKILL_AIM_HOLD_MULT.get(
 				int(_profile.get("user_control_skill", 1)), 1.0))

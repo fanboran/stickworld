@@ -140,7 +140,7 @@ func find_nearest_barracks(pos: Vector2) -> Node2D:
 
 # ─────────────────────────────── 人口（再生/统计）────────────────────────────
 
-## 村民实体数（非士兵、非附身、存活；P0 村A 单地图口径）
+## 村民实体数（非士兵、非接管、存活；P0 村A 单地图口径）
 func _villager_count() -> int:
 	return _scan_villagers(null).size()
 

@@ -18,8 +18,8 @@
 ##   - get_bone_ids() -> Array           获取所有骨骼 ID
 ##
 ## StickmanEntity 公共 API：
-##   - set_user_controlled(bool)               切换玩家附身
-##   - is_user_controlled() -> bool            查询附身状态
+##   - set_user_controlled(bool)               切换玩家接管
+##   - is_user_controlled() -> bool            查询 User Control 状态
 ##   - get_facing() -> int               朝向（1=右，-1=左）
 ##   - get_current_anim() -> String      当前动画名
 ##   - ai_move(dir: Vector2, run: bool)  🆕 AI 设定移动方向

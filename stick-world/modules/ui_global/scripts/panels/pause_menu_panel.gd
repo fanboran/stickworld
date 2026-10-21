@@ -5,7 +5,7 @@ extends StickScreen
 ## 由 SystemSetup 装配到 UIRoot.ModalOverlay；ESC 由 GameRoot 统一处理（见 game_root.gd
 ## _handle_escape）：未开任何模态时开本菜单，已开则逐层退栈。
 ## 打开即暂停（StickScreen.open + UIModalStack 双重保险），关闭恢复原速度。
-## 附身模式下 ESC 保留给"退出附身"，不弹本菜单。
+## User Control 模式下 ESC 保留给"退出接管"，不弹本菜单。
 ## 从本菜单打开设置/存档时不自行隐藏：UIModalStack 压上层时自动盖住本菜单
 ## （防双重遮罩），ESC 退栈后自动恢复可见。
 

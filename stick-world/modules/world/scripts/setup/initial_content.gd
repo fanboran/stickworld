@@ -2,7 +2,7 @@ extends Node
 ## 新游戏初始内容生成器 —— NPC 与战场敌人的 spawn。
 ##
 ## 职责：
-## - 村庄仓库预置
+## - 聚落仓库预置
 ## - NPC 村民生成（含职业分配与装具，经 TownLifeAPI，town_life 模块实现）
 ## - 遭遇战战场敌方生成（启动战斗）
 ##
@@ -92,13 +92,13 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 	# 配额满待业 wander；契约见 modules/town_life/api.gd）
 	var stats: Dictionary = TownLifeAPI.assign_village_jobs(npcs)
 	# stdout 证据：配比总览 + 逐村民职业/工位（视觉/日志验收材料）
-	print_debug("[TownLife] 村庄配比: 在职=%s 待业=%d（共 %d 人）" % [stats.get("jobs", {}), stats.get("idle", 0), npcs.size()])
+	print_debug("[TownLife] 聚落配比: 在职=%s 待业=%d（共 %d 人）" % [stats.get("jobs", {}), stats.get("idle", 0), npcs.size()])
 	for npc in npcs:
 		if npc == null or not is_instance_valid(npc):
 			continue
 		var pid := String(npc.get_profession()) if npc.has_method("get_profession") else ""
 		if pid.is_empty():
-			print_debug("[TownLife]   %s 待业（村庄闲逛）" % npc.name)
+			print_debug("[TownLife]   %s 待业（聚落闲逛）" % npc.name)
 			continue
 		var prof: Dictionary = TownLifeAPI.get_profession(pid)
 		var site_desc: String = "资源点(%s)" % prof.get("product", "?")

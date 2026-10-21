@@ -1,6 +1,6 @@
 extends Node
 ## 世界场景性能基准（dev 层）——绕过主菜单直接加载 game_root（新档语义），
-## 量测世界/村庄场景的帧率与 proc/phys/draws 基线（不含主菜单/音频噪声）。
+## 量测世界/聚落场景的帧率与 proc/phys/draws 基线（不含主菜单/音频噪声）。
 ##
 ## 用法（真渲染；建议 --audio-driver Dummy 关声音降噪）：
 ##   godot --path . --resolution 1920x1080 res://tests/dev/world_perf.tscn

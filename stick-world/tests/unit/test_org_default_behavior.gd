@@ -164,8 +164,8 @@ func _test_gate_on_tag_match() -> void:
 	# 无精确行的标签回落全域兜底行
 	var res: String = m.create_organization("科学院", "RESEARCH", 3, "").data.org_id
 	_runner.assert_equal(m.get_default_behavior(res), expected_default, "RESEARCH 应回落全域兜底行")
-	var com: String = m.create_organization("商队", "COMMERCE", 1, "").data.org_id
-	_runner.assert_equal(m.get_default_behavior(com), expected_default, "COMMERCE 应回落全域兜底行")
+	var tra: String = m.create_organization("运输队", "LOGISTICS", 1, "").data.org_id
+	_runner.assert_equal(m.get_default_behavior(tra), expected_default, "LOGISTICS 应回落全域兜底行")
 	# 写入的是深拷贝：篡改返回值不影响组织内部状态
 	var view: Dictionary = m.get_default_behavior(res)
 	view["candidates"] = []

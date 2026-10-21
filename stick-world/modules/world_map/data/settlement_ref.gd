@@ -7,7 +7,7 @@ extends Resource
 
 ## 聚落级别
 enum Level {
-	VILLAGE = 1,    ## T1 村落（一小团建筑）
+	VILLAGE = 1,    ## T1 聚落（一小团建筑）
 	TOWN = 2,       ## T2 镇/大部落
 	CITY = 3,       ## T3 城市（有城墙）
 	CAPITAL = 4,    ## T4 中心城市

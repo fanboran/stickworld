@@ -28,7 +28,7 @@ extends Node2D
 ## 水带会横在屏幕中央，且未适配缩放，待地面构图定稿后重做，见待办事项）
 @export var enable_water: bool = false
 ## 天空背景地形组（Terraria 各地形一套独立贴图）：
-## "mountains"=纯远山（村落/战场/道路等开阔地）、"forest"=远山+森林树线
+## "mountains"=纯远山（聚落/战场/道路等开阔地）、"forest"=远山+森林树线
 @export var sky_biome: String = "mountains"
 
 # ─────────────────────────────── 子节点引用 ────────────────────────────────

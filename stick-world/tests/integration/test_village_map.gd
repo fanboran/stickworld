@@ -1,5 +1,5 @@
 extends Node
-## 集成测试：村落地图（原 test_stage_02 迁移）。
+## 集成测试：聚落地图（原 test_stage_02 迁移）。
 ## 覆盖：GameRoot 装配、VillageMap 装配、StickmanEntity 生成移动、CameraRig、DebugApi/DebugOverlay。
 ##
 ## 运行：
@@ -41,7 +41,7 @@ func _ready() -> void:
 # ─────────────────────────────── 测试注册 ────────────────────────────────
 
 func _register_tests() -> void:
-	_tests.append({"name": "GameRoot: 加载测试村落", "fn": Callable(self, "_test_gameroot_load_village")})
+	_tests.append({"name": "GameRoot: 加载测试聚落", "fn": Callable(self, "_test_gameroot_load_village")})
 	_tests.append({"name": "VillageMap: 子节点齐全", "fn": Callable(self, "_test_village_children")})
 	_tests.append({"name": "VillageMap: 地面字段配置", "fn": Callable(self, "_test_village_ground_fields")})
 	_tests.append({"name": "VillageMap: spawn_entity", "fn": Callable(self, "_test_village_spawn")})

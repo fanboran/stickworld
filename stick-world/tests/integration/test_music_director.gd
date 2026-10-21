@@ -156,8 +156,8 @@ func _test_loop_is_integer_bars() -> void:
 
 func _test_resolve_cue() -> void:
 	var cases := [
-		[{"map_type": 0}, "village", "村落地图 → 小镇"],
-		[{"map_type": 0, "night": true}, "village_night", "村落 夜晚 → 夜镇"],
+		[{"map_type": 0}, "village", "聚落地图 → 小镇"],
+		[{"map_type": 0, "night": true}, "village_night", "聚落 夜晚 → 夜镇"],
 		[{"map_type": 3}, "interior", "室内地图 → 灯下"],
 		[{"map_type": 4}, "interior_hall", "大建筑内部 → 厅堂"],
 		[{"map_type": 2}, "field_day", "道路/户外 白天 → 原野·昼"],
@@ -250,15 +250,15 @@ func _test_variation_rotation() -> void:
 	MusicDirector.set_context("strategic", false)
 	MusicDirector.set_context("night", false)
 	MusicDirector.set_context("map_type", 2)        # 先离开（去户外）
-	MusicDirector.set_context("map_type", 0)        # 第 1 次进村落
+	MusicDirector.set_context("map_type", 0)        # 第 1 次进聚落
 	var first := MusicDirector.get_cue()
 	_runner.assert_true(first in ["village", "village_b"],
-		"村落应解析到小镇或它的变奏（实际 %s）" % first)
+		"聚落应解析到小镇或它的变奏（实际 %s）" % first)
 	MusicDirector.set_context("map_type", 2)        # 离开
-	MusicDirector.set_context("map_type", 0)        # 第 2 次进村落
+	MusicDirector.set_context("map_type", 0)        # 第 2 次进聚落
 	var second := MusicDirector.get_cue()
 	_runner.assert_true(second in ["village", "village_b"],
-		"第 2 次进村落应仍解析到同族（实际 %s）" % second)
+		"第 2 次进聚落应仍解析到同族（实际 %s）" % second)
 	_runner.assert_not_equal(second, first,
 		"连续两次进入同一场景应换一版（实测 %s → %s）" % [first, second])
 	# 收尾：回到户外，避免影响后续用例
@@ -451,7 +451,7 @@ func _test_preview_isolation() -> void:
 	MusicDirector.set_tier(1, 0.0)
 	# 预览一首：随后的情境变化不许把它换掉
 	MusicDirector.start_preview("battle", true)
-	MusicDirector.set_context("map_type", 0)     # 走进村落
+	MusicDirector.set_context("map_type", 0)     # 走进聚落
 	_runner.assert_equal(MusicDirector.get_cue(), "battle",
 		"预览期间情境变化不应抢走曲目（实际：%s）" % MusicDirector.get_cue())
 	_runner.assert_equal(MusicDirector.get_preview_track(), "battle", "预览曲目仍在")

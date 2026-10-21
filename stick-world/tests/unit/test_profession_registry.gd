@@ -136,7 +136,7 @@ func _test_duck_degrade() -> void:
 	_runner.assert_equal(TownLifeAPI.assign_village_job(null, 0), "", "null 实体安全返回空")
 
 
-# ───────────────────────── 批次 4：村庄职业配比 ────────────────────────────────
+# ───────────────────────── 批次 4：聚落职业配比 ────────────────────────────────
 
 func _test_count_work_capacity() -> void:
 	# 本套件无建筑环境：smithy_lv1 走占位表兜底（批次 3 语义 = "村子有打铁需求"）

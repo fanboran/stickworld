@@ -14,7 +14,7 @@ extends MapBase
 ##   - 3D 实心区间 → 2D 碰撞墙（_build_solid_bodies）、城门传送带与引导
 ##     （gate_steer_point/_build_gate_portals）、旅行出口触发器（_exit_specs）
 ##   - resource_gen 野外资源点生成（forest_*/resource_* 参数由子类调档）
-##   - 村庄设施/村民布点覆盖点（supports_village_facilities 等，默认按主街语义）
+##   - 聚落设施/村民布点覆盖点（supports_village_facilities 等，默认按主街语义）
 ##
 ## 布局扩展点（基类默认空实现，布局图覆写，见 Hd2dStreetMap）：
 ##   _apply_map_params()   —— _ready 开头按注入的 map_id 解析壳参数

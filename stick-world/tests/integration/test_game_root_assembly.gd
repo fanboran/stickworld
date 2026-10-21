@@ -283,9 +283,9 @@ func _test_mode_panel_switch() -> void:
 	if mp == null:
 		_runner.assert_true(false, "ModePanel 不存在")
 		return
-	# 默认显示村落面板
+	# 默认显示聚落面板
 	mp.switch_to(UIAPI.PanelType.VILLAGE)
-	_runner.assert_equal(mp.get_active_panel_type(), UIAPI.PanelType.VILLAGE, "应显示村落面板")
+	_runner.assert_equal(mp.get_active_panel_type(), UIAPI.PanelType.VILLAGE, "应显示聚落面板")
 	# 切换到战斗
 	mp.switch_to(UIAPI.PanelType.BATTLE)
 	_runner.assert_equal(mp.get_active_panel_type(), UIAPI.PanelType.BATTLE, "应显示战斗面板")

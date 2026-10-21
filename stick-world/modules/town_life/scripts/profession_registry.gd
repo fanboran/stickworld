@@ -22,7 +22,7 @@ extends RefCounted
 ##   consume_amount 每拍消耗量（0 = 无消耗）[提案/待定]
 ##   cycle          工作节拍（秒/拍）[提案/待定]
 ##   tool           工具/武器变体（TOOL_WEAPONS 的 key；缺省 = 不换武器）
-##   quota          村庄该职业最大在职数（批次 4 配比；缺省 1）[提案/待定]
+##   quota          聚落该职业最大在职数（批次 4 配比；缺省 1）[提案/待定]
 ##                  工位职业实际配额 = min(quota, 工位容量)，见 count_work_capacity
 ##
 ## 数值口径（自然数不膨胀；见 docs/设计/命名与数值口径.md §二）：采集 9/拍与玩家
@@ -197,13 +197,13 @@ static func assign_village_job(entity: Node, index: int) -> String:
 	return id
 
 
-# ─────────────────────────── 批次 4：村庄职业配比 ────────────────────────────
+# ─────────────────────────── 批次 4：聚落职业配比 ────────────────────────────
 
-## quota 字段缺省值（professions.tres 行未写 quota 时的村庄该职业最大在职数）
+## quota 字段缺省值（professions.tres 行未写 quota 时的聚落该职业最大在职数）
 const DEFAULT_QUOTA: int = 1
 
 
-## 数村庄某职业的工位容量：
+## 数聚落某职业的工位容量：
 ##   - 扫 "building" 组累计匹配 def_id + is_operational 建筑的 WorkSlot 槽位数
 ##     （复用 get_work_site 的真建筑语义）；
 ##   - 无匹配真建筑但占位表覆盖该 def → 容量 1（占位工位语义 = "村子有该
@@ -244,7 +244,7 @@ static func count_work_capacity(ref_entity: Node, work_site_def: String) -> int:
 	return 0 if is_nan(get_placeholder_work_site_x(work_site_def)) else 1
 
 
-## 村庄批量配比分配（批次 4，initial_content.spawn_npcs 正片入口）：
+## 聚落批量配比分配（批次 4，initial_content.spawn_npcs 正片入口）：
 ##   - 各职业配额 = min(配置 quota, 工位容量)；工位容量仅约束工位职业
 ##     （work_site_def 非空），资源点职业（空 def）不受工位约束——资源点
 ##     存在性由城镇生成线保证（village_a 净空带吃掉资源点是布局阶段问题，

@@ -573,7 +573,7 @@ func _physics_tick(delta: float) -> void:
 		# 静态分离（soft-body 位置互推）已随固体碰撞语义退役（裁决#40b：
 		# 任何单位不被其他单位位移）。非 sim 战斗的"不穿人"由本体的单位层
 		# 物理互撞承担（_update_solid_collision_mask：battle 期 mask 开单位层，
-		# move_and_slide 贴边停/滑动；村庄期关闭保持原软分离观感）。
+		# move_and_slide 贴边停/滑动；聚落期关闭保持原软分离观感）。
 		if not _sim_active():
 			_update_solid_collision_mask()
 
@@ -1106,7 +1106,7 @@ func get_organization_api() -> Node:
 
 
 ## 获取地图引用（spawn 时由 MapBase 注入；可能为 null——AI 模块读
-## town_center_world_x 等村庄锚点用，见 ai_controller wander 决策）
+## town_center_world_x 等聚落锚点用，见 ai_controller wander 决策）
 func get_map_reference() -> Node2D:
 	return _map_ref
 
@@ -1555,7 +1555,7 @@ func set_battle_instance(bi: Node) -> void:
 ## 固体互撞层切换（裁决#40b 非 sim 战斗链；sim 链由 battle_sim._clip_axis 承担）：
 ## 战斗活跃期 collision_mask 开单位层（2）——move_and_slide 对其他单位 CharacterBody2D
 ## 贴边停/滑动，站定单位是 kinematic 不被推动 = 任何单位不被他人位移（SWL 同款
-## 语义，翻译档 §7.1.2：Unit.PushApart 基类为空）；村庄期关闭（mask 回 1 只撞
+## 语义，翻译档 §7.1.2：Unit.PushApart 基类为空）；聚落期关闭（mask 回 1 只撞
 ## 地形），劳作穿行保持原软分离观感。状态变化才 set（免每帧触发引擎重排）。
 func _update_solid_collision_mask() -> void:
 	var active: bool = _battle_instance != null and is_instance_valid(_battle_instance) \

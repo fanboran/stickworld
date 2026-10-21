@@ -114,7 +114,7 @@ func _test_box_select() -> void:
 	# 框选 unit 1~3
 	var rect := _helper.rect_for_units([1, 2, 3])
 	var selected: Array = _selection.box_select(rect, false)
-	# 注意：combat_test_setup 加载完整 game_root 村庄场景，正片 NPC 与测试
+	# 注意：combat_test_setup 加载完整 game_root 聚落场景，正片 NPC 与测试
 	# 单位共用一张地图（批次 4 起 NPC 扩到 10 人、右簇最远 X=1770 与测试
 	# 单位区 1500+ 重叠）。落在框内的正片 NPC 被一并选中是框选的正确行为，
 	# 故只断言目标单位的成员关系与框外单位不被选中，不断言选中总数。

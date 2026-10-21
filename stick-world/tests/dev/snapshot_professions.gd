@@ -4,7 +4,7 @@ extends Node
 ## 用法（不要 --headless，真渲染）：
 ##   godot --path stick-world res://tests/dev/snapshot_professions.tscn -- --out F:/tmp/professions.png
 ##
-## 内容：村庄加载后，真实 NPC（initial_content 轮转分配：铁匠+伐木工）已在
+## 内容：聚落加载后，真实 NPC（initial_content 轮转分配：铁匠+伐木工）已在
 ## 仓库右侧站位；补 spawn 一个矿工（轮转 index=2）凑齐三职业，玩家传送至
 ## NPC 区中央，相机跟随截图。stdout 打印每个 NPC 的职业 id 与身体色作程序化证据。
 

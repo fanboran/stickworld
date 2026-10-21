@@ -55,5 +55,5 @@ func _hide_all() -> void:
 
 
 func _ready() -> void:
-	# 默认显示村落面板
+	# 默认显示聚落面板
 	switch_to(UIAPI.PanelType.VILLAGE)

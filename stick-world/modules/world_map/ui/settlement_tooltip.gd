@@ -15,9 +15,9 @@ class_name SettlementTooltip
 ## 鼠标指针到面板左上角的偏移（面板出现在指针右下侧）
 const CURSOR_OFFSET := Vector2(18.0, 18.0)
 
-## 聚落级别中文名（SettlementRef.Level：1 村落 2 镇 3 城市 4 中心城市 5 帝国首都）
+## 聚落级别中文名（SettlementRef.Level：1 聚落 2 镇 3 城市 4 中心城市 5 帝国首都）
 const LEVEL_NAMES := {
-	1: "村落",
+	1: "聚落",
 	2: "镇",
 	3: "城市",
 	4: "中心城市",

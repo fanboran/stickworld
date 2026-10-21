@@ -6,7 +6,7 @@ extends Node2D
 ##   EnvironmentSystem / CameraRig / SceneLoader / InputDispatcher
 ##   WorldChunkHost / UIRoot / BattleDirector
 ##
-## 子场景（村落/战场/室内）通过 SceneLoader 加载到 WorldChunkHost。
+## 子场景（聚落/战场/室内）通过 SceneLoader 加载到 WorldChunkHost。
 ## 详见 docs/技术/架构/场景与战斗/场景与战斗架构.md §二。
 ##
 ## 子节点：
@@ -62,7 +62,7 @@ const L1_SETTLEMENT_COUNT: int = 8
 const _UnitsApiScript: GDScript = preload("res://modules/units/api.gd")
 const _STICKMAN_ENTITY_SCENE: PackedScene = _UnitsApiScript.STICKMAN_ENTITY_SCENE
 
-## 第二个测试村落地图 ID
+## 第二个测试聚落地图 ID
 const VILLAGE_B_MAP_ID := "village_b"
 ## 战场地图 ID（HD-2D 城郊战场，主街东门旅行链可达）
 const BATTLEFIELD_MAP_ID := "battlefield"
@@ -223,7 +223,7 @@ const BOOT_STAGES: int = 9
 ## 启动期世界生成阶段（8/9 细分文字 + 分帧让步的开关；游戏内切图关闭——
 ## 不把全屏加载盖回到正在玩的画面上，让帧本身照做只不刷文字）
 var _boot_world_phase: bool = false
-## 世界生成子阶段总数（初始建筑/存档恢复/村庄设施/村民）——副进度条按此切分
+## 世界生成子阶段总数（初始建筑/存档恢复/聚落设施/村民）——副进度条按此切分
 const WORLD_SUB_PHASES: int = 4
 ## 当前世界生成子阶段序号（1 起）与名称，供副进度条映射与文字刷新
 var _world_sub_idx: int = 0
@@ -265,7 +265,7 @@ func _ready() -> void:
 	# 通知游戏开始
 	if EventBus:
 		EventBus.game_started.emit()
-	# 加载初始村落（延迟一帧确保 SceneLoader 就绪；读档/世界生成显示 8/9，
+	# 加载初始聚落（延迟一帧确保 SceneLoader 就绪；读档/世界生成显示 8/9，
 	# 地图加载完成后 _on_map_loaded 视世界就绪淡出覆盖层）
 	_boot_world_phase = true
 	call_deferred("_load_start_village")
@@ -348,7 +348,7 @@ func _world_sub_progress(done: int, total: int, detail: String = "") -> void:
 	_show_loading(msg, float(BOOT_STAGES - 1) / float(BOOT_STAGES), sub)
 
 
-## 「村庄设施」子阶段：资源点放置逐项进度（下条文字「布置资源点 n/m」）。
+## 「聚落设施」子阶段：资源点放置逐项进度（下条文字「布置资源点 n/m」）。
 func _world_sub_phase_resources(placed: int, target: int) -> void:
 	_world_sub_progress(placed, target, "布置资源点 %d/%d" % [placed, target])
 
@@ -578,7 +578,7 @@ func _register_default_maps() -> void:
 	# 删除，主街西缘与战场右缘步行出口随链关闭（城外资源图走城门选项框）。
 	scene_loader.register_map_exit(BATTLEFIELD_MAP_ID, WorldAPI.EntrySide.LEFT, HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	# 资源图↔主街双缘登记（西图接主街西门/东图接主街东门）：城门选项框的
-	# 资源图直达按钮读出口表生成（村庄项走战略图 api——hd2d_gate_prompt），
+	# 资源图直达按钮读出口表生成（聚落项走战略图 api——hd2d_gate_prompt），
 	# 内缘触发器回程也走这里
 	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.LEFT, RESOURCE_W_MAP_ID, WorldAPI.EntrySide.RIGHT)
 	scene_loader.register_map_exit(HD2D_STREET_MAP_ID, WorldAPI.EntrySide.RIGHT, RESOURCE_E_MAP_ID, WorldAPI.EntrySide.LEFT)
@@ -719,7 +719,7 @@ func _bind_event_bus() -> void:
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
 
-## 启动新游戏：加载初始村落地图。
+## 启动新游戏：加载初始聚落地图。
 func start_new_game(initial_map_id: String) -> void:
 	if scene_loader and scene_loader.has_method("load_map"):
 		scene_loader.load_map(initial_map_id)

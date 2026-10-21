@@ -133,12 +133,12 @@ func _test_create_with_preset() -> void:
 	# 成员角色写入
 	_runner.assert_equal(_helper.units[0].get_role(), "builder", "成员 role 应为 builder")
 	_runner.assert_equal(_formation.get_squad_preset(squad_id), "fp_builder_crew", "squad preset 应记录")
-	# 劳工队（LABOR 标签）
+	# 劳工队（工程标签：劳工归并 ENGINEERING 同一职责域）
 	var worker_id: String = _formation.create_squad([_helper.units[2]], "", "fp_worker_crew")
 	_runner.assert_true(not worker_id.is_empty(), "劳工队应创建成功")
 	if _org_api != null:
 		var worg: Dictionary = _org_api.get_organization(worker_id)
-		_runner.assert_equal(worg.get("data", {}).get("tag", -1), OrganizationState.Tag.LABOR, "劳工队组织标签应为 LABOR")
+		_runner.assert_equal(worg.get("data", {}).get("tag", -1), OrganizationState.Tag.ENGINEERING, "劳工队组织标签应为 ENGINEERING（劳工并入工程）")
 	# 战斗班（默认预设）
 	var combat_id: String = _formation.create_squad([_helper.units[3], _helper.units[4]])
 	_runner.assert_true(not combat_id.is_empty(), "默认预设战斗班应创建成功")

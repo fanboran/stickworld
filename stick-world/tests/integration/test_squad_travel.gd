@@ -7,7 +7,7 @@ extends Node
 ## 退出码：0 全部通过，1 有失败
 ##
 ## 测试覆盖：
-##   - 村庄编成战斗班（preset/排长/职责）
+##   - 聚落编成战斗班（preset/排长/职责）
 ##   - 跨图到战场：编队快照（export_squads）-> 跟随者 spawn -> 重建（restore_squads）
 ##   - 战场地图实体数（玩家 + 随行；战场已退役自动刷敌，架构 §4.3）
 ##   - 重建后编队完整（成员数/preset/排长）
@@ -39,7 +39,7 @@ func _ready() -> void:
 
 
 func _register_tests() -> void:
-	_tests.append({"name": "编队: 村庄编成战斗班", "fn": Callable(self, "_test_create_party"), "async": true})
+	_tests.append({"name": "编队: 聚落编成战斗班", "fn": Callable(self, "_test_create_party"), "async": true})
 	_tests.append({"name": "跨图: 携带队伍到战场", "fn": Callable(self, "_test_travel_with_squad"), "async": true})
 	_tests.append({"name": "重建: 编队信息完整恢复", "fn": Callable(self, "_test_squad_restored"), "async": true})
 	_tests.append({"name": "战斗: 遭遇战双方人数正确", "fn": Callable(self, "_test_battle_started"), "async": true})
@@ -73,7 +73,7 @@ func _run_tests_async() -> void:
 	get_tree().quit(exit_code)
 
 
-## 在村庄编成战斗班（3 人 + 排长 + 跟随）
+## 在聚落编成战斗班（3 人 + 排长 + 跟随）
 func _test_create_party() -> void:
 	if _formation == null:
 		_runner.assert_true(false, "FormationSystem 为空")

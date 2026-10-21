@@ -9,7 +9,7 @@
 ##       村民职业**强制**分配（轮转 index % 职业数，不看配额）+ 着装应用，
 ##       返回职业 id（"" = 无职业/待业）。测试摆拍/调试用。
 ##   - TownLifeAPI.assign_village_jobs(entities) -> Dictionary
-##       村庄批量**配比**分配（批次 4，spawn 正片入口）：各职业不超过
+##       聚落批量**配比**分配（批次 4，spawn 正片入口）：各职业不超过
 ##       min(配置 quota, 工位容量)，配额满的村民待业。返回
 ##       {"jobs": {职业id: 人数}, "idle": 待业数}。
 ##       initial_content.spawn_npcs 是唯一调用点。
@@ -56,7 +56,7 @@ static func assign_village_job(entity: Node, index: int) -> String:
 	return ProfessionRegistry.assign_village_job(entity, index)
 
 
-## 村庄批量配比分配（批次 4）：各职业不超过 min(quota, 工位容量)，
+## 聚落批量配比分配（批次 4）：各职业不超过 min(quota, 工位容量)，
 ## 配额满待业。返回 {"jobs": {职业id: 人数}, "idle": 待业数}。
 static func assign_village_jobs(entities: Array) -> Dictionary:
 	return ProfessionRegistry.assign_village_jobs(entities)

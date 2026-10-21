@@ -2,7 +2,7 @@ class_name ProceduralMaterials
 extends RefCounted
 ## 程序化材质贴图生成器 —— 用代码生成木材/稻草/石材纹理，不依赖外部 PNG。
 
-## 同参贴图静态缓存：seed 全部由尺寸/参数哈希决定（同参必同图），村庄 N 栋同款
+## 同参贴图静态缓存：seed 全部由尺寸/参数哈希决定（同参必同图），聚落 N 栋同款
 ## 建筑每栋重生成同张图纯浪费。ImageTexture 创建后不可变，多 Sprite2D 共享安全。
 static var _tex_cache: Dictionary = {}
 

@@ -245,7 +245,7 @@ func _make_decision() -> void:
 		# 村民空闲走动（小镇生活批次 3 [提案/待定]）：村民 idle 完成后概率
 		# wander（批次 4 起含待业村民，_is_villager 判身份标志+不在编队）；
 		# 其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）。
-		# 村民 wander 锚定村庄中心（批次 4）：待业村民全天闲逛，无锚会累积
+		# 村民 wander 锚定聚落中心（批次 4）：待业村民全天闲逛，无锚会累积
 		# 漂出村子/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
 		if _is_villager() and _dice() < villager_wander_probability:
 			_state_machine.travel("wander", _villager_wander_params())

@@ -193,7 +193,7 @@ func _step_table() -> Array:
 		["后处理", _setup_post_process],
 		["地图过渡", _setup_map_transition],
 		# 单位 LOD 调度（性能优化）：核心系统装配完成后挂载，自动发现模式——
-		# 覆盖演练场（battle_arena）/世界村庄/真实战斗全部场景（headless 无相机时空转）
+		# 覆盖演练场（battle_arena）/世界聚落/真实战斗全部场景（headless 无相机时空转）
 		["单位 LOD", _setup_unit_lod],
 	]
 

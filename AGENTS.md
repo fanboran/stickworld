@@ -143,8 +143,10 @@ core/
 │   └── components/        # progress_painter.gd 世界空间进度条 _draw 公共基类
 │                          # （视觉/主题/屏幕基类属 L1，在 modules/ui_global：sketch 手绘控件族、StickTheme/StickStyle、StickScreen/StickWindow）
 └── services/              # 抽象服务
-    ├── audio_manager.gd   # 音频管理器（预留，未接线）
-    └── analytics/         # 数据分析（预留）
+    ├── audio_manager.gd   # 音频管理器（在役：SFX_EVENTS/SFX_POLICY/BGM 侧链）
+    ├── music_director.gd  # 音乐导演（BGM 情境与战斗声场，autoload）
+    ├── scene_router.gd    # 场景路由服务
+    └── stick_prof.gd      # StickProf 性能采样
 ```
 
 ### 游戏功能模块 (`modules/`) 标准结构

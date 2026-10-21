@@ -215,6 +215,20 @@ func start() -> void:
 	_state = State.ENGAGED
 	if EventBus != null:
 		EventBus.battle_started.emit(get_battle_id())
+		# 战场规模初值即发（氛围层不等第一个清点拍才有档位）
+		_emit_engagement()
+
+
+## 战场规模脉动（EventBus.battle_engagement_changed）：双方存活总数，供战斗氛围层
+## 按"接战规模"分档调声场音量（用声场代替逐单位发声——小兵代理档不发动画事件，
+## 大战场听感的正确解法，见 docs/技术/音频/音效触发规范.md §C4）。
+## 低频：随胜负清点同拍（0.5s）走，O(n) 存活扫描与 _check_victory 同量级。
+func _emit_engagement() -> void:
+	if EventBus == null or not EventBus.has_signal("battle_engagement_changed"):
+		return
+	EventBus.battle_engagement_changed.emit(
+			get_battle_id(),
+			_count_alive(_units_attacker) + _count_alive(_units_defender))
 
 
 func _physics_process(delta: float) -> void:
@@ -249,6 +263,9 @@ func _physics_tick(delta: float) -> void:
 	_victory_check_timer -= sim
 	if _victory_check_timer <= 0.0:
 		_victory_check_timer = 0.5
+		# 规模脉动先于胜负清点：_check_victory 可能就地收束（清空列表），
+		# 收束那一拍的规模值已无意义
+		_emit_engagement()
 		_check_victory()
 
 

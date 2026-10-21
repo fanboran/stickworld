@@ -69,6 +69,8 @@ const _CorePartScript: GDScript = preload("res://modules/world/scripts/setup/sys
 const _PanelsPartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_ui_panels.gd")
 const _MapPartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_strategic_map.gd")
 const _ExtrasPartScript: GDScript = preload("res://modules/world/scripts/setup/system_setup_extras.gd")
+## 武器动画音效桥（弓射/镐击命中帧 → SFX_EVENTS；同模块文件，见 finish_setup）
+const _WeaponAnimSfxBridgeScript: GDScript = preload("res://modules/world/scripts/weapon_anim_sfx_bridge.gd")
 
 var _root: GameRoot
 
@@ -144,6 +146,13 @@ func setup_steps(root: GameRoot) -> Array:
 
 ## 装配收尾（战斗横幅 deferred）
 func finish_setup() -> void:
+	# 武器动画音效桥：树级自动发现 WeaponMount，把弓射/镐击的动画 Hit 命中帧
+	# 接到 SFX_EVENTS（Spine 源尚无这两条动画的 Sound 数据，见桥文件头）。
+	# 放收尾不进步骤表——加载屏副进度条步骤数是契约，不得增减。
+	var bridge := Node.new()
+	bridge.set_script(_WeaponAnimSfxBridgeScript)
+	bridge.name = "WeaponAnimSfxBridge"
+	_root.add_child(bridge)
 	call_deferred("_setup_battle_banner_deferred")
 
 

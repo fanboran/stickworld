@@ -71,6 +71,22 @@ const DUCK_STINGER_HOLD_S := 2.5
 ## 环境音层 → 声压（线性）。环境音只是"底噪"，比音乐低很多。
 const AMBIENCE_LEVEL := 0.34
 
+## ── 战斗氛围层（战场声场）────────────────────────────────────────────
+## 战斗中循环播放的人群/兵器底噪，**用声场代替逐单位发声**：战斗中非附身单位
+## 走小兵渲染代理，不发任何动画事件（规范 §10.1），逐单位补声既贵又必然成噪声墙；
+## 玩家感知的是"那里有很多人在打"，一条随规模起伏的声场就是它的正确表达。
+## 规模档位由 EventBus.battle_engagement_changed 推送（BattleInstance 随胜负
+## 清点同拍广播双方存活数），档间 4s 淡化（复用环境音层那套写法）。
+## 设计依据：docs/技术/音频/音效触发规范.md §C4。
+const BATTLE_AMBIENCE_NAME := "battle_crowd"
+## 规模（双方存活数）→ 线性音量档，自上而下取首个命中项。【提案/待定】：
+## 大会战 / 接战 / 小接触。资产就位前本层只记档不发声（加载处静默跳过）。
+const BATTLE_AMBIENCE_TIERS := [
+	{"min_units": 40, "level": 0.34},
+	{"min_units": 12, "level": 0.24},
+	{"min_units": 0, "level": 0.15},
+]
+
 ## 游戏状态 → 曲目的解析表。
 ## 键是"情境"（由 set_context 维护），值优先匹配"最具体的键在前"。
 ## 单独一个函数表达规则，比散在各处的事件回调可读、可测。
@@ -108,6 +124,13 @@ var _expect_arrival: bool = false
 var _stinger_players: Array = []
 var _ambience: AudioStreamPlayer = null
 var _ambience_name: String = ""
+## 战斗氛围层（战场声场，随接战规模分档；见 BATTLE_AMBIENCE_TIERS）
+var _battle_ambience: AudioStreamPlayer = null
+var _battle_ambience_active: bool = false
+## 最近一次推送的战场规模（双方存活数；起播时补档用）
+var _battle_ambience_units: int = 0
+## 当前规模档的目标线性音量（0 = 未激活/未推送）
+var _battle_ambience_level: float = 0.0
 var _enabled: bool = true
 var _rng := RandomNumberGenerator.new()
 
@@ -134,6 +157,13 @@ func _ready() -> void:
 	_ambience.bus = AudioManager.BUS_SFX
 	_ambience.volume_db = SILENT_DB
 	add_child(_ambience)
+
+	# 战斗氛围层（战场声场；与情境环境音层独立——它跟战斗走，不跟地图情境走）
+	_battle_ambience = AudioStreamPlayer.new()
+	_battle_ambience.name = "_BattleAmbiencePlayer"
+	_battle_ambience.bus = AudioManager.BUS_SFX
+	_battle_ambience.volume_db = SILENT_DB
+	add_child(_battle_ambience)
 
 	_wire_event_bus()
 
@@ -168,6 +198,7 @@ func _wire_event_bus() -> void:
 	_safe_connect("mega_interior_entered", _on_mega_interior_entered)
 	_safe_connect("battle_started", _on_battle_started)
 	_safe_connect("battle_ended", _on_battle_ended)
+	_safe_connect("battle_engagement_changed", _on_battle_engagement)
 	_safe_connect("game_paused", _on_paused)
 	_safe_connect("game_resumed", _on_resumed)
 	_safe_connect("map_unloaded", _on_map_unloaded)
@@ -317,12 +348,87 @@ func _on_mega_interior_entered(_building_id: int, _map_id: String) -> void:
 
 func _on_battle_started(_battle_id: String) -> void:
 	set_context("battle", true)
+	# 战场声场入场（规模档由随后的 engagement 初值补齐；资产缺失时静默记档）
+	_set_battle_ambience_active(true)
 
 
 func _on_battle_ended(_battle_id: String, victory: bool) -> void:
 	# 先叠一句结算短句，再回到场景音乐（短句不打断主曲，主曲仍按情境解析）
 	play_stinger("sting_victory" if victory else "sting_defeat")
 	set_context("battle", false)
+	# 战场声场退场（4s 淡出，与场景环境音的回归交叉）
+	_set_battle_ambience_active(false)
+
+
+## 战场规模推送（BattleInstance 随胜负清点同拍广播）：按存活总数刷新声场档位。
+## 未激活时忽略（多场战斗并存时 last-wins，与情境解析的单战场假设一致）。
+func _on_battle_engagement(_battle_id: String, alive_units: int) -> void:
+	if not _battle_ambience_active:
+		return
+	_apply_battle_ambience_level(alive_units)
+
+
+## 战斗氛围层开关：开 = 找资产起播并按当前规模上档；关 = 4s 淡出。
+## 资产缺失静默跳过（氛围层是锦上添花）：激活态与档位照常记账，
+## 资产就位后的下一场战斗即有声，不因资产缺位报错刷屏。
+func _set_battle_ambience_active(active: bool) -> void:
+	if _battle_ambience_active == active:
+		return
+	_battle_ambience_active = active
+	if active:
+		_start_battle_ambience()
+	else:
+		_battle_ambience_level = 0.0
+		_battle_ambience_units = 0
+		_fade_player(_battle_ambience, SILENT_DB, FADE_AMBIENCE)
+
+
+func _start_battle_ambience() -> void:
+	var path := ""
+	for ext: String in [".wav", ".ogg"]:
+		var cand: String = AMBIENCE_DIR + BATTLE_AMBIENCE_NAME + ext
+		if ResourceLoader.exists(cand):
+			path = cand
+			break
+	if path == "":
+		return
+	var stream: AudioStream = load(path)
+	if stream == null:
+		return
+	_battle_ambience.stream = stream
+	if stream is AudioStreamWAV:
+		var w := stream as AudioStreamWAV
+		w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		w.loop_begin = 0
+		w.loop_end = w.data.size() / 2      # 16bit 单/立体声：字节数/2 = 帧数×声道
+	_battle_ambience.play()
+	_apply_battle_ambience_level(_battle_ambience_units)
+
+
+## 规模 → 音量档（BATTLE_AMBIENCE_TIERS 自上而下取首个命中项），4s 淡入到位。
+func _apply_battle_ambience_level(alive_units: int) -> void:
+	_battle_ambience_units = alive_units
+	var level := 0.0
+	for tier in BATTLE_AMBIENCE_TIERS:
+		if alive_units >= int(tier["min_units"]):
+			level = float(tier["level"])
+			break
+	_battle_ambience_level = level
+	if _battle_ambience.stream == null or not _battle_ambience.playing:
+		return
+	_fade_player(_battle_ambience, _linear_to_db(level), FADE_AMBIENCE)
+
+
+## 战斗氛围层状态（测试/调试用）：激活 / 规模 / 目标档 / 资产是否在位。
+## 资产未就位期间机制面只能靠这份可观测数据验收。
+func get_battle_ambience_report() -> Dictionary:
+	return {
+		"active": _battle_ambience_active,
+		"units": _battle_ambience_units,
+		"level": _battle_ambience_level,
+		"has_stream": _battle_ambience != null and _battle_ambience.stream != null,
+		"playing": _battle_ambience != null and _battle_ambience.playing,
+	}
 
 
 ## travel_started 带三个参数（from_id, to_id, mode）——签名必须一致，
@@ -762,6 +868,11 @@ func stop_all(fade_s: float = 1.0) -> void:
 	_preview_backup_cue = ""
 	_fade_player(_ambience, SILENT_DB, fade_s)
 	_ambience_name = ""
+	# 战斗氛围层一并收声（stop_all 是"全静"出口，测试/场景切换用）
+	_battle_ambience_active = false
+	_battle_ambience_level = 0.0
+	_battle_ambience_units = 0
+	_fade_player(_battle_ambience, SILENT_DB, fade_s)
 
 
 func _fade_player(p: AudioStreamPlayer, to_db: float, dur: float) -> void:
@@ -802,6 +913,7 @@ func get_state_report() -> Dictionary:
 		"layers": _players.keys().duplicate(),
 		"layer_db": _layer_db.duplicate(),
 		"ambience": _ambience_name,
+		"battle_ambience": get_battle_ambience_report(),
 		"context": _context.duplicate(),
 		"manifest_cues": _manifest.get("cue_count", 0),
 		"playing": is_playing(),

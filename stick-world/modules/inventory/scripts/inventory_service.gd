@@ -54,6 +54,9 @@ func setup(game_root: Node) -> void:
 	_game_root = game_root
 	inventory.equipment_changed.connect(_apply_equipment_to_entity)
 	inventory.item_used.connect(_on_item_used)
+	# bag→inventory_changed 转发桥（原在 PlayerInventory._init 以 lambda 自连，
+	# 与 bag 成 RefCounted 引用环致进程退出泄漏；挂在树节点上环断在生命周期）
+	inventory.bag.contents_changed.connect(_on_bag_contents_changed)
 	if EventBus != null:
 		EventBus.possession_started.connect(_on_possession_started)
 		EventBus.possession_ended.connect(_on_possession_ended)
@@ -83,6 +86,11 @@ func use_hotbar_slot(index: int) -> StringName:
 ## 滚轮切换武器（附身态滚轮语义，09 文档 §二）：循环下一个武器指派格并换装
 func cycle_weapon(dir: int) -> StringName:
 	return inventory.hotbar_cycle_weapon(dir)
+
+
+## 背包内容变化 → inventory_changed 转发（UI 刷新锚点）
+func _on_bag_contents_changed() -> void:
+	inventory.inventory_changed.emit()
 
 
 # ─────────────────────────────── 附身边界 ────────────────────────────────

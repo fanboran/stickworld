@@ -40,7 +40,10 @@ signal item_used(def_id: StringName)
 func _init() -> void:
 	hotbar.resize(HOTBAR_SIZE)
 	hotbar.fill(&"")
-	bag.contents_changed.connect(func() -> void: inventory_changed.emit())
+	# 注意：不要在此把 bag.contents_changed 自连成 inventory_changed 转发——
+	# lambda 捕 self，bag 持该 Callable 强引用 = inventory→bag→inventory 的
+	# RefCounted 引用环，进程退出前永不释放（ObjectDB 退出泄漏的源头）。
+	# 转发桥挂在 InventoryService（树节点）上，环断在节点生命周期（见该类 setup）。
 
 
 # ─────────────────────────────── 查询 ────────────────────────────────

@@ -1644,6 +1644,22 @@ func restore_squads(snapshots: Array, entity_map: Dictionary) -> int:
 	return _snapshot_helper.restore_squads(snapshots, entity_map)
 
 
+## 导出编队 + 编制（存档用，读档完整性批次；实体以 iid 为键，save_handler 换算
+## 成 entities 表稳定键。函数体在 squad_snapshot.gd——存档带排、跨图快照只带班）。
+func export_for_save() -> Dictionary:
+	if _snapshot_helper == null:
+		return {}
+	return _snapshot_helper.export_for_save()
+
+
+## 从存档行重建编队 + 编制（save_handler 存档恢复编排调用；前置 = 旧班已解散、
+## 档内组织已收编。entity_map = 存档 entity_id -> 活实体）。返回恢复班数。
+func restore_from_save(data: Dictionary, entity_map: Dictionary) -> int:
+	if _snapshot_helper == null:
+		return 0
+	return _snapshot_helper.restore_from_save(data, entity_map)
+
+
 ## 编队几何数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认；setup 调用
 ## （unit 测试不触发、不依赖 autoload）。循环内核见 squad_snapshot.load_overrides。
 func _apply_balance_tuning() -> void:

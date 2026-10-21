@@ -77,6 +77,14 @@ func load_save_data(data: Dictionary) -> void:
 		_manager.load_save_data(data)
 
 
+## 读档收编（读档完整性批次）：从 WorldState 容器收编档内组织为本模块工作集。
+## save_handler 存档恢复编排调用（解散旧班 → 本方法 → 重建班），语义见
+## OrganizationManager.restore_from_world_container。
+func restore_from_world() -> void:
+	if _is_initialized:
+		_manager.restore_from_world_container()
+
+
 # ===== 创建/查询 =====
 
 ## 创建一个新组织
@@ -213,6 +221,14 @@ func assign_stickman(org_id: String, stickman_id: String, role: String) -> Dicti
 	if not _is_initialized:
 		return {"ok": false, "error": "模块未初始化"}
 	return _manager.assign_stickman(org_id, stickman_id, role)
+
+
+## 整表重设成员（读档完整性批次）：编队恢复重建人员账用，语义见
+## OrganizationManager.set_personnel（清旧表重写，不触发补位引擎）。
+func set_personnel(org_id: String, stickman_ids: Array) -> Dictionary:
+	if not _is_initialized:
+		return {"ok": false, "error": "模块未初始化"}
+	return _manager.set_personnel(org_id, stickman_ids)
 
 
 ## 从组织移除火柴人

@@ -118,3 +118,25 @@ func disband_all_squads() -> void:
 func restore_squads(snapshots: Array, entity_map: Dictionary) -> void:
 	if _formation != null and _formation.has_method("restore_squads"):
 		_formation.restore_squads(snapshots, entity_map)
+
+
+# ─────────────────────────── 编队存档（读档完整性批次）────────────────────────────
+
+## 导出编队 + 编制（存档链路；save_handler 经本契约调用，成员/排长以实体 iid 为键，
+## 由 save_handler 换算成 entities 表稳定键。{} = 模块缺位/无编队）。
+func export_for_save() -> Dictionary:
+	if _formation == null:
+		return {}
+	if _formation.has_method("export_for_save"):
+		return _formation.export_for_save()
+	return {}
+
+
+## 从存档行重建编队 + 编制（save_handler 存档恢复编排调用）。
+## data = formation 行 JSON；entity_map = 存档 entity_id → 活实体。返回恢复班数。
+func restore_from_save(data: Dictionary, entity_map: Dictionary) -> int:
+	if _formation == null:
+		return 0
+	if _formation.has_method("restore_from_save"):
+		return _formation.restore_from_save(data, entity_map)
+	return 0

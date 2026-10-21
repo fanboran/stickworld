@@ -959,3 +959,47 @@ func load_save_data(data: Dictionary) -> void:
 		if _world != null:
 			_world.register_organization(state)
 	_next_id = int(data.get("next_id", 1))
+
+
+## 读档收编（读档完整性批次）：把 WorldState 容器里的组织状态收编为本类工作集。
+## 存档链：本类创建的组织经 register_organization 进 WorldState 容器，随 world_state
+## 行落盘；读档链 WorldState._on_game_loaded 先恢复容器（game_loaded 时序保证），
+## 随后 save_handler 存档恢复编排（解散旧班 → 本方法 → 重建班）经 api 调本方法收编
+## ——引用同一批 OrganizationState 对象，不重序列化，此后两端读写同源。
+## 先清后收：mid-session 读档时旧工作集被档内版本整体覆盖（与 WorldState 容器同语义）；
+## 调用前置 = 旧班已解散（否则旧班 id 与档内组织撞车，后续解散会误删档内组织）。
+## _next_id 计数器不随档（world_state 行无此字段），按现存 org_%d 最大后缀续算防新 id 冲突。
+func restore_from_world_container() -> void:
+	organizations.clear()
+	if _world != null:
+		for org_id in _world.organizations:
+			var state: Variant = _world.organizations[org_id]
+			if state is ScriptOrgState:
+				organizations[String(org_id)] = state
+	_recompute_next_id()
+
+
+## 按现存组织 id（org_%d）最大后缀续算 ID 计数器（无后缀/非数字 id 不参与）。
+func _recompute_next_id() -> void:
+	var max_suffix := 0
+	for org_id in organizations:
+		var suffix := String(org_id).trim_prefix("org_").to_int()
+		if suffix > max_suffix:
+			max_suffix = suffix
+	_next_id = max_suffix + 1
+
+
+## 整表重设成员（读档完整性批次）：清旧表后逐个写入。供编队恢复重建人员账——
+## 档内 personnel 存的是存档时旧 iid（跨会话已死），按恢复后的活实体重写；
+## 绕过 remove_stickman 的补位引擎（重写账面不是人员变动，不触发继任）。
+## 未知组织 = {ok: false}；重复/空 id 去重（沿用 assign 防双挂语义）。
+func set_personnel(org_id: String, stickman_ids: Array) -> Dictionary:
+	var org := _get_org(org_id)
+	if org == null:
+		return {"ok": false, "error": "组织不存在: %s" % org_id}
+	org.personnel.clear()
+	for sid_v in stickman_ids:
+		var sid := str(sid_v)
+		if not sid.is_empty() and sid not in org.personnel:
+			org.personnel.append(sid)
+	return {"ok": true, "data": {"count": org.personnel.size()}}

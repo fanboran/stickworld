@@ -1,0 +1,63 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/单位数据.xlsx → weapons sheet 自动生成",
+		"resource_name": "weapons",
+		"source_file": "config/excel/单位数据.xlsx",
+		"source_sheet": "weapons",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/units/weapons.tres",
+	"variables": {
+		"data": [
+			{
+				"armor_penetration": 5,
+				"attack_mult": 1.2,
+				"icon_path": "res://assets/icons/weapons/sword_iron.png",
+				"id": "wpn_sword_001",
+				"mana_cost": 30,
+				"name_zh": "铁剑",
+				"range_bonus": 0,
+				"speed_mult": 0.9,
+				"type": "sword",
+				"weight": 5
+			},
+			{
+				"armor_penetration": 2,
+				"attack_mult": 0.8,
+				"icon_path": "res://assets/icons/weapons/bow_short.png",
+				"id": "wpn_bow_001",
+				"mana_cost": 25,
+				"name_zh": "短弓",
+				"range_bonus": 3,
+				"speed_mult": 1,
+				"type": "bow",
+				"weight": 2
+			},
+			{
+				"armor_penetration": 10,
+				"attack_mult": 1,
+				"icon_path": "res://assets/icons/weapons/staff_apprentice.png",
+				"id": "wpn_staff_001",
+				"mana_cost": 40,
+				"name_zh": "学徒法杖",
+				"range_bonus": 2,
+				"speed_mult": 0.8,
+				"type": "staff",
+				"weight": 3
+			},
+			{
+				"armor_penetration": 0,
+				"attack_mult": 1,
+				"icon_path": null,
+				"id": "wpn_bare_001",
+				"mana_cost": 0,
+				"name_zh": "徒手",
+				"range_bonus": 0,
+				"speed_mult": 1,
+				"type": "bare_hand",
+				"weight": 0
+			}
+		]
+	}
+}

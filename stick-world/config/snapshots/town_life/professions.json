@@ -1,0 +1,44 @@
+{
+	"_meta": {},
+	"_source": "res://config/town_life/professions.tres",
+	"variables": {
+		"data": [
+			{
+				"consume_amount": 5.0,
+				"consume_res": "res_metal_ore",
+				"cycle": 4.0,
+				"id": "blacksmith",
+				"name_zh": "铁匠",
+				"produce_amount": 3.0,
+				"product": "res_iron_ingot",
+				"quota": 1,
+				"tool": "pickaxe",
+				"work_site_def": "smithy_lv1"
+			},
+			{
+				"consume_amount": 0.0,
+				"consume_res": "",
+				"cycle": 5.0,
+				"id": "lumberjack",
+				"name_zh": "伐木工",
+				"produce_amount": 9.0,
+				"product": "res_wood",
+				"quota": 3,
+				"tool": "sword",
+				"work_site_def": ""
+			},
+			{
+				"consume_amount": 0.0,
+				"consume_res": "",
+				"cycle": 5.0,
+				"id": "miner",
+				"name_zh": "矿工",
+				"produce_amount": 9.0,
+				"product": "res_metal_ore",
+				"quota": 3,
+				"tool": "pickaxe",
+				"work_site_def": ""
+			}
+		]
+	}
+}

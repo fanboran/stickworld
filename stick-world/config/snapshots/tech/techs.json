@@ -1,0 +1,169 @@
+{
+	"_meta": {},
+	"_source": "res://config/tech/techs.tres",
+	"variables": {
+		"data": [
+			{
+				"category": "economy",
+				"id": "tech_stone_tools",
+				"name_zh": "石器工具",
+				"research_cost": 9,
+				"tier": 1,
+				"unlocks": [
+					"stone_axe",
+					"stone_pickaxe",
+					"basic_quarry"
+				]
+			},
+			{
+				"category": "military",
+				"id": "tech_basic_combat",
+				"name_zh": "基础战斗",
+				"research_cost": 14,
+				"tier": 1,
+				"unlocks": [
+					"warrior",
+					"spear",
+					"wooden_shield"
+				]
+			},
+			{
+				"category": "administration",
+				"id": "tech_primitive_administration",
+				"name_zh": "原始行政管理",
+				"research_cost": 11,
+				"tier": 1,
+				"unlocks": [
+					"tribal_council",
+					"basic_laws",
+					"census_tent"
+				]
+			},
+			{
+				"category": "economy",
+				"id": "tech_bronze_working",
+				"name_zh": "青铜冶炼",
+				"prerequisites": "tech_stone_tools",
+				"research_cost": 38,
+				"tier": 2,
+				"unlocks": [
+					"bronze_axe",
+					"bronze_pickaxe",
+					"smelter",
+					"copper_mine"
+				]
+			},
+			{
+				"category": "military",
+				"id": "tech_formation_tactics",
+				"name_zh": "阵型战术",
+				"prerequisites": "tech_basic_combat",
+				"research_cost": 34,
+				"tier": 2,
+				"unlocks": [
+					"spearman",
+					"shield_wall",
+					"barracks",
+					"military_drill"
+				]
+			},
+			{
+				"category": "administration",
+				"id": "tech_early_writing",
+				"name_zh": "早期文字",
+				"prerequisites": "tech_primitive_administration",
+				"research_cost": 26,
+				"tier": 2,
+				"unlocks": [
+					"scribe",
+					"clay_tablet",
+					"record_keeping",
+					"royal_decree"
+				]
+			},
+			{
+				"category": "science",
+				"id": "tech_herbal_medicine",
+				"name_zh": "草药医学",
+				"prerequisites": "tech_primitive_administration",
+				"research_cost": 29,
+				"tier": 2,
+				"unlocks": [
+					"herbalist",
+					"field_hospital",
+					"healing_salve"
+				]
+			},
+			{
+				"category": "economy",
+				"id": "tech_iron_working",
+				"name_zh": "铁器锻造",
+				"prerequisites": "tech_bronze_working",
+				"research_cost": 72,
+				"tier": 3,
+				"unlocks": [
+					"iron_axe",
+					"iron_pickaxe",
+					"blast_furnace",
+					"iron_mine"
+				]
+			},
+			{
+				"category": "military",
+				"id": "tech_cavalry_warfare",
+				"name_zh": "骑兵战术",
+				"prerequisites": "tech_formation_tactics,tech_bronze_working",
+				"research_cost": 78,
+				"tier": 3,
+				"unlocks": [
+					"horseman",
+					"cavalry_archer",
+					"stable",
+					"horse_breeding"
+				]
+			},
+			{
+				"category": "science",
+				"id": "tech_philosophy",
+				"name_zh": "哲学思想",
+				"prerequisites": "tech_early_writing,tech_herbal_medicine",
+				"research_cost": 58,
+				"tier": 3,
+				"unlocks": [
+					"philosopher",
+					"academy",
+					"natural_philosophy",
+					"logic"
+				]
+			},
+			{
+				"category": "administration",
+				"id": "tech_bureaucracy",
+				"name_zh": "官僚制度",
+				"prerequisites": "tech_early_writing",
+				"research_cost": 52,
+				"tier": 3,
+				"unlocks": [
+					"bureaucrat",
+					"tax_office",
+					"census",
+					"archives"
+				]
+			},
+			{
+				"category": "economy",
+				"id": "tech_trade_networks",
+				"name_zh": "贸易网络",
+				"prerequisites": "tech_early_writing,tech_bronze_working",
+				"research_cost": 66,
+				"tier": 3,
+				"unlocks": [
+					"merchant",
+					"marketplace",
+					"trade_route",
+					"currency"
+				]
+			}
+		]
+	}
+}

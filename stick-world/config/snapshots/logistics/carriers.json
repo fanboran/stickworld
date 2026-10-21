@@ -1,0 +1,69 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/运输数据.xlsx → carriers sheet 自动生成",
+		"resource_name": "carriers",
+		"source_file": "config/excel/运输数据.xlsx",
+		"source_sheet": "carriers",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/logistics/carriers.tres",
+	"variables": {
+		"data": [
+			{
+				"capacity": 5,
+				"cost_per_km": 1,
+				"id": "car_human",
+				"name_zh": "人力搬运",
+				"speed": 20,
+				"terrain_penalty": "low",
+				"unlock_tech": null
+			},
+			{
+				"capacity": 15,
+				"cost_per_km": 3,
+				"id": "car_beast",
+				"name_zh": "驮兽",
+				"speed": 40,
+				"terrain_penalty": "medium",
+				"unlock_tech": null
+			},
+			{
+				"capacity": 30,
+				"cost_per_km": 5,
+				"id": "car_wagon",
+				"name_zh": "马车",
+				"speed": 60,
+				"terrain_penalty": "high",
+				"unlock_tech": "tech_wheel"
+			},
+			{
+				"capacity": 50,
+				"cost_per_km": 10,
+				"id": "car_river",
+				"name_zh": "河船",
+				"speed": 80,
+				"terrain_penalty": "water_only",
+				"unlock_tech": "tech_sailing"
+			},
+			{
+				"capacity": 200,
+				"cost_per_km": 20,
+				"id": "car_ship",
+				"name_zh": "海船",
+				"speed": 100,
+				"terrain_penalty": "ocean_only",
+				"unlock_tech": "tech_seafaring"
+			},
+			{
+				"capacity": 10,
+				"cost_per_km": 50,
+				"id": "car_magic",
+				"name_zh": "魔法传送阵",
+				"speed": 999,
+				"terrain_penalty": null,
+				"unlock_tech": "tech_teleport"
+			}
+		]
+	}
+}

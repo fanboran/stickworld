@@ -1,0 +1,85 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/扩张数据.xlsx → regions sheet 自动生成",
+		"resource_name": "regions",
+		"source_file": "config/excel/扩张数据.xlsx",
+		"source_sheet": "regions",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/expansion/regions.tres",
+	"variables": {
+		"data": [
+			{
+				"center_x": 500,
+				"center_y": 500,
+				"id": "reg_plain_01",
+				"name_zh": "中原平原",
+				"resources": "food,wood",
+				"stickmen_types": "plain",
+				"tech_unlocks": null,
+				"terrain": "plain"
+			},
+			{
+				"center_x": 200,
+				"center_y": 300,
+				"id": "reg_volcano_01",
+				"name_zh": "火山山脉",
+				"resources": "metal",
+				"stickmen_types": "volcano,giant",
+				"tech_unlocks": "tech_smelting",
+				"terrain": "mountain"
+			},
+			{
+				"center_x": 700,
+				"center_y": 200,
+				"id": "reg_source_01",
+				"name_zh": "源流湿地",
+				"resources": "food",
+				"stickmen_types": "source",
+				"tech_unlocks": "tech_magic_basic",
+				"terrain": "swamp"
+			},
+			{
+				"center_x": 900,
+				"center_y": 600,
+				"id": "reg_desert_01",
+				"name_zh": "沙漠荒原",
+				"resources": "stone",
+				"stickmen_types": "desert,centaur",
+				"tech_unlocks": "tech_camelry",
+				"terrain": "desert"
+			},
+			{
+				"center_x": 300,
+				"center_y": 800,
+				"id": "reg_ocean_01",
+				"name_zh": "海洋群岛",
+				"resources": "food,wood",
+				"stickmen_types": "ocean",
+				"tech_unlocks": "tech_sailing",
+				"terrain": "coast"
+			},
+			{
+				"center_x": 600,
+				"center_y": 700,
+				"id": "reg_forest_01",
+				"name_zh": "森林",
+				"resources": "wood,food",
+				"stickmen_types": "forest,winged",
+				"tech_unlocks": "tech_arbalest",
+				"terrain": "forest"
+			},
+			{
+				"center_x": 400,
+				"center_y": 100,
+				"id": "reg_ice_01",
+				"name_zh": "极北冰原",
+				"resources": "stone",
+				"stickmen_types": "ice",
+				"tech_unlocks": "tech_frost_resist",
+				"terrain": "ice"
+			}
+		]
+	}
+}

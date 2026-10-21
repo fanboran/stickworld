@@ -1,0 +1,51 @@
+{
+	"_meta": {
+		"category": "excel_export",
+		"description": "从 config/excel/扩张数据.xlsx → civ_differences sheet 自动生成",
+		"resource_name": "civ_differences",
+		"source_file": "config/excel/扩张数据.xlsx",
+		"source_sheet": "civ_differences",
+		"version": "0.1.0"
+	},
+	"_source": "res://config/expansion/civ_differences.tres",
+	"variables": {
+		"data": [
+			{
+				"civilization_type": "agriculture",
+				"description": "农耕文明组织严密，中央集权",
+				"economy_bonus": "中",
+				"military_bonus": "balanced",
+				"naval_bonus": "低",
+				"org_depth_bonus": "deep",
+				"research_bonus": "中"
+			},
+			{
+				"civilization_type": "nomadic",
+				"description": "游牧来去如风，层级灵活",
+				"economy_bonus": "低",
+				"military_bonus": "高(骑兵)",
+				"naval_bonus": "无",
+				"org_depth_bonus": "shallow",
+				"research_bonus": "低"
+			},
+			{
+				"civilization_type": "commerce",
+				"description": "商业文明贸易驱动，军事靠外包",
+				"economy_bonus": "高",
+				"military_bonus": "低",
+				"naval_bonus": "高",
+				"org_depth_bonus": "medium",
+				"research_bonus": "中"
+			},
+			{
+				"civilization_type": "ocean",
+				"description": "海洋文明制海权至上",
+				"economy_bonus": "高(贸易)",
+				"military_bonus": "中",
+				"naval_bonus": "极高",
+				"org_depth_bonus": "medium",
+				"research_bonus": "中"
+			}
+		]
+	}
+}

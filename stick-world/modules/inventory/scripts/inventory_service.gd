@@ -21,10 +21,11 @@ const STARTER_EQUIP: Array[StringName] = [
 	&"wpn_sword_001", &"shd_wood_001",
 	&"arm_head_cloth", &"arm_chest_cloth", &"arm_legs_cloth",
 ]
-## 开局背包（原型全武器开放原则：与玩家全能换装的自由度等价）
+## 开局背包（原型全武器开放原则：与玩家全能换装的自由度等价；
+## 弓耗弹——配一叠箭让远程从开局即可用，战场掉落是后续补箭来源）
 const STARTER_PACK: Array = [
 	[&"wpn_spear_001", 1], [&"wpn_bow_001", 1], [&"wpn_pickaxe_001", 1],
-	[&"wpn_staff_001", 1], [&"con_bandage", 5],
+	[&"wpn_staff_001", 1], [&"ammo_arrow_001", 50], [&"con_bandage", 5],
 ]
 ## 开局 Hotbar 预指派（1-6：五武器+绷带——滚轮/数字键即刻可切）
 const STARTER_HOTBAR: Array[StringName] = [
@@ -101,21 +102,28 @@ func _on_possession_started(entity: Node) -> void:
 	if wm != null:
 		_orig_weapon_type = int(wm.weapon_type)
 		_orig_shield_enabled = bool(wm.shield_enabled)
+		# 弹药容器注入（弓耗弹）：玩家附身期间武器射击从玩家背包扣弹
+		#（weapon_mount.ammo_source；NPC 个体弹药=E-4，脱离即收回）
+		if "ammo_source" in wm:
+			wm.ammo_source = inventory.bag
 	_apply_equipment_to_entity()
 
 
 func _on_possession_ended(entity: Node) -> void:
 	# 恢复实体原武器状态（背包装备只属于玩家）
 	var wm: Node = _get_weapon_mount(entity)
-	if wm != null and _orig_weapon_type >= 0:
-		wm.equipped_shield = false
-		wm.shield_enabled = _orig_shield_enabled
-		wm.weapon_type = _orig_weapon_type
-		# 装备乘子一并复位（NPC 回兵种基准数值）
-		if "equip_attack_mult" in wm:
-			wm.equip_attack_mult = 1.0
-		if "equip_speed_mult" in wm:
-			wm.equip_speed_mult = 1.0
+	if wm != null:
+		if "ammo_source" in wm:
+			wm.ammo_source = null
+		if _orig_weapon_type >= 0:
+			wm.equipped_shield = false
+			wm.shield_enabled = _orig_shield_enabled
+			wm.weapon_type = _orig_weapon_type
+			# 装备乘子一并复位（NPC 回兵种基准数值）
+			if "equip_attack_mult" in wm:
+				wm.equip_attack_mult = 1.0
+			if "equip_speed_mult" in wm:
+				wm.equip_speed_mult = 1.0
 	if entity != null and is_instance_valid(entity) and "armor_speed_factor" in entity:
 		entity.armor_speed_factor = 1.0
 		entity.armor_damage_reduction = 0.0

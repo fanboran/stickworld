@@ -14,7 +14,7 @@ extends StickScreen
 
 ## 分类标题（ItemDef.Category 序 → 中文；仅 UI 分组）
 const CATEGORY_NAMES: Array[String] = [
-	"武器", "盾", "头部护甲", "胸部护甲", "腿部护甲", "消耗品", "材料",
+	"武器", "盾", "头部护甲", "胸部护甲", "腿部护甲", "消耗品", "材料", "弹药",
 ]
 ## 属性键 → 中文名（GDD §6.1 个体属性标签）
 const ATTR_NAMES: Dictionary = {
@@ -215,6 +215,12 @@ func _make_entry_row(e: Dictionary) -> Control:
 	var mw: ItemStack = _inv.get_main_weapon()
 	if mw != null and not mw.is_empty() and mw.def_id == def_id:
 		StickKit.label(row, "·已持", StickKit.LabelKind.TINY).modulate = Color(StickTokens.ACCENT, 0.8)
+	# 耗弹武器的弹药余量行内提示（弓耗弹消费面：背包里一眼看到还剩几箭）
+	var ammo_id: StringName = def.ammo_id
+	if def.category == ItemDef.Category.WEAPON and ammo_id != &"" and ItemDB.get_def(ammo_id) != null:
+		var ammo_def: ItemDef = ItemDB.get_def(ammo_id)
+		StickKit.label(row, "·%s×%d" % [ammo_def.display_name, _inv.count_of(ammo_id)],
+				StickKit.LabelKind.TINY).modulate = Color(StickTokens.ACCENT, 0.8)
 	return row
 
 

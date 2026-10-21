@@ -36,6 +36,9 @@ func _ready() -> void:
 	_runner.add_test("矿物-堆叠限量与非装备类", _test_mineral)
 	_runner.add_test("乘子-伤害与冷却吃装备 stats", _test_stats_multipliers)
 	_runner.add_test("状态效果-list_active", _test_status_list_active)
+	_runner.add_test("弹药-开局箭矢+不可指派Hotbar", _test_ammo_starter_and_assignable)
+	_runner.add_test("弹药-弓耗弹容器语义(有弹/耗弹/射空)", _test_ammo_spend_semantics)
+	_runner.add_test("弹药-免弹武器与无源恒可射", _test_ammo_free_fire)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -321,3 +324,50 @@ func _test_status_list_active() -> void:
 	_runner.assert_gt(float(actives[0]["remain"]), 2.0, "剩余时长正确")
 	_runner.assert_approx(float(actives[0]["power"]), 3.0, 0.001, "强度带出")
 	se.free()
+
+
+# ─────────────────────────────── ⑦ 弓耗弹（AMMO 消费面，蓝图 §4.2）────────────
+
+func _test_ammo_starter_and_assignable() -> void:
+	var service: Node = ScriptInventoryService.new()
+	service.grant_starter_kit()
+	var inv: PlayerInventory = service.inventory
+	_runner.assert_equal(inv.count_of(&"ammo_arrow_001"), 50, "开局一叠箭（50）")
+	_runner.assert_false(inv.hotbar_assignable(&"ammo_arrow_001"), "弹药不可指派 Hotbar")
+	service.free()
+
+
+func _test_ammo_spend_semantics() -> void:
+	var wm: Node = ScriptWeaponMount.new()
+	wm.weapon_type = 2  # BOW（不进树；setter 不触发重挂）
+	var inv := _make_inv()
+	inv.add_item(&"ammo_arrow_001", 3)
+	wm.ammo_source = inv.bag
+	_runner.assert_equal(wm.current_ammo_id(), &"ammo_arrow_001", "弓弹药指向箭矢")
+	_runner.assert_true(wm.has_ammo(), "有箭可射")
+	_runner.assert_true(wm.spend_ammo(), "出箭扣 1 发")
+	_runner.assert_equal(inv.count_of(&"ammo_arrow_001"), 2, "背包箭 3→2")
+	wm.spend_ammo()
+	wm.spend_ammo()
+	_runner.assert_equal(inv.count_of(&"ammo_arrow_001"), 0, "箭射空")
+	_runner.assert_false(wm.has_ammo(), "射空不能射（has_ammo=false）")
+	_runner.assert_false(wm.spend_ammo(), "空袋扣弹失败")
+	wm.free()
+
+
+func _test_ammo_free_fire() -> void:
+	var wm: Node = ScriptWeaponMount.new()
+	var bag := ItemContainer.new()
+	# 免弹武器（近战）：无源也有弹——数据开关口径
+	wm.weapon_type = 0  # SWORD
+	wm.ammo_source = null
+	_runner.assert_equal(wm.current_ammo_id(), &"", "近战免弹")
+	_runner.assert_true(wm.has_ammo(), "免弹武器恒可射")
+	_runner.assert_true(wm.spend_ammo(), "免弹武器不扣弹")
+	# 弓但无弹药源（NPC：个体背包=E-4）——免弹口径，战斗行为零回归
+	wm.weapon_type = 2  # BOW
+	_runner.assert_equal(wm.current_ammo_id(), &"ammo_arrow_001", "弓弹药指向箭矢")
+	_runner.assert_true(wm.has_ammo(), "无源（NPC）恒可射")
+	_runner.assert_true(wm.spend_ammo(), "无源不扣弹")
+	_runner.assert_equal(bag.count_of(&"ammo_arrow_001"), 0, "无源不产生扣减")
+	wm.free()

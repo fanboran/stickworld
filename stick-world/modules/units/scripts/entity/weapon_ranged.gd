@@ -93,6 +93,10 @@ func fire_arrow_manual(aim_dir: Vector2, power: float) -> Node2D:
 	var owner_entity: CharacterBody2D = _mount.get_owner_entity()
 	if owner_entity == null:
 		return null
+	# 弹药约束（蓝图 §4.2）：耗弹武器出箭前扣 1 发，无弹不出箭。
+	# 免弹武器/无弹药源（NPC，E-4 前口径）spend_ammo 恒 true，零行为变化。
+	if not _mount.spend_ammo():
+		return null
 	var scene: PackedScene = _mount.ARROW_SCENE
 	if scene == null:
 		return null
@@ -274,6 +278,10 @@ func _body_pos(entity: Node) -> Vector2:
 func fire_arrow(target: Node) -> void:
 	var owner_entity: CharacterBody2D = _mount.get_owner_entity()
 	if owner_entity == null:
+		return
+	# 弹药约束（蓝图 §4.2）：出箭前扣 1 发，无弹不出箭（AI 路径同玩家手动路径
+	# 同一出口——NPC 无弹药源恒免弹，E-4 个体弹药接入后自然收紧）
+	if not _mount.spend_ammo():
 		return
 	var scene: PackedScene = _mount.ARROW_SCENE
 	if scene == null:

@@ -119,28 +119,44 @@ func refresh() -> void:
 	if _service == null:
 		return
 	var inv: PlayerInventory = _service.inventory
-	_main_hand.stack = inv.get_main_weapon()
+	var mw: ItemStack = inv.get_main_weapon()
+	# 耗弹武器（弓）的格子角标显示**弹药余量**而非武器件数——弓耗弹的
+	# Hotbar 消费面：切到弓即见剩几箭，射一箭减一（bag 变化自动触发本刷新）
+	var mw_ammo: int = _ammo_count(inv, mw.def_id) if mw != null and not mw.is_empty() else -1
+	_main_hand.stack = mw if mw_ammo < 0 else ItemStack.new(mw.def_id, mw_ammo)
 	_off_hand.stack = inv.get_equipped(PlayerInventory.SlotType.OFF_HAND)
 	_off_hand.locked = inv.is_offhand_locked()
-	var mw: ItemStack = inv.get_main_weapon()
 	var wielded_id: StringName = mw.def_id if mw != null and not mw.is_empty() else &""
 	for i in _item_slots.size():
 		var w: ItemSlotWidget = _item_slots[i]
 		var id: StringName = inv.hotbar[i]
 		if id == &"":
 			w.stack = null
+			continue
+		var ac: int = _ammo_count(inv, id)
+		if ac >= 0:
+			# 耗弹武器格：角标=弹药余量（当前武器格与备选格同口径）
+			w.stack = ItemStack.new(id, ac)
 		elif id == wielded_id:
 			w.stack = ItemStack.new(id, 1)
 		else:
 			# 指派格展示：消耗品显示剩余数量；武器/工具单件
 			w.stack = ItemStack.new(id, maxi(1, inv.count_of(id)))
 		# 当前武器所在格 = 琥珀高亮（滚轮切武器的视觉锚点）
-		w.highlight = id != &"" and id == wielded_id
+		w.highlight = id == wielded_id
 	# 选中格滚入可视窗口 + 溢出指示
 	_scroll_to_visible(inv.hotbar_selected)
 	_hint_left.modulate.a = 1.0 if _scroll_offset > 0 else 0.0
 	_hint_right.modulate.a = 1.0 \
 			if _scroll_offset + VISIBLE_SLOTS < PlayerInventory.HOTBAR_SIZE else 0.0
+
+
+## 耗弹武器的弹药余量（def.ammo_id 空/弹药 def 缺失返回 -1 = 非耗弹武器）
+func _ammo_count(inv: PlayerInventory, def_id: StringName) -> int:
+	var def: ItemDef = ItemDB.get_def(def_id)
+	if def == null or def.ammo_id == &"" or ItemDB.get_def(def.ammo_id) == null:
+		return -1
+	return inv.count_of(def.ammo_id)
 
 
 ## 平移窗口使 target 滚入视野（数字键/滚轮切换后调用）

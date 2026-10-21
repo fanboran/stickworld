@@ -33,7 +33,7 @@ static func _ensure_loaded() -> void:
 
 static func _def(id: String, name: String, cat: int, max_stack: int,
 		icon_path: String = "", stats: Dictionary = {}, weapon_type: int = -1,
-		two_handed: bool = false, desc: String = "") -> void:
+		two_handed: bool = false, desc: String = "", ammo_id: String = "") -> void:
 	var d := ItemDef.new()
 	d.id = StringName(id)
 	d.display_name = name
@@ -44,6 +44,7 @@ static func _def(id: String, name: String, cat: int, max_stack: int,
 	d.stats = stats
 	d.weapon_type = weapon_type
 	d.two_handed = two_handed
+	d.ammo_id = StringName(ammo_id)
 	d.description = desc
 	_defs[d.id] = d
 
@@ -58,8 +59,10 @@ static func _build_defs() -> void:
 			{"attack_mult": 1.0, "speed_mult": 0.95, "weight": 6}, 1, false,
 			"长柄矛。距离优势明显，列阵时是铜墙铁壁。")
 	_def("wpn_bow_001", "短弓", ItemDef.Category.WEAPON, 1, "弓箭_64.png",
-			{"attack_mult": 0.8, "speed_mult": 1.0, "weight": 2}, 2, true,
-			"双手武器。抛物线越顶抛射，装备时无法持盾。")
+			{"attack_mult": 0.8, "speed_mult": 1.0, "weight": 2, "spawn_ammo": 20},
+			2, true,
+			"双手武器。抛物线越顶抛射，装备时无法持盾。每箭消耗一支箭矢，射空不能射。",
+			"ammo_arrow_001")
 	_def("wpn_pickaxe_001", "铁镐", ItemDef.Category.WEAPON, 1, "十字镐_64.png",
 			{"attack_mult": 0.6, "speed_mult": 1.0, "weight": 4}, 3, false,
 			"采矿镐。敲石头顺手，敲人勉强。")
@@ -93,6 +96,12 @@ static func _build_defs() -> void:
 	_def("con_bandage", "绷带", ItemDef.Category.CONSUMABLE, 99, "绷带_64.png",
 			{"heal_amount": 30.0}, -1, false,
 			"简单包扎，回复 30 点生命。数字键或点击 Hotbar 使用。")
+	# ── 弹药（"弹药进 items 域"首个样板，蓝图《武器装备与个人库存》§4.2：
+	#    箭为堆叠弹药物品，弓 def.ammo_id 指向本条；投矛/法术消耗沿同一通道。
+	#    图标 = 战斗箭矢贴图斜置转制（assets/icons 程序转档，不跨模块引用））
+	_def("ammo_arrow_001", "箭矢", ItemDef.Category.AMMO, 50, "箭矢_64.png",
+			{"weight": 0.1}, -1, false,
+			"弓用箭矢，一叠五十支。战场翻检掉落物或搜刮箭手尸体补箭。")
 	# ── 矿物（背包可携带的采出物；堆叠限量——石材多、钻石稀缺。
 	# 建造材料（木板等）不进背包：搬运占用双手（InteractionController
 	# 的 carrying 机制），走区域仓库/工地交付链路）

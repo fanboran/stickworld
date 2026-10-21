@@ -15,6 +15,10 @@ class_name SettlementTooltip
 ## 鼠标指针到面板左上角的偏移（面板出现在指针右下侧）
 const CURSOR_OFFSET := Vector2(18.0, 18.0)
 
+## 同地块悬停期间的内容重算周期（秒）：战斗开始/结束、到访、玩家位置变化
+## 都会改旅行提示文案；get_travel_status 含路网寻路，逐帧重算太浪费，按周期轮询
+const REFRESH_INTERVAL := 0.5
+
 ## 聚落级别中文名（SettlementRef.Level：1 村落 2 镇 3 城市 4 中心城市 5 帝国首都）
 const LEVEL_NAMES := {
 	1: "村落",
@@ -35,6 +39,9 @@ var _enter_label: Label = null
 
 ## 当前展示的 tile（"" = 无）
 var _shown_tile_id: String = ""
+
+## 同地块悬停期内容重算累计器（随 _process 累加，达 REFRESH_INTERVAL 清零重算）
+var _refresh_accumulator: float = 0.0
 
 
 func _ready() -> void:
@@ -77,18 +84,31 @@ func _build_widgets() -> void:
 	_enter_label.visible = false
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _renderer == null or _api == null:
 		return
 	var tile_id: String = _renderer.hovered_tile_id
 	if tile_id == _shown_tile_id:
 		if visible:
 			_follow_mouse()
+			# 悬停未换地块也要重算文案：战斗开始/结束、到访、玩家位置变化
+			# 都会改旅行提示；寻路有成本，按 REFRESH_INTERVAL 周期轮询
+			_refresh_accumulator += delta
+			if _refresh_accumulator >= REFRESH_INTERVAL:
+				_refresh_accumulator = 0.0
+				_refresh_content(tile_id)
 		return
 	_shown_tile_id = tile_id
+	_refresh_accumulator = 0.0
 	if tile_id.is_empty():
 		visible = false
 		return
+	_refresh_content(tile_id)
+	# 未命中（数据不含该 id）保持隐藏
+
+
+## 按 tile_id 从世界数据取地块并刷新内容（_process 轮询专用；数据缺失时隐藏）
+func _refresh_content(tile_id: String) -> void:
 	var data: L1WorldData = _api.get_data()
 	if data == null:
 		visible = false
@@ -97,13 +117,13 @@ func _process(_delta: float) -> void:
 		if tile.tile_id == tile_id:
 			update_for_tile(tile)
 			break
-	# 未命中（数据不含该 id）保持隐藏
 
 
 ## 复位（地图开关时由控制器调用）：清除上次 hover 记忆，
 ## 重开后由 _process 按当前鼠标位置重新评估是否显示
 func reset() -> void:
 	_shown_tile_id = ""
+	_refresh_accumulator = 0.0
 	visible = false
 
 

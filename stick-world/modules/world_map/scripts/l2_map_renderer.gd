@@ -364,7 +364,7 @@ func _draw() -> void:
 			draw_line(seg[0], seg[1], TILE_BORDER_COLOR, twidth, true)
 		# 6. 相邻地区分界线（深色，抗锯齿矢量线；已烘焙合并共线段）
 		if not _neighbor_border_segs.is_empty():
-			var bw := BORDER_WIDTH()
+			var bw := _border_width()
 			for seg in _neighbor_border_segs:
 				draw_line(seg[0], seg[1], BORDER_COLOR, bw, true)
 	# 6.5 湖泊绘制到最上层：覆盖灰色相邻地区/非地块区（湖是水域，不应被灰影盖住）。
@@ -464,7 +464,7 @@ func _build_political_borders() -> void:
 			MapTokens.DASH_LONG / zz, MapTokens.DASH_LONG_GAP / zz)
 
 
-func BORDER_WIDTH() -> float:
+func _border_width() -> float:
 	# 相邻地区分界：地图绝对宽，放大超屏幕像素 clamp
 	if _camera != null and _camera.has_method("get_zoom"):
 		var z: float = _camera.get_zoom()

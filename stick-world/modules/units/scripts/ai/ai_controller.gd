@@ -32,7 +32,7 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 const WANDER_PROBABILITY: float = 0.0
 
 ## 村民 idle 完成后切 wander 的概率（小镇生活批次 3 [提案/待定]：
-## 空闲走动让村子"活"起来）。作用域过滤见 _is_villager（批次 4 改造）：
+## 空闲走动让聚落"活"起来）。作用域过滤见 _is_villager（批次 4 改造）：
 ## 村民身份标志（is_villager）+ 不在编队——待业村民闲逛，战斗/编队/敌方
 ## 单位仍走 WANDER_PROBABILITY=0——待机乱走会破坏战斗测试语义。
 ## 用 var 便于测试注入 0/1 做确定性断言。
@@ -246,7 +246,7 @@ func _make_decision() -> void:
 		# wander（批次 4 起含待业村民，_is_villager 判身份标志+不在编队）；
 		# 其他单位（战斗/编队/敌方）保持原地待命（P0 语义不变）。
 		# 村民 wander 锚定聚落中心（批次 4）：待业村民全天闲逛，无锚会累积
-		# 漂出村子/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
+		# 漂出聚落/地图——锚 = 地图 town_center_world_x（村中心，village_a=0）
 		if _is_villager() and _dice() < villager_wander_probability:
 			_state_machine.travel("wander", _villager_wander_params())
 			return
@@ -606,7 +606,7 @@ func _try_harvest() -> bool:
 	return true
 
 
-## 村民 wander 参数（批次 4）：锚定村中心（地图 town_center_world_x），
+## 村民 wander 参数（批次 4）：锚定聚落中心（地图 town_center_world_x），
 ## 防长时间闲逛累积漂离；地图引用未注入/无该属性的桩环境返回空参数
 ##（wander 原语义，零扰动）。
 func _villager_wander_params() -> Dictionary:

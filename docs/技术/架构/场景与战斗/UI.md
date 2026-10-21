@@ -29,7 +29,7 @@ UIRoot (常驻)
 
 #### 10.1.1 GlobalHUD 详细设计
 
-> **当前实现**：[global_hud.gd](../../../../stick-world/modules/ui_global/scripts/hud/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与定居点.md](建筑与定居点.md) §9.4 / P0-11）。
+> **当前实现**：[global_hud.gd](../../../../stick-world/modules/ui_global/scripts/hud/global_hud.gd) 120 行，显示时间速度、游戏时间、通知、居中模式按钮。**未显示资源数量**（资源系统未接入，见 [建筑与聚落.md](建筑与聚落.md) §9.4 / P0-11）。
 
 GlobalHUD 节点结构（含资源显示扩展）：
 

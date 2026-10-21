@@ -139,7 +139,7 @@ func _test_duck_degrade() -> void:
 # ───────────────────────── 批次 4：聚落职业配比 ────────────────────────────────
 
 func _test_count_work_capacity() -> void:
-	# 本套件无建筑环境：smithy_lv1 走占位表兜底（批次 3 语义 = "村子有打铁需求"）
+	# 本套件无建筑环境：smithy_lv1 走占位表兜底（批次 3 语义 = "聚落有打铁需求"）
 	var e := FakeEntity.new()
 	add_child(e)  # 容量计数借实体取场景树
 	_runner.assert_equal(ProfessionRegistry.count_work_capacity(e, "smithy_lv1"), 1,

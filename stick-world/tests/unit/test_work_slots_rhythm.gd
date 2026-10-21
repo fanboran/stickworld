@@ -524,7 +524,7 @@ func _test_count_capacity_real_buildings() -> void:
 
 
 func _test_wander_anchor_pullback() -> void:
-	# 批次 4：待业村民全天 wander 无锚会累积漂出村子（实测漂到 -2900，
+	# 批次 4：待业村民全天 wander 无锚会累积漂出聚落（实测漂到 -2900，
 	# 超出 village_a 地图边界 -2160）——锚点参数应把超锚闲逛拉回
 	_new_case()
 	var e := FakeEntity.new()

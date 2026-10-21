@@ -229,7 +229,7 @@ func _test_cancel_charge() -> void:
 	_runner.assert_false(possession.is_aim_charging(), "强制收口应清拉弓态")
 	_runner.assert_equal(_projectiles_of(kit).size(), 0, "收口不出手（退出附身防误射）")
 	_runner.assert_approx(Engine.time_scale, 1.0, 0.001,
-			"收口后 time_scale 恢复常速（headless 慢放短路，断言无害）")
+			"收口后 time_scale 保持常速（蓄力链路不碰 time_scale，回归哨兵）")
 	kit["box"].queue_free()
 
 

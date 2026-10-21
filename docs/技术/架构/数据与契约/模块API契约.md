@@ -20,7 +20,7 @@
 # 建造
 func start_construction(region_id: String, building_type: String, org_id: String) -> Dictionary
 # [P] region_id 属于玩家控制区域, org_id 存在且标签=ENGINEERING
-# [Q] 创建一个 Construction Project, building 状态=PLANNED, 发射 building_started
+# [Q] 创建一个 Construction Project, building 状态=PLANNED
 
 # 查询
 func get_buildings_in_region(region_id: String) -> Array[String]

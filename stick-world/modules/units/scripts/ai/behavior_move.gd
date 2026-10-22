@@ -19,6 +19,8 @@ const ScriptBehaviorProfiles := preload("res://modules/units/scripts/ai/behavior
 ## 运动助手常量源（遇阻接战复用让路锥面口径：YIELD_AHEAD_DOT / YIELD_LATERAL_FORCE，
 ## 单一真相源不复制数值；entity_motion 与本类同属 units 模块，无跨模块依赖）
 const ScriptEntityMotion := preload("res://modules/units/scripts/entity/entity_motion.gd")
+## 静态障碍局部避障组件（寻路方案A：切向滑动 + 短时绕行意向 + 卡住升级）
+const ScriptWallAvoid := preload("res://modules/units/scripts/ai/steering_wall_avoid.gd")
 
 ## 到达目标的距离阈值（像素）
 const ARRIVAL_THRESHOLD: float = 20.0
@@ -68,6 +70,9 @@ var _catching_up: bool = false
 var _detour_lateral: Vector2 = Vector2.ZERO
 ## 遇阻接战：连续绕行累计时长（s，"绕行超阈值转接战"的计时源）
 var _detour_elapsed: float = 0.0
+## 静态障碍避障（方案A，敌挡路之外的"墙"半边）：切向滑动/绕行意向/卡住升级
+##（enter 懒初始化——直构造不进树的测试路径同样可用）
+var _wall_avoid: RefCounted = null
 
 
 func _ready() -> void:
@@ -88,6 +93,9 @@ func enter(previous: String, params: Dictionary) -> void:
 	_engage_check_timer = 0.0
 	_detour_lateral = Vector2.ZERO
 	_detour_elapsed = 0.0
+	if _wall_avoid == null:
+		_wall_avoid = ScriptWallAvoid.new(entity)
+	_wall_avoid.arm()
 	_update_formation_block(true)
 
 
@@ -197,6 +205,22 @@ func update(delta: float) -> void:
 	var move_dir: Vector2 = dir
 	if _detour_lateral != Vector2.ZERO:
 		move_dir = (dir + _detour_lateral).normalized()
+	# 静态障碍避障（方案A）：切向滑动/绕行意向方向修正 + 卡住升级上报。
+	# 组件内部 0.2s 节流摊销（决策冷却内做，不每帧全量）；只处理墙（非单位
+	# 碰撞体），敌挡路接战/单位分离推挤语义不受影响
+	_wall_avoid.update(delta, move_dir, _target)
+	# 卡住升级终态：持续受阻（推墙/被占位绕圈）超限 → 判不可达 finish（AI 层
+	# 换目标/回 idle，把不可达从"无限推墙"变成"有限尝试后上报"）。战斗推进令
+	# （engage_in_range）
+	# 不吃放弃——接战语义归遇阻接战/看门狗，推进令不因地形静默终止
+	if _wall_avoid.is_unreachable() and not _engage_in_range:
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		print("[BehaviorMove] 目标不可达（受阻 %.1fs 放弃）: pos=%v target=%v"
+				% [float(_wall_avoid.push_time()), entity.global_position, _target])
+		finish()
+		return
+	move_dir = _wall_avoid.steer(delta, move_dir)
 	if entity.has_method("ai_move"):
 		entity.ai_move(move_dir, _running)
 

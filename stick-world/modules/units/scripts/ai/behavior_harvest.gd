@@ -65,6 +65,19 @@ var _site_building: Node2D = null
 var _cycle_timer: float = 0.0
 ## ResourcesApi（显式注入优先；缺省惰性查节点）
 var resources_api: Variant = null
+## 静态障碍避障组件（方案A；懒初始化——直构造不进树的测试路径同样可用；
+## 目标切换（换资源点/工位）时组件随目标变更自动复位进度账本）
+var _wall_avoid: RefCounted = null
+## 不可达资源点拉黑 TTL（ms，引擎墙钟）：墙带装饰性资源点对步行单位几何
+## 不可达，不拉黑会永远挑回同一点；TTL 后重试（节点枯竭重生/换路抵达留活口）
+const NODE_BLACKLIST_TTL_MS: int = 120_000
+## 拉黑表挂 entity meta（跨行为会话持久——行为 enter/finish 循环不清空，
+## 否则"放弃→重进→再走到黑点"无限循环）；表自清（过期条目读取时跳过）
+const _META_DEAD_NODES: String = "_harvest_dead_nodes"
+## 已报过不可达的目标（打印去重：同目标重试期不刷屏，换目标再报）
+var _reported_goal: Vector2 = Vector2(NAN, NAN)
+
+const ScriptWallAvoid := preload("res://modules/units/scripts/ai/steering_wall_avoid.gd")
 
 
 func _ready() -> void:
@@ -102,7 +115,7 @@ func update(delta: float) -> void:
 		return
 	match _phase:
 		Phase.TO_TARGET:
-			_update_travel()
+			_update_travel(delta)
 		Phase.WORKING:
 			_update_working(delta)
 
@@ -147,18 +160,24 @@ func _locate() -> bool:
 	return true
 
 
-## 找最近未枯竭且产物匹配的资源点（resource_node 组扫描，同玩家交互先例）。
+## 找最近未枯竭且产物匹配的资源点（resource_node 组扫描，同玩家交互先例；
+## 跳过拉黑中的不可达点——表挂 entity meta 跨行为会话持久）。
 func _find_resource_node() -> Node2D:
 	var product := String(_prof.get("product", ""))
 	if product.is_empty() or entity == null or not is_instance_valid(entity) \
 			or entity.get_tree() == null:
 		return null
+	var now: int = Time.get_ticks_msec()
+	var dead: Dictionary = entity.get_meta(_META_DEAD_NODES, {}) if entity != null else {}
 	var best: Node2D = null
 	var best_dist: float = INF
 	for node in entity.get_tree().get_nodes_in_group("resource_node"):
 		var rn := node as Node2D
 		if rn == null or not is_instance_valid(rn) or not rn.is_inside_tree():
 			continue
+		var dl: int = int(dead.get(rn.get_instance_id(), 0))
+		if dl > now:
+			continue  # 不可达拉黑中（TTL 内不回头）
 		if rn.has_method("is_depleted") and rn.is_depleted():
 			continue
 		if not rn.has_method("get_resource_id") or String(rn.get_resource_id()) != product:
@@ -172,7 +191,7 @@ func _find_resource_node() -> Node2D:
 
 # ─────────────────────────────── 移动 ────────────────────────────────
 
-func _update_travel() -> void:
+func _update_travel(delta: float) -> void:
 	var target := _current_target()
 	# 目标中途失效（被清场/枯竭）：重新寻位
 	if not _target_valid():
@@ -184,18 +203,52 @@ func _update_travel() -> void:
 	var steer: Vector2 = gate_steered_target(target)
 	if steer != target:
 		if entity.global_position.distance_to(steer) > ARRIVE_THRESHOLD:
-			if entity.has_method("ai_move"):
-				entity.ai_move((steer - entity.global_position).normalized())
+			var gdir: Vector2 = (steer - entity.global_position).normalized()
+			gdir = _wall_step(delta, gdir, steer)
+			if gdir != Vector2.ZERO and entity.has_method("ai_move"):
+				entity.ai_move(gdir)
 			return
 	var dist: float = entity.global_position.distance_to(target)
 	if dist > ARRIVE_THRESHOLD:
-		if entity.has_method("ai_move"):
-			entity.ai_move((target - entity.global_position).normalized())
+		var dir: Vector2 = (target - entity.global_position).normalized()
+		dir = _wall_step(delta, dir, target)
+		if dir != Vector2.ZERO and entity.has_method("ai_move"):
+			entity.ai_move(dir)
 	else:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
 		_phase = Phase.WORKING
 		_cycle_timer = 0.0
+
+
+## 静态障碍避障步（方案A）：方向修正 + 不可达处置。不可达 = 停车 + 资源点
+## 拉黑（entity meta 持久 + TTL）换点重寻，重寻仍是同一目标（节点拉黑无效/
+## 工位点不变/门洞引导点依旧不可达）→ finish 交决策层收口。返回零向量 = 本拍
+## 停车（重寻位中）。**必须 ai_stop**：AI 意图粘性——不清旧方向的话
+## _handle_ai_input 会带着旧意图继续推墙。打印按目标去重（同目标重试期不刷屏）。
+func _wall_step(delta: float, dir: Vector2, goal: Vector2) -> Vector2:
+	if _wall_avoid == null:
+		_wall_avoid = ScriptWallAvoid.new(entity)
+	_wall_avoid.update(delta, dir, goal)
+	if _wall_avoid.is_unreachable():
+		if entity.has_method("ai_stop"):
+			entity.ai_stop()
+		if goal != _reported_goal:
+			_reported_goal = goal
+			print("[BehaviorHarvest] 劳作目标不可达（受阻 %.1fs，拉黑换点）: pos=%v goal=%v"
+					% [float(_wall_avoid.push_time()), entity.global_position, goal])
+		var node_before: Node2D = _node
+		var site_before: Vector2 = _site_pos
+		if _mode == Mode.RESOURCE and _node != null and is_instance_valid(_node):
+			var dead: Dictionary = entity.get_meta(_META_DEAD_NODES, {})
+			dead[_node.get_instance_id()] = Time.get_ticks_msec() + NODE_BLACKLIST_TTL_MS
+			entity.set_meta(_META_DEAD_NODES, dead)
+		if not _locate() \
+				or (_mode == Mode.RESOURCE and _node == node_before) \
+				or (_mode == Mode.WORKSITE and _site_pos == site_before):
+			finish()  # 无可换点 / 换完仍是同一目标（引导点不可达）：同位重试无意义
+		return Vector2.ZERO
+	return _wall_avoid.steer(delta, dir)
 
 
 func _current_target() -> Vector2:

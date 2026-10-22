@@ -22,11 +22,8 @@ const MIN_DURATION: float = 3.0
 const MAX_DURATION: float = 6.0
 ## 方向角度每帧的最大变化量（弧度），值越大转向越急
 const WANDER_JITTER: float = 2.5
-## 卡住检测：如果 N 秒内移动距离 < 阈值，视为卡住
-const STUCK_TIME: float = 0.2
-const STUCK_DIST: float = 3.0
-## 卡住恢复冷却时间（秒），防止连续触发导致左右抽搐
-const STUCK_COOLDOWN: float = 0.5
+## 卡住检测三件套（阈值/冷却/掉头）已抽公共组件 steering_stuck.gd（寻路方案A
+## P0：wander 与静态障碍避障两边复用），常量随组件走，此处只持组件实例
 ## 边界规避余量（像素），进入此范围开始转向
 const BOUNDARY_MARGIN: float = 80.0
 ## 边界规避力强度（相对于漫游方向的权重）
@@ -36,19 +33,18 @@ const ANCHOR_DEFAULT_RADIUS: float = 640.0
 ## 锚点回归力强度（相对权重，与边界规避同模式）
 const ANCHOR_FORCE: float = 2.0
 
-# ─────────────────────────────── 运行时 ────────────────────────────────
-## 当前漫游方向（归一化）
+const ScriptSteeringStuck := preload("res://modules/units/scripts/ai/steering_stuck.gd")
+
+# ─────────────────────── 运行时 ────────────────────────
+## 当前漫游方向（归一）
 var _wander_dir: Vector2 = Vector2.ZERO
 ## 已漫游时间
 var _timer: float = 0.0
 ## 本次漫游时长
 var _duration: float = 4.0
-## 上一帧位置（卡住检测用）
-var _last_pos: Vector2 = Vector2.ZERO
-## 卡住计时器
-var _stuck_timer: float = 0.0
-## 卡住恢复冷却（冷却期间不检测卡住，防止左右抽搐）
-var _stuck_cooldown: float = 0.0
+## 卡住检测三件套（公共组件实例：检测/冷却在组件内，掉头取其静态方法；
+## 声明处初始化——直构造不进树的测试路径同样可用）
+var _stuck: RefCounted = ScriptSteeringStuck.new()
 ## 漫游锚点 X（NAN = 无锚，原语义）；超出 _anchor_radius 施加回归力
 var _anchor_x: float = NAN
 ## 锚点回归半径（px）
@@ -63,9 +59,7 @@ func enter(previous: String, params: Dictionary) -> void:
 	super.enter(previous, params)
 	_timer = 0.0
 	_duration = params.get("duration", randf_range(MIN_DURATION, MAX_DURATION))
-	_last_pos = entity.global_position if entity != null else Vector2.ZERO
-	_stuck_timer = 0.0
-	_stuck_cooldown = 0.0
+	_stuck.arm(entity.global_position if entity != null else Vector2.ZERO)
 	_anchor_x = float(params.get("anchor_x", NAN))
 	_anchor_radius = float(params.get("anchor_radius", ANCHOR_DEFAULT_RADIUS))
 	_pick_new_direction()
@@ -85,21 +79,10 @@ func update(delta: float) -> void:
 			entity.ai_stop()
 		return
 
-	# ── 卡住检测（冷却期间跳过，防止转向后立刻又触发）──
-	if _stuck_cooldown > 0.0:
-		_stuck_cooldown -= delta
-	else:
-		var moved: float = entity.global_position.distance_to(_last_pos)
-		if moved < STUCK_DIST:
-			_stuck_timer += delta
-			if _stuck_timer > STUCK_TIME:
-				# 卡住了：转 120~240°，偏向掉头避免左右横跳
-				_turn_away()
-				_stuck_timer = 0.0
-				_stuck_cooldown = STUCK_COOLDOWN
-		else:
-			_stuck_timer = 0.0
-	_last_pos = entity.global_position
+	# ── 卡住检测（公共组件：冷却期内组件自跳过，防转向后立刻又触发）──
+	if _stuck.tick(delta, entity.global_position):
+		# 卡住了：转 120~240°，偏向掉头避免左右横跳（掉头公式在公共组件）
+		_wander_dir = _stuck.turn_away(_wander_dir)
 
 	# ── 边界规避 ──
 	# 接近地图边缘时施加反向转向力
@@ -145,23 +128,6 @@ func update(delta: float) -> void:
 ## 随机选一个新方向
 func _pick_new_direction() -> void:
 	_wander_dir = Vector2.from_angle(randf() * TAU)
-
-
-## 卡住时转 120~240°，偏向掉头而非侧转，避免左右横跳抽搐
-func _turn_away() -> void:
-	if _wander_dir.length() < 0.1:
-		_pick_new_direction()
-		return
-	# 120°~240° = PI*2/3 ~ PI*4/3，确保不会只转 90° 导致垂直于墙来回横跳
-	var turn: float = randf_range(PI * 2.0 / 3.0, PI * 4.0 / 3.0)
-	if randf() < 0.5:
-		turn = -turn
-	var cos_t: float = cos(turn)
-	var sin_t: float = sin(turn)
-	_wander_dir = Vector2(
-		_wander_dir.x * cos_t - _wander_dir.y * sin_t,
-		_wander_dir.x * sin_t + _wander_dir.y * cos_t
-	).normalized()
 
 
 ## 每帧对方向做小角度随机旋转（Reynolds wander 的简化版）

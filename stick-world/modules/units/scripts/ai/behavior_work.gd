@@ -18,8 +18,8 @@ extends BehaviorBase
 
 # ─────────────────────────────── 常量 ────────────────────────────────
 
-## 网格单元大小（与 PlacementGrid.CELL_SIZE 一致）
-const CELL_SIZE: float = 24.0
+## 网格单元大小（共享词汇：core/constants/placement_metrics.gd，锚定 PlacementGrid.CELL_SIZE）
+const CELL_SIZE: float = PlacementMetrics.CELL_PX
 ## 到达阈值（距目标小于此值视为已到达，避免抖动）
 const ARRIVE_THRESHOLD: float = 24.0
 ## 单格高度（工作位相对地面线下方一点，避免遮住建筑）
@@ -136,16 +136,16 @@ func _compute_target_position() -> void:
 	if slot_index < 0:
 		slot_index = 0
 	# 多名工人在中间区内按 slot 间隔分布（间隔 24px）；区域窄时居中
-	var offset_along: float = float(slot_index) * 24.0
+	var offset_along: float = float(slot_index) * CELL_SIZE
 	var span: float = zone_right - zone_left
 	var workers: int = maxi(1, _project.get_worker_count())
 	var target_x: float
-	if span > 24.0 * float(workers):
+	if span > CELL_SIZE * float(workers):
 		target_x = zone_left + 12.0 + offset_along
 	else:
 		target_x = zone_left + span * 0.5
 	# Y：建筑下方一点（建筑原点在 ground_y，工作位在 ground_y 下方）
-	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
+	var ground_y: float = PlacementMetrics.ground_y_of(entity)
 	_target_pos = Vector2(target_x, ground_y + WORK_OFFSET_Y)
 
 

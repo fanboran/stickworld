@@ -36,13 +36,9 @@ const _BuildingPersistenceScript: GDScript = preload("res://modules/construction
 ## plan 物化的管线 def → 运行时 def 映射查它（INT-4 单源）
 const _BuildingGenAPI: GDScript = preload("res://modules/building_gen/api.gd")
 
-## 放置度量常量库（模块内单一真相源：条带宽/基线回退/阻挡纵深，L2 禁反向
-## preload world——权威 PlacementGrid.CELL_SIZE 的换轨同步锚在 metrics 头注释）
-const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
-
-## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨
-## 只动彼处——同 build_menu/behavior_work 口径）
-const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
+## 占地条带宽（px）：自 L0 共享词汇 PlacementMetrics（锚定 PlacementGrid.CELL_SIZE，
+## 换轨只动 core/constants/placement_metrics.gd——同 build_menu/behavior_work 口径）
+const CELL_PX: float = PlacementMetrics.CELL_PX
 
 # ─────────────────────────────── 字段 ────────────────────────────────
 
@@ -626,7 +622,7 @@ func get_all_project_ids() -> Array:
 ## 落位基线（px，画布域）：取值逻辑收敛在 placement_metrics.baseline_at
 ##（HD-2D 逐格墙脚线 → 旧图 ground_y + building_baseline_offset 回退）。
 func _baseline_at(cell_x: int, width: int, baseline_y: float = -1.0) -> float:
-	return ScriptPlacementMetrics.baseline_at(_map, cell_x, width, baseline_y)
+	return PlacementMetrics.baseline_at(_map, cell_x, width, baseline_y)
 
 
 ## 选址范围内是否有实体（玩家/NPC）阻挡放置。
@@ -641,7 +637,7 @@ func _entity_blocking(cell_x: int, width: int, baseline_y: float = -1.0) -> bool
 	# 建筑体 Y 范围（与 PassageBarrier 一致：约 [baseline-BLOCK_BODY_DEPTH, baseline]，
 	# 不含脚下空地）；基线与实际落位同源（点击深度优先；旧图 duck 回退 ground_y+offset）
 	var baseline: float = _baseline_at(cell_x, width, baseline_y)
-	var body_top: float = baseline - ScriptPlacementMetrics.BLOCK_BODY_DEPTH
+	var body_top: float = baseline - PlacementMetrics.BLOCK_BODY_DEPTH
 	var body_bottom: float = baseline
 	for e in _map.get_entities():
 		if e == null or not is_instance_valid(e):
@@ -652,7 +648,7 @@ func _entity_blocking(cell_x: int, width: int, baseline_y: float = -1.0) -> bool
 		if center_y + half_h < body_top or center_y - half_h > body_bottom:
 			continue  # 脚部在建筑体区域外（脚下空地）→ 不挡
 		var x: float = e.global_position.x
-		var x_margin: float = ScriptPlacementMetrics.BLOCK_X_MARGIN
+		var x_margin: float = PlacementMetrics.BLOCK_X_MARGIN
 		if x >= left_x - x_margin and x <= right_x + x_margin:
 			return true
 	return false

@@ -994,6 +994,19 @@ func get_organization_api() -> Node:
 	return _organization_api
 
 
+## 由 GameRoot spawn 时注入 ResourcesApi 引用（玩家采集/村仓入账经它转发；
+## 交互控制器不再全树 find_child 具名节点）
+var _resources_api: Node = null
+
+
+func set_resources_api(api: Node) -> void:
+	_resources_api = api
+
+
+func get_resources_api() -> Node:
+	return _resources_api
+
+
 ## 获取地图引用（spawn 时由 MapBase 注入；可能为 null——AI 模块读
 ## town_center_world_x 等聚落锚点用，见 ai_controller wander 决策）
 func get_map_reference() -> Node2D:

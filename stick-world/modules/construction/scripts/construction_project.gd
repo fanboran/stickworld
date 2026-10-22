@@ -18,11 +18,9 @@ extends RefCounted
 ## 本模块不引用 units 内部类，避免 construction→units 编译期依赖）
 const BODY_COLLISION_LAYER: int = 2
 
-## 放置度量常量库（模块内单一真相源：条带宽/基线回退/阻挡纵深）
-const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
-
-## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨只动彼处）
-const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
+## 占地条带宽（px）：自 L0 共享词汇 PlacementMetrics（条带宽/基线回退/阻挡纵深；
+## 锚定 PlacementGrid.CELL_SIZE，换轨只动 core/constants/placement_metrics.gd）
+const CELL_PX: float = PlacementMetrics.CELL_PX
 
 const ScriptPlacementSystem := preload("res://modules/construction/scripts/placement/placement_system.gd")
 
@@ -337,7 +335,7 @@ func _remove_placeholder_visual() -> void:
 ##（HD-2D 逐格墙脚线 → 旧图 ground_y + building_baseline_offset 回退）。
 ## 工地障碍/占位视觉/完工落位三处共用，保证同线不跳位。
 func _baseline_at() -> float:
-	return ScriptPlacementMetrics.baseline_at(map, cell_x, width, baseline_y)
+	return PlacementMetrics.baseline_at(map, cell_x, width, baseline_y)
 
 
 ## 完工：UNDER_CONSTRUCTION → OPERATIONAL

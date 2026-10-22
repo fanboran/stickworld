@@ -365,6 +365,8 @@ func _restore_from_save(map: Node2D, map_id: String) -> void:
 				player.set_construction_manager(_root._construction_api)
 			if player.has_method("set_formation_system") and _root._formation_system != null:
 				player.set_formation_system(_root._formation_system)
+			if player.has_method("set_resources_api") and _root._resources_api != null:
+				player.set_resources_api(_root._resources_api)
 			if _root.camera_rig != null and _root.camera_rig.has_method("set_follow_target"):
 				_root.camera_rig.set_follow_target(player)
 			# 兜底生成玩家同样对准（水平居中）
@@ -402,6 +404,9 @@ func _restore_entities(db, slot_id: int, map_id: String, map: Node2D) -> Diction
 			# 读档进入即对准玩家（水平居中）
 			if _root.camera_rig != null and _root.camera_rig.has_method("snap_to_follow_target"):
 				_root.camera_rig.snap_to_follow_target()
+			# 玩家注入 ResourcesApi（采集/村仓入账经它；交互控制器不自行找节点）
+			if entity.has_method("set_resources_api") and _root._resources_api != null:
+				entity.set_resources_api(_root._resources_api)
 		else:
 			if entity.has_method("set_user_controlled"):
 				entity.set_user_controlled(false)

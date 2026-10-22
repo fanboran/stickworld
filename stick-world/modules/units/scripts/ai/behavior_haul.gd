@@ -19,7 +19,7 @@ extends BehaviorBase
 
 
 # ─────────────────────────────── 常量 ────────────────────────────────
-const CELL_SIZE: float = 24.0
+const CELL_SIZE: float = PlacementMetrics.CELL_PX
 const ARRIVE_THRESHOLD: float = 28.0
 const WORK_OFFSET_Y: float = 40.0
 
@@ -197,7 +197,7 @@ func _compute_warehouse_pos() -> Vector2:
 	if zone_right <= zone_left:
 		zone_left = left_x
 		zone_right = right_x
-	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
+	var ground_y: float = PlacementMetrics.ground_y_of(entity)
 	# 取货点 = 中间区中心（或偏自己一侧）
 	var center_x: float = (left_x + right_x) * 0.5
 	var target_x: float = zone_left + (zone_right - zone_left) * 0.5
@@ -221,7 +221,7 @@ func _compute_site_pos() -> Vector2:
 	if zone_right <= zone_left:
 		zone_left = left_x
 		zone_right = right_x
-	var ground_y: float = entity.get("ground_y") if "ground_y" in entity else 810.0
+	var ground_y: float = PlacementMetrics.ground_y_of(entity)
 	var center_x: float = (left_x + right_x) * 0.5
 	var target_x: float = zone_left + (zone_right - zone_left) * 0.5
 	if entity.global_position.x < center_x:

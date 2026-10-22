@@ -39,12 +39,9 @@ extends RefCounted
 
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
 
-## 放置度量常量库（模块内单一真相源：派工距离的项目中心 x 与 manager 的
-## get_nearest_project 快照缓存同公式，换轨只动 placement_metrics）
-const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
-
-## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE）
-const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
+## 占地条带宽（px）：自 L0 共享词汇 PlacementMetrics（派工距离的项目中心 x 与
+## manager 的 get_nearest_project 快照缓存同公式，锚定 PlacementGrid.CELL_SIZE）
+const CELL_PX: float = PlacementMetrics.CELL_PX
 
 # ─────────────────────────────── 任务族 ────────────────────────────────
 

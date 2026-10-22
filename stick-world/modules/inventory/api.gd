@@ -19,3 +19,20 @@ static func get_service() -> InventoryService:
 	if root == null or root.root == null:
 		return null
 	return root.root.find_child("InventoryService", true, false) as InventoryService
+
+
+## 打开容器双栏界面（翻包/村仓共用；屏幕由本模块 setup 注册到服务）。
+## 返回是否真正打开（服务/屏幕未就绪 → false，调用方无需自行找节点）。
+static func open_container_screen(container: ItemContainer, title: String) -> bool:
+	var service := get_service()
+	if service == null:
+		return false
+	return service.open_container_screen(container, title)
+
+
+## 打开建筑交互菜单（actions 数据驱动；屏幕由本模块 setup 注册到服务）。
+static func open_building_menu(building_name: String, actions: Array) -> bool:
+	var service := get_service()
+	if service == null:
+		return false
+	return service.open_building_menu(building_name, actions)

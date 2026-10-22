@@ -34,15 +34,15 @@ var _order: Array[String] = []
 
 ## 交战态战斗实例（假单位 = 裸 Node：无 is_dead 即计存活，专测判定分支）
 func _make_battle(attackers: int, defenders: int, limit: float, elapsed: float) -> Node:
-	var b := BattleScript.new()
+	var b: Node = _runner.track_node(BattleScript.new())
 	add_child(b)
 	b._state = BattleScript.State.ENGAGED
 	for i in attackers:
-		var u := Node.new()
+		var u: Node = _runner.track_node(Node.new())
 		b._units_attacker.append(u)
 		add_child(u)
 	for i in defenders:
-		var u := Node.new()
+		var u: Node = _runner.track_node(Node.new())
 		b._units_defender.append(u)
 		add_child(u)
 	b.duration_limit = limit

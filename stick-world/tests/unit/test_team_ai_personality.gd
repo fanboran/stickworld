@@ -167,6 +167,7 @@ func _add_ratio3_setup(ctx: _Ctx) -> void:
 
 func _make_ctx(overrides: Dictionary) -> _Ctx:
 	var ctx := _Ctx.new()
+	ctx.tracker = _runner.track_node
 	ctx.setup(overrides)
 	return ctx
 
@@ -174,10 +175,16 @@ func _make_ctx(overrides: Dictionary) -> _Ctx:
 class _Ctx:
 	var battle: _FakeBattle
 	var ai: TeamAi
+	## 夹具登记口（= TestRunner.track_node）；桩内部造的单位也经它登记
+	var tracker: Callable = Callable()
+
+	func _track(node):
+		return tracker.call(node) if tracker.is_valid() else node
 
 	func setup(overrides: Dictionary = {}) -> void:
-		battle = _FakeBattle.new()
-		ai = ScriptTeamAi.new()
+		battle = _track(_FakeBattle.new())
+		battle.tracker = tracker
+		ai = _track(ScriptTeamAi.new())
 		ai.setup(battle, 1, null, null, overrides)
 
 	func teardown() -> void:
@@ -200,9 +207,11 @@ class _FakeBattle extends Node:
 	var _anchor_faction2 := Vector2(1500, 300)
 	## get_allies_of 调用计数（_refresh_snapshot 每次调用一次 → 观测 DECIDE 拍）
 	var count_allies_queries: int = 0
+	## 单位桩登记口（_Ctx 注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
 
 	func add_unit(pos: Vector2, faction: int, wtype: int) -> void:
-		var u := _FakeUnit.new()
+		var u: _FakeUnit = tracker.call(_FakeUnit.new()) if tracker.is_valid() else _FakeUnit.new()
 		u.global_position = pos
 		u.faction = faction
 		u.weapon_type = wtype

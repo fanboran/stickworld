@@ -64,16 +64,16 @@ func _test_anchor_freeze_and_slot() -> void:
 func _test_anchor_range_budget() -> void:
 	# 8 人班（列高 4 → 2 列）：冻结锚须带射程预算——前列线 = 最前成员 + 纵深
 	# （末列恰贴首停成员的射程线，前列更近照样打；锚冻在质心会让末列掉出射程哑火）
-	var fs: Node = ScriptFormationSystem.new()
-	var org: Node = FakeOrgApi.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	fs.setup(org)
-	var battle := FakeBattle.new()
-	var enemy := FakeEnemy.new()
+	var battle: FakeBattle = _runner.track_node(FakeBattle.new())
+	var enemy: FakeEnemy = _runner.track_node(FakeEnemy.new())
 	enemy.global_position = Vector2(700.0, 900.0)
 	battle.enemies.append(enemy)
 	var units: Array = []
 	for i in 8:
-		var u := FakeUnit.new()
+		var u: FakeUnit = _runner.track_node(FakeUnit.new())
 		u.name = "B%d" % i
 		u.global_position = Vector2(100.0, 500.0 + i * 100.0)
 		var w := FakeWeapon.new()
@@ -393,17 +393,20 @@ class _FormationFixture extends RefCounted:
 	var sid: String = ""
 	var enemy: FakeEnemy = null
 	var battle: FakeBattle = null
+	## 夹具登记口（= TestRunner.track_node；RefCounted 夹具不能靠父节点连带回收）
+	var _track: Callable = Callable()
 
-	func _init() -> void:
-		fs = ScriptFormationSystem.new()
-		org = FakeOrgApi.new()
+	func _init(tracker: Callable = Callable()) -> void:
+		_track = tracker
+		fs = _t(ScriptFormationSystem.new())
+		org = _t(FakeOrgApi.new())
 		fs.setup(org)
-		battle = FakeBattle.new()
-		enemy = FakeEnemy.new()
+		battle = _t(FakeBattle.new())
+		enemy = _t(FakeEnemy.new())
 		enemy.global_position = Vector2(700.0, 650.0)
 		battle.enemies.append(enemy)
 		for i in 4:
-			var u := FakeUnit.new()
+			var u: FakeUnit = _t(FakeUnit.new())
 			u.name = "U%d" % i
 			u.global_position = Vector2(100.0, 500.0 + i * 100.0)
 			var w := FakeWeapon.new()
@@ -414,6 +417,9 @@ class _FormationFixture extends RefCounted:
 			units.append(u)
 		sid = fs.create_squad(units, "槽位锚定队")
 
+	func _t(node):
+		return _track.call(node) if _track.is_valid() else node
+
 	func teardown() -> void:
 		fs.free()
 		org.free()
@@ -423,7 +429,7 @@ class _FormationFixture extends RefCounted:
 
 
 func _make_fixture() -> _FormationFixture:
-	return _FormationFixture.new()
+	return _FormationFixture.new(_runner.track_node)
 
 
 ## 直调战斗锚 tick（绕过 _process；足量 delta 触发节流）
@@ -482,24 +488,27 @@ class _BehaviorCtx extends RefCounted:
 	var attack: Node = null
 	var sid: String = ""
 	var slot: Vector2 = Vector2.INF
+	## 夹具登记口（= TestRunner.track_node；RefCounted 夹具不能靠父节点连带回收）
+	var _track: Callable = Callable()
 
-	func _init(wtype: int) -> void:
+	func _init(wtype: int, tracker: Callable = Callable()) -> void:
+		_track = tracker
 		ScriptBehaviorProfiles._cache.clear()
 		var prof: Dictionary = ScriptBehaviorProfiles.get_profile(wtype)
 		prof["y_drift_interval"] = Vector2(1.0e9, 1.0e9)  # 漂移重掷永不触发（y 走位确定性）
-		fs = ScriptFormationSystem.new()
-		org = FakeOrgApi.new()
+		fs = _t(ScriptFormationSystem.new())
+		org = _t(FakeOrgApi.new())
 		fs.setup(org)
 		# 钉夹具几何（旧观察场覆写口径；生产默认 230 与本套件槽位断言无关）
 		fs.ROW_GAP = 90.0
 		fs.SPREAD_SPACING = 112.0
-		battle = FakeBattle.new()
-		enemy = FakeEnemy.new()
+		battle = _t(FakeBattle.new())
+		enemy = _t(FakeEnemy.new())
 		enemy.global_position = Vector2(900.0, 240.0)
 		battle.enemies.append(enemy)
-		entity = _AnchorEntity.new()
+		entity = _t(_AnchorEntity.new())
 		entity.global_position = Vector2(500.0, 240.0)
-		var w := FakeWeapon.new()
+		var w: FakeWeapon = _t(FakeWeapon.new())
 		w.weapon_type = wtype
 		entity.weapon = w
 		entity.battle = battle
@@ -508,9 +517,12 @@ class _BehaviorCtx extends RefCounted:
 		# 白盒注入战斗锚（tick 冻结语义另由编队侧用例覆盖）
 		fs._squads[sid]["combat_anchor"] = {"pos": Vector2(500.0, 300.0), "facing": Vector2.RIGHT}
 		slot = fs.get_unit_combat_slot(entity)
-		attack = ScriptBehaviorAttack.new()
+		attack = _t(ScriptBehaviorAttack.new())
 		attack.entity = entity
 		attack.enter("", {"battle": battle, "forced_target": enemy})
+
+	func _t(node):
+		return _track.call(node) if _track.is_valid() else node
 
 	func teardown() -> void:
 		attack.free()
@@ -522,4 +534,4 @@ class _BehaviorCtx extends RefCounted:
 
 
 func _make_behavior_ctx(wtype: int) -> _BehaviorCtx:
-	return _BehaviorCtx.new(wtype)
+	return _BehaviorCtx.new(wtype, _runner.track_node)

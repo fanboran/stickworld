@@ -389,20 +389,23 @@ class _World extends RefCounted:
 	var battle: FakeBattle = null
 	var enemy: FakeEnemy = null
 	var units: Array = []
+	## 夹具登记口（= TestRunner.track_node；RefCounted 夹具不能靠父节点连带回收）
+	var _track: Callable = Callable()
 
-	func _init(n: int, x0: float, ranged: bool) -> void:
-		fs = ScriptFormationSystem.new()
-		org = FakeOrgApi.new()
+	func _init(n: int, x0: float, ranged: bool, tracker: Callable = Callable()) -> void:
+		_track = tracker
+		fs = _t(ScriptFormationSystem.new())
+		org = _t(FakeOrgApi.new())
 		fs.setup(org)
 		# 钉夹具几何（本套件测战线几何数学本身；生产默认随战场垂直碰撞超级大批
 		# 改 230，与本套件既有断言无关——夹具沿用写断言时的 140 口径）
 		fs.SPREAD_SPACING = 140.0
-		battle = FakeBattle.new()
-		enemy = FakeEnemy.new()
+		battle = _t(FakeBattle.new())
+		enemy = _t(FakeEnemy.new())
 		enemy.global_position = Vector2(9000.0, 500.0)
 		battle.enemies.append(enemy)
 		for i in n:
-			var u := FakeUnit.new()
+			var u: FakeUnit = _t(FakeUnit.new())
 			u.name = "U%d" % i
 			u.global_position = Vector2(x0, 500.0 + (float(i) - float(n - 1) * 0.5) * 130.0)
 			var w := FakeWeapon.new()
@@ -415,6 +418,9 @@ class _World extends RefCounted:
 			u.add_child(a)
 			units.append(u)
 
+	func _t(node):
+		return _track.call(node) if _track.is_valid() else node
+
 	func teardown() -> void:
 		fs.free()
 		org.free()
@@ -424,7 +430,7 @@ class _World extends RefCounted:
 
 
 func _make_world(n: int, x0: float = 0.0, ranged: bool = false) -> _World:
-	return _World.new(n, x0, ranged)
+	return _World.new(n, x0, ranged, _runner.track_node)
 
 
 func _teardown_world(w: _World) -> void:

@@ -75,11 +75,13 @@ func _ready() -> void:
 ## 构造 formation + 一个 n 人班；units_pos 为各成员位置；
 ## leader_idx >= 0 时任命该成员为班长（锚点 = 班长位置，否则质心兜底）
 func _make_world(n: int, units_pos: Array, leader_idx: int = -1) -> Array:
-	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
+	# 夹具经 runner 登记：用例自行 fs.free() 后，登记表按有效性跳过；
+	# 未显式释放的单位桩（Node2D 无父节点连带）由用例收尾统一回收
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
 	var units: Array = []
 	for i in n:
-		var u := FakeUnit.new()
+		var u: FakeUnit = _runner.track_node(FakeUnit.new())
 		u.name = "U%d" % i
 		u.position = units_pos[i]
 		units.append(u)
@@ -245,7 +247,7 @@ func _test_centroid_anchor() -> void:
 func _test_no_squad_zero() -> void:
 	var r: Array = _make_world(1, [Vector2.ZERO])
 	var fs: Node = r[0]
-	var lone := FakeUnit.new()
+	var lone: FakeUnit = _runner.track_node(FakeUnit.new())
 	lone.position = Vector2(5000, 0)
 	_runner.assert_true(fs.get_unit_cohesion_steer(lone) == Vector2.ZERO, "无班单位应零施力")
 	_runner.assert_false(fs.is_unit_catching_up(lone), "无班单位不在归队态")

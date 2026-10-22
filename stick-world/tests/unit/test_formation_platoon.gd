@@ -104,7 +104,7 @@ func _ready() -> void:
 func _make_units(n: int, battle: Node = null) -> Array:
 	var units: Array = []
 	for i in n:
-		var u := FakeUnit.new()
+		var u: FakeUnit = _runner.track_node(FakeUnit.new())
 		u.name = "U%d" % i
 		u.position = Vector2(100 + i * 40, 500)
 		u.battle = battle
@@ -114,7 +114,7 @@ func _make_units(n: int, battle: Node = null) -> Array:
 
 ## 构造 FormationSystem + 指定人数的班（fp_combat_squad 战斗预设）
 func _make_fs_with_squads(sizes: Array, org: Node) -> Array:
-	var fs: Node = ScriptFormationSystem.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org)
 	var sids: Array = []
 	var all_units: Array = []
@@ -126,7 +126,7 @@ func _make_fs_with_squads(sizes: Array, org: Node) -> Array:
 
 
 func _test_create_and_lookup() -> void:
-	var org: Node = FakeOrgApi.new()
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	var r: Array = _make_fs_with_squads([3, 3, 3], org)
 	var fs: Node = r[0]
 	var sids: Array = r[1]
@@ -146,7 +146,7 @@ func _test_create_and_lookup() -> void:
 
 
 func _test_platoon_leader_rank() -> void:
-	var org: Node = FakeOrgApi.new()
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	var r: Array = _make_fs_with_squads([4, 4], org)
 	var fs: Node = r[0]
 	var sids: Array = r[1]
@@ -162,9 +162,9 @@ func _test_platoon_leader_rank() -> void:
 	var outsider: Node = _make_units(1)[0]
 	_runner.assert_false(fs.assign_platoon_leader(pid, outsider), "排外单位应拒绝")
 	# 带原生 rank 字段的桩：属性口径（set_rank 方法缺省走 "rank" in u 分支）
-	var ranked_fs: Node = ScriptFormationSystem.new()
-	ranked_fs.setup(FakeOrgApi.new())
-	var ru: RankedUnit = RankedUnit.new()
+	var ranked_fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	ranked_fs.setup(_runner.track_node(FakeOrgApi.new()))
+	var ru: RankedUnit = _runner.track_node(RankedUnit.new())
 	ru.position = Vector2.ZERO
 	var rsid: String = ranked_fs.create_squad([ru], "带衔班", "fp_combat_squad")
 	var rpid: String = ranked_fs.create_platoon([rsid])
@@ -173,13 +173,13 @@ func _test_platoon_leader_rank() -> void:
 
 
 func _test_leader_death_gap() -> void:
-	var org: Node = FakeOrgApi.new()
-	var fs: Node = ScriptFormationSystem.new()
+	var org: Node = _runner.track_node(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org)
-	var battle: Node = FakeBattle.new()
+	var battle: Node = _runner.track_node(FakeBattle.new())
 	var enemies: Array = []
 	for i in 2:
-		var e := FakeEnemy.new()
+		var e: FakeEnemy = _runner.track_node(FakeEnemy.new())
 		e.name = "Enemy%d" % i
 		e.position = Vector2(600 + i * 40, 500)
 		enemies.append(e)
@@ -215,8 +215,8 @@ func _test_leader_death_gap() -> void:
 
 
 func _test_squad_rotation_unaffected() -> void:
-	var org: Node = FakeOrgApi.new()
-	var fs: Node = ScriptFormationSystem.new()
+	var org: Node = _runner.track_node(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org)
 	var s1_units: Array = _make_units(3)
 	var s1: String = fs.create_squad(s1_units, "甲班", "fp_combat_squad")
@@ -238,7 +238,7 @@ func _test_squad_rotation_unaffected() -> void:
 
 
 func _test_disband_chaining() -> void:
-	var org: Node = FakeOrgApi.new()
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	var r: Array = _make_fs_with_squads([3, 3, 3], org)
 	var fs: Node = r[0]
 	var sids: Array = r[1]

@@ -34,7 +34,7 @@ func _ready() -> void:
 # ─────────────────────────────── 测试用例 ────────────────────────────────
 
 func _test_order_attack() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -57,7 +57,7 @@ func _test_order_attack() -> void:
 
 
 func _test_order_defend() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 力量劣势维持 DEFEND：本方 1 vs 敌方 3
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -91,7 +91,7 @@ func _test_order_defend() -> void:
 
 
 func _test_order_garrison() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_enemy_unit(Vector2(800, 300), ScriptTeamAiProfiles.SPEAR)  # 敌近
@@ -110,7 +110,7 @@ func _test_order_garrison() -> void:
 
 
 func _test_order_filter_faction() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -130,7 +130,7 @@ func _test_order_filter_faction() -> void:
 
 
 func _test_order_filter_noncombat() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -149,7 +149,7 @@ func _test_order_filter_noncombat() -> void:
 
 
 func _test_order_filter_empty() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -168,7 +168,7 @@ func _test_order_filter_empty() -> void:
 
 
 func _test_order_manual_guard() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -195,7 +195,7 @@ func _test_order_manual_guard() -> void:
 
 
 func _test_order_manual_expire() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -222,7 +222,7 @@ func _test_order_manual_expire() -> void:
 
 
 func _test_order_tier() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -240,7 +240,7 @@ func _test_order_tier() -> void:
 
 
 func _test_order_null_orders() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup_with_orders(null)
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -255,24 +255,40 @@ func _test_order_null_orders() -> void:
 
 # ─────────────────────────────── Mock 夹具 ────────────────────────────────
 
+## 造带 runner 登记口的上下文（夹具节点由用例结束统一释放）
+func _make_ctx() -> _Ctx:
+	var ctx := _Ctx.new()
+	ctx.tracker = _runner.track_node
+	return ctx
+
+
 class _Ctx:
 	var battle: _FakeBattle
 	var orders: _FakeOrders
 	var formation: _FakeFormation
 	var ai: TeamAi
+	## 夹具登记口（= TestRunner.track_node）；桩内部造的单位也经它登记
+	var tracker: Callable = Callable()
+
+	func _track(node):
+		return tracker.call(node) if tracker.is_valid() else node
 
 	func setup() -> void:
-		battle = _FakeBattle.new()
-		orders = _FakeOrders.new()
-		formation = _FakeFormation.new()
-		ai = ScriptTeamAi.new()
+		battle = _track(_FakeBattle.new())
+		battle.tracker = tracker
+		orders = _track(_FakeOrders.new())
+		formation = _track(_FakeFormation.new())
+		formation.tracker = tracker
+		ai = _track(ScriptTeamAi.new())
 		ai.setup(battle, 1, orders, formation, {})
 
 	func setup_with_orders(o: Node) -> void:
-		battle = _FakeBattle.new()
-		orders = _FakeOrders.new()
-		formation = _FakeFormation.new()
-		ai = ScriptTeamAi.new()
+		battle = _track(_FakeBattle.new())
+		battle.tracker = tracker
+		orders = _track(_FakeOrders.new())
+		formation = _track(_FakeFormation.new())
+		formation.tracker = tracker
+		ai = _track(ScriptTeamAi.new())
 		ai.setup(battle, 1, o, formation, {})
 
 	func teardown() -> void:
@@ -303,9 +319,11 @@ class _FakeBattle extends Node:
 	var _units: Array = []
 	var _anchor_faction1 := Vector2(500, 300)
 	var _anchor_faction2 := Vector2(1500, 300)
+	## 单位桩登记口（_Ctx 注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
 
 	func add_unit(pos: Vector2, faction: int, wtype: int) -> void:
-		var u := _FakeUnit.new()
+		var u: _FakeUnit = tracker.call(_FakeUnit.new()) if tracker.is_valid() else _FakeUnit.new()
 		u.global_position = pos
 		u.faction = faction
 		u.weapon_type = wtype
@@ -357,11 +375,13 @@ class _FakeOrders extends Node:
 
 class _FakeFormation extends Node:
 	var _squads: Dictionary = {}  # squad_id -> {faction, is_combat, units}
+	## 单位桩登记口（_Ctx 注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
 
 	func add_squad(squad_id: String, faction: int, is_combat: bool, unit_count: int) -> void:
 		var units: Array = []
 		for i in unit_count:
-			var u := _FakeUnit.new()
+			var u: _FakeUnit = tracker.call(_FakeUnit.new()) if tracker.is_valid() else _FakeUnit.new()
 			u.faction = faction
 			u.weapon_type = ScriptTeamAiProfiles.SPEAR
 			u.dead = false

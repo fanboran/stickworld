@@ -39,7 +39,7 @@ func _ready() -> void:
 # ─────────────────────────────── 测试用例 ────────────────────────────────
 
 func _test_weakest_ally_lowest_hp() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	var a1 := ctx.add_ally(Vector2(500, 300), 0.2)
 	var a2 := ctx.add_ally(Vector2(520, 300), 0.6)
@@ -50,7 +50,7 @@ func _test_weakest_ally_lowest_hp() -> void:
 
 
 func _test_weakest_ally_full_hp() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_ally(Vector2(500, 300), 1.0)
 	ctx.add_ally(Vector2(520, 300), 1.0)
@@ -60,7 +60,7 @@ func _test_weakest_ally_full_hp() -> void:
 
 
 func _test_weakest_ally_faction_isolation() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_ally(Vector2(500, 300), 1.0)
 	ctx.add_enemy(Vector2(510, 300), 0.1)
@@ -70,7 +70,7 @@ func _test_weakest_ally_faction_isolation() -> void:
 
 
 func _test_cooldown_constraint() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	var wm := _FakeWeaponMount.new()
 	wm.weapon_type = ScriptBehaviorProfiles.MERIC
@@ -83,7 +83,7 @@ func _test_cooldown_constraint() -> void:
 
 
 func _test_casting_mutex() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	var wm := _FakeWeaponMount.new()
 	wm.weapon_type = ScriptBehaviorProfiles.MERIC
@@ -105,9 +105,9 @@ func _test_pick_heal_anim_random() -> void:
 
 
 func _test_hot_per_tick() -> void:
-	var se := ScriptStatusEffects.new()
-	var owner := _FakeEntity.new()
-	owner.health = _FakeHealth.new()
+	var se: Node = _runner.track_node(ScriptStatusEffects.new())
+	var owner: _FakeEntity = _runner.track_node(_FakeEntity.new())
+	owner.health = _runner.track_node(_FakeHealth.new())
 	owner.health.max_hp = 100.0
 	owner.health.hp = 50.0
 	se._owner = owner
@@ -120,9 +120,9 @@ func _test_hot_per_tick() -> void:
 
 
 func _test_hot_cap() -> void:
-	var se := ScriptStatusEffects.new()
-	var owner := _FakeEntity.new()
-	owner.health = _FakeHealth.new()
+	var se: Node = _runner.track_node(ScriptStatusEffects.new())
+	var owner: _FakeEntity = _runner.track_node(_FakeEntity.new())
+	owner.health = _runner.track_node(_FakeHealth.new())
 	owner.health.max_hp = 100.0
 	owner.health.hp = 99.0
 	se._owner = owner
@@ -134,9 +134,9 @@ func _test_hot_cap() -> void:
 
 
 func _test_hot_no_damage() -> void:
-	var se := ScriptStatusEffects.new()
-	var owner := _FakeEntity.new()
-	owner.health = _FakeHealth.new()
+	var se: Node = _runner.track_node(ScriptStatusEffects.new())
+	var owner: _FakeEntity = _runner.track_node(_FakeEntity.new())
+	owner.health = _runner.track_node(_FakeHealth.new())
 	owner.health.max_hp = 100.0
 	owner.health.hp = 50.0
 	se._owner = owner
@@ -171,7 +171,7 @@ func _test_profile_zero_regression() -> void:
 
 
 func _test_weakest_ally_self() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.caster_health.hp = 30.0
 	ctx.caster_health.max_hp = 100.0
@@ -182,17 +182,29 @@ func _test_weakest_ally_self() -> void:
 
 # ─────────────────────────────── Mock 夹具 ────────────────────────────────
 
+## 造带 runner 登记口的上下文（夹具节点由用例结束统一释放）
+func _make_ctx() -> _Ctx:
+	var ctx := _Ctx.new()
+	ctx.tracker = _runner.track_node
+	return ctx
+
+
 class _Ctx:
 	var battle: _FakeBattle
 	var caster: _FakeEntity
 	var caster_health: _FakeHealth
+	## 夹具登记口（= TestRunner.track_node）；单位/血量桩也经它登记
+	var tracker: Callable = Callable()
+
+	func _track(node):
+		return tracker.call(node) if tracker.is_valid() else node
 
 	func setup() -> void:
-		battle = _FakeBattle.new()
-		caster_health = _FakeHealth.new()
+		battle = _track(_FakeBattle.new())
+		caster_health = _track(_FakeHealth.new())
 		caster_health.max_hp = 100.0
 		caster_health.hp = 100.0
-		caster = _FakeEntity.new()
+		caster = _track(_FakeEntity.new())
 		caster.faction = 1
 		caster.global_position = Vector2(480, 300)
 		caster.health = caster_health
@@ -205,10 +217,10 @@ class _Ctx:
 			battle.queue_free()
 
 	func add_ally(pos: Vector2, hp_ratio: float) -> _FakeEntity:
-		var h := _FakeHealth.new()
+		var h: _FakeHealth = _track(_FakeHealth.new())
 		h.max_hp = 100.0
 		h.hp = hp_ratio * 100.0
-		var e := _FakeEntity.new()
+		var e: _FakeEntity = _track(_FakeEntity.new())
 		e.faction = 1
 		e.global_position = pos
 		e.health = h
@@ -216,10 +228,10 @@ class _Ctx:
 		return e
 
 	func add_enemy(pos: Vector2, hp_ratio: float) -> _FakeEntity:
-		var h := _FakeHealth.new()
+		var h: _FakeHealth = _track(_FakeHealth.new())
 		h.max_hp = 100.0
 		h.hp = hp_ratio * 100.0
-		var e := _FakeEntity.new()
+		var e: _FakeEntity = _track(_FakeEntity.new())
 		e.faction = 2
 		e.global_position = pos
 		e.health = h

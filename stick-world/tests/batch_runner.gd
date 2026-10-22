@@ -103,14 +103,24 @@ const PER_TEST_TIMEOUT_SEC: float = 30.0
 
 var _failed: Array[String] = []
 
+## 排查观测位（默认关闭）：环境变量 SW_BATCH_TRACE=<绝对路径> 时，每套件
+## 起止/耗时/退出码逐行落盘（每次写即关，保证并行观测实时可见）。
+## stdout 在重定向下全缓冲，长跑期间黑盒——排查并行轮转问题时靠它看实时进度。
+var _trace_path: String = ""
+var _t0_ms: int = 0
+
 
 func _ready() -> void:
 	Engine.set_meta("test_batch", true)
 	var t0: int = Time.get_ticks_msec()
+	_t0_ms = t0
+	_trace_path = OS.get_environment("SW_BATCH_TRACE")
+	_trace("batch start pid=%d" % OS.get_process_id())
 	_check_manifest()
 	for path in UNIT_SCRIPTS:
 		await _run_one(path)
 	var secs: float = (Time.get_ticks_msec() - t0) / 1000.0
+	_trace("batch end failed=%d" % _failed.size())
 	print("=== 批量汇总: %d / %d 通过（%.1fs）===" % [
 		UNIT_SCRIPTS.size() - _failed.size(), UNIT_SCRIPTS.size(), secs
 	])
@@ -120,8 +130,21 @@ func _ready() -> void:
 	else:
 		for f in _failed:
 			print("[BATCH-FAIL] %s" % f)
+		_trace("batch-fail list: %s" % ", ".join(_failed))
 		await get_tree().process_frame
 		get_tree().quit(1)
+
+
+## 追踪一行到 SW_BATCH_TRACE 指定文件（相对批启动的毫秒时间戳）；未设环境变量时零开销。
+func _trace(line: String) -> void:
+	if _trace_path.is_empty():
+		return
+	var f := FileAccess.open(_trace_path, FileAccess.READ_WRITE if FileAccess.file_exists(_trace_path) else FileAccess.WRITE)
+	if f == null:
+		return
+	f.seek_end()
+	f.store_line("[%8dms] %s" % [Time.get_ticks_msec() - _t0_ms, line])
+	f.close()
 
 
 ## 清单自检：tests/unit/ 下每个 .gd 都必须在 UNIT_SCRIPTS 里——套件文件躺在盘上
@@ -158,10 +181,14 @@ func _check_manifest() -> void:
 
 
 func _run_one(path: String) -> void:
+	_trace("suite load start: %s" % path)
+	var load_t0: int = Time.get_ticks_msec()
 	var script: GDScript = load(path) as GDScript
 	if script == null:
 		_failed.append(path + "（加载失败）")
+		_trace("suite LOAD-FAIL: %s" % path)
 		return
+	_trace("suite loaded in %dms: %s" % [Time.get_ticks_msec() - load_t0, path])
 	# 全局时间状态隔离：前一套件触发的 battle_started 自动暂停会残留到本进程，
 	# 污染后续套件（2026-09-01 起 weapon_mount/arrow 挂了 TimeManager 暂停门禁，
 	# PAUSED 残留会让命中帧/冷却推进全部空转）
@@ -174,9 +201,13 @@ func _run_one(path: String) -> void:
 	var inst: Node = script.new()
 	inst.name = path.get_file().get_basename()
 	add_child(inst)
+	var run_t0: int = Time.get_ticks_msec()
 	var code: int = await _await_done(inst)
 	var cases: int = int(Engine.get_meta(TestRunner.META_LAST_CASES, -1))
 	var asserts: int = int(Engine.get_meta(TestRunner.META_LAST_ASSERTS, 0))
+	_trace("suite done in %dms code=%d cases=%d: %s" % [
+		Time.get_ticks_msec() - run_t0, code, cases, path.get_file()
+	])
 	print("  [%s] %-46s 用例 %d / 断言 %d" % [
 		"OK  " if code == 0 else "FAIL", inst.name, cases, asserts
 	])
@@ -195,5 +226,6 @@ func _await_done(inst: Node) -> int:
 		await get_tree().process_frame
 	if done.is_empty():
 		push_error("[BatchRunner] 超时(%.0fs): %s" % [PER_TEST_TIMEOUT_SEC, inst.name])
+		_trace("suite TIMEOUT: %s" % inst.name)
 		return 1
 	return done[0]

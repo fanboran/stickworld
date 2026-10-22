@@ -120,6 +120,8 @@ bash tests/run_unit.sh                         # unit 批量（单进程，秒�
 
 退出码：0 全过 / 1 有失败。`run_tests.gd`（旧入口）职责：仅 autoload 冒烟（EventBus/ConfigManager），不再是"全部测试入口"。
 
+**类缓存预检**：`run_all.sh` / `run_unit.sh` 起跑前经 `tests/lib/class_cache_guard.sh` 校验 `.godot/global_script_class_cache.cfg`（盘上 class_name 全集 ⊆ 缓存注册集），不健康先 `--import` 重建——该缓存缺失/残缺会让套件在 load/编译层成片失败（`Identifier X not declared`），多会话共用工作区时由编辑器/import 重写引入（根因档案见 [测试假失败与不稳定项](../../docs/项目/待办/测试假失败与不稳定项.md)）。
+
 ---
 
 ## 五、关于 GdUnit4（P0-7 决策）

@@ -108,22 +108,22 @@ func _ready() -> void:
 
 ## 构造真实 battle_instance + 假单位（battle/map 进树，cover_system 需要 tree）
 func _make_battle() -> Dictionary:
-	var map := Node2D.new()
+	var map = _runner.track_node(Node2D.new())
 	map.name = "TestMap"
 	add_child(map)
-	var battle: Node = ScriptBattleInstance.new()
+	var battle: Node = _runner.track_node(ScriptBattleInstance.new())
 	battle.name = "TestBattle"
 	add_child(battle)
 	battle.setup(map)
 	battle.start()  # PREPARING -> ENGAGED（behavior.update 需 is_active）
-	var a := FakeUnit.new()
+	var a = _runner.track_node(FakeUnit.new())
 	a.name = "Attacker"
 	a.position = Vector2(0, 0)
-	var b1 := FakeUnit.new()
+	var b1 = _runner.track_node(FakeUnit.new())
 	b1.name = "Enemy1"
 	b1.faction_id = 2
 	b1.position = Vector2(100, 0)
-	var b2 := FakeUnit.new()
+	var b2 = _runner.track_node(FakeUnit.new())
 	b2.name = "Enemy2"
 	b2.faction_id = 2
 	b2.position = Vector2(200, 0)
@@ -175,8 +175,8 @@ func _test_finder_filter() -> void:
 	var e1: FakeUnit = w["e1"]
 	var e2: FakeUnit = w["e2"]
 	# e1 被 3 个不同攻击者围攻（≥ max_attackers 3）→ 应被过滤，选 e2
-	var extra1 := FakeUnit.new()
-	var extra2 := FakeUnit.new()
+	var extra1 = _runner.track_node(FakeUnit.new())
+	var extra2 = _runner.track_node(FakeUnit.new())
 	battle.register_attacker(e1, a)
 	battle.register_attacker(e1, extra1)
 	battle.register_attacker(e1, extra2)
@@ -206,7 +206,7 @@ func _test_finder_forward_only() -> void:
 	var a: FakeUnit = w["attacker"]
 	var e1: FakeUnit = w["e1"]      # (100,0) 身前（facing 默认 1）
 	var e2: FakeUnit = w["e2"]      # (200,0) 身前
-	var behind := FakeUnit.new()    # (-150,0) 背后且更近
+	var behind = _runner.track_node(FakeUnit.new())    # (-150,0) 背后且更近
 	behind.name = "EnemyBehind"
 	behind.faction_id = 2
 	behind.position = Vector2(-150, 0)
@@ -233,14 +233,14 @@ func _test_finder_forward_fallback() -> void:
 	var a: FakeUnit = w["attacker"]
 	var e1: FakeUnit = w["e1"]      # 身前，被围攻超限
 	var e2: FakeUnit = w["e2"]      # 身前，无围攻
-	var behind := FakeUnit.new()    # 背后最近
+	var behind = _runner.track_node(FakeUnit.new())    # 背后最近
 	behind.name = "EnemyBehind2"
 	behind.faction_id = 2
 	behind.position = Vector2(-50, 0)
 	battle.add_unit(behind, 2)
 	# e1 围攻超限需 3 个**不同**攻击者（register_attacker 同者去重，见 _test_register）
-	var extra1 := FakeUnit.new()
-	var extra2 := FakeUnit.new()
+	var extra1 = _runner.track_node(FakeUnit.new())
+	var extra2 = _runner.track_node(FakeUnit.new())
 	battle.register_attacker(e1, a)
 	battle.register_attacker(e1, extra1)
 	battle.register_attacker(e1, extra2)
@@ -252,10 +252,10 @@ func _test_finder_forward_fallback() -> void:
 func _test_leash_far() -> void:
 	var w: Dictionary = _make_battle()
 	# P1 拆分：追击判定本体在 target_acquire（tier_of 分层），直测 helper
-	var acq: ScriptTargetAcquire = ScriptTargetAcquire.new()
+	var acq: ScriptTargetAcquire = _runner.track_node(ScriptTargetAcquire.new())
 	acq.setup(w["attacker"], w["battle"], {})
 	# 裁决#31 起无距离门（追击最近敌不设上限）——观测面恒不追丢
-	var far := FakeUnit.new()
+	var far = _runner.track_node(FakeUnit.new())
 	far.position = Vector2(500, 0)
 	acq._target = far
 	_runner.assert_false(acq.is_beyond_leash(), "无距离门：远目标不判追丢（裁决#31）")
@@ -263,10 +263,10 @@ func _test_leash_far() -> void:
 
 func _test_leash_near() -> void:
 	var w: Dictionary = _make_battle()
-	var acq: ScriptTargetAcquire = ScriptTargetAcquire.new()
+	var acq: ScriptTargetAcquire = _runner.track_node(ScriptTargetAcquire.new())
 	acq.setup(w["attacker"], w["battle"], {})
 	# 目标在 150px 内 → 不超 leash
-	var near := FakeUnit.new()
+	var near = _runner.track_node(FakeUnit.new())
 	near.position = Vector2(150, 0)
 	acq._target = near
 	_runner.assert_false(acq.is_beyond_leash(), "目标在攻击范围×4 内不应判追丢")
@@ -278,7 +278,7 @@ func _test_hit_stun() -> void:
 	var attacker: FakeUnit = w["attacker"]
 	var e1: FakeUnit = w["e1"]
 	e1.position = Vector2(100, 0)  # 攻击范围内
-	var beh: Node = ScriptBehaviorAttack.new()
+	var beh: Node = _runner.track_node(ScriptBehaviorAttack.new())
 	beh.entity = attacker
 	beh.enter("", {"battle": w["battle"]})
 	attacker.stun = true
@@ -301,7 +301,7 @@ func _test_sticky_target() -> void:
 	var attacker: FakeUnit = w["attacker"]
 	var e1: FakeUnit = w["e1"]
 	var e2: FakeUnit = w["e2"]
-	var beh: Node = ScriptBehaviorAttack.new()
+	var beh: Node = _runner.track_node(ScriptBehaviorAttack.new())
 	beh.entity = attacker
 	beh.enter("", {"battle": w["battle"]})
 	beh.update(0.01)  # 首次选举（最近 = e1，100px）
@@ -325,9 +325,9 @@ func _test_swing_lock() -> void:
 	var attacker: FakeUnit = w["attacker"]
 	var e1: FakeUnit = w["e1"]
 	e1.position = Vector2(100, 0)  # 出手门内（0.8×140=112）
-	var beh: Node = ScriptBehaviorAttack.new()
+	var beh: Node = _runner.track_node(ScriptBehaviorAttack.new())
 	beh.entity = attacker
-	var weap := FakeWeapon.new()
+	var weap = _runner.track_node(FakeWeapon.new())
 	attacker.weapon = weap
 	beh.enter("", {"battle": w["battle"]})
 	beh.update(0.01)  # 射程内站桩出手（冷却好即打）

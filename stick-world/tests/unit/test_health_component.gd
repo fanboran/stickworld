@@ -24,7 +24,7 @@ func _ready() -> void:
 
 
 func _new_health(max_hp: float) -> Node:
-	var h := ScriptHealthComponent.new()
+	var h = _runner.track_node(ScriptHealthComponent.new())
 	h.max_hp = max_hp
 	h.hp = max_hp
 	return h

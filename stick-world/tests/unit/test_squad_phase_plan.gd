@@ -157,15 +157,15 @@ func _ready() -> void:
 ## 构造：formation + n 个带 AI 桩的单位（同点出生 → 槽位序 = 入队序，确定性）。
 ## 返回 {"fs", "units", "sid"}
 func _make_world(n: int, pos: Vector2 = Vector2(200, 500)) -> Dictionary:
-	var fs: Node = ScriptFormationSystem.new()
-	var org: Node = FakeOrgApi.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	fs.setup(org)
 	var units: Array = []
 	for i in n:
-		var u := FakeUnit.new()
+		var u = _runner.track_node(FakeUnit.new())
 		u.name = "U%d" % i
 		u.position = pos
-		u.ai = FakeAI.new()
+		u.ai = _runner.track_node(FakeAI.new())
 		units.append(u)
 	var sid: String = fs.create_squad(units, "相位队")
 	return {"fs": fs, "units": units, "sid": sid}
@@ -383,8 +383,8 @@ func _test_back_enemy_cover() -> void:
 	var sid: String = w["sid"]
 	_enable(fs)
 	# 背敌：敌人(+x 推进方向的反半平面)距 140px（<背敌半径 260，>武器射程 100 不算接战）
-	var battle: Node = FakeBattle.new()
-	var enemy := FakeEnemy.new()
+	var battle: Node = _runner.track_node(FakeBattle.new())
+	var enemy = _runner.track_node(FakeEnemy.new())
 	enemy.position = Vector2(60, 500)  # 单位在 (200,500)，敌在其背后
 	battle.enemies = [enemy]
 	for u in units:
@@ -424,8 +424,8 @@ func _test_guards() -> void:
 	units[0].ai.force_behavior("retreat")
 	units[1].ai.force_order("move", {"target": Vector2(9999, 0)})
 	units[4].ai.force_order("move", {"target": Vector2(9999, 0)})  # 两翼侧玩家号令
-	var battle: Node = FakeBattle.new()
-	var enemy := FakeEnemy.new()
+	var battle: Node = _runner.track_node(FakeBattle.new())
+	var enemy = _runner.track_node(FakeEnemy.new())
 	enemy.position = Vector2(250, 500)  # u2 在 (200,500)：50px < 射程 100 = 接战，且在推进方向前方
 	battle.enemies = [enemy]
 	units[2].battle = battle

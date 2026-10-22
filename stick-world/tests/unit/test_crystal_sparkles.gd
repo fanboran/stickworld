@@ -243,7 +243,7 @@ func _test_measure_host() -> void:
 	_runner.assert_approx(float(m_poly["area_units"]), 1.0, 0.001, "Polygon2D shoelace 面积")
 
 	# 空宿主：兜底不至于崩
-	var m_none := ScriptCrystalSparkles.measure_host(Node2D.new())
+	var m_none := ScriptCrystalSparkles.measure_host(_runner.track_node(Node2D.new()))
 	_runner.assert_gt(float(m_none["area_units"]), 0.0, "无可视化子节点时应有兜底面积")
 
 

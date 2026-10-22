@@ -75,13 +75,13 @@ func _ready() -> void:
 
 
 func _make_move_behavior(member: bool) -> Array:
-	var beh: Node = ScriptBehaviorMove.new()
-	var unit := FakeUnit.new()
+	var beh: Node = _runner.track_node(ScriptBehaviorMove.new())
+	var unit = _runner.track_node(FakeUnit.new())
 	unit.position = Vector2(0, 0)
 	if member:
-		var fs: Node = ScriptFormationSystem.new()
-		fs.setup(FakeOrgApi.new())
-		var other := FakeUnit.new()
+		var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+		fs.setup(_runner.track_node(FakeOrgApi.new()))
+		var other = _runner.track_node(FakeUnit.new())
 		fs.create_squad([unit, other], "列阵队", "fp_combat_squad")
 		unit.formation = fs
 	# 目标设在单位附近（确保 dist <= ARRIVAL_THRESHOLD 触发到达）
@@ -111,11 +111,11 @@ func _test_arrive_nonmember() -> void:
 
 
 func _test_reposition() -> void:
-	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
-	var u0 := FakeUnit.new()
-	var u1 := FakeUnit.new()
-	var u2 := FakeUnit.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
+	var u0 = _runner.track_node(FakeUnit.new())
+	var u1 = _runner.track_node(FakeUnit.new())
+	var u2 = _runner.track_node(FakeUnit.new())
 	u0.position = Vector2(0, 0)
 	u1.position = Vector2(50, 0)
 	u2.position = Vector2(100, 0)

@@ -55,14 +55,14 @@ func _ready() -> void:
 ## false 时沿 y 向 260px 大间距散开（间距 > 槽距 140+死区余量：成员距自身
 ## 槽位必超死区，确定性——槽距改值时同步核本夹具）。
 func _make_formation(n: int, same_point: bool = true) -> Array:
-	var fs: Node = ScriptFormationSystem.new()
-	var org: Node = FakeOrgApi.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	fs.setup(org)
 	# 钉夹具几何（生产默认随战场垂直碰撞超级大批改 230；本套件断言按 140 写）
 	fs.SPREAD_SPACING = 140.0
 	var units: Array = []
 	for i in n:
-		var u := Node2D.new()
+		var u = _runner.track_node(Node2D.new())
 		u.name = "U%d" % i
 		u.position = Vector2(100, 500) if same_point else Vector2(100, 500 + i * 260.0)
 		var s := GDScript.new()
@@ -112,12 +112,12 @@ func _test_slot_grid() -> void:
 
 func _test_slot_world() -> void:
 	# 纵向两员（对称于中线）：u0→前列上槽、u1→前列中槽，换位对称无改善 → 索引序确定
-	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
-	var u0 := Node2D.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
+	var u0 = _runner.track_node(Node2D.new())
 	u0.name = "Top"
 	u0.position = Vector2(160, 436)
-	var u1 := Node2D.new()
+	var u1 = _runner.track_node(Node2D.new())
 	u1.name = "Mid"
 	u1.position = Vector2(160, 564)
 	var units: Array = [u0, u1]
@@ -173,12 +173,12 @@ func _test_reinforce_on_removal() -> void:
 func _test_swap_closer_to_front() -> void:
 	# u0 远离锚（后方）、u4 贴近前排锚侧——贪心换位应让近者填前列。
 	# 班级列高 4：5 人才有两列（前列 4 + 后列 1），远者被换到唯一后列槽。
-	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
 	var xs: Array = [0.0, 40.0, 80.0, 120.0, 480.0]
 	var units: Array = []
 	for i in xs.size():
-		var u := Node2D.new()
+		var u = _runner.track_node(Node2D.new())
 		u.name = "U%d" % i
 		u.position = Vector2(xs[i], 500)
 		var s := GDScript.new()

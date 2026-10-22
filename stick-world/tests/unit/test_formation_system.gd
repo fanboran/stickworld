@@ -55,18 +55,18 @@ func _ready() -> void:
 
 
 func _make_fs() -> Array:
-	var org := FakeOrgApi.new()
-	var fs := ScriptFormationSystem.new()
+	var org = _runner.track_node(FakeOrgApi.new())
+	var fs = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org)
 	return [fs, org]
 
 
 func _unit() -> Node:
-	return Node.new()
+	return _runner.track_node(Node.new())
 
 
 func _test_no_org_api() -> void:
-	var fs := ScriptFormationSystem.new()
+	var fs = _runner.track_node(ScriptFormationSystem.new())
 	var squad_id: String = fs.create_squad([_unit()])
 	_runner.assert_equal(squad_id, "", "未注入 api 应创建失败")
 	_runner.assert_equal(fs.get_squad_count(), 0, "无小队")
@@ -91,7 +91,7 @@ func _test_dead_filter() -> void:
 	var pair := _make_fs()
 	var fs: Node = pair[0]
 	var org: FakeOrgApi = pair[1]
-	var dead := Node.new()
+	var dead = _runner.track_node(Node.new())
 	dead.set_script(_make_dead_unit_script())
 	dead.set("dead", true)
 	var squad_id: String = fs.create_squad([dead])

@@ -28,8 +28,8 @@ func _ready() -> void:
 
 ## 构造 api + manager fixture，返回 {"api": ..., "manager": ..., "events": [...]}
 func _make_api() -> Dictionary:
-	var api := ScriptResourcesApi.new()
-	var manager := ScriptResourceManager.new()
+	var api = _runner.track_node(ScriptResourcesApi.new())
+	var manager = _runner.track_node(ScriptResourceManager.new())
 	api.setup(manager)
 	var events: Array = []  # {sig: String, args: Array}
 	api.resource_changed.connect(func(a, b, c, d): events.append({"sig": "changed", "args": [a, b, c, d]}))
@@ -38,7 +38,7 @@ func _make_api() -> Dictionary:
 
 
 func _test_uninitialized() -> void:
-	var api := ScriptResourcesApi.new()
+	var api = _runner.track_node(ScriptResourcesApi.new())
 	var r: Dictionary = api.consume("res_wood", 10.0, "r1", "test")
 	_runner.assert_false(r.get("ok", true), "未初始化 consume 应失败")
 	_runner.assert_false(api.produce("res_wood", 10.0, "r1", "test").get("ok", true), "未初始化 produce 应失败")

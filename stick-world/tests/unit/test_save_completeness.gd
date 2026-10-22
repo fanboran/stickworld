@@ -78,7 +78,7 @@ class FakeOrgApi:
 ## 桩单位（Node2D + 无脚本；formation 内部读 global_position 等空间属性，
 ## 裸 Node 会报脚本错；各内部函数对无脚本桩有 has_method/in 守卫）
 func _make_stub(name_str: String) -> Node2D:
-	var u := Node2D.new()
+	var u = _runner.track_node(Node2D.new())
 	u.name = name_str
 	return u
 
@@ -106,7 +106,7 @@ func _build_world(fs: Node, org_api: FakeOrgApi) -> Dictionary:
 
 ## save_handler._parse_extra_field：旧档安全回退守卫（阵营/编队回填的共同前置）
 func _test_parse_extra_field_guards() -> void:
-	var sh: Node = ScriptSaveHandler.new()  # 不挂树：仅调纯方法，不触 _root
+	var sh: Node = _runner.track_node(ScriptSaveHandler.new())  # 不挂树：仅调纯方法，不触 _root
 	_runner.assert_null(sh._parse_extra_field({"extra_data": ""}, "faction_id"), "空串 → null")
 	_runner.assert_null(sh._parse_extra_field({"extra_data": "{bad json"}, "faction_id"), "坏 JSON → null")
 	_runner.assert_null(sh._parse_extra_field({"extra_data": "[1,2]"}, "faction_id"), "非字典 JSON → null")
@@ -116,7 +116,7 @@ func _test_parse_extra_field_guards() -> void:
 
 
 func _test_parse_extra_field_hit() -> void:
-	var sh: Node = ScriptSaveHandler.new()
+	var sh: Node = _runner.track_node(ScriptSaveHandler.new())
 	# JSON 数字解码恒为 float：先断非 null（防 null 被 int() 吞成 0 假绿），再 int 化比较
 	var fid: Variant = sh._parse_extra_field({"extra_data": "{\"faction_id\":2}"}, "faction_id")
 	_runner.assert_not_null(fid, "正常字典取到值")
@@ -129,7 +129,7 @@ func _test_parse_extra_field_hit() -> void:
 
 ## _remap_formation_keys：iid→entity_id 换算与剔除规则
 func _test_remap_keys() -> void:
-	var sh: Node = ScriptSaveHandler.new()
+	var sh: Node = _runner.track_node(ScriptSaveHandler.new())
 	var raw: Dictionary = {
 		"squads": [
 			{"org_id": "org_1", "name": "a", "preset_id": "fp", "work_types": ["WORK_COMBAT"],
@@ -155,7 +155,7 @@ func _test_remap_keys() -> void:
 
 
 func _test_remap_platoons() -> void:
-	var sh: Node = ScriptSaveHandler.new()
+	var sh: Node = _runner.track_node(ScriptSaveHandler.new())
 	var raw: Dictionary = {
 		"squads": [
 			{"org_id": "org_1", "name": "a", "preset_id": "fp", "work_types": [],
@@ -181,8 +181,8 @@ func _test_remap_platoons() -> void:
 
 ## export_for_save：班 + 排全字段导出（跨图快照不带排，存档导出必须带）
 func _test_export_for_save() -> void:
-	var org_api := FakeOrgApi.new()
-	var fs: Node = ScriptFormationSystem.new()
+	var org_api = _runner.track_node(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org_api)
 	var w: Dictionary = _build_world(fs, org_api)
 	_runner.assert_false(w.is_empty(), "fixture 编班成功")
@@ -209,13 +209,13 @@ func _test_export_for_save() -> void:
 
 ## restore_from_save：换算落档 → 模拟重启动（新宿主 + 桩组织收编档内组织）→ 重建
 func _test_restore_from_save() -> void:
-	var org_api := FakeOrgApi.new()
-	var fs: Node = ScriptFormationSystem.new()
+	var org_api = _runner.track_node(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org_api)
 	var w: Dictionary = _build_world(fs, org_api)
 	_runner.assert_false(w.is_empty(), "fixture 编班成功")
 	# 存档换算（save_handler 同逻辑）：iid → ent 键
-	var sh: Node = ScriptSaveHandler.new()
+	var sh: Node = _runner.track_node(ScriptSaveHandler.new())
 	var exported: Dictionary = fs.export_for_save()
 	var iid_map: Dictionary = {
 		int(w["u0"].get_instance_id()): "ent_0000",
@@ -226,9 +226,9 @@ func _test_restore_from_save() -> void:
 	var s1 := String(w["s1"])
 	var s2 := String(w["s2"])
 	# 模拟重启动：旧宿主销毁、组织侧收编了档内组织（id 不变）
-	var org_api2 := FakeOrgApi.new()
+	var org_api2 = _runner.track_node(FakeOrgApi.new())
 	org_api2.orgs = {s1: true, s2: true}
-	var fs2: Node = ScriptFormationSystem.new()
+	var fs2: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs2.setup(org_api2)
 	# 新实体（新 iid = 跨会话语义）
 	var n0 := _make_stub("n0")
@@ -264,9 +264,9 @@ func _test_restore_from_save() -> void:
 
 
 func _test_restore_skip_guards() -> void:
-	var org_api2 := FakeOrgApi.new()
+	var org_api2 = _runner.track_node(FakeOrgApi.new())
 	org_api2.orgs = {"org_1": true}  # 组织侧只有 org_1
-	var fs2: Node = ScriptFormationSystem.new()
+	var fs2: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs2.setup(org_api2)
 	var n0 := _make_stub("n0")
 	add_child(n0)
@@ -291,9 +291,9 @@ func _test_restore_skip_guards() -> void:
 
 
 func _test_counter_advance() -> void:
-	var org_api2 := FakeOrgApi.new()
+	var org_api2 = _runner.track_node(FakeOrgApi.new())
 	org_api2.orgs = {"org_1": true}
-	var fs2: Node = ScriptFormationSystem.new()
+	var fs2: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs2.setup(org_api2)
 	var n0 := _make_stub("n0")
 	add_child(n0)

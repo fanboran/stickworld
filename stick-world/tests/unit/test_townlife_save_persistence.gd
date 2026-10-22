@@ -92,10 +92,10 @@ func _open_db() -> Object:
 
 
 func _make_handler() -> Node:
-	var handler: Node = ScriptSaveHandler.new()
+	var handler: Node = _runner.track_node(ScriptSaveHandler.new())
 	# GameRoot.new()：不进树不跑 _ready——_STICKMAN_ENTITY_SCENE 是 const 可直接取，
 	# camera_rig/_construction_api 默认 null（NPC 行不触碰；判空守卫在 save_handler）
-	handler._root = ScriptGameRoot.new()
+	handler._root = _runner.track_node(ScriptGameRoot.new())
 	return handler
 
 
@@ -109,7 +109,7 @@ func _spawn_villager(map: _StubMap, prof: String, x: float) -> Node2D:
 ## 存 → 清空 → 全新图恢复（round-trip 公共通道），返回新图
 func _roundtrip(db: Object, handler: Node, map: _StubMap) -> _StubMap:
 	handler._save_entities(db, SLOT, MAP_ID, map)
-	var fresh := _StubMap.new()
+	var fresh = _runner.track_node(_StubMap.new())
 	add_child(fresh)
 	handler._restore_entities(db, SLOT, MAP_ID, fresh)
 	return fresh
@@ -120,7 +120,7 @@ func _roundtrip(db: Object, handler: Node, map: _StubMap) -> _StubMap:
 func _test_roundtrip() -> void:
 	var db: Object = _open_db()
 	var handler: Node = _make_handler()
-	var map := _StubMap.new()
+	var map = _runner.track_node(_StubMap.new())
 	add_child(map)
 	_spawn_villager(map, "miner", 100.0)   # 矿工（pickaxe 装具）
 	map.spawn_entity(UnitsAPI.STICKMAN_ENTITY_SCENE, Vector2(200.0, 1000.0))   # 无职业实体（对照）
@@ -159,7 +159,7 @@ func _test_roundtrip() -> void:
 func _test_idle_villager() -> void:
 	var db: Object = _open_db()
 	var handler: Node = _make_handler()
-	var map := _StubMap.new()
+	var map = _runner.track_node(_StubMap.new())
 	add_child(map)
 	_spawn_villager(map, "", 100.0)   # 待业（空职业）但仍是村民
 	var restored := _roundtrip(db, handler, map)
@@ -180,7 +180,7 @@ func _test_legacy_no_fields() -> void:
 		"pos_x": 100.0, "pos_y": 1000.0, "facing": 1, "is_player": 0,
 		"extra_data": "{}",
 	})
-	var fresh := _StubMap.new()
+	var fresh = _runner.track_node(_StubMap.new())
 	add_child(fresh)
 	handler._restore_entities(db, SLOT, MAP_ID, fresh)
 	_runner.assert_equal(fresh.get_entities().size(), 1, "老档实体照常恢复")
@@ -200,7 +200,7 @@ func _test_unknown_profession() -> void:
 		"pos_x": 100.0, "pos_y": 1000.0, "facing": 1, "is_player": 0,
 		"extra_data": JSON.stringify({"profession": "phantom_job", "is_villager": true}),
 	})
-	var fresh := _StubMap.new()
+	var fresh = _runner.track_node(_StubMap.new())
 	add_child(fresh)
 	handler._restore_entities(db, SLOT, MAP_ID, fresh)
 	var e: Node2D = fresh.get_entities()[0]

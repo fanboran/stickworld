@@ -42,8 +42,8 @@ func _ready() -> void:
 
 
 func _make_pair() -> Array:
-	var e := StubEntity.new()
-	var vc := Node.new()
+	var e = _runner.track_node(StubEntity.new())
+	var vc = _runner.track_node(Node.new())
 	vc.set_script(VisualControllerScript)
 	e.add_child(vc)
 	vc.call("setup", e)

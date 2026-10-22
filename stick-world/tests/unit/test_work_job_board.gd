@@ -37,10 +37,7 @@ class FakeMap:
 
 
 var _runner: TestRunner
-## 用例残留工人（统一释放，防跨用例对象泄漏计数）
-var _workers: Array[Node] = []
-## 用例残留地图节点
-var _maps: Array[Node] = []
+## fixture 生命周期统一走 TestRunner.track_node（跨用例即时释放）
 
 
 func _ready() -> void:
@@ -58,7 +55,6 @@ func _ready() -> void:
 	_runner.add_test("兼容: get_worker_project 两族同源 + assign_to 族别派生 + 幂等", _test_compat)
 	_runner.run()
 	print(_runner.summary())
-	_cleanup()
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
@@ -73,12 +69,10 @@ func _make_project(cell_x: int, width: int = 2, map: Node2D = null,
 
 ## 完工就绪项目：FakeMap（含 building_host）+ 运行时打包的 Node2D 空场景
 func _make_completable_project(cell_x: int) -> ScriptConstructionProject:
-	var map := FakeMap.new()
+	var map = _runner.track_node(FakeMap.new())
 	map.building_host = Node2D.new()
 	map.building_host.name = "BuildingHost"
 	map.add_child(map.building_host)
-	_maps.append(map)
-	_maps.append(map.building_host)
 	var root := Node2D.new()
 	var scene := PackedScene.new()
 	scene.pack(root)
@@ -88,28 +82,15 @@ func _make_completable_project(cell_x: int) -> ScriptConstructionProject:
 
 ## 建 Node2D 工人（带 x 坐标；不进树，global_position 直接可读写）
 func _make_worker(x: float) -> Node2D:
-	var w := Node2D.new()
+	var w = _runner.track_node(Node2D.new())
 	w.global_position = Vector2(x, 0.0)
-	_workers.append(w)
 	return w
 
 
 ## 建裸 Node 工人（无位置属性 → 距离退化用例 + 旧行为兼容面）
 func _make_bare_worker() -> Node:
-	var w := Node.new()
-	_workers.append(w)
-	return w
+	return _runner.track_node(Node.new())
 
-
-func _cleanup() -> void:
-	for w in _workers:
-		if is_instance_valid(w):
-			w.free()
-	_workers.clear()
-	for m in _maps:
-		if is_instance_valid(m):
-			m.free()
-	_maps.clear()
 
 
 # ─────────────────────────────── 用例 ────────────────────────────────

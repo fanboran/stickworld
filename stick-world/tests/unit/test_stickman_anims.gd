@@ -83,7 +83,7 @@ func _test_hit_transitions() -> void:
 
 
 func _test_player_loads_anims() -> void:
-	var player := AnimationPlayer.new()
+	var player = _runner.track_node(AnimationPlayer.new())
 	Anims.setup_player(player)
 	var lib: AnimationLibrary = player.get_animation_library("")
 	_runner.assert_true(lib != null, "动画库应创建")

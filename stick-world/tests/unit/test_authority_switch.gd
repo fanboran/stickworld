@@ -193,17 +193,17 @@ func _ready() -> void:
 
 
 func _new_world() -> Dictionary:
-	var org := FakeOrgApi.new()
-	var fs: Node = ScriptFormationSystem.new()
+	var org = _runner.track_node(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org)
 	return {"fs": fs, "org": org}
 
 
 func _unit(unit_name: String, pos: Vector2 = Vector2.ZERO) -> FakeUnit:
-	var u := FakeUnit.new()
+	var u = _runner.track_node(FakeUnit.new())
 	u.name = unit_name
 	u.position = pos
-	u.ai = FakeAI.new()
+	u.ai = _runner.track_node(FakeAI.new())
 	return u
 
 
@@ -433,8 +433,8 @@ func _test_guard_retreat_behavior() -> void:
 
 func _test_guard_engaged() -> void:
 	var w := _guard_world()
-	var battle := FakeBattle.new()
-	var enemy := FakeEnemy.new()
+	var battle = _runner.track_node(FakeBattle.new())
+	var enemy = _runner.track_node(FakeEnemy.new())
 	enemy.position = Vector2(50, 0)  # 距受测者 50px < 射程 100 = 接战
 	battle.enemies = [enemy]
 	w["subject"].battle = battle
@@ -444,8 +444,8 @@ func _test_guard_engaged() -> void:
 
 func _test_guard_manual_order() -> void:
 	var w := _guard_world()
-	var battle := FakeBattle.new()
-	var tai := FakeTeamAi.new()
+	var battle = _runner.track_node(FakeBattle.new())
+	var tai = _runner.track_node(FakeTeamAi.new())
 	tai.guarded[w["sa"]] = true  # 该班处于玩家手动号令保护期
 	battle.team_ai = tai
 	w["subject"].battle = battle
@@ -550,19 +550,19 @@ func _test_battle_seed_derivation() -> void:
 	var u := _unit("u0")
 	_runner.assert_equal(fs._authority_phase_seed(u), base, "无 battle 链的单位应回落档案基底种子")
 	# 有 battle_id → 派生确定、同 id 两次一致、异于基底
-	var b1 := FakeBattle.new()
+	var b1 = _runner.track_node(FakeBattle.new())
 	b1.battle_id = "battle_1001"
 	u.battle = b1
 	var s1: int = fs._authority_phase_seed(u)
 	_runner.assert_equal(fs._authority_phase_seed(u), s1, "同 battle_id 两次派生应一致（可复现）")
 	_runner.assert_not_equal(s1, base, "有 battle_id 时派生种子应异于回落基底")
 	# 不同 battle_id → 不同派生（抽样两例）
-	var b2 := FakeBattle.new()
+	var b2 = _runner.track_node(FakeBattle.new())
 	b2.battle_id = "battle_2002"
 	u.battle = b2
 	var s2: int = fs._authority_phase_seed(u)
 	_runner.assert_not_equal(s2, s1, "不同 battle_id（例1）派生种子应不同")
-	var b3 := FakeBattle.new()
+	var b3 = _runner.track_node(FakeBattle.new())
 	b3.battle_id = "battle_3003"
 	u.battle = b3
 	var s3: int = fs._authority_phase_seed(u)
@@ -579,7 +579,7 @@ func _test_battle_seed_derivation() -> void:
 func _build_battle_desync_world(battle_id: String) -> Dictionary:
 	var w := _new_world()
 	var fs: Node = w["fs"]
-	var battle := FakeBattle.new()
+	var battle = _runner.track_node(FakeBattle.new())
 	battle.battle_id = battle_id
 	var units: Array = []
 	var a_members: Array = []
@@ -665,8 +665,8 @@ func _test_resource() -> void:
 ## 归一化取数口同时接受两种形态：本用例对同一权威值组合分别走包装与裸数据断言。
 func _test_org_query_normalization() -> void:
 	# 基线：班长在场（1.0）+ 班长被接管（+0.2 玩家光环），无组织加成
-	var org := FakeOrgApi.new()
-	var fs: FormationSystem = ScriptFormationSystem.new()
+	var org = _runner.track_node(FakeOrgApi.new())
+	var fs: FormationSystem = _runner.track_node(ScriptFormationSystem.new())
 	fs.setup(org)
 	fs._squads["s1"] = {"units": [], "leader": null, "preset_id": "squad_combat",
 			"work_types": [], "role": "fighter", "name": "s1",
@@ -687,8 +687,8 @@ func _test_org_query_normalization() -> void:
 	fs.free()
 	org.free()
 	# 裸数据形态（单测历史口径）：同一组合仍取到 1.5（班长 1.0 + 指挥官 0.5）
-	var bare := BareOrgApi.new()
-	var fs2: FormationSystem = ScriptFormationSystem.new()
+	var bare = _runner.track_node(BareOrgApi.new())
+	var fs2: FormationSystem = _runner.track_node(ScriptFormationSystem.new())
 	fs2.setup(bare)
 	fs2._squads["s1"] = {"units": [], "leader": null, "preset_id": "squad_combat",
 			"work_types": [], "role": "fighter", "name": "s1",
@@ -706,7 +706,7 @@ func _test_org_query_normalization() -> void:
 ## get_authority_switch_state 除运行态计数外，须镜像档案实值（候选半径/冷却等），
 ## 供 UI duck 消费；默认值 = AUTHORITY_DEFAULTS，注入后随参数变化（单一真相源）。
 func _test_state_exit() -> void:
-	var fresh: FormationSystem = ScriptFormationSystem.new()
+	var fresh: FormationSystem = _runner.track_node(ScriptFormationSystem.new())
 	# 未 setup（_authority_params 空）也要恒有值：回落 AUTHORITY_DEFAULTS 同值
 	var d: Dictionary = fresh.get_authority_switch_state()
 	_runner.assert_approx(float(d.get("candidate_radius", -1.0)),

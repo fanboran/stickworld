@@ -246,7 +246,7 @@ func _test_ranged_walk_and_shoot() -> void:
 	var ctx := _make_move_ctx(Vector2(400, 0))
 	var unit: FakeUnit = ctx["unit"]
 	var beh: Node = ctx["beh"]
-	var weapon := StubWeapon.new()
+	var weapon = _runner.track_node(StubWeapon.new())
 	weapon.weapon_type = 2  # BOW
 	weapon.attack_range = 500.0
 	unit.weapon = weapon
@@ -265,4 +265,4 @@ func _test_ranged_walk_and_shoot() -> void:
 	_runner.assert_true(attacked, "远程被拦应边走边射（射程内出手）")
 	_runner.assert_equal(weapon.last_target, blocker, "走射对象应为拦路者")
 	_runner.assert_true(unit.global_position.x > x0, "走射期应保持向目标推进（不停车）")
-	_teardown_ctx(ctx, [blocker])
+	_teardown_ctx(ctx, [blocker, weapon])

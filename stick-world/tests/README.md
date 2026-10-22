@@ -51,6 +51,27 @@ func _ready() -> void:
 
 ---
 
+### Fixture 生命周期（防进程退出泄漏）
+
+用例自建、但既不进场景树也不由用例显式 `free()` 的 Node（FormationSystem / FakeUnit / WorldState …）会在进程退出时被 ObjectDB 记为 `Leaked instance`；其持有的 RefCounted 图（如 WorldState 的 1000+ CityState）会整片泄漏，把真实缺陷淹进退出噪音。约定：
+
+1. **节点登记**：用例自建的节点一律 `runner.track_node(node)`（批量 `runner.track_nodes(array)`），API 返回原对象，可链式书写：
+
+   ```gdscript
+   var fs: Node = runner.track_node(ScriptFormationSystem.new())
+   var units: Array = []
+   for i in 3:
+       units.append(runner.track_node(FakeUnit.new()))
+   ```
+
+2. **资源登记**：用例自建、需要 runner 放开的 Resource / RefCounted 用 `runner.track_resource(res)`。
+3. **释放时机**：runner 在每个用例结束（`_finish`，含手工 `end_test()`）按登记**逆序**释放——节点先从场景树摘除再 `free()`，资源只清 runner 的强引用。已手动 `free()` 的节点重复登记无害（无效实例自动跳过）。
+4. **不要登记共享对象**：`preload` 的 `.tres`、autoload 单例由进程/资源缓存管理；登记只会让生命周期含混。跨用例共享的 fixture 也不能登记（每用例结束会被释放）。
+5. **未入树节点不要用 `queue_free()` 收尾**：进程通常在 `_ready` 末即退出，删除队列来不及 flush；直接交给 `track_node` 才是即时释放。
+6. **统一出口**：`TestRunner.finish_process(emitter, code)` 会顺带停掉在播 SFX 声部（`AudioStreamPlayback` 由 AudioServer 持有，秒退会被记泄漏）；新套件一律走该出口。
+
+验收口径：`tools/census_unit_leaks.sh` 逐 unit 套件单进程普查，除产品侧静态缓存/autoload 不可回收项外 `Leaked instance` 应为 0。
+
 ## 三、运行命令
 
 标准命令（headless，必须带 `-- --fresh-start` 防存档污染）：

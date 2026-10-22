@@ -195,7 +195,7 @@ func _test_supply_chain() -> void:
 
 func _test_world_state_roundtrip() -> void:
 	# WorldState 实例级 save/load：注册 3 类实体后整体恢复
-	var ws := ScriptWS.new()
+	var ws = _runner.track_node(ScriptWS.new())
 	ws.game_time = 14.5
 	var s = ScriptStickmanState.new()
 	s.id = "sm_1"
@@ -217,7 +217,7 @@ func _test_world_state_roundtrip() -> void:
 	_runner.assert_equal(save.organizations.size(), 1, "存档含 1 个组织")
 	_runner.assert_equal(save.regions.size(), 1, "存档含 1 个地块")
 
-	var ws2 := ScriptWS.new()
+	var ws2 = _runner.track_node(ScriptWS.new())
 	ws2.load_save_data(save)
 	_runner.assert_equal(ws2.game_time, 14.5, "game_time 保真")
 	var s2 = ws2.get_entity("stickmen", "sm_1")
@@ -308,7 +308,7 @@ func _test_bad_types() -> void:
 
 
 func _test_player_faction_shell() -> void:
-	var ws := ScriptWS.new()
+	var ws = _runner.track_node(ScriptWS.new())
 	ws.start_new_run()
 	_runner.assert_not_null(ws.get_entity("factions", "player"), "新开局 factions 含玩家政权壳")
 	_runner.assert_equal(ws.get_entity("factions", "player").state_id, "player", "玩家政权 id = player")
@@ -322,7 +322,7 @@ func _test_player_faction_shell() -> void:
 
 
 func _test_faction_aggregates() -> void:
-	var ws := ScriptWS.new()
+	var ws = _runner.track_node(ScriptWS.new())
 	var f = ScriptFactionState.new()
 	f.state_id = "state_003"
 	f.name = "东部联盟"
@@ -359,7 +359,7 @@ func _test_faction_aggregates() -> void:
 func _test_world_model_json_roundtrip() -> void:
 	# 存档管线真实口径：world_state 表 data 为 JSON.stringify 快照，读档
 	# JSON.parse_string——int 全变 float，载入侧逐字段还原（本用例验证类型还原）
-	var ws := ScriptWS.new()
+	var ws = _runner.track_node(ScriptWS.new())
 	var f = ScriptFactionState.new()
 	f.state_id = "state_003"
 	f.name = "东部联盟"
@@ -380,7 +380,7 @@ func _test_world_model_json_roundtrip() -> void:
 	_runner.assert_true(parsed is Dictionary, "存档 JSON 解析回 Dictionary")
 	# JSON 层前提验证：int 确实变成了 float（证明还原逻辑真的被走到）
 	_runner.assert_equal(typeof(parsed["cities"]["settlement_city_001"]["level"]), TYPE_FLOAT, "JSON 层 int 确变 float（还原前提成立）")
-	var ws2 := ScriptWS.new()
+	var ws2 = _runner.track_node(ScriptWS.new())
 	ws2.load_save_data(parsed)
 
 	var f2 = ws2.get_entity("factions", "state_003")
@@ -406,13 +406,13 @@ func _test_world_model_json_roundtrip() -> void:
 
 func _test_legacy_save_missing_domains() -> void:
 	# 旧档（M1 前存档）无 cities/factions 键：回退空域不崩，其余字段照常恢复
-	var ws := ScriptWS.new()
+	var ws = _runner.track_node(ScriptWS.new())
 	ws.load_save_data({"game_time": 6.5, "run_seed": 42, "visited_settlements": ["settlement_city_001"]})
 	_runner.assert_equal(ws.cities.size(), 0, "旧档缺 cities 键回退空域")
 	_runner.assert_equal(ws.factions.size(), 0, "旧档缺 factions 键回退空域")
 	_runner.assert_equal(ws.game_time, 6.5, "旧档其余字段照常恢复")
 	# 完全空存档同样不崩
-	var ws2 := ScriptWS.new()
+	var ws2 = _runner.track_node(ScriptWS.new())
 	ws2.load_save_data({})
 	_runner.assert_equal(ws2.cities.size(), 0, "空存档 cities 空域")
 	_runner.assert_equal(ws2.factions.size(), 0, "空存档 factions 空域")

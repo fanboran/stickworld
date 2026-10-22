@@ -94,14 +94,14 @@ func _ready() -> void:
 
 ## 构造：formation + battle + 一队自己人 + 一队敌人；squad 用 fp_combat_squad（战斗）
 func _make_world(combat: bool = true) -> Dictionary:
-	var fs: Node = ScriptFormationSystem.new()
-	var org: Node = FakeOrgApi.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	fs.setup(org)
-	var battle: Node = FakeBattle.new()
+	var battle: Node = _runner.track_node(FakeBattle.new())
 	# 我方 2 人（faction 0），敌方 2 人（faction 1）
 	var my_units: Array = []
 	for i in 2:
-		var u := FakeUnit.new()
+		var u = _runner.track_node(FakeUnit.new())
 		u.name = "My%d" % i
 		u.position = Vector2(100 + i * 40, 500)
 		u.battle = battle
@@ -111,7 +111,7 @@ func _make_world(combat: bool = true) -> Dictionary:
 	var squad_id: String = fs.create_squad(my_units, "小队", preset_id)
 	var enemies: Array = []
 	for i in 2:
-		var e := FakeEnemy.new()
+		var e = _runner.track_node(FakeEnemy.new())
 		e.name = "Enemy%d" % i
 		e.position = Vector2(600 + i * 40, 500)
 		enemies.append(e)
@@ -161,12 +161,12 @@ func _test_noncombat_skip() -> void:
 
 
 func _test_no_battle() -> void:
-	var fs: Node = ScriptFormationSystem.new()
-	var org: Node = FakeOrgApi.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	fs.setup(org)
 	var units: Array = []
 	for i in 2:
-		var u := FakeUnit.new()
+		var u = _runner.track_node(FakeUnit.new())
 		u.name = "NoBattle%d" % i
 		u.battle = null
 		u.formation = fs

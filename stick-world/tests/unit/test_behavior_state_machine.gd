@@ -49,13 +49,13 @@ func _ready() -> void:
 
 
 func _make_fake(fake_name: String) -> FakeBehavior:
-	var b := FakeBehavior.new()
+	var b = _runner.track_node(FakeBehavior.new())
 	b.behavior_name = fake_name
 	return b
 
 
 func _make_sm() -> ScriptBehaviorStateMachine:
-	return ScriptBehaviorStateMachine.new()
+	return _runner.track_node(ScriptBehaviorStateMachine.new())
 
 
 func _test_register_travel() -> void:

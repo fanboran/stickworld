@@ -40,6 +40,11 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
+	# 套件 fixture 收尾：显式释放 GameRoot（内含地图/系统节点），
+	# 避免进程退出时地图侧节点成为 ObjectDB 孤儿残留
+	if _helper != null and is_instance_valid(_helper.game_root):
+		_helper.game_root.free()
+		_helper.game_root = null
 	get_tree().quit(exit_code)
 
 

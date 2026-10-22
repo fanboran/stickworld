@@ -15,6 +15,8 @@ extends RefCounted
 ##   - **async 用例内建**：add_test(name, fn, true) + run_async()，免去手动 begin/end_test 配对
 ##   - 断言 API 扩充：assert_false / assert_lt / assert_gt / assert_approx / assert_null / assert_not_null
 ##   - 汇总输出断言总数
+##   - fixture 生命周期：track_node/track_resource 登记 + 用例结束逆序释放，
+##     消除测试进程退出时的 ObjectDB 泄漏噪音（见下方「fixture 生命周期」）
 ##
 ## 兼容旧用法：add_test(name, fn) + run()、begin_test/end_test 手动配对仍然有效。
 
@@ -25,6 +27,10 @@ var _current_failed: bool = false
 var _current_messages: Array = []
 var _current_assertions: int = 0
 
+## 本用例登记的 fixture（用例结束逆序释放；跨用例不保留）
+var _tracked_nodes: Array = []
+var _tracked_resources: Array = []
+
 ## 批量模式观测出口（batch_runner 消费）：最近一次 run()/run_async() 的用例数与断言数。
 ## 经 Engine meta 发布的原因：TestRunner 实例活在套件脚本内部，批量运行器拿不到它，
 ## 而"用例一条没跑"正是历史盲区（空 _results 曾判通过，见 all_passed 零用例守卫）。
@@ -34,6 +40,68 @@ const META_LAST_ASSERTS: String = "test_last_asserts"
 
 func add_test(name: String, fn: Callable, is_async: bool = false) -> void:
 	_tests.append({"name": name, "fn": fn, "async": is_async})
+
+
+# ─────────────────────────────── fixture 生命周期 ────────────────────────────────
+##
+## 为什么需要：用例常 new 出既不进场景树、也不 free 的桩节点（FormationSystem /
+## FakeUnit / WorldState …）。这些孤儿 Node 在进程退出时被 ObjectDB 记为
+## "Leaked instance"，其持有的 RefCounted 图（如 WorldState 的 1000+ CityState）
+## 随之整片泄漏，把真实缺陷淹进退出噪音。
+##
+## 约定：用例自建、由用例负责销毁的节点/资源经 track_node / track_resource 登记；
+## **每个用例结束**（_finish）逆序释放，套件内不跨用例累积。共享资源（preload
+## 的 .tres、autoload 单例）不要登记——登记也只清 runner 的强引用，不会强拆
+## 他人持有的引用，但会让共享对象的生命周期不明。
+##
+## 用法：
+##   var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+##   var units: Array = []
+##   for i in 3:
+##       units.append(_runner.track_node(FakeUnit.new()))
+##   _runner.track_resource(plan)
+
+## 登记一个用例自建节点；原样返回，便于一行链式书写。
+func track_node(node) -> Variant:
+	if node is Node:
+		_tracked_nodes.append(node)
+	return node
+
+
+## 批量登记节点（如一次构造的单位数组）。
+func track_nodes(nodes: Array) -> void:
+	for n in nodes:
+		track_node(n)
+
+
+## 登记一个用例自建的资源/RefCounted 实例；原样返回，便于链式书写。
+## 释放口径 = 清掉 runner 的强引用（RefCounted 是否真正回收取决于是否还有他人引用）。
+func track_resource(res) -> Variant:
+	if res != null:
+		_tracked_resources.append(res)
+	return res
+
+
+## 批量登记资源。
+func track_resources(resources: Array) -> void:
+	for r in resources:
+		track_resource(r)
+
+
+## 释放本用例登记的全部 fixture：节点按登记逆序 free（先摘出场景树，防树内 free
+## 告警），随后清空资源强引用。重复登记/已手动 free 的节点由 is_instance_valid 跳过；
+## 父节点先于子节点被释放时，子节点已随父消失，同样跳过。
+## 公开供套件在 finish_process 前做兜底（正常路径由 _finish 自动调用）。
+func cleanup_fixtures() -> void:
+	for i in range(_tracked_nodes.size() - 1, -1, -1):
+		var n = _tracked_nodes[i]
+		if is_instance_valid(n):
+			if n.is_inside_tree() and n.get_parent() != null:
+				n.get_parent().remove_child(n)
+			n.free()
+	_tracked_nodes.clear()
+	_tracked_resources.clear()
+
 
 
 ## 同步运行（仅适用于纯同步用例；async 用例请用 run_async）。
@@ -199,6 +267,8 @@ func _finish() -> void:
 		"messages": _current_messages.duplicate(),
 		"asserts": _current_assertions,
 	})
+	# 用例结束即释放本用例登记 fixture（逆序），进程退出前不留孤儿节点噪音
+	cleanup_fixtures()
 
 
 func _count_assert() -> void:
@@ -225,12 +295,27 @@ func end_test() -> void:
 # ─────────────────────────────── 进程结束出口 ────────────────────────────────
 
 ## 测试进程结束统一出口：
+## - 先停掉在播 SFX 声部（见 stop_audio_voices）；
 ## - 批量模式（batch_runner 设置了 Engine meta "test_batch"）：经 test_done 信号
 ##   通知批量运行器（deferred 发射，保证运行器先完成连接），不退出进程；
 ## - 独立运行：直接 get_tree().quit(exit_code)。
 ## 要求使用方脚本声明 `signal test_done(code: int)`。
 static func finish_process(emitter: Node, exit_code: int) -> void:
+	stop_audio_voices()
 	if Engine.has_meta("test_batch"):
 		emitter.call_deferred("emit_signal", "test_done", exit_code)
 	else:
 		emitter.get_tree().quit(exit_code)
+
+
+## 退出前停止在播 SFX 声部：AudioStreamPlayback 由 AudioServer 持有，进程秒退时
+## 仍在播的声部会被 ObjectDB 记为泄漏（战斗/采集类用例触发音效后必现）。停声部
+## 是 autoload 侧的正常退出清理，不是掩盖测试引用。无 AudioManager（纯逻辑工程）
+## 时静默跳过。
+static func stop_audio_voices() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		return
+	var audio := tree.root.get_node_or_null("AudioManager")
+	if audio != null and audio.has_method("stop_all_sfx"):
+		audio.stop_all_sfx()

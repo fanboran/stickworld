@@ -72,10 +72,11 @@ var _runner: TestRunner
 ## 独立容器隔离投射物计数：fire/throw 的投射物挂 owner.get_parent()=
 ## 本容器，前序用例 queue_free 延迟残留不会污染断言。
 func _make_mount(weapon_type: int) -> Dictionary:
-	var box := Node2D.new()
+	var box = _runner.track_node(Node2D.new())
 	add_child(box)
 	var owner := StubOwner.new()
 	box.add_child(owner)
+	_runner.track_node(owner._visual)  # 成员自建 Node，不随宿主父子链释放
 	var wm: Node = WeaponMountScript.new()
 	wm.name = "WeaponMount"
 	owner.add_child(wm)

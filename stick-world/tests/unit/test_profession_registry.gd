@@ -92,44 +92,44 @@ func _test_assign_rotation() -> void:
 	# index 0..n-1 依次得各职业（轮转顺序 = 配置顺序）
 	var got: Array = []
 	for i in profs.size():
-		var e := FakeEntity.new()
-		e.rig = FakeRig.new()
-		e.weapon_mount = FakeMount.new()
+		var e = _runner.track_node(FakeEntity.new())
+		e.rig = _runner.track_node(FakeRig.new())
+		e.weapon_mount = _runner.track_node(FakeMount.new())
 		var id := TownLifeAPI.assign_village_job(e, i)
 		_runner.assert_equal(id, ids[i], "index %d 应得职业 %s" % [i, ids[i]])
 		_runner.assert_equal(e.get_profession(), ids[i], "实体应写入职业 id %s" % ids[i])
 		got.append(id)
 	_runner.assert_equal(got.size(), profs.size(), "每个实体都应分配到职业")
 	# index 越界取模循环不炸
-	var e2 := FakeEntity.new()
+	var e2 = _runner.track_node(FakeEntity.new())
 	var id2 := TownLifeAPI.assign_village_job(e2, profs.size() + 1)
 	_runner.assert_equal(id2, ids[1], "越界 index 取模循环")
 
 
 func _test_appearance() -> void:
 	var smith: Dictionary = ProfessionRegistry.get_profession("blacksmith")
-	var e := FakeEntity.new()
-	e.rig = FakeRig.new()
-	e.weapon_mount = FakeMount.new()
+	var e = _runner.track_node(FakeEntity.new())
+	e.rig = _runner.track_node(FakeRig.new())
+	e.weapon_mount = _runner.track_node(FakeMount.new())
 	ProfessionRegistry.apply_appearance(e, smith)
 	_runner.assert_equal(e.weapon_mount.weapon_type, WeaponMount.WeaponType.PICKAXE, "铁匠工具映射 PICKAXE")
 	_runner.assert_equal(e.rig.body_color, Color.WHITE, "装具应用不改身体色（火柴人身体不做身份染色）")
 	# 未知 tool 值不换装（保持默认剑）
 	var bogus: Dictionary = {"id": "x", "tool": "chainsaw"}
-	var e2 := FakeEntity.new()
-	e2.rig = FakeRig.new()
-	e2.weapon_mount = FakeMount.new()
+	var e2 = _runner.track_node(FakeEntity.new())
+	e2.rig = _runner.track_node(FakeRig.new())
+	e2.weapon_mount = _runner.track_node(FakeMount.new())
 	ProfessionRegistry.apply_appearance(e2, bogus)
 	_runner.assert_equal(e2.rig.body_color, Color.WHITE, "未知 tool 同样不染身体色")
 	_runner.assert_equal(e2.weapon_mount.weapon_type, WeaponMount.WeaponType.SWORD, "未知 tool 保持默认武器")
 	# 缺 rig/weapon_mount 的实体只跳装具不炸
-	var e3 := FakeEntity.new()
+	var e3 = _runner.track_node(FakeEntity.new())
 	ProfessionRegistry.apply_appearance(e3, smith)
 
 
 func _test_duck_degrade() -> void:
 	# 裸 Node：没有 set_profession 方法 → 未分配返回 ""
-	var bare := Node2D.new()
+	var bare = _runner.track_node(Node2D.new())
 	var id := TownLifeAPI.assign_village_job(bare, 0)
 	_runner.assert_equal(id, "", "接不住职业的实体返回空（未分配）")
 	# null 实体安全
@@ -140,7 +140,7 @@ func _test_duck_degrade() -> void:
 
 func _test_count_work_capacity() -> void:
 	# 本套件无建筑环境：smithy_lv1 走占位表兜底（批次 3 语义 = "聚落有打铁需求"）
-	var e := FakeEntity.new()
+	var e = _runner.track_node(FakeEntity.new())
 	add_child(e)  # 容量计数借实体取场景树
 	_runner.assert_equal(ProfessionRegistry.count_work_capacity(e, "smithy_lv1"), 1,
 			"无真建筑但占位表覆盖 smithy_lv1 → 容量 1（占位计入配比的兜底）")
@@ -158,9 +158,9 @@ func _test_assign_village_jobs() -> void:
 	#（当前 blacksmith 1 / lumberjack 3 / miner 3）。
 	var entities: Array = []
 	for i in 10:
-		var e := FakeEntity.new()
-		e.rig = FakeRig.new()
-		e.weapon_mount = FakeMount.new()
+		var e = _runner.track_node(FakeEntity.new())
+		e.rig = _runner.track_node(FakeRig.new())
+		e.weapon_mount = _runner.track_node(FakeMount.new())
 		add_child(e)
 		entities.append(e)
 	var stats: Dictionary = TownLifeAPI.assign_village_jobs(entities)
@@ -191,7 +191,7 @@ func _test_jobs_capacity_zero_idle() -> void:
 	]
 	var entities: Array = []
 	for i in 4:
-		var e := FakeEntity.new()
+		var e = _runner.track_node(FakeEntity.new())
 		add_child(e)
 		entities.append(e)
 	var stats: Dictionary = TownLifeAPI.assign_village_jobs(entities)

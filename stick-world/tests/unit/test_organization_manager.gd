@@ -66,7 +66,7 @@ func _build_tree(m: ScriptOrgManager) -> Dictionary:
 # ─────────────── 创建 ───────────────
 
 func _test_create_ok() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var r1: Dictionary = m.create_organization("连部", "MILITARY", 3, "")
 	_runner.assert_true(r1.get("ok", false), "根组织创建应成功: " + str(r1))
 	var r2: Dictionary = m.create_organization("连部二", "MILITARY", 3, "")
@@ -76,14 +76,14 @@ func _test_create_ok() -> void:
 
 
 func _test_create_invalid() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	_runner.assert_false(m.create_organization("x", "MILITARY", 0, "").get("ok", true), "tier=0 应失败")
 	_runner.assert_false(m.create_organization("x", "MILITARY", 6, "").get("ok", true), "tier=6 应失败")
 	_runner.assert_false(m.create_organization("x", "ILLEGAL", 3, "").get("ok", true), "无效 tag 应失败")
 
 
 func _test_create_parent_validate() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	m.create_organization("军团部", "MILITARY", 5, "")
 	_runner.assert_false(m.create_organization("x", "MILITARY", 4, "org_999").get("ok", true), "父组织不存在应失败")
 	# 父 tier5，子必须 tier4
@@ -96,7 +96,7 @@ func _test_create_parent_validate() -> void:
 # ─────────────── 查询 ───────────────
 
 func _test_query() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	_runner.assert_true(m.get_organization("org_999").get("ok", false) == false, "不存在组织查询应失败")
 	var q: Dictionary = m.get_organization(tree.leaf)
@@ -110,7 +110,7 @@ func _test_query() -> void:
 
 
 func _test_query_by_tag_region() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	_build_tree(m)
 	m.create_organization("研究站", "RESEARCH", 4, "org_1")
 	_runner.assert_equal(m.get_orgs_by_tag("MILITARY").size(), 3, "MILITARY 应有 3 个")
@@ -128,7 +128,7 @@ func _test_query_by_tag_region() -> void:
 # ─────────────── 编制 / 人事 ───────────────
 
 func _test_templates_autonomy() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	_runner.assert_true(m.set_personnel_template(tree.leaf, {"rifleman": 4}).get("ok", false), "设置人员编制")
 	_runner.assert_equal(m.get_organization(tree.leaf).data.personnel_template, {"rifleman": 4}, "编制保真")
@@ -141,7 +141,7 @@ func _test_templates_autonomy() -> void:
 
 
 func _test_commander() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	_runner.assert_true(m.assign_commander(tree.leaf, "stick_1").get("ok", false), "任命指挥官")
 	_runner.assert_equal(m.get_organization(tree.leaf).data.commander_id, "stick_1", "指挥官保真")
@@ -151,7 +151,7 @@ func _test_commander() -> void:
 
 
 func _test_stickman_assign() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	_runner.assert_true(m.assign_stickman(tree.leaf, "stick_1", "rifleman").get("ok", false), "分配人员")
 	_runner.assert_false(m.assign_stickman(tree.leaf, "stick_1", "rifleman").get("ok", true), "重复分配应失败")
@@ -167,7 +167,7 @@ func _test_insert_tier_above() -> void:
 	# 层级不变量：child.tier == parent.tier - 1。连续层级树（5→4→3）中，
 	# org 与 parent 之间没有空层，above 必须拒绝（2026-08 审计修复：原实现
 	# 放行 new_tier == parent.tier，制造"同级父子"）。
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	var r: Dictionary = m.insert_tier(tree.leaf, "加强连", "above")
 	_runner.assert_false(r.get("ok", true), "连续层级树 above 插入应失败: " + str(r))
@@ -177,7 +177,7 @@ func _test_insert_tier_above() -> void:
 
 
 func _test_insert_tier_below() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	var r: Dictionary = m.insert_tier(tree.leaf, "排部", "below")
 	_runner.assert_true(r.get("ok", false), "below 插入应成功: " + str(r))
@@ -191,7 +191,7 @@ func _test_insert_tier_below() -> void:
 
 
 func _test_insert_tier_fail() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	_runner.assert_false(m.insert_tier(tree.root, "x", "above").get("ok", true), "根组织上方插入应失败")
 	_runner.assert_false(m.insert_tier(tree.leaf, "x", "sideways").get("ok", true), "无效位置应失败")
@@ -204,7 +204,7 @@ func _test_insert_tier_fail() -> void:
 
 
 func _test_remove_tier() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var tree := _build_tree(m)
 	var r: Dictionary = m.remove_tier(tree.mid)
 	_runner.assert_true(r.get("ok", false), "删除中间组织应成功")
@@ -215,8 +215,8 @@ func _test_remove_tier() -> void:
 
 
 func _test_disband() -> void:
-	var m := ScriptOrgManager.new()
-	var ws := ScriptWS.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
+	var ws = _runner.track_node(ScriptWS.new())
 	m.set_world(ws)
 	var tree := _build_tree(m)
 	m.assign_commander(tree.mid, "stick_c")
@@ -234,8 +234,8 @@ func _test_disband() -> void:
 # ─────────────── 序列化 ───────────────
 
 func _test_save_load() -> void:
-	var m := ScriptOrgManager.new()
-	m.set_world(ScriptWS.new())
+	var m = _runner.track_node(ScriptOrgManager.new())
+	m.set_world(_runner.track_node(ScriptWS.new()))
 	var tree := _build_tree(m)
 	m.assign_stickman(tree.leaf, "stick_1", "rifleman")
 	m.set_personnel_template(tree.leaf, {"rifleman": 4})
@@ -244,8 +244,8 @@ func _test_save_load() -> void:
 	_runner.assert_equal(save.organizations.size(), 3, "存档应含 3 个组织")
 	_runner.assert_equal(save.next_id, 4, "next_id 应为 4")
 
-	var m2 := ScriptOrgManager.new()
-	m2.set_world(ScriptWS.new())
+	var m2 = _runner.track_node(ScriptOrgManager.new())
+	m2.set_world(_runner.track_node(ScriptWS.new()))
 	m2.load_save_data(save)
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.personnel, ["stick_1"], "读档后人员保真")
 	_runner.assert_equal(m2.get_organization(tree.leaf).data.personnel_template, {"rifleman": 4}, "读档后编制保真")
@@ -262,8 +262,8 @@ func _test_save_load() -> void:
 
 ## WorldState 容器同步：创建注册、删除注销（2026-08 集中制 A 方案）
 func _test_world_sync() -> void:
-	var m := ScriptOrgManager.new()
-	var ws := ScriptWS.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
+	var ws = _runner.track_node(ScriptWS.new())
 	m.set_world(ws)
 	var tree := _build_tree(m)
 	_runner.assert_equal(ws.organizations.size(), 3, "创建 3 个组织后 WorldState 容器应有 3 个")
@@ -277,7 +277,7 @@ func _test_world_sync() -> void:
 # ─────────────── 预设（load_preset / export_as_preset） ───────────────
 
 func _test_load_preset_from_config() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var r: Dictionary = m.load_preset("军事编制", "")
 	_runner.assert_true(r.get("ok", false), "军事编制预设应加载成功: " + str(r))
 	var created: Array = r.data.created
@@ -300,7 +300,7 @@ func _test_load_preset_from_config() -> void:
 
 
 func _test_load_preset_errors() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var r1: Dictionary = m.load_preset("不存在的预设", "")
 	_runner.assert_false(r1.get("ok", true), "未知预设名应失败")
 	_runner.assert_true(str(r1.get("error", "")).contains("可用"), "错误信息应列出可用预设")
@@ -316,7 +316,7 @@ func _test_load_preset_errors() -> void:
 
 
 func _test_load_preset_attach() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var root: Dictionary = m.create_organization("野战军", "MILITARY", 5, "")
 	# v2 蓝图直灌（export_as_preset 同格式）：顶层 L4 恰好衔接 L5 父组织
 	var preset := {
@@ -336,7 +336,7 @@ func _test_load_preset_attach() -> void:
 
 
 func _test_load_preset_rollback() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	# 条目层级断链（连的子级标 L5 越界）→ 中途失败，已创建组织须回滚
 	var preset := {
 		"name": "坏预设", "tag": "MILITARY",
@@ -353,7 +353,7 @@ func _test_load_preset_rollback() -> void:
 
 
 func _test_export_roundtrip() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var r: Dictionary = m.load_preset("军事编制", "")
 	var root_id: String = r.data.org_id
 	# 只导出子树（从团开始）：导出根 = 团，parent_id 恒为 ""
@@ -367,7 +367,7 @@ func _test_export_roundtrip() -> void:
 	_runner.assert_equal(String(exported.data.entries[0].key), "n1", "条目 key 应为语义键（先根序重编，无运行时 org_id）")
 	_runner.assert_true(str(exported.data.entries[0].key).begins_with("n"), "key 不应携带 org_ 前缀")
 	# 往返：回灌到全新 manager，结构应同构
-	var m2 := ScriptOrgManager.new()
+	var m2 = _runner.track_node(ScriptOrgManager.new())
 	var r2: Dictionary = m2.apply_preset(exported.data, "")
 	_runner.assert_true(r2.get("ok", false), "导出数据应可直接回灌: " + str(r2))
 	var exported2: Dictionary = m2.export_as_preset(r2.data.org_id)
@@ -395,7 +395,7 @@ func _preset_shape(data: Dictionary) -> Array:
 # ─────────────── 蓝图模板字段往返（v2：模板导、实例不导） ───────────────
 
 func _test_preset_template_roundtrip() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var r: Dictionary = m.load_preset("军事编制", "")
 	var root_id: String = r.data.org_id
 	var regiment_id: String = m.get_child_orgs(root_id)[0]
@@ -416,7 +416,7 @@ func _test_preset_template_roundtrip() -> void:
 	# 实例字段不应出现
 	_runner.assert_false(reg_entry.has("personnel") or reg_entry.has("commander_id"), "实例字段（成员/指挥官）不应进蓝图")
 	# 回灌：模板字段逐项落到新组织
-	var m2 := ScriptOrgManager.new()
+	var m2 = _runner.track_node(ScriptOrgManager.new())
 	var r2: Dictionary = m2.apply_preset(exported.data, "")
 	var reg2: String = m2.get_child_orgs(r2.data.org_id)[0]
 	_runner.assert_equal(m2.get_organization(reg2).data.personnel_template, {"rifleman": 4, "mage": 1}, "回灌后编制模板保真")
@@ -427,8 +427,8 @@ func _test_preset_template_roundtrip() -> void:
 # ─────────────── api 层信号契约（层级调整补发信号） ───────────────
 
 func _test_api_signals() -> void:
-	var api := preload("res://modules/organization/api.gd").new()
-	var m := ScriptOrgManager.new()
+	var api = _runner.track_node(preload("res://modules/organization/api.gd").new())
+	var m = _runner.track_node(ScriptOrgManager.new())
 	api.setup(m)
 	var tree := _build_tree(m)
 	var created_ids: Array = []
@@ -459,7 +459,7 @@ func _build_l1_squad(m: ScriptOrgManager, members: Array) -> String:
 
 
 func _test_succession_rank_highest() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var cmd_table := {"101": 1.0, "102": 3.0, "103": 2.0}
 	m.set_attribute_provider(func(id: String) -> float: return float(cmd_table.get(id, -1.0)))
 	var org := _build_l1_squad(m, ["101", "102", "103"])
@@ -484,7 +484,7 @@ func _test_succession_rank_highest() -> void:
 
 
 func _test_succession_tie_pool_order() -> void:
-	var m := ScriptOrgManager.new()  # 不注入 attribute_provider → 全员 -1 平局 → 池序定胜负
+	var m = _runner.track_node(ScriptOrgManager.new())  # 不注入 attribute_provider → 全员 -1 平局 → 池序定胜负
 	var root: String = m.create_organization("连", "MILITARY", 2, "").data.org_id
 	m.assign_stickman(root, "201", "fighter")  # 连部直属副官
 	m.assign_stickman(root, "202", "fighter")
@@ -500,7 +500,7 @@ func _test_succession_tie_pool_order() -> void:
 	# 平局时池序：personnel（201）先于子指挥官（301/302）
 	_runner.assert_equal(String(m.get_organization(root).data.commander_id), "201", "平局按池序，personnel 先于子指挥官")
 	# 中间层无 personnel → 完全退化为下级指挥官（child_orgs 注册序）
-	var m2 := ScriptOrgManager.new()
+	var m2 = _runner.track_node(ScriptOrgManager.new())
 	var root2: String = m2.create_organization("连", "MILITARY", 2, "").data.org_id
 	var p1: String = m2.create_organization("一排", "MILITARY", 1, root2).data.org_id
 	var p2: String = m2.create_organization("二排", "MILITARY", 1, root2).data.org_id
@@ -516,7 +516,7 @@ func _test_succession_tie_pool_order() -> void:
 
 func _test_succession_pools() -> void:
 	# 并池去重：同一人既是父 personnel 又是子组织指挥官 → 候选只出现一次
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var root: String = m.create_organization("连", "MILITARY", 2, "").data.org_id
 	m.assign_stickman(root, "601", "fighter")
 	var l1: String = m.create_organization("排", "MILITARY", 1, root).data.org_id
@@ -539,7 +539,7 @@ func _test_succession_pools() -> void:
 
 func _test_succession_vacancy() -> void:
 	# 候选池空 → 持续空缺（filled=false，report 仍必发）
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var root: String = m.create_organization("连", "MILITARY", 2, "").data.org_id
 	m.assign_commander(root, "801")
 	var reports: Array = []
@@ -551,7 +551,7 @@ func _test_succession_vacancy() -> void:
 	_runner.assert_false(bool(reports[0].payload.filled), "filled=false")
 	_runner.assert_equal(String(reports[0].payload.successor_id), "", "successor_id 为空")
 	# PLAYER_CHOSEN：不自动补（等玩家任命），EventBus 不发射
-	var m2 := ScriptOrgManager.new()
+	var m2 = _runner.track_node(ScriptOrgManager.new())
 	var squad2 := _build_l1_squad(m2, ["811", "812"])
 	m2.organizations[squad2].succession_rule = ScriptOrgState.SuccessionRule.PLAYER_CHOSEN
 	var assigned: Array = []
@@ -565,7 +565,7 @@ func _test_succession_vacancy() -> void:
 
 
 func _test_succession_candidates_api() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var cmd_table := {"901": 2.0, "902": 5.0, "903": 3.5}
 	m.set_attribute_provider(func(id: String) -> float: return float(cmd_table.get(id, -1.0)))
 	var squad := _build_l1_squad(m, ["901", "902", "903"])
@@ -582,7 +582,7 @@ func _test_succession_candidates_api() -> void:
 # ─────────────── 批次 3-F1：信息上报门控（架构文档 §4.4） ───────────────
 
 func _test_report_gate_matrix() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var org: String = m.create_organization("排", "MILITARY", 1, "").data.org_id
 	# HIGH：全自主——仅 commander_lost 必报
 	m.set_autonomy(org, "HIGH")
@@ -612,7 +612,7 @@ func _test_report_gate_matrix() -> void:
 
 
 func _test_file_report_schema() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var org: String = m.create_organization("排", "MILITARY", 1, "").data.org_id
 	var reports: Array = []
 	m.report_filed.connect(func(oid: String, report: Dictionary): reports.append([oid, report]))
@@ -630,7 +630,7 @@ func _test_file_report_schema() -> void:
 	m.file_report("org_nope", {"type": "contact"})
 	_runner.assert_equal(reports.size(), 1, "未知组织不发")
 	# api 层转发：combat 挂点 → api.file_report → api.report_filed
-	var api := preload("res://modules/organization/api.gd").new()
+	var api = _runner.track_node(preload("res://modules/organization/api.gd").new())
 	api.setup(m)
 	var api_reports: Array = []
 	api.report_filed.connect(func(oid: String, report: Dictionary): api_reports.append(report))
@@ -645,7 +645,7 @@ func _test_file_report_schema() -> void:
 ## 成功迁移：源成员表移除、目标成员表加入；被调者为源指挥官时既有补位触发；
 ## api 层对源/目标各发一次 org_restructured。
 func _test_transfer_ok() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var a: String = m.create_organization("甲排", "MILITARY", 1, "").data.org_id
 	var b: String = m.create_organization("乙排", "MILITARY", 1, "").data.org_id
 	m.assign_stickman(a, "101", "fighter")
@@ -667,7 +667,7 @@ func _test_transfer_ok() -> void:
 	_runner.assert_equal(m.get_organization(a).data.personnel, ["102"], "源成员表应只剩 102")
 	_runner.assert_equal(m.get_organization(b).data.personnel, ["201", "103", "101"], "101 应加入目标成员表")
 	# api 层：成功对源/目标各发一次 org_restructured
-	var api := preload("res://modules/organization/api.gd").new()
+	var api = _runner.track_node(preload("res://modules/organization/api.gd").new())
 	api.setup(m)
 	var sigs: Array = []
 	api.org_restructured.connect(func(oid: String): sigs.append(oid))
@@ -681,7 +681,7 @@ func _test_transfer_ok() -> void:
 
 ## 各类校验失败 → {ok:false} 且两组织状态（成员表/指挥官）逐位不变（先校验后落地，无中途改动）。
 func _test_transfer_atomic_fail() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var a: String = m.create_organization("甲", "MILITARY", 1, "").data.org_id
 	var b: String = m.create_organization("乙", "MILITARY", 1, "").data.org_id
 	m.assign_stickman(a, "11", "fighter")
@@ -711,7 +711,7 @@ func _test_transfer_atomic_fail() -> void:
 
 ## 脏 id / 跨图残留：组织侧零出向，只按成员表事实处理，不查实体、不崩溃。
 func _test_transfer_dirty_id() -> void:
-	var m := ScriptOrgManager.new()
+	var m = _runner.track_node(ScriptOrgManager.new())
 	var a: String = m.create_organization("甲", "MILITARY", 1, "").data.org_id
 	var b: String = m.create_organization("乙", "MILITARY", 1, "").data.org_id
 	m.assign_stickman(a, "ghost_map_other", "fighter")  # 非数字/他图残留 id

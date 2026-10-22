@@ -123,7 +123,7 @@ func _cleanup() -> void:
 ## 容器 free 时组员自动出组），开新容器
 func _new_case() -> void:
 	_cleanup()
-	_case_root = Node.new()
+	_case_root = _runner.track_node(Node.new())
 	_case_root.name = "CaseRoot"
 	add_child(_case_root)
 
@@ -139,6 +139,7 @@ func _spawn_resource_node(fix: FakeResourceNode) -> FakeResourceNode:
 
 ## 挂进局部树（get_tree()/组查询可用），测试尾统一清理
 func _spawn(fix: Node) -> Node:
+	_runner.track_node(fix)
 	_case_root.add_child(fix)
 	return fix
 
@@ -148,7 +149,7 @@ func _make_harvest(profession_id: String) -> Dictionary:
 	var e := FakeEntity.new()
 	e._profession_id = profession_id
 	_spawn(e)
-	var b: Node = ScriptBehaviorHarvest.new()
+	var b: Node = _runner.track_node(ScriptBehaviorHarvest.new())
 	b.entity = e
 	_spawn(b)
 	return {"behavior": b, "entity": e}
@@ -171,7 +172,7 @@ func _test_no_profession_finish() -> void:
 	# 裸实体（无 get_profession 方法）：行为 enter 安全 finish
 	var bare := CharacterBody2D.new()
 	_spawn(bare)
-	var b: Node = ScriptBehaviorHarvest.new()
+	var b: Node = _runner.track_node(ScriptBehaviorHarvest.new())
 	b.entity = bare
 	b.enter("", {})
 	_runner.assert_true(b.is_finished(), "无职业协议实体 enter 即 finish")
@@ -179,7 +180,7 @@ func _test_no_profession_finish() -> void:
 	var e := FakeEntity.new()
 	e._profession_id = ""
 	_spawn(e)
-	var b2: Node = ScriptBehaviorHarvest.new()
+	var b2: Node = _runner.track_node(ScriptBehaviorHarvest.new())
 	b2.entity = e
 	b2.enter("", {})
 	_runner.assert_true(b2.is_finished(), "待业实体 enter 即 finish")
@@ -233,7 +234,7 @@ func _test_resource_depleted_finish() -> void:
 	tree.stock = 20
 	tree.position = Vector2(100, 0)
 	_spawn(tree)
-	b.resources_api = FakeResourcesApi.new()
+	b.resources_api = _runner.track_node(FakeResourcesApi.new())
 	b.enter("", {"profession": _prof({})})
 	e.global_position = tree.global_position
 	b.update(0.1)      # 到位进劳作

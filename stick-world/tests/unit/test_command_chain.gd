@@ -162,7 +162,7 @@ func _ready() -> void:
 
 
 func _test_deliver_instant() -> void:
-	var cc := ScriptCommandChain.new()
+	var cc = _runner.track_node(ScriptCommandChain.new())
 	var unit := StubUnit.new()
 	var delivered: Array = []
 	cc.order_delivered.connect(func(_t: int, sid: String, ids: Array) -> void: delivered.append([sid, ids]))
@@ -175,7 +175,7 @@ func _test_deliver_instant() -> void:
 
 
 func _test_deliver_skips_dead() -> void:
-	var cc := ScriptCommandChain.new()
+	var cc = _runner.track_node(ScriptCommandChain.new())
 	var alive := StubUnit.new()
 	var dead_unit := DeadStubUnit.new()
 	last_delivered_ids = []
@@ -183,6 +183,7 @@ func _test_deliver_skips_dead() -> void:
 	cc.deliver(1, "squad_y", [alive, dead_unit], "idle", {}, 0, 1, "")
 	_runner.assert_equal(alive.ai.behavior, "idle", "活体单位应收到号令")
 	_runner.assert_equal(dead_unit.ai.behavior, "", "死亡单位应跳过（不设置行为）")
+	_runner.track_node(dead_unit.get_ai_controller())
 	_runner.assert_equal(last_delivered_ids.size(), 1, "unit_ids 应只含送达的活体单位（死者跳过）")
 	alive.free_ai()
 
@@ -191,7 +192,7 @@ func _test_deliver_skips_dead() -> void:
 ##（首人 0 延迟即时、末人窗内延迟）；玩家号令（tier=0）恒即时。chain 须入树
 ##（timer 走 SceneTree；未入树回退即时是测试桩语义，另循上两用例覆盖）
 func _test_ai_stagger() -> void:
-	var cc := ScriptCommandChain.new()
+	var cc = _runner.track_node(ScriptCommandChain.new())
 	add_child(cc)
 	var u1 := StubUnit.new()
 	var u2 := StubUnit.new()
@@ -215,7 +216,7 @@ func _test_ai_stagger() -> void:
 
 
 func _test_relay_guard() -> void:
-	var cc := ScriptCommandChain.new()
+	var cc = _runner.track_node(ScriptCommandChain.new())
 	var plan := {"hops": [{"from_org": "", "to_org": "org_a", "order": {}}]}
 	# org_api 缺失 → push_warning + return（守卫在 await 之前，无场景树也安全）
 	cc.deliver_via_orgs(plan, null, 0, "move", {}, "")
@@ -241,17 +242,18 @@ func _capture_delivered(_t: int, _sid: String, ids: Array) -> void:
 
 
 func _test_order_to_behavior() -> void:
-	var to := ScriptTacticalOrders.new()
+	var to = _runner.track_node(ScriptTacticalOrders.new())
 	_runner.assert_equal(to._order_to_behavior(ScriptTacticalOrders.OrderType.ADVANCE_ALL), "move", "ADVANCE_ALL -> move")
 	_runner.assert_equal(to._order_to_behavior(ScriptTacticalOrders.OrderType.SPRINT), "move", "SPRINT -> move")
 	_runner.assert_equal(to._order_to_behavior(ScriptTacticalOrders.OrderType.HOLD_POSITION), "idle", "HOLD_POSITION -> idle")
 	_runner.assert_equal(to._order_to_behavior(ScriptTacticalOrders.OrderType.RETREAT), "retreat", "RETREAT -> retreat")
 	_runner.assert_equal(to._order_to_behavior(ScriptTacticalOrders.OrderType.TAKE_COVER), "seek_cover", "TAKE_COVER -> seek_cover")
 	_runner.assert_equal(to._order_to_behavior(ScriptTacticalOrders.OrderType.RALLY), "move", "RALLY -> move")
+	to.free()
 
 
 func _test_order_to_params() -> void:
-	var to := ScriptTacticalOrders.new()
+	var to = _runner.track_node(ScriptTacticalOrders.new())
 	var target := Vector2(100, 200)
 	var adv: Dictionary = to._order_to_params(ScriptTacticalOrders.OrderType.ADVANCE_ALL, target)
 	_runner.assert_equal(adv.get("target", Vector2.ZERO), target, "ADVANCE_ALL 携带目标点")
@@ -262,12 +264,13 @@ func _test_order_to_params() -> void:
 	_runner.assert_true(hold.is_empty(), "HOLD_POSITION 无参数")
 	var retreat: Dictionary = to._order_to_params(ScriptTacticalOrders.OrderType.RETREAT, target)
 	_runner.assert_true(retreat.is_empty(), "RETREAT 无参数（battle 由 behavior 自取）")
+	to.free()
 
 
 # ─────────────────────── 接力在途登记（UI-W3 前置）───────────────────────
 
 func _mk_relay_chain(formation: RelayFormation) -> ScriptCommandChain:
-	var chain: ScriptCommandChain = ScriptCommandChain.new()
+	var chain: ScriptCommandChain = _runner.track_node(ScriptCommandChain.new())
 	chain.setup_formation(formation)
 	chain.add_child(formation)  # 归 chain 之下：测试收尾 chain.free 一并回收
 	add_child(chain)
@@ -305,12 +308,12 @@ func _await_relays_settled(chain: ScriptCommandChain) -> bool:
 
 
 func _test_relay_two_hop() -> void:
-	var formation := RelayFormation.new()
+	var formation = _runner.track_node(RelayFormation.new())
 	formation.combat = {"l1a": true, "l1b": true}
 	formation.squads = {"l1a": [StubUnit.new()], "l1b": [StubUnit.new()]}
 	var chain := _mk_relay_chain(formation)
 	var cap := _capture_relay_signals(chain)
-	var api := RelayOrgApi.new()
+	var api = _runner.track_node(RelayOrgApi.new())
 	api.orgs = {"root": {"tier": 2, "commander_id": "c1"}, "l1a": {"tier": 1, "commander_id": ""}, "l1b": {"tier": 1, "commander_id": ""}}
 	chain.deliver_via_orgs(_relay_plan("root", ["l1a", "l1b"]), api,
 			ScriptTacticalOrders.OrderType.ADVANCE_ALL, "move", {"target": Vector2.ZERO}, "")
@@ -335,12 +338,12 @@ func _test_relay_two_hop() -> void:
 
 
 func _test_relay_eta_inflight() -> void:
-	var formation := RelayFormation.new()
+	var formation = _runner.track_node(RelayFormation.new())
 	formation.combat = {"l1": true}
 	formation.squads = {"l1": [StubUnit.new()]}
 	var chain := _mk_relay_chain(formation)
 	var cap := _capture_relay_signals(chain)
-	var api := RelayOrgApi.new()
+	var api = _runner.track_node(RelayOrgApi.new())
 	api.orgs = {"root": {"tier": 2, "commander_id": "c1"}, "l1": {"tier": 1, "commander_id": ""}}
 	api.delays = {">root": 0.4, "root>l1": 0.2}
 	chain.deliver_via_orgs(_relay_plan("root", ["l1"]), api,
@@ -358,12 +361,12 @@ func _test_relay_eta_inflight() -> void:
 
 
 func _test_relay_leaderless() -> void:
-	var formation := RelayFormation.new()
+	var formation = _runner.track_node(RelayFormation.new())
 	formation.combat = {"l1": true}
 	formation.squads = {"l1": [StubUnit.new()]}
 	var chain := _mk_relay_chain(formation)
 	var cap := _capture_relay_signals(chain)
-	var api := RelayOrgApi.new()
+	var api = _runner.track_node(RelayOrgApi.new())
 	api.orgs = {"root": {"tier": 2, "commander_id": ""}, "l1": {"tier": 1, "commander_id": ""}}
 	chain.deliver_via_orgs(_relay_plan("root", ["l1"]), api,
 			ScriptTacticalOrders.OrderType.ADVANCE_ALL, "move", {"target": Vector2.ZERO}, "")
@@ -374,14 +377,14 @@ func _test_relay_leaderless() -> void:
 
 
 func _test_relay_reject() -> void:
-	var formation := RelayFormation.new()
+	var formation = _runner.track_node(RelayFormation.new())
 	formation.combat = {"l1": false}
 	formation.squads = {"l1": [StubUnit.new()]}
 	var chain := _mk_relay_chain(formation)
 	var delivered: Array = []
 	chain.order_delivered.connect(func(_ot: int, _sid: String, _ids: Array) -> void: delivered.append(1))
 	var cap := _capture_relay_signals(chain)
-	var api := RelayOrgApi.new()
+	var api = _runner.track_node(RelayOrgApi.new())
 	api.orgs = {"root": {"tier": 2, "commander_id": "c1"}, "l1": {"tier": 1, "commander_id": ""}}
 	chain.deliver_via_orgs(_relay_plan("root", ["l1"]), api,
 			ScriptTacticalOrders.OrderType.ADVANCE_ALL, "move", {"target": Vector2.ZERO}, "")
@@ -412,11 +415,11 @@ func _test_relay_eventbus_mirror() -> void:
 		arrived.append({"rid": rid, "from": from, "to": to, "hop": hop, "outcome": outcome})
 	EventBus.relay_started.connect(cb_started)
 	EventBus.relay_arrived.connect(cb_arrived)
-	var formation := RelayFormation.new()
+	var formation = _runner.track_node(RelayFormation.new())
 	formation.combat = {"l1": true}
 	formation.squads = {"l1": [StubUnit.new()]}
 	var chain := _mk_relay_chain(formation)
-	var api := RelayOrgApi.new()
+	var api = _runner.track_node(RelayOrgApi.new())
 	api.orgs = {"root": {"tier": 2, "commander_id": "c1"}, "l1": {"tier": 1, "commander_id": ""}}
 	api.delays = {">root": 0.3, "root>l1": 0.1}
 	chain.deliver_via_orgs(_relay_plan("root", ["l1"]), api,
@@ -450,7 +453,7 @@ func _test_relay_eventbus_mirror() -> void:
 
 ## 树构建：玩家源 + 组织节点、群龙无首口径、补位候选前、统辖规模、层级布局坐标
 func _test_board_tree_and_layout() -> void:
-	var api := BoardOrgApi.new()
+	var api = _runner.track_node(BoardOrgApi.new())
 	api.roots = ["root"]
 	api.orgs = {
 		"root": {"id": "root", "name": "第三团", "tier": 3, "tag": 0,
@@ -461,7 +464,7 @@ func _test_board_tree_and_layout() -> void:
 				"commander_id": "p1", "personnel": ["p1", "p2"], "child_orgs": []},
 	}
 	api.candidates = {"co": [{"id": "p1", "cmd": 3.0}, {"id": "p2", "cmd": 2.0}]}
-	var board = ScriptBoard.new()
+	var board = _runner.track_node(ScriptBoard.new())
 	board.build_tree(api)
 	_runner.assert_equal(board.get_node_count(), 4, "玩家源 + 三组织 = 4 节点")
 	var co: Dictionary = board.get_node_snapshot("co")
@@ -484,7 +487,7 @@ func _test_board_tree_and_layout() -> void:
 
 ## 在途跳账本：起跑登记 eta → 动画时钟递减 → 抵达销账/留档；停驻态随送达清除
 func _test_board_hop_ledger() -> void:
-	var api := BoardOrgApi.new()
+	var api = _runner.track_node(BoardOrgApi.new())
 	api.roots = ["root"]
 	api.orgs = {
 		"root": {"id": "root", "name": "第三团", "tier": 3, "tag": 0,
@@ -494,7 +497,7 @@ func _test_board_hop_ledger() -> void:
 		"l1": {"id": "l1", "name": "一排", "tier": 1, "tag": 0,
 				"commander_id": "p1", "personnel": ["p1"], "child_orgs": []},
 	}
-	var board = ScriptBoard.new()
+	var board = _runner.track_node(ScriptBoard.new())
 	board.build_tree(api)
 	board.notify_relay_started("r1", 0, "", "root", 0, 2.0)
 	_runner.assert_equal(board.get_active_hop_ids().size(), 1, "起跑即在途（连线点亮）")
@@ -521,7 +524,7 @@ func _test_board_hop_ledger() -> void:
 ## 选中口径：普通组织节点 / 玩家源节点（id 空串）/ 未选中三分，非法 id 忽略
 func _test_board_selection() -> void:
 	var api := _small_tree_api()
-	var board = ScriptBoard.new()
+	var board = _runner.track_node(ScriptBoard.new())
 	board.build_tree(api)
 	_runner.assert_false(board.has_selection(), "初始未选中")
 	var captured: Array = []
@@ -547,7 +550,7 @@ func _test_board_selection() -> void:
 
 ## 拥挤治理：任意缩放下同层兵牌不重叠（步距 = 兵牌宽 + 间隙），内容尺寸随缩放变
 func _test_board_zoom_no_overlap() -> void:
-	var api := BoardOrgApi.new()
+	var api = _runner.track_node(BoardOrgApi.new())
 	var kids: Array = []
 	var orgs: Dictionary = {
 		"root": {"id": "root", "name": "第三营", "tier": 3, "tag": 0,
@@ -561,9 +564,9 @@ func _test_board_zoom_no_overlap() -> void:
 	orgs["root"]["child_orgs"] = kids
 	api.roots = ["root"]
 	api.orgs = orgs
-	var board = ScriptBoard.new()
+	var board = _runner.track_node(ScriptBoard.new())
 	board.build_tree(api)
-	var unit := board.get_unit_positions()
+	var unit: Dictionary = board.get_unit_positions()
 	_runner.assert_equal(unit.size(), 14, "12 叶 + 营 + 玩家源 = 14 节点")
 	for zoom in [ScriptBoard.ZOOM_MIN, 1.0, ScriptBoard.ZOOM_MAX]:
 		board.set_zoom(float(zoom))
@@ -600,17 +603,17 @@ func _test_board_zoom_no_overlap() -> void:
 ## 无目标点号令（坚守）恒可用；玩家源节点/未选中不可下令（按钮全禁用）
 func _test_view_order_issuance() -> void:
 	var api := _small_tree_api()
-	var tac := OrderTactical.new()
-	var fs := CentroidFormation.new()
-	var u := Node2D.new()
+	var tac = _runner.track_node(OrderTactical.new())
+	var fs = _runner.track_node(CentroidFormation.new())
+	var u = _runner.track_node(Node2D.new())
 	u.position = Vector2(100.0, 50.0)
 	fs.squads = {"l1": [u]}
-	var root := ViewRoot.new()
+	var root = _runner.track_node(ViewRoot.new())
 	root.org_api = api
 	root.tactical = tac
 	root.formation = fs
 	add_child(root)
-	var view: Control = ViewScene.instantiate()
+	var view: Control = _runner.track_node(ViewScene.instantiate())
 	add_child(view)
 	view.setup(root)
 	# 初始未选中：号令条全禁用
@@ -652,7 +655,7 @@ func _test_view_order_issuance() -> void:
 
 ## 小树夹具：玩家源 → 第三营(L3) → 第一连(L2) → 一排(L1)
 func _small_tree_api() -> BoardOrgApi:
-	var api := BoardOrgApi.new()
+	var api = _runner.track_node(BoardOrgApi.new())
 	api.roots = ["root"]
 	api.orgs = {
 		"root": {"id": "root", "name": "第三营", "tier": 3, "tag": 0,

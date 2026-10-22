@@ -70,7 +70,7 @@ func _test_map_base_identity() -> void:
 
 func _make_street_map() -> Hd2dStreetMap:
 	var map := Hd2dStreetMap.new()
-	map._hd = MockHd.new()
+	map._hd = _runner.track_node(MockHd.new())
 	return map
 
 

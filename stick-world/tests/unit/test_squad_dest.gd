@@ -51,12 +51,12 @@ func _ready() -> void:
 
 ## 构造一个含 n 个单位的 FormationSystem（fake org api）
 func _make_formation(n: int) -> Array:
-	var fs: Node = ScriptFormationSystem.new()
-	var org: Node = FakeOrgApi.new()
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	var org: Node = _runner.track_node(FakeOrgApi.new())
 	fs.setup(org)
 	var units: Array = []
 	for i in n:
-		var u := Node2D.new()
+		var u = _runner.track_node(Node2D.new())
 		u.name = "U%d" % i
 		u.position = Vector2(100 + i * 40, 500)
 		var s := GDScript.new()
@@ -164,7 +164,7 @@ func _test_chain_personalize() -> void:
 		s.reload()
 		u.set_script(s)
 	# 构造 CommandChain + 注入 formation，手动触发 _execute_delivery
-	var cc: Node = ScriptCommandChain.new()
+	var cc: Node = _runner.track_node(ScriptCommandChain.new())
 	cc.setup_formation(fs)
 	var base := Vector2(500, 500)
 	var params := {"target": base}

@@ -140,6 +140,7 @@ bash tests/run_all.sh -Changed HEAD~1          # 只跑 git diff 影响到的套
 bash tests/run_all.sh -Parallel 8              # 调整并行度（1-8）
 bash tests/run_all.sh -Report /tmp/report.json # 输出 JSON 报告
 bash tests/run_unit.sh                         # unit 批量（单进程，秒级）
+godot --headless --path <项目根> --script res://tests/lib/unit_suite_main.gd -- res://tests/unit/test_xxx.gd   # 单套件独立跑（逐套排障/普查宿主）
 ```
 
 退出码：0 全过 / 1 有失败。`run_tests.gd`（旧入口）职责：仅 autoload 冒烟（EventBus/ConfigManager），不再是"全部测试入口"。

@@ -14,7 +14,8 @@ extends BehaviorBase
 ##
 ## 多工人各自往返（不限制搬运工数量）；搬运时切换为 carry 动画。
 ## 移动接入静态障碍避障（寻路方案A，steering_wall_avoid）：直线驱动叠加切向
-## 滑动/绕行意向；持续推墙超限判不可达 finish（决策层重派），不再无限推墙。
+## 滑动/绕行意向；持续受阻（推墙/被占位绕圈）超限判不可达 finish（决策层
+## 重派），不再无限推墙。
 
 
 # ─────────────────────────────── 常量 ────────────────────────────────
@@ -139,8 +140,8 @@ func exit(next: String) -> void:
 # ─────────────────────────────── 内部 ────────────────────────────────
 
 ## 走向目标点，到达后触发对应阶段完成逻辑。直线方向叠加静态障碍避障
-##（方案A）：切向滑动/绕行意向修正；持续推墙超限 → 判不可达 finish 放弃
-## 本行为（决策层重派/换向），不再无限推墙卡死。
+##（方案A）：切向滑动/绕行意向修正；持续受阻（推墙/被占位绕圈）超限 → 判
+## 不可达 finish 放弃本行为（决策层重派/换向），不再无限推墙卡死。
 func _move_to(delta: float, target: Vector2) -> void:
 	var dist: float = entity.global_position.distance_to(target)
 	if dist > ARRIVE_THRESHOLD:
@@ -149,7 +150,7 @@ func _move_to(delta: float, target: Vector2) -> void:
 		if _wall_avoid.is_unreachable():
 			if entity.has_method("ai_stop"):
 				entity.ai_stop()
-			print("[BehaviorHaul] 搬运目标不可达（推墙 %.1fs 放弃，决策层重派）: pos=%v target=%v"
+			print("[BehaviorHaul] 搬运目标不可达（受阻 %.1fs 放弃，决策层重派）: pos=%v target=%v"
 					% [float(_wall_avoid.push_time()), entity.global_position, target])
 			finish()
 			return

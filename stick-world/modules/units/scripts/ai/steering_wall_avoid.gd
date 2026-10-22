@@ -11,10 +11,18 @@ extends RefCounted
 ##    卡住触发即换侧重织（冷却防左右抽搐）；
 ## 3. 卡住升级：目标进度停滞 + 持续推墙累计超 GIVE_UP 时限 → 判"目标不可达"
 ##    上报（行为层 finish 换目标，把不可达从"无限推墙"变成"有限尝试后失败"）。
+##    推墙停滞中段（ESCAPE_AFTER）先沿墙法线背退一次：单位一旦嵌进碰撞体
+##    （move_and_slide 不自动排出）只沿切线滑会永远蹭在原地，背退是可控出口。
+##    阻滞面不止静态墙：**目的地被友军占位**时（如两个村民同采一棵树，后来者被
+##    分离/让路横向分量推着绕圈，永远差 ARRIVE 阈值几 px），单位有速度但目标距离
+##    长期无实质改善——本组件用"目标距离历史最优改善量"账本把这种"有速度无接近"
+##    同样升级为不可达（consumer 换点/放弃），不依赖碰撞法线（单位碰撞体被本组件
+##    过滤，读取不到）。
 ##
 ## 作用域红线（战斗语义零破坏）：只处理静态墙（非 CharacterBody2D 碰撞体），
 ## 不碰敌挡路接战/单位分离推挤——敌方单位挡路归 behavior_move 遇阻接战
-##（_handle_path_block），友军归 entity_motion 让路/分离。
+##（_handle_path_block），友军归 entity_motion 让路/分离。阻滞升级只是"有限
+## 尝试后上报"，不改变挡路处置本身。
 ##
 ## 性能：自带 0.2s 节流拍（AI 决策冷却内做，不每帧全量）；碰撞结果读取零
 ## 成本（move_and_slide 已算好），无 raycast 无邻居扫描。
@@ -33,11 +41,27 @@ const PUSH_DOT: float = -0.2
 const TANGENT_MIN: float = 0.25
 ## 绕行意向持续时长（s，调研带 0.3~1s）：到期重评估，仍对顶则续织
 const DETOUR_DURATION: float = 0.8
+## 背退脱困触发：推墙停滞累计超过此值 → 先沿墙法线后退一段再绕（脱出
+## 嵌入碰撞体/死角的姿态；PUSH 法线与实际位置不一致时只滑动永远出不来）
+const ESCAPE_AFTER: float = 2.0
+## 背退持续时长（s）：160px/s 走速下约后退 96px，足够脱离单位半径量级的嵌入
+const ESCAPE_DURATION: float = 0.6
 ## 目标进度下限（px/s）：低于此视为"没在接近目标"（滑墙期最差 ~25% 速度 ≈40px/s，
 ## 12 是走速下的零头阈值——只区分"有进展/停摆"）
 const PROGRESS_MIN: float = 12.0
+## 目标距离实质改善量（px）：每拍目标距离须比历史最优再近这么多才算"有进展"。
+## 低于此的抖动改善不刷新基准（防绕圈时 ±1~2px 的随机靠近把停滞账本清零）。
+## 6px ≈ 走速 160px/s 的 2 帧位移，只放过真实接近。
+const PROGRESS_EPS: float = 6.0
 ## 持续推墙放弃时限（s）：验收口径"不允许 >5s 的持续推墙"（寻路调研 §三）
 const GIVE_UP_TIME: float = 5.0
+## 阻滞（有速度但目标距离无实质改善）计入推墙账本的速度下限（px/s）：与
+## behavior 看门狗 intent 阈值同量级——低于此更像站桩/被顶死（推墙分支管），
+## 不把"贴墙滑行但速度被摩擦吃掉"重复计数
+const BLOCK_MOVE_MIN: float = 10.0
+## 动态阻滞的方向偏离判据（速度与意图的归一化点积上限）：低于此才算"被推着
+## 横走/绕圈"；正常直进（点积≈1）不进阻滞账本，避免慢速赶路被误判
+const BLOCK_MISDIRECT_DOT: float = 0.5
 
 ## 所属实体（读滑动碰撞 + 实例奇偶；构造注入，不参与引用计数）
 var _entity: Node = null
@@ -48,6 +72,8 @@ var _scan_accum: float = 0.0
 ## 目标进度采样（上拍目标距离；目标变更时复位）
 var _goal: Vector2 = Vector2(NAN, NAN)
 var _last_goal_dist: float = INF
+## 目标距离历史最优基准（仅当改善 ≥ PROGRESS_EPS 时刷新；绕圈抖动不刷新）
+var _best_goal_dist: float = INF
 ## 累计推墙时长（有目标进度即衰减，防短暂擦碰累积误杀）
 var _push_time: float = 0.0
 ## 目标不可达（升级终态；arm/目标变更复位）
@@ -58,6 +84,11 @@ var _tangent: Vector2 = Vector2.ZERO
 var _detour_dir: Vector2 = Vector2.ZERO
 var _detour_left: float = 0.0
 var _detour_side: int = 0
+## 背退脱困：方向 + 剩余时长 + 本段停滞是否已退过（沿墙法线后退，脱出
+## 嵌进碰撞体/死角的姿态；每段停滞最多退一次，退完仍无进展走绕行/放弃）
+var _escape_dir: Vector2 = Vector2.ZERO
+var _escape_left: float = 0.0
+var _escape_done: bool = false
 
 
 func _init(entity: Node) -> void:
@@ -71,12 +102,16 @@ func _init(entity: Node) -> void:
 func arm() -> void:
 	_scan_accum = 0.0
 	_last_goal_dist = INF
+	_best_goal_dist = INF
 	_push_time = 0.0
 	_unreachable = false
 	_tangent = Vector2.ZERO
 	_detour_dir = Vector2.ZERO
 	_detour_left = 0.0
 	_detour_side = 0
+	_escape_dir = Vector2.ZERO
+	_escape_left = 0.0
+	_escape_done = false
 	if _entity != null and is_instance_valid(_entity):
 		_stuck.arm(_entity.global_position)
 
@@ -92,8 +127,12 @@ func update(delta: float, dir_n: Vector2, goal: Vector2) -> void:
 	if goal != _goal:
 		_goal = goal
 		_last_goal_dist = INF
+		_best_goal_dist = INF
 		_push_time = 0.0
 		_unreachable = false
+		_escape_left = 0.0
+		_escape_dir = Vector2.ZERO
+		_escape_done = false
 	_scan_accum += delta
 	if _scan_accum < SCAN_INTERVAL:
 		return
@@ -104,6 +143,10 @@ func update(delta: float, dir_n: Vector2, goal: Vector2) -> void:
 
 ## 应用避障方向修正（每 update 拍调用）：绕行意向 > 切向滑动 > 原方向。
 func steer(delta: float, dir_n: Vector2) -> Vector2:
+	if _escape_left > 0.0:
+		_escape_left -= delta
+		if _escape_dir != Vector2.ZERO:
+			return _escape_dir
 	if _detour_left > 0.0:
 		_detour_left -= delta
 		if _detour_dir != Vector2.ZERO:
@@ -139,6 +182,11 @@ func _scan(beat: float, dir_n: Vector2, goal: Vector2) -> void:
 	if _last_goal_dist < INF:
 		progress = (_last_goal_dist - goal_dist) / beat
 	_last_goal_dist = goal_dist
+	# 实质接近判定（防绕圈抖动）：目标距离须比历史最优再近 PROGRESS_EPS；
+	# 不刷新基准的小幅抖动不算进展，连续无实质接近 = 被占位绕圈/被堵死
+	var closing: bool = goal_dist <= _best_goal_dist - PROGRESS_EPS
+	if closing:
+		_best_goal_dist = goal_dist
 
 	# 墙接触读取：物理碰撞法线 + 行走带边界虚拟墙（clamp 不产生碰撞，顶边界的
 	# 单位同样会无限推——虚拟法线让 clamp 盲区走同一条避障链）
@@ -170,12 +218,30 @@ func _scan(beat: float, dir_n: Vector2, goal: Vector2) -> void:
 	else:
 		_tangent = Vector2.ZERO
 
-	# 推墙时长账本：接触墙 + 无目标进度才累计（滑墙有进展不罚）；否则衰减
+	# 推墙时长账本：接触墙 + 无目标进度才累计（滑墙有进展不罚）；否则衰减。
+	# 第二项覆盖"动态阻滞"：没有墙接触（单位碰撞体被过滤/分离力隔着）但有实际
+	# 移动速度、目标距离长期无实质改善（典型=目的地被友军站着占位，后来者被
+	# 让路横分量推着绕圈）——同样按 GIVE_UP 时限升级不可达，交给消费方换点。
 	var stalled: bool = progress == INF or progress < PROGRESS_MIN
-	if pushing and stalled:
+	var velocity: Vector2 = _entity.velocity if _entity is CharacterBody2D else Vector2.ZERO
+	# 动态阻滞判据：有速度但**方向明显偏离意图**（绕圈/被横推）且目标无实质接近。
+	# 方向对齐的直线缓慢推进不在此列（进度账本自会按 6px 步进刷新）
+	var misdirected: bool = velocity.length() >= BLOCK_MOVE_MIN \
+			and velocity.normalized().dot(dir_n) < BLOCK_MISDIRECT_DOT
+	var crowd_blocked: bool = (not closing) and misdirected
+	if (pushing and stalled) or crowd_blocked:
 		_push_time += beat
 	else:
 		_push_time = maxf(0.0, _push_time - beat * 2.0)
+	# 背退脱困：持续推墙且无进展 → 沿墙法线后退一段再试（单位一旦嵌入碰撞体，
+	# move_and_slide 不会自动排出，只沿切线滑会永远留在体内来回蹭）
+	if pushing and stalled and _push_time >= ESCAPE_AFTER and not _escape_done:
+		_escape_dir = n
+		_escape_left = ESCAPE_DURATION
+		_escape_done = true
+	# 有实质接近/脱离接触：本段停滞收口，下次再卡可重新脱困
+	if closing or not pushing:
+		_escape_done = false
 
 	# 卡住三件套（公共组件）：完全没动 → 换侧重织绕行（同侧绕不动换反侧再试）
 	if _stuck.tick(beat, pos):

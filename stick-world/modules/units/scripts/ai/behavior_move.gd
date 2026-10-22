@@ -209,13 +209,14 @@ func update(delta: float) -> void:
 	# 组件内部 0.2s 节流摊销（决策冷却内做，不每帧全量）；只处理墙（非单位
 	# 碰撞体），敌挡路接战/单位分离推挤语义不受影响
 	_wall_avoid.update(delta, move_dir, _target)
-	# 卡住升级终态：持续推墙超限 → 判不可达 finish（AI 层换目标/回 idle，把
-	# 不可达从"无限推墙"变成"有限尝试后上报"）。战斗推进令（engage_in_range）
+	# 卡住升级终态：持续受阻（推墙/被占位绕圈）超限 → 判不可达 finish（AI 层
+	# 换目标/回 idle，把不可达从"无限推墙"变成"有限尝试后上报"）。战斗推进令
+	# （engage_in_range）
 	# 不吃放弃——接战语义归遇阻接战/看门狗，推进令不因地形静默终止
 	if _wall_avoid.is_unreachable() and not _engage_in_range:
 		if entity.has_method("ai_stop"):
 			entity.ai_stop()
-		print("[BehaviorMove] 目标不可达（推墙 %.1fs 放弃）: pos=%v target=%v"
+		print("[BehaviorMove] 目标不可达（受阻 %.1fs 放弃）: pos=%v target=%v"
 				% [float(_wall_avoid.push_time()), entity.global_position, _target])
 		finish()
 		return

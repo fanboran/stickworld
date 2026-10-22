@@ -120,8 +120,12 @@ func _ready() -> void:
 	_runner.add_test("组件: 正对面墙织绕行意向（侧别帧间稳定）", _test_detour_intent)
 	_runner.add_test("组件: 绕行到期自动失效（无墙不残留）", _test_detour_expiry)
 	_runner.add_test("组件: 推墙停滞累计超限 → 判不可达", _test_give_up_unreachable)
+	_runner.add_test("组件: 无墙占位绕圈（有速度无接近）→ 判不可达", _test_crowd_stall_unreachable)
+	_runner.add_test("组件: 有实质接近不升级（无墙正常赶路）", _test_approach_no_escalation)
+	_runner.add_test("组件: 换目标清零阻滞账本（换点重试）", _test_goal_change_resets_stall)
 	_runner.add_test("组件: 滑墙有进展不升级（推墙账本衰减）", _test_slide_no_escalation)
 	_runner.add_test("组件: 卡住换侧（同侧绕不动翻反侧重织）", _test_stuck_flip_side)
+	_runner.add_test("组件: 持续推墙先背退脱困（沿法线退出后重试）", _test_escape_backoff)
 	_runner.add_test("行为: move 遇墙织绕行保持移动（非战斗）", _test_move_detour)
 	_runner.add_test("行为: move 不可达 finish 上报（非战斗不无限推墙）", _test_move_unreachable_finish)
 	_runner.add_test("行为: engage 推进令永不因不可达静默终止", _test_engage_never_give_up)
@@ -247,6 +251,70 @@ func _test_give_up_unreachable() -> void:
 	_teardown([unit])
 
 
+## 动态阻滞（无墙接触）：目的地被友军占位时，后来者被分离/让路横向分量推着
+## 绕圈——有速度、但目标距离长期无实质接近（每拍只抖动 ±1~2px）。组件须按同一
+## GIVE_UP 时限升级不可达，交消费方换点（主街两个伐木工同抢一棵树的实锤情形）。
+func _test_crowd_stall_unreachable() -> void:
+	var unit := FakeUnit.new()
+	unit.position = Vector2(0, -30.0)  # 站在目标 30px 外（ARRIVE 阈值边缘绕圈）
+	var av := _make_stub_avoid(unit)
+	var goal := Vector2.ZERO
+	var angle: float = -PI * 0.5
+	var gave_up: bool = false
+	for i in 40:  # 8s > GIVE_UP_TIME(5s)
+		# 半径恒 30px 绕圈：净接近 ≈ 0，径向速度分量只有抖动级
+		angle += 0.14
+		unit.global_position = Vector2(cos(angle), sin(angle)) * 30.0
+		unit.velocity = Vector2(-sin(angle), cos(angle)) * 100.0
+		av.update(0.2, (goal - unit.global_position).normalized(), goal)
+		if av.is_unreachable():
+			gave_up = true
+			break
+	_runner.assert_true(gave_up, "无墙占位绕圈（有速度无接近）应判不可达")
+	_runner.assert_true(av.push_time() >= 5.0, "阻滞账本应累计到放弃时限")
+	_teardown([unit])
+
+
+## 无墙正常赶路（每拍实质接近 > PROGRESS_EPS）：阻滞账本不累计、不升级
+func _test_approach_no_escalation() -> void:
+	var unit := FakeUnit.new()
+	unit.position = Vector2(0, 400.0)
+	var av := _make_stub_avoid(unit)
+	var goal := Vector2.ZERO
+	var gave_up: bool = false
+	for i in 15:  # 3s：每拍接近 20px（160px/s）
+		var dir: Vector2 = (goal - unit.global_position).normalized()
+		unit.velocity = dir * 160.0
+		unit.global_position += dir * 20.0
+		av.update(0.2, dir, goal)
+		if av.is_unreachable():
+			gave_up = true
+			break
+	_runner.assert_false(gave_up, "正常赶路有实质接近不应升级不可达")
+	_runner.assert_true(av.push_time() <= 0.01, "有进展时阻滞账本应保持清零")
+	_teardown([unit])
+
+
+## 换点重试：绕圈累计接近时限时目标变更（harvest 拉黑换点）→ 账本清零、
+## 不把新目标误判不可达
+func _test_goal_change_resets_stall() -> void:
+	var unit := FakeUnit.new()
+	unit.position = Vector2(0, -30.0)
+	var av := _make_stub_avoid(unit)
+	var angle: float = -PI * 0.5
+	for i in 15:  # 3s < GIVE_UP_TIME：累计中但未升级
+		angle += 0.14
+		unit.global_position = Vector2(cos(angle), sin(angle)) * 30.0
+		unit.velocity = Vector2(-sin(angle), cos(angle)) * 100.0
+		av.update(0.2, (Vector2.ZERO - unit.global_position).normalized(), Vector2.ZERO)
+	_runner.assert_true(av.push_time() > 1.0, "前置：阻滞账本已在累计")
+	var new_goal := Vector2(500.0, 0.0)
+	av.update(0.2, Vector2.RIGHT, new_goal)
+	_runner.assert_false(av.is_unreachable(), "换目标后不应沿用旧账本判不可达")
+	_runner.assert_equal(av.push_time(), 0.0, "换目标应清零阻滞账本")
+	_teardown([unit])
+
+
 ## 滑墙有进展（沿墙横移接近目标）：推墙账本衰减，不升级不可达
 func _test_slide_no_escalation() -> void:
 	var unit := FakeUnit.new()
@@ -287,6 +355,27 @@ func _test_stuck_flip_side() -> void:
 			flipped = true
 			break
 	_runner.assert_true(flipped, "绕行中卡住应换侧（方向翻面重织）")
+	_teardown([unit])
+
+
+## 背退脱困：推墙停滞超过 ESCAPE_AFTER 后，先沿墙法线（远离墙）后退一段，
+## 给"嵌进碰撞体只靠切线滑永远出不来"的姿态一个出口；退完仍无进展才放弃
+func _test_escape_backoff() -> void:
+	var unit := FakeUnit.new()
+	unit.freeze = true  # 钉住：模拟嵌入物理体后 move_and_slide 不排出
+	unit.position = Vector2(0, 0)
+	var av := _make_stub_avoid(unit)
+	av.wall_normals = [Vector2(0, 1)]
+	var dir := Vector2(0, -1)
+	var escaped: bool = false
+	for i in 20:  # 4s
+		av.update(0.2, dir, Vector2(0, -400))
+		var out: Vector2 = av.steer(0.2, dir)
+		if out.distance_to(Vector2(0, 1)) < 0.01:
+			escaped = true
+			break
+	_runner.assert_true(escaped, "持续推墙停滞应沿法线背退脱困")
+	_runner.assert_false(av.is_unreachable(), "背退阶段尚未到放弃时限")
 	_teardown([unit])
 
 

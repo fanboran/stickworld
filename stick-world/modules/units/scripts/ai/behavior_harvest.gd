@@ -235,7 +235,7 @@ func _wall_step(delta: float, dir: Vector2, goal: Vector2) -> Vector2:
 			entity.ai_stop()
 		if goal != _reported_goal:
 			_reported_goal = goal
-			print("[BehaviorHarvest] 劳作目标不可达（推墙 %.1fs，拉黑换点）: pos=%v goal=%v"
+			print("[BehaviorHarvest] 劳作目标不可达（受阻 %.1fs，拉黑换点）: pos=%v goal=%v"
 					% [float(_wall_avoid.push_time()), entity.global_position, goal])
 		var node_before: Node2D = _node
 		var site_before: Vector2 = _site_pos

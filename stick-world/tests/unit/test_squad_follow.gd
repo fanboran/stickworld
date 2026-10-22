@@ -139,8 +139,10 @@ func _ready() -> void:
 
 
 func _make_fs() -> Node:
-	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
+	# 夹具经 runner 登记，用例结束统一释放（FormationSystem 持有的
+	# SquadFireteam/SquadPlatoon 等 RefCounted 随宿主回收整片消失）
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
 	return fs
 
 
@@ -149,11 +151,11 @@ func _make_squad(fs: Node, base_x: float, n: int, squad_name: String) -> Diction
 	var units: Array = []
 	var ais: Array = []
 	for i in n:
-		var u := FakeUnit.new()
+		var u: FakeUnit = _runner.track_node(FakeUnit.new())
 		u.name = "%s%d" % [squad_name, i]
 		u.position = Vector2(base_x + i * 40.0, 500)
 		u.formation = fs
-		var ai := FakeAI.new()
+		var ai: FakeAI = _runner.track_node(FakeAI.new())
 		u.ai = ai
 		units.append(u)
 		ais.append(ai)
@@ -277,14 +279,14 @@ func _test_engaged_skip() -> void:
 	var front: Dictionary = _make_squad(fs, 600.0, 2, "F")
 	var rear: Dictionary = _make_squad(fs, 100.0, 1, "R")
 	# 后队成员接战中：射程 100 内有敌
-	var battle: Node = FakeBattle.new()
-	var enemy := FakeEnemy.new()
+	var battle: Node = _runner.track_node(FakeBattle.new())
+	var enemy: FakeEnemy = _runner.track_node(FakeEnemy.new())
 	enemy.name = "E"
 	enemy.position = Vector2(150, 500)  # 距后队成员 50 < 100
 	battle.enemies = [enemy]
 	var u: FakeUnit = rear["units"][0]
 	u.battle = battle
-	u.weapon = FakeWeapon.new()
+	u.weapon = _runner.track_node(FakeWeapon.new())
 	fs.set_squad_follow_squad(rear["sid"], front["sid"], 150.0)
 	var ai: FakeAI = rear["ais"][0]
 	_runner.assert_false(ai.has_order(), "接战成员不应被跟队号令打断")

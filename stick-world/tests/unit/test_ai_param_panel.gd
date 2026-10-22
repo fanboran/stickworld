@@ -177,10 +177,11 @@ func _test_r1_variance() -> void:
 # ─────────────────────────────── R5 防扎堆治疗 ────────────────────────────────
 
 func _test_r5_skip_being_healed() -> void:
-	var battle := _FakeBattle.new()
+	var battle: _FakeBattle = _runner.track_node(_FakeBattle.new())
+	battle.tracker = _runner.track_node
 	battle.add_unit(1, 0.2)  # A：重伤
 	battle.add_unit(1, 0.5)  # B：中伤
-	var healer := _FakeUnit.new()
+	var healer: _FakeUnit = _runner.track_node(_FakeUnit.new())
 	healer.faction = 1
 	# 过滤关（默认）：血量最低优先 → A
 	var t1: Node = ScriptTargetFinder.find_weakest_ally(healer, {"battle": battle})
@@ -212,8 +213,8 @@ func _test_r5_mark() -> void:
 # ─────────────────────────────── R4 权威值择班 ────────────────────────────────
 
 func _make_fs(org: _FakeOrgApi) -> FormationSystem:
-	var fs: FormationSystem = ScriptFormationSystem.new()
-	fs.setup(org)
+	var fs: FormationSystem = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(org))
 	return fs
 
 
@@ -228,7 +229,7 @@ func _test_r4_authority() -> void:
 			"follow_squad_id": "", "follow_gap": 0.0, "slots": {}}
 	_runner.assert_approx(fs.get_squad_authority("s1"), 0.0, 0.001, "空班 = 0")
 	# 班长在场 → 1.0；接管 → +0.2 玩家光环
-	var leader := _FakeUnit.new()
+	var leader: _FakeUnit = _runner.track_node(_FakeUnit.new())
 	fs._squads["s1"]["leader"] = leader
 	_runner.assert_approx(fs.get_squad_authority("s1"), 1.0, 0.001, "有班长 = 1.0")
 	leader.user_controlled = true
@@ -284,9 +285,11 @@ class _FakeUnit extends Node2D:
 
 class _FakeBattle extends Node:
 	var units: Array = []
+	## 单位桩登记口（用例注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
 
 	func add_unit(faction: int, ratio: float) -> void:
-		var u := _FakeWounded.new()
+		var u: _FakeWounded = tracker.call(_FakeWounded.new()) if tracker.is_valid() else _FakeWounded.new()
 		u.faction = faction
 		u.ratio = ratio
 		units.append(u)

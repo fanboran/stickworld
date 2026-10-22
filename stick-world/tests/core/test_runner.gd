@@ -302,20 +302,105 @@ func end_test() -> void:
 ## 要求使用方脚本声明 `signal test_done(code: int)`。
 static func finish_process(emitter: Node, exit_code: int) -> void:
 	stop_audio_voices()
+	reset_ui_static_caches()
 	if Engine.has_meta("test_batch"):
 		emitter.call_deferred("emit_signal", "test_done", exit_code)
 	else:
 		emitter.get_tree().quit(exit_code)
 
 
-## 退出前停止在播 SFX 声部：AudioStreamPlayback 由 AudioServer 持有，进程秒退时
+## 退出前复位 ui_global 的进程级静态缓存（手绘 StyleBox / 沸腾贴图帧集 / 字体 /
+## 图标 / 空纹理）。这些缓存懒构建后常驻静态变量，进程退出时会被 ObjectDB 记成
+## 泄漏（尤其只 preload 到 SketchStyle/SketchTextures 的套件）。复位只清缓存，
+## 下次按原懒加载路径重建——运行时行为不变，仅供测试 teardown 使用。
+static func reset_ui_static_caches() -> void:
+	SketchTextures.reset_static_caches()
+	SketchStyle.reset_static_caches()
+	SketchButton.reset_static_caches()
+	SketchPanel.reset_static_caches()
+	SketchFonts.reset_static_caches()
+	SketchDraw.reset_static_caches()
+	StickIcons.reset_static_caches()
+	SketchIcons.reset_static_caches()
+	SketchHSlider.reset_static_caches()
+	SketchOptionButton.reset_static_caches()
+
+
+## 退出前停止在播音频声部：AudioStreamPlayback 由 AudioServer 持有，进程秒退时
 ## 仍在播的声部会被 ObjectDB 记为泄漏（战斗/采集类用例触发音效后必现）。停声部
-## 是 autoload 侧的正常退出清理，不是掩盖测试引用。无 AudioManager（纯逻辑工程）
-## 时静默跳过。
+## 是 autoload 侧的正常退出清理，不是掩盖测试引用。无 AudioManager/MusicDirector
+## （纯逻辑工程）时静默跳过。
+##
+## 三个细节（headless 无帧退出场景）：
+## - stop_all_sfx / stop_all 都靠 queue_free 回收播放器，而进程秒退不跑延迟删除
+##   队列，故先快照声部、停播后直接 free；
+## - instant 音效重触发与音乐换曲会先把旧播放器移出登记表再 queue_free，
+##   这些节点同样残留，按 AudioManager/MusicDirector 的子节点一并收；
+## - 播放中的 AudioStreamPlayback 由音频线程持有，必须让它按真实时间跑完混音
+##   才会释放；本次进程若起过音则等几次混音，否则退出时播放实例与流仍记泄漏。
 static func stop_audio_voices() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null or tree.root == null:
 		return
 	var audio := tree.root.get_node_or_null("AudioManager")
+	var music := tree.root.get_node_or_null("MusicDirector")
+	if audio == null and music == null:
+		return
+	var players: Array = []
+	var had_sound: bool = false
 	if audio != null and audio.has_method("stop_all_sfx"):
+		var tracked: Variant = audio.get("_sfx_players")
+		if tracked is Array:
+			players.append_array(tracked as Array)
+		var play_counts: Variant = audio.get("_play_counts")
+		had_sound = play_counts is Dictionary and not (play_counts as Dictionary).is_empty()
 		audio.stop_all_sfx()
+	if music != null and music.has_method("stop_all"):
+		# 音乐层（含战场声场/短句）：stop_all(0) 只静音 + 排延迟释放，无帧不会执行
+		var layers: Variant = music.get("_players")
+		if layers is Dictionary:
+			players.append_array((layers as Dictionary).values())
+		var stingers: Variant = music.get("_stinger_players")
+		if stingers is Array:
+			players.append_array(stingers as Array)
+		for key in ["_ambience", "_battle_ambience"]:
+			var p: Variant = music.get(key)
+			if p != null:
+				players.append(p)
+		# 不走 stop_all(0)：它会建 0.3s 后 queue_free 的 tween，播放器已由本函数
+		# 直接 free，批跑后续帧里回调会打到已释放实例。这里只清状态表。
+		music.set("_players", {})
+		music.set("_layer_db", {})
+		music.set("_cue", "")
+		music.set("_preview", "")
+		music.set("_battle_ambience_active", false)
+		music.set("_ambience_name", "")
+	# 换曲/重触发退役的播放器已不在登记表里，按子节点兜底收齐
+	for host in [audio, music]:
+		if host == null:
+			continue
+		for child in host.get_children():
+			if child is AudioStreamPlayer or child is AudioStreamPlayer2D:
+				if not players.has(child):
+					players.append(child)
+	for p in players:
+		if is_instance_valid(p) and (p as Node).is_inside_tree():
+			had_sound = had_sound or bool(p.get("playing"))
+	if had_sound:
+		# 先停播，再让音频线程跑几次混音（时间增量回落 = 新一次混音完成）
+		for p in players:
+			if is_instance_valid(p) and (p as Node).has_method("stop"):
+				(p as Node).call("stop")
+		var last_mix: float = AudioServer.get_time_since_last_mix()
+		var mixes: int = 0
+		var deadline: int = Time.get_ticks_msec() + 1000
+		while mixes < 4 and Time.get_ticks_msec() < deadline:
+			OS.delay_msec(2)
+			var now_mix: float = AudioServer.get_time_since_last_mix()
+			if now_mix < last_mix:
+				mixes += 1
+			last_mix = now_mix
+	# 无帧退出时 queue_free 不会执行：混音释放后直接 free 声部节点
+	for p in players:
+		if is_instance_valid(p):
+			p.free()

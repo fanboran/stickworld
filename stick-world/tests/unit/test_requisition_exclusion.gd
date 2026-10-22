@@ -86,8 +86,9 @@ func _spawn(n: Node) -> Node:
 ## 编队系统夹具：真 FormationSystem + 组织桩（不进树，_process 不跑——
 ## 本套件同步断言，无帧依赖；槽位计算取实体 global_position，实体进树即可）
 func _make_formation() -> Node:
+	# fs 随 _case_root 回收；org 桩不进树，须单独登记给 runner
 	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
 	_spawn(fs)
 	return fs
 

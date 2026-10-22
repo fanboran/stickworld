@@ -47,6 +47,12 @@ const K_ICON_SQUARE := 5
 static var _variants: Dictionary = {}
 
 
+## 复位静态变体表（仅测试 teardown 调用）。变体只含纯值（颜色/字符串/枚举），
+## 清掉后按 button_variant 的懒构建路径重建，运行时语义不变。
+static func reset_static_caches() -> void:
+	_variants.clear()
+
+
 ## 按 SketchButton.Kind 取变体属性集（懒构建，跨类 const 引用不参与常量折叠）
 static func button_variant(kind: int) -> Dictionary:
 	if _variants.is_empty():

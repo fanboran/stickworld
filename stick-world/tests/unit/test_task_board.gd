@@ -656,6 +656,7 @@ func _make_board() -> ScriptTaskBoard:
 
 func _make_ctx(overrides: Dictionary) -> _Ctx:
 	var ctx := _Ctx.new()
+	ctx.tracker = _runner.track_node
 	ctx.setup(overrides)
 	return ctx
 
@@ -663,6 +664,7 @@ func _make_ctx(overrides: Dictionary) -> _Ctx:
 ## 带组织根映射的上下文（FakeOrdersOrg 代理 get_org_root_for_squad）
 func _make_org_ctx(org_roots: Dictionary) -> _Ctx:
 	var ctx := _Ctx.new()
+	ctx.tracker = _runner.track_node
 	ctx.setup_org(org_roots)
 	return ctx
 
@@ -672,19 +674,29 @@ class _Ctx:
 	var orders: Node
 	var formation: _FakeFormation
 	var ai: TeamAi
+	## 夹具登记口（= TestRunner.track_node）；桩内部造的单位也经它登记，
+	## 用例结束随 runner 统一释放（不进树的 Node 不会被父节点连带回收）。
+	var tracker: Callable = Callable()
+
+	func _track(node):
+		return tracker.call(node) if tracker.is_valid() else node
 
 	func setup(overrides: Dictionary = {}) -> void:
-		battle = _FakeBattle.new()
-		orders = _FakeOrders.new()
-		formation = _FakeFormation.new()
-		ai = ScriptTeamAi.new()
+		battle = _track(_FakeBattle.new())
+		battle.tracker = tracker
+		orders = _track(_FakeOrders.new())
+		formation = _track(_FakeFormation.new())
+		formation.tracker = tracker
+		ai = _track(ScriptTeamAi.new())
 		ai.setup(battle, 1, orders, formation, overrides)
 
 	func setup_org(org_roots: Dictionary) -> void:
-		battle = _FakeBattle.new()
-		orders = _FakeOrdersOrg.new(org_roots)
-		formation = _FakeFormation.new()
-		ai = ScriptTeamAi.new()
+		battle = _track(_FakeBattle.new())
+		battle.tracker = tracker
+		orders = _track(_FakeOrdersOrg.new(org_roots))
+		formation = _track(_FakeFormation.new())
+		formation.tracker = tracker
+		ai = _track(ScriptTeamAi.new())
 		ai.setup(battle, 1, orders, formation, {})
 
 	func teardown() -> void:
@@ -715,9 +727,14 @@ class _FakeBattle extends Node:
 	var _units: Array = []
 	var _anchor_faction1 := Vector2(500, 300)
 	var _anchor_faction2 := Vector2(1500, 300)
+	## 单位桩登记口（_Ctx 注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
+
+	func _new_unit() -> _FakeUnit:
+		return tracker.call(_FakeUnit.new()) if tracker.is_valid() else _FakeUnit.new()
 
 	func add_unit(pos: Vector2, faction: int, wtype: int) -> void:
-		var u := _FakeUnit.new()
+		var u := _new_unit()
 		u.global_position = pos
 		u.faction = faction
 		u.weapon_type = wtype
@@ -805,11 +822,13 @@ class _FakeOrdersOrg extends Node:
 
 class _FakeFormation extends Node:
 	var _squads: Dictionary = {}  # squad_id -> {faction, is_combat, units}
+	## 单位桩登记口（_Ctx 注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
 
 	func add_squad(squad_id: String, faction: int, is_combat: bool, unit_count: int) -> void:
 		var units: Array = []
 		for i in unit_count:
-			var u := _FakeUnit.new()
+			var u: _FakeUnit = tracker.call(_FakeUnit.new()) if tracker.is_valid() else _FakeUnit.new()
 			u.faction = faction
 			u.weapon_type = ScriptTeamAiProfiles.SPEAR
 			u.dead = false

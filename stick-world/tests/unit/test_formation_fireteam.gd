@@ -86,7 +86,7 @@ func _ready() -> void:
 func _make_units(n: int) -> Array:
 	var units: Array = []
 	for i in n:
-		var u := FakeUnit.new()
+		var u: FakeUnit = _runner.track_node(FakeUnit.new())
 		u.name = "U%d" % i
 		u.position = Vector2(100 + i * 40, 500)
 		units.append(u)
@@ -95,8 +95,8 @@ func _make_units(n: int) -> Array:
 
 ## 构造 FormationSystem + 一个 n 人战斗班，返回 [fs, squad_id, units]
 func _make_fs_with_squad(n: int, preset: String = "fp_combat_squad") -> Array:
-	var fs: Node = ScriptFormationSystem.new()
-	fs.setup(FakeOrgApi.new())
+	var fs: Node = _runner.track_node(ScriptFormationSystem.new())
+	fs.setup(_runner.track_node(FakeOrgApi.new()))
 	var units: Array = _make_units(n)
 	var sid: String = fs.create_squad(units, "甲班", preset)
 	return [fs, sid, units]
@@ -181,9 +181,9 @@ func _test_order_addressing() -> void:
 	var sid: String = r[1]
 	var units: Array = r[2]
 	var ft1: String = fs.create_fireteam(sid, units.slice(0, 3), "一号")
-	var cc: Node = FakeCommandChain.new()
+	var cc: Node = _runner.track_node(FakeCommandChain.new())
 	add_child(cc)
-	var to: Node = ScriptTacticalOrders.new()
+	var to: Node = _runner.track_node(ScriptTacticalOrders.new())
 	to.setup(fs, cc)
 	add_child(to)
 	var target := Vector2(900, 500)
@@ -204,7 +204,7 @@ func _test_order_addressing() -> void:
 	var sid2: String = r2[1]
 	var ft2: String = fs2.create_fireteam(sid2, r2[2].slice(0, 2), "工程一组")
 	_runner.assert_false(ft2.is_empty(), "工程班可建火力组")
-	var to2: Node = ScriptTacticalOrders.new()
+	var to2: Node = _runner.track_node(ScriptTacticalOrders.new())
 	to2.setup(fs2, cc)
 	add_child(to2)
 	_runner.assert_false(to2.issue(ScriptTacticalOrders.OrderType.ADVANCE_ALL, ft2, target), "非战斗职责班的火力组应拒绝号令")
@@ -223,9 +223,9 @@ func _test_no_phase_plan_for_ft() -> void:
 	var ft1: String = fs.create_fireteam(sid, units.slice(0, 3), "一号")
 	# 开相位计划（缺省关闭；本测试显式开）
 	fs.set_phase_plan_params({"phase_plan_enabled": true})
-	var cc: Node = FakeCommandChain.new()
+	var cc: Node = _runner.track_node(FakeCommandChain.new())
 	add_child(cc)
-	var to: Node = ScriptTacticalOrders.new()
+	var to: Node = _runner.track_node(ScriptTacticalOrders.new())
 	to.setup(fs, cc)
 	add_child(to)
 	# 火力组推进号令：不激活班粒度相位计划（细分不得整班重置决策）

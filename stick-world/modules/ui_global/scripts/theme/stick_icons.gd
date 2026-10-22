@@ -26,6 +26,12 @@ static var _cache: Dictionary = {}
 static var _warned: Dictionary = {}
 
 
+## 复位图标静态缓存（仅测试 teardown 调用；下次按需重载，运行时语义不变）
+static func reset_static_caches() -> void:
+	_cache.clear()
+	_warned.clear()
+
+
 ## 按母题名取图标贴图（64px，ContentPalette 量化彩色）；缺失返回 null
 static func tex(motif: StringName) -> Texture2D:
 	if _cache.has(motif):

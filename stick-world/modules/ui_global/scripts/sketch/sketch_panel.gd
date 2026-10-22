@@ -39,6 +39,11 @@ func _ready() -> void:
 static var _box_cache: Dictionary = {}
 
 
+## 复位静态 StyleBox 缓存（仅测试 teardown 调用；下次按需重建，运行时语义不变）
+static func reset_static_caches() -> void:
+	_box_cache.clear()
+
+
 static func _box(slot: StringName, pad_x: int, pad_y: int) -> StyleBoxTexture:
 	var key := "%s|%d|%d" % [slot, pad_x, pad_y]
 	if not _box_cache.has(key):

@@ -68,11 +68,12 @@ func _ready() -> void:
 
 ## 构造 helper：实体在原点（射程 100 / 仇恨半径 ×4 = 400），profile 全基线回退
 func _make_acq(enemies_at: Array = []) -> Dictionary:
-	var entity := FakeUnit.new()
+	var entity: FakeUnit = _runner.track_node(FakeUnit.new())
+	_runner.track_node(entity.weapon)  # 桩内初始化的武器节点无父节点，单独登记
 	entity.position = Vector2(0, 0)
-	var battle := FakeBattle.new()
+	var battle: FakeBattle = _runner.track_node(FakeBattle.new())
 	for x in enemies_at:
-		var e := FakeEnemy.new()
+		var e: FakeEnemy = _runner.track_node(FakeEnemy.new())
 		e.position = Vector2(float(x), 0)
 		battle.enemies.append(e)
 	var acq: ScriptTargetAcquire = ScriptTargetAcquire.new()
@@ -81,7 +82,7 @@ func _make_acq(enemies_at: Array = []) -> Dictionary:
 
 
 func _add_enemy(battle: FakeBattle, x: float) -> FakeEnemy:
-	var e := FakeEnemy.new()
+	var e: FakeEnemy = _runner.track_node(FakeEnemy.new())
 	e.position = Vector2(x, 0)
 	battle.enemies.append(e)
 	return e

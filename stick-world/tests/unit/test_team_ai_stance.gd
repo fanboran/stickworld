@@ -37,14 +37,14 @@ func _ready() -> void:
 # ─────────────────────────────── 测试用例 ────────────────────────────────
 
 func _test_initial_stance() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	_runner.assert_equal(ctx.ai.get_stance(), ScriptTeamAi.STANCE_DEFEND, "初始 DEFEND")
 	ctx.teardown()
 
 
 func _test_ratio_attack_enter() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 本方 3 SPEAR(str=6) vs 敌方 1 SPEAR(str=2) → ratio=3.0 >= 1.30
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -58,7 +58,7 @@ func _test_ratio_attack_enter() -> void:
 
 
 func _test_ratio_attack_exit() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 先切 ATTACK：本方 3 SPEAR vs 敌方 1 SPEAR → ratio=3.0
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -78,7 +78,7 @@ func _test_ratio_attack_exit() -> void:
 
 
 func _test_ratio_defend_enter() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 本方 1 SPEAR(str=2) vs 敌方 3 SPEAR(str=6) → ratio=0.33 <= 0.85
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -92,7 +92,7 @@ func _test_ratio_defend_enter() -> void:
 
 
 func _test_garrison_no_defenders() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 先建立初始力量基线：本方 3 SPEAR(str=6)
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -113,7 +113,7 @@ func _test_garrison_no_defenders() -> void:
 
 
 func _test_garrison_enemy_close() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 敌军质心距本方锚点 < enemy_close_dist(900) → enemy_army_is_close_to_us 真
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -125,7 +125,7 @@ func _test_garrison_enemy_close() -> void:
 
 
 func _test_stance_cooldown() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_own_unit(Vector2(520, 300), ScriptTeamAiProfiles.SPEAR)
@@ -145,7 +145,7 @@ func _test_stance_cooldown() -> void:
 
 
 func _test_attack_gate() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 力量占优但门禁未过（duration=5 < seconds_before_attack=10）
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -159,7 +159,7 @@ func _test_attack_gate() -> void:
 
 
 func _test_stubs_false() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	_runner.assert_false(ctx.ai.barricade_exists(), "barricade_exists 桩恒假")
 	_runner.assert_false(ctx.ai.statue_is_low_health(), "statue_is_low_health 桩恒假")
@@ -169,7 +169,7 @@ func _test_stubs_false() -> void:
 
 
 func _test_compare_unit_types() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	var p := ScriptTeamAiProfiles
 	# 优先序 [GIANT, STAFF, SPEAR, BOW, SWORD]
@@ -182,7 +182,7 @@ func _test_compare_unit_types() -> void:
 
 
 func _test_balance_calc() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# 本方 1 SPEAR(str=2) + 1 SWORD(str=1) = 3；敌方 1 BOW(str=1.5) = 1.5
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
@@ -195,7 +195,7 @@ func _test_balance_calc() -> void:
 
 
 func _test_enemy_no_military() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_enemy_unit(Vector2(1500, 300), ScriptTeamAiProfiles.PICKAXE)  # 非军事
@@ -206,7 +206,7 @@ func _test_enemy_no_military() -> void:
 
 
 func _test_garrison_recent() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	ctx.add_own_unit(Vector2(500, 300), ScriptTeamAiProfiles.SPEAR)
 	ctx.add_enemy_unit(Vector2(800, 300), ScriptTeamAiProfiles.SPEAR)
@@ -228,7 +228,7 @@ func _test_garrison_recent() -> void:
 ## 语义：缓存随决策周期（update/_update_task_board）刷新，查询侧零重算零副作用
 ## ——HUD 可高频轮询而不重跑四规则。
 func _test_attack_pct_cache() -> void:
-	var ctx := _Ctx.new()
+	var ctx := _make_ctx()
 	ctx.setup()
 	# setup 期首算：门禁未开（duration=0 < deadline≥8）→ 缓存 0
 	_runner.assert_approx(ctx.ai.get_attack_percentage(), 0.0, 0.001, "setup 首算：门禁未开缓存 = 0")
@@ -255,13 +255,26 @@ func _test_attack_pct_cache() -> void:
 
 # ─────────────────────────────── Mock 夹具 ────────────────────────────────
 
+## 造带 runner 登记口的上下文（夹具节点由用例结束统一释放）
+func _make_ctx() -> _Ctx:
+	var ctx := _Ctx.new()
+	ctx.tracker = _runner.track_node
+	return ctx
+
+
 class _Ctx:
 	var battle: _FakeBattle
 	var ai: TeamAi
+	## 夹具登记口（= TestRunner.track_node）；桩内部造的单位也经它登记
+	var tracker: Callable = Callable()
+
+	func _track(node):
+		return tracker.call(node) if tracker.is_valid() else node
 
 	func setup() -> void:
-		battle = _FakeBattle.new()
-		ai = ScriptTeamAi.new()
+		battle = _track(_FakeBattle.new())
+		battle.tracker = tracker
+		ai = _track(ScriptTeamAi.new())
 		ai.setup(battle, 1, null, null, {})
 
 	func teardown() -> void:
@@ -288,9 +301,11 @@ class _FakeBattle extends Node:
 	var _units: Array = []
 	var _anchor_faction1 := Vector2(500, 300)
 	var _anchor_faction2 := Vector2(1500, 300)
+	## 单位桩登记口（_Ctx 注入 TestRunner.track_node）
+	var tracker: Callable = Callable()
 
 	func add_unit(pos: Vector2, faction: int, wtype: int, is_enemy: bool) -> void:
-		var u := _FakeUnit.new()
+		var u: _FakeUnit = tracker.call(_FakeUnit.new()) if tracker.is_valid() else _FakeUnit.new()
 		u.global_position = pos
 		u.faction = faction
 		u.weapon_type = wtype

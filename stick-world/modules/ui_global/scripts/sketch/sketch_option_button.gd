@@ -14,6 +14,11 @@ const ARROW_RESERVE := 14.0
 static var _popup_theme_fallback: Theme = null
 
 
+## 复位下拉弹窗兜底主题（仅测试 teardown 调用；下次按需重建，运行时语义不变）
+static func reset_static_caches() -> void:
+	_popup_theme_fallback = null
+
+
 var _seed: int = 0
 var _timer: float = 0.0
 

@@ -30,6 +30,12 @@ const ARC_STEPS: int = 4
 ## 1px 空纹理（shared）：覆盖引擎原生图标用（SketchHSlider 滑块等，不影响布局处）
 static var _empty_tex: ImageTexture = null
 
+
+## 复位共享空纹理缓存（仅测试 teardown 调用；下次按需重建，运行时语义不变）
+static func reset_static_caches() -> void:
+	_empty_tex = null
+	_blank_tex_cache.clear()
+
 static func empty_texture() -> ImageTexture:
 	if _empty_tex == null:
 		_empty_tex = ImageTexture.create_from_image(

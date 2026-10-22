@@ -38,6 +38,8 @@ static func create_burst(effect_id: String) -> GPUParticles2D:
 			_config_sparkle(p)
 		_:
 			push_warning("[Fx] 未知特效 ID: %s" % effect_id)
+			# 未知 ID 不返回节点：刚 new 出的粒子未入树也无引用，不释放会成为孤儿
+			p.free()
 			return null
 	return p
 

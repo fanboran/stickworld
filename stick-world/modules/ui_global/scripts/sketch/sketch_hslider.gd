@@ -10,6 +10,11 @@ extends HSlider
 ## 空纹理：覆盖引擎 grabber 图标（shared，避免每实例建图）
 static var _empty_tex: ImageTexture = null
 
+
+## 复位共享空纹理（仅测试 teardown 调用；下次按需重建，运行时语义不变）
+static func reset_static_caches() -> void:
+	_empty_tex = null
+
 var _seed: int = 0
 var _timer: float = 0.0
 

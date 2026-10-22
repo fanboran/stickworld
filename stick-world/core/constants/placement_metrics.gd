@@ -1,15 +1,17 @@
+class_name PlacementMetrics
 extends RefCounted
-## 放置度量常量库 —— construction 模块内占地/落位口径的唯一出口。
+## 放置度量常量库 —— 占地/落位口径的 L0 共享词汇（core/constants）。
 ##
 ## 为什么存在：占地条带宽、落位基线回退值等数字曾以裸字面量散在 manager/project/
 ## indicator/tracker/ghost/build_menu 六处（各写一份"换轨时两处同步"注释，靠人肉
-## 对齐）；本档把它们收编成模块内单一真相源，改口径只动这里。
+## 对齐）；本档把它们收编成单一真相源，改口径只动这里。construction 与 units
+## 等 L2 消费方共用本词汇，避免各自复制回退链。
 ##
 ## 跨模块边界（勿越）：真正的权威在 world 模块 L3——
 ##   - 条带宽权威 = PlacementGrid.CELL_SIZE（modules/world/scripts/placement/）
 ##   - 基线偏移权威 = Hd2dMapBase.building_baseline_offset
-## construction 是 L2，禁止反向 preload world；两端口径靠本文件注释锚定同步
-##（换轨时改这里 + world 侧各一行）。
+## 消费方（construction/units 等 L2）禁止反向 preload world；两端口径靠本文件
+## 注释锚定同步（换轨时改这里 + world 侧各一行）。
 
 ## 占地条带宽（px）：锚定 PlacementGrid.CELL_SIZE（24px 换轨，旧 32；1 格显示
 ## 24 设计像素@zoom1）。同 build_menu/placement_ghost/behavior_work 口径。

@@ -35,6 +35,11 @@ const STARTER_HOTBAR: Array[StringName] = [
 
 var inventory: PlayerInventory = null
 
+## 容器窗口 / 建筑菜单（模块自装配时注册；模块外只经 InventoryAPI 入口打开，
+## 不再全树 find_child 屏幕节点）
+var _container_screen: Node = null
+var _building_menu_screen: Node = null
+
 var _game_root: Node = null
 ## 当前桥接的接管实体（null = 未接管，装备变化只改数据不落地）
 var _entity: Node = null
@@ -66,6 +71,40 @@ func setup(game_root: Node) -> void:
 		if EventBus.has_signal("game_loaded"):
 			EventBus.game_loaded.connect(_on_game_loaded)
 	grant_starter_kit()
+
+
+# ─────────────────────────────── 屏幕注册与打开 ────────────────────────────────
+
+## 注册容器窗口（modules/inventory/setup.gd 装配时调用）。
+func set_container_screen(screen: Node) -> void:
+	_container_screen = screen
+
+
+## 注册建筑交互菜单（modules/inventory/setup.gd 装配时调用）。
+func set_building_menu_screen(screen: Node) -> void:
+	_building_menu_screen = screen
+
+
+## 打开容器双栏界面（翻包/村仓共用）。未装配屏幕或屏幕未就绪 → false。
+func open_container_screen(container: ItemContainer, title: String) -> bool:
+	if container == null:
+		return false
+	if _container_screen == null or not is_instance_valid(_container_screen):
+		return false
+	if not _container_screen.has_method("open_with"):
+		return false
+	_container_screen.open_with(container, title)
+	return true
+
+
+## 打开建筑交互菜单（actions 数据驱动）。未装配屏幕或屏幕未就绪 → false。
+func open_building_menu(building_name: String, actions: Array) -> bool:
+	if _building_menu_screen == null or not is_instance_valid(_building_menu_screen):
+		return false
+	if not _building_menu_screen.has_method("open_with"):
+		return false
+	_building_menu_screen.open_with(building_name, actions)
+	return true
 
 
 # ─────────────────────────────── 对外操作 ────────────────────────────────

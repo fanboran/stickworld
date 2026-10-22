@@ -154,7 +154,7 @@ func _locate() -> bool:
 		_site_building = site.get("building") as Node2D
 		# Y 统一按实体地面线补齐（槽位/占位只消费 X，站位在地面带内可达，
 		# 同 BehaviorHaul 取货点口径）
-		var ground_y: float = float(entity.get("ground_y")) if "ground_y" in entity else 810.0
+		var ground_y: float = PlacementMetrics.ground_y_of(entity)
 		_site_pos = Vector2(pos.x, ground_y + WORK_OFFSET_Y)
 	_phase = Phase.TO_TARGET
 	return true

@@ -12,7 +12,7 @@ extends Node
 var _entity: Node2D = null
 
 ## 交互 X 范围：建筑左右各内缩 1 格（16 格建筑 → 角色需在中间 14 格内）
-const INTERACT_CELL_INSET: float = 24.0
+const INTERACT_CELL_INSET: float = PlacementMetrics.CELL_PX
 ## 交互垂直范围外延容忍（px）
 const INTERACT_VERT_TOL: float = 30.0
 ## 工地主体高度（与 ConstructionProject._create_barrier 默认障碍高一致）
@@ -80,19 +80,15 @@ func try_interact() -> void:
 
 
 ## 翻包：打开 ContainerScreen 翻检尸体遗物（模态自动暂停；转移原语走
-## items 域 ItemTransfer）。窗口实例经组查找（SystemSetup 装配在 ModalOverlay）。
+## items 域 ItemTransfer）。窗口实例由 inventory 模块装配并注册，经其 API 入口打开。
 func _open_loot_container(corpse: Node2D) -> void:
 	if corpse == null or not corpse.has_meta("loot"):
 		return
 	var loot: ItemContainer = corpse.get_meta("loot")
 	if loot == null or loot.is_empty():
 		return
-	var loop := Engine.get_main_loop() as SceneTree
-	if loop == null or loop.root == null:
-		return
-	var screen: Node = loop.root.find_child("ContainerScreen", true, false)
-	if screen != null and screen.has_method("open_with"):
-		screen.open_with(loot, "翻检遗物")
+	# 容器窗口归 inventory 模块所有：经其契约入口打开，不跨模块全树找屏幕节点
+	InventoryAPI.open_container_screen(loot, "翻检遗物")
 
 
 ## 拾取地面掉落物（死亡物品直接落地）：经 InventoryAPI 取全局背包服务，
@@ -115,12 +111,6 @@ func _pickup_ground_item(item: Node2D) -> void:
 ## 新 action 零改框架。村仓经 RegionStorage 桥 resources（区域粒度暂全局视图，
 ## 地图区域 id 接线后收紧）。
 func _open_building_menu(_building: Node2D, building_name: String) -> void:
-	var loop := Engine.get_main_loop() as SceneTree
-	if loop == null or loop.root == null:
-		return
-	var menu: Node = loop.root.find_child("BuildingMenuScreen", true, false)
-	if menu == null or not menu.has_method("open_with"):
-		return
 	var carrying: bool = _entity.is_carrying()
 	var actions: Array = [
 		{"label": ("放回建材" if carrying else "拿起建材"),
@@ -129,20 +119,15 @@ func _open_building_menu(_building: Node2D, building_name: String) -> void:
 		 "callback": Callable(self, "_open_region_storage")},
 		{"label": "进入内景", "enabled": false},
 	]
-	menu.open_with(building_name, actions)
+	# 建筑菜单归 inventory 模块所有：经其契约入口打开
+	InventoryAPI.open_building_menu(building_name, actions)
 
 
 ## 打开村仓（RegionStorage 物品视图：资源品 def ↔ resources 台账）
 func _open_region_storage() -> void:
-	var loop := Engine.get_main_loop() as SceneTree
-	if loop == null or loop.root == null:
-		return
-	var screen: Node = loop.root.find_child("ContainerScreen", true, false)
-	if screen == null or not screen.has_method("open_with"):
-		return
 	var api: Node = _get_resources_api()
 	var storage := RegionStorage.new("", api)
-	screen.open_with(storage, "村口仓库")
+	InventoryAPI.open_container_screen(storage, "村口仓库")
 
 
 ## 按住 F 的连续交互（采集手感）：动作锁解除后自动续作，由实体物理帧驱动。
@@ -187,13 +172,13 @@ func _play_world_sfx(event_name: String) -> void:
 	AudioManager.play_event(event_name, _entity.global_position)
 
 
-## 惰性获取 ResourcesApi（GameRoot 下具名节点；采集入库必须走模块 API）
+## 获取 ResourcesApi（spawn 时由 GameRoot 经 set_resources_api 注入；采集入库
+## 必须走模块 API）。未注入（测试直生实体）时返回 null，由调用方跳过入账。
 func _get_resources_api() -> Node:
 	if _resources_api_cache != null and is_instance_valid(_resources_api_cache):
 		return _resources_api_cache
-	var scene_root: Node = _entity.get_tree().current_scene
-	if scene_root != null:
-		_resources_api_cache = scene_root.find_child("ResourcesApi", true, false)
+	if _entity != null and _entity.has_method("get_resources_api"):
+		_resources_api_cache = _entity.get_resources_api()
 	return _resources_api_cache
 
 
@@ -267,21 +252,18 @@ func _get_building_barrier_bounds(building: Node2D) -> Dictionary:
 	var map: Node2D = _entity.get_map()
 	var baseline: float = _map_building_baseline(map, 0, 1)
 	return {
-		"left": left_x, "right": left_x + float(w) * 24.0, "center": left_x + float(w) * 12.0,
+		"left": left_x,
+		"right": left_x + float(w) * PlacementMetrics.CELL_PX,
+		"center": left_x + float(w) * PlacementMetrics.CELL_PX * 0.5,
 		"top": baseline - PROJECT_BODY_HEIGHT, "bottom": baseline,
 	}
 
 
-## 地图建筑基线（px，画布域）：HD-2D 图逐格取邻居楼线（get_building_baseline_at，
-## cell_x=0/width=1 仅用于无格子上下文的回退——楼排线在全图同带）；旧图 duck 回退
-## ground_y + building_baseline_offset。
+## 地图建筑基线（px，画布域）：取值逻辑收敛在 core/constants/placement_metrics.gd
+## （HD-2D 逐格楼线 → 旧图 ground_y + building_baseline_offset 回退），
+## 与 construction 侧共用同一真相源。
 func _map_building_baseline(map: Node2D, cell_x: int, width: int) -> float:
-	if map == null:
-		return 810.0 + 96.0
-	if map.has_method("get_building_baseline_at"):
-		return float(map.call("get_building_baseline_at", cell_x, width))
-	return float(map.get("ground_y") if "ground_y" in map else 810.0) \
-			+ float(map.get("building_baseline_offset") if "building_baseline_offset" in map else 96.0)
+	return PlacementMetrics.baseline_at(map, cell_x, width)
 
 
 ## 实体 X 是否位于建筑横向中间 (width-2) 格区间内（左右各内缩 1 格；宽度不足时退化为整体）
@@ -319,8 +301,8 @@ func _find_nearest_ground_item() -> Node2D:
 
 ## 检测实体是否在工地交互范围内（横向中间 (width-2) 格 + 垂直在主体范围内）。
 func _is_near_project(project: RefCounted) -> bool:
-	var left_x: float = float(project.cell_x) * 24.0
-	var right_x: float = left_x + float(project.width) * 24.0
+	var left_x: float = float(project.cell_x) * PlacementMetrics.CELL_PX
+	var right_x: float = left_x + float(project.width) * PlacementMetrics.CELL_PX
 	if not _is_x_in_building_zone(left_x, right_x):
 		return false
 	var baseline: float
@@ -347,8 +329,8 @@ func _find_interact_target() -> Dictionary:
 		# 优先：工地
 		var project: RefCounted = _entity.get_construction_manager().get_nearest_project(_entity.global_position)
 		if project != null and _is_near_project(project):
-			var left_x: float = float(project.cell_x) * 24.0
-			var right_x: float = left_x + float(project.width) * 24.0
+			var left_x: float = float(project.cell_x) * PlacementMetrics.CELL_PX
+			var right_x: float = left_x + float(project.width) * PlacementMetrics.CELL_PX
 			var cx: float = (left_x + right_x) * 0.5
 			var hint: String = ""
 			if _entity.is_carrying():
@@ -470,7 +452,7 @@ func update_hint() -> void:
 	var hint_y: float = float(info.get("hint_y", -1.0))
 	if hint_y < 0.0:
 		var map: Node2D = _entity.get_map()
-		var ground_y: float = map.get("ground_y") if map != null and "ground_y" in map else 810.0
+		var ground_y: float = PlacementMetrics.ground_y_of(map)
 		hint_y = ground_y - 280.0
 	_interact_hint_node.global_position = Vector2(float(info.center_x), hint_y)
 	# text setter 每次赋值都触发 Label 重排：文案没变不写（本函数每物理帧被调）

@@ -24,10 +24,9 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptWorkCrewAssigner := preload("res://modules/construction/scripts/work_crew_assigner.gd")
 const ScriptConstructionProject := preload("res://modules/construction/scripts/construction_project.gd")
-const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
 
 ## 占地条带宽（与派工距离度量同源；锚定 PlacementGrid.CELL_SIZE）
-const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
+const CELL_PX: float = PlacementMetrics.CELL_PX
 
 
 ## 完工用例哑地图：只供 building_host 挂点（墙脚线/网格 duck 全走回退）

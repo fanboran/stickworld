@@ -224,6 +224,9 @@ func _on_map_loaded(map_id: String, map_type: int) -> void:
 		# 玩家注入 OrganizationApi（招兵交互经 org api 转发 RecruitManager）
 		if player.has_method("set_organization_api") and _host._organization_api != null:
 			player.set_organization_api(_host._organization_api)
+		# 玩家注入 ResourcesApi（手动采集/村仓入账经它；交互控制器不自行找节点）
+		if player.has_method("set_resources_api") and _host._resources_api != null:
+			player.set_resources_api(_host._resources_api)
 		# 让 CameraRig 跟随玩家
 		if _host.camera_rig != null and _host.camera_rig.has_method("set_follow_target"):
 			_host.camera_rig.set_follow_target(player)

@@ -49,7 +49,11 @@ func assemble(root: Node) -> void:
 	if root.ui_root.add_to_slot("ModalOverlay", container) \
 			and container.has_method("setup"):
 		container.setup(root, service)
+		# 屏幕注册到服务：模块外经 InventoryAPI.open_container_screen 打开
+		service.set_container_screen(container)
 	var bmenu := UIKit.full_rect(_BuildingMenuScript, "BuildingMenuScreen")
 	if root.ui_root.add_to_slot("ModalOverlay", bmenu) \
 			and bmenu.has_method("setup"):
 		bmenu.setup(root, service)
+		# 屏幕注册到服务：模块外经 InventoryAPI.open_building_menu 打开
+		service.set_building_menu_screen(bmenu)

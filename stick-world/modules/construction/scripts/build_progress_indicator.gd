@@ -16,8 +16,7 @@ var _material_progress: float = 0.0
 var _build_progress: float = 0.0
 
 ## 占地条带宽（px）：自 placement_metrics（锚定 PlacementGrid.CELL_SIZE，换轨只动彼处）
-const ScriptPlacementMetrics := preload("res://modules/construction/scripts/placement/placement_metrics.gd")
-const CELL_PX: float = ScriptPlacementMetrics.CELL_PX
+const CELL_PX: float = PlacementMetrics.CELL_PX
 
 ## 进度条高度
 const _BAR_HEIGHT: float = 6.0

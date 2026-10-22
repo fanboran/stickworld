@@ -13,6 +13,9 @@ const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battl
 @export var battle_anchor_path: NodePath = NodePath("BattleAnchor")
 ## 地图上建筑宿主节点路径（由装配层注入，默认与 WorldAPI.PATH_MAP_BUILDING_HOST 一致）
 @export var building_host_path: NodePath = NodePath("BuildingHost")
+## 地图上实体宿主节点路径（由装配层注入，真相源 WorldAPI.PATH_MAP_ENTITY_HOST；
+## 空 = 未注入，BattleInstance 的小兵渲染代理回落地图根）
+@export var entity_host_path: NodePath = NodePath()
 
 # ─────────────────────────────── 运行时 ────────────────────────────────
 ## 活跃的 BattleInstance 列表
@@ -59,7 +62,7 @@ func start_battle_at(map: Node2D, attacker_units: Array, defender_units: Array,
 		return null
 	var bi: Node = ScriptBattleInstance.new()
 	bi.name = "BattleInstance"
-	bi.setup(map)
+	bi.setup(map, entity_host_path)
 	if player_faction != ScriptBattleInstance.FACTION_ATTACKER:
 		bi.set_player_faction(player_faction)
 	# 装配注入透传（P6 阵营 AI：enable_team_ai 时 TeamAi 消费号令/编队引用）

@@ -37,6 +37,11 @@ var _canvas_modulate: CanvasModulate = null
 ## 时降为微光并在玩家出现前不移动。贴图为运行时生成的径向渐变，非手绘资产。
 var _camp_light: PointLight2D = null
 
+## 玩家实体查询（装配期下行注入：SystemSetup 注入 GameRoot.get_player_entity 的
+## Callable）。environment 是 L1，不自行向上遍历找 L3 组装根；未注入（测试裸树/
+## 主菜单）时返回 null → 营火光静止。查询应返回 Node2D 或 null。
+var _player_query: Callable = Callable()
+
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
@@ -129,24 +134,14 @@ func _update_camp_light() -> void:
 	_camp_light.global_position = _camp_light.global_position.lerp(target_pos, 0.12)
 
 
-## 找玩家（接管）实体：优先 GameRoot.get_entity 系的接管实体；无则先找当前接管单位
-## （EnvironmentSystem 与 units 解耦经 GameRoot 路径，若多个都找不到返回 null → 光静止）
+## 找玩家（接管）实体：经装配期注入的查询 Callable 取值（environment 与 world
+## 无静态/运行时上行依赖）。未注入或查询无结果返回 null → 营火光静止。
 func _find_player_entity() -> Node2D:
-	var gr := get_tree().root.get_node_or_null("GameRoot")
-	if gr == null:
+	if not _player_query.is_valid():
 		return null
-	# 1. 接管实体（最常用路径）：GameRoot → UserControlInterface.get_user_controlled_entity
-	if gr.has_method("get_user_control_interface"):
-		var pi = gr.get_user_control_interface()
-		if pi != null and pi.has_method("get_user_controlled_entity"):
-			var p = pi.get_user_controlled_entity()
-			if p != null and is_instance_valid(p):
-				return p as Node2D
-	# 2. 兜底：玩家实体
-	if gr.has_method("get_player_entity"):
-		var pl = gr.get_player_entity()
-		if pl != null and is_instance_valid(pl):
-			return pl as Node2D
+	var p: Variant = _player_query.call()
+	if p != null and is_instance_valid(p) and p is Node2D:
+		return p as Node2D
 	return null
 
 
@@ -175,6 +170,12 @@ static func _sample_light_color(hour: float) -> Color:
 
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
+
+## 注入玩家实体查询（装配期下行注入；返回 Node2D 或 null）。测试/裸树不注入即可，
+## 营火光保持静止，不回退到全树查找。
+func set_player_query(query: Callable) -> void:
+	_player_query = query
+
 
 ## 设置一天的现实秒数
 func set_seconds_per_day(seconds: float) -> void:

@@ -100,15 +100,19 @@ var _player_faction: int = FACTION_ATTACKER
 var _sim: ScriptBattleSim = null
 ## 小兵渲染代理（§十四；null = 未启用/回退富管线）
 var _crowd: ScriptCrowdRenderer = null
+## 地图上实体宿主节点路径（由 BattleDirector 装配注入，真相源
+## WorldAPI.PATH_MAP_ENTITY_HOST；combat 不反向依赖 world 模块）
+var _entity_host_path: NodePath = NodePath()
 
 
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
-## 初始化：注入地图，创建掩体系统。
-func setup(map: Node2D) -> void:
+## 初始化：注入地图与实体宿主路径，创建掩体系统。
+func setup(map: Node2D, entity_host_path: NodePath = NodePath()) -> void:
 	# 树序契约固化（SIM_FIRST_PRIORITY 注释）：负优先组先于单位节点推进
 	process_physics_priority = SIM_FIRST_PRIORITY
 	_map = map
+	_entity_host_path = entity_host_path
 	_cover = ScriptCoverSystem.new()
 	_cover.setup(map)
 	# D 刀 A/B 开关：启用时参战 AI 单位模拟状态进 BattleSim（移动/分离/冷却/
@@ -126,7 +130,10 @@ func setup(map: Node2D) -> void:
 	if ScriptCrowdRenderer.is_enabled() and map != null:
 		_crowd = ScriptCrowdRenderer.new()
 		var host_parent: Node2D = map
-		var eh: Node2D = map.find_child("EntityHost", true, false) as Node2D
+		# 路径由装配层注入（无裸字面量）；未注入/地图无该节点时回落地图根
+		var eh: Node2D = null
+		if not _entity_host_path.is_empty():
+			eh = map.get_node_or_null(_entity_host_path) as Node2D
 		if eh != null:
 			host_parent = eh
 		_crowd.setup(host_parent,

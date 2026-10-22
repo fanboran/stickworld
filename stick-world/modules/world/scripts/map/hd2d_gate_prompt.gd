@@ -82,7 +82,7 @@ func _wall_px() -> float:
 
 
 func _find_player() -> Node2D:
-	var host: Node2D = _map.get_node_or_null("EntityHost") as Node2D
+	var host: Node2D = _map.get_node_or_null(WorldAPI.PATH_MAP_ENTITY_HOST) as Node2D
 	if host == null:
 		return null
 	for u in host.get_children():
@@ -121,15 +121,13 @@ func _refresh_panel(side: int) -> void:
 	ui_root.add_to_slot("HudOverlay", _panel)
 
 
-## 沿场景树找 UIRoot（CanvasLayer）
+## 经注册 group 通道取 UIRoot（ui_root.gd 注册，勿回退全树扫描）；
+## 裸树/测试无 UIRoot 时返回 null，调用方按空值分支静默跳过。
 func _find_ui_root() -> CanvasLayer:
-	var n: Node = get_tree().root
-	if n is CanvasLayer and n.name == "UIRoot":
-		return n
-	var found := n.find_children("UIRoot", "CanvasLayer", true, false)
-	if not found.is_empty():
-		return found[0] as CanvasLayer
-	return null
+	var tree := get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group("ui_root") as CanvasLayer
 
 
 func _hide_panel() -> void:

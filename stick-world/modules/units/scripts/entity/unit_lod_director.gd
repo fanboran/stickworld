@@ -30,12 +30,11 @@ const StickProf := preload("res://core/services/stick_prof.gd")
 ## 节流后事件最多晚 1 个节拍触发（15Hz ≤ 66ms、5Hz ≤ 200ms），不丢失、不重发。
 ##
 ## 挂载与自动发现：由 SystemSetup 装配挂到 GameRoot（节点名 UnitLodDirector），
-## setup(game_root) 后每拍自动发现——地图经 GameRoot.get_current_map() 解析，
-## 地图实例变更时重解析 map.find_child("EntityHost", true, false) 并缓存宿主
-## 引用、重置档位状态；单位集每拍从缓存宿主的子节点刷新（演练场等
-## 晚于地图装配的刷兵下一拍自动纳入，递归 find_child 只付在换绑时）；相机每拍
-## 取 game_root 视口激活相机。地图未加载 / 无相机（headless 测试）时空转，
-## 单位保持默认全速（零行为变化）。
+## setup(game_root, entity_host_path) 后每拍自动发现——地图经 GameRoot.get_current_map()
+## 解析，地图实例变更时按注入的实体宿主路径解析并缓存宿主引用、重置档位状态；
+## 单位集每拍从缓存宿主的子节点刷新（演练场等晚于地图装配的刷兵下一拍自动纳入，
+## 路径解析只付在换绑时）；相机每拍取 game_root 视口激活相机。地图未加载 / 无相机
+## （headless 测试）时空转，单位保持默认全速（零行为变化）。
 
 ## 视口外扩 20% 内 且 距离 < NEAR_DIST → T0
 const NEAR_RECT_MARGIN: float = 0.20
@@ -78,9 +77,12 @@ enum Tier {
 
 ## 宿主 GameRoot（自动发现单位集与相机；弱类型 Node，units 侧不硬依赖 world 类）
 var _game_root: Node = null
-## 当前绑定的地图实例（实例变更 → 重解析 EntityHost + 重置档位状态）
+## 地图上实体宿主节点路径（装配层注入，真相源 WorldAPI.PATH_MAP_ENTITY_HOST；
+## 空 = 未注入，单位集不跟踪——units 不反向依赖 world 模块）
+var _entity_host_path: NodePath = NodePath()
+## 当前绑定的地图实例（实例变更 → 重解析实体宿主 + 重置档位状态）
 var _map: Node2D = null
-## 当前地图的 EntityHost（地图换绑时经 find_child 解析并缓存）
+## 当前地图的实体宿主（地图换绑时按注入路径解析并缓存）
 var _host: Node = null
 ## 单位集快照（每拍从 _host 子节点刷新，仅收实现 LOD 契约的单位）
 var _units: Array = []
@@ -98,9 +100,10 @@ var _tiers: Dictionary = {}
 var _hzs: Dictionary = {}
 
 
-## 注入宿主 GameRoot（自动发现模式：地图/单位集/相机均由本节点每拍自取）。
-func setup(game_root: Node) -> void:
+## 注入宿主 GameRoot 与实体宿主路径（自动发现模式：地图/单位集/相机均由本节点每拍自取）。
+func setup(game_root: Node, entity_host_path: NodePath = NodePath()) -> void:
 	_game_root = game_root
+	_entity_host_path = entity_host_path
 	_map = null
 	_host = null
 	_units.clear()
@@ -200,8 +203,8 @@ func _retier() -> void:
 		_apply_tier(u, new_tier, _tier_hz(new_tier, t0_hz))
 
 
-## 地图换绑：map 实例变更（含 null ↔ 非 null）时重解析 EntityHost 并清档位状态。
-## find_child（递归）只在换绑时执行，宿主引用缓存到下一换绑。
+## 地图换绑：map 实例变更（含 null ↔ 非 null）时按注入路径重解析实体宿主并清档位状态。
+## 路径解析只在换绑时执行，宿主引用缓存到下一换绑；未注入路径则不跟踪单位集。
 func _rebind_map() -> void:
 	var map: Node2D = null
 	if _game_root.has_method("get_current_map"):
@@ -213,8 +216,8 @@ func _rebind_map() -> void:
 	_units.clear()
 	_tiers.clear()
 	_hzs.clear()
-	if map != null:
-		_host = map.find_child("EntityHost", true, false)
+	if map != null and not _entity_host_path.is_empty():
+		_host = map.get_node_or_null(_entity_host_path)
 
 
 ## 单位集每拍刷新：从缓存宿主取子节点快照，只收实现 LOD 契约的单位

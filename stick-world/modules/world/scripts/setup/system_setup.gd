@@ -171,6 +171,10 @@ func setup_steps(root: GameRoot) -> Array:
 
 ## 装配收尾（战斗横幅 deferred）
 func finish_setup() -> void:
+	# 环境系统玩家查询下行注入（拆 environment → world 上行查找，审计 2-4/3-1）：
+	# L1 不自行遍历场景树找 GameRoot，这里注入 GameRoot 既有玩家实体查询；
+	# 测试裸树不跑装配，EnvironmentSystem 无注入时返回 null（营火光静止）。
+	_inject_environment_player_query()
 	# 武器动画音效桥：树级自动发现 WeaponMount，把弓射/镐击的动画 Hit 命中帧
 	# 接到 SFX_EVENTS（Spine 源尚无这两条动画的 Sound 数据，见桥文件头）。
 	# 放收尾不进步骤表——加载屏副进度条步骤数是契约，不得增减。
@@ -179,6 +183,24 @@ func finish_setup() -> void:
 	bridge.name = "WeaponAnimSfxBridge"
 	_root.add_child(bridge)
 	call_deferred("_setup_battle_banner_deferred")
+
+
+## 向 EnvironmentSystem 注入玩家实体查询 Callable（装配期下行注入）。
+func _inject_environment_player_query() -> void:
+	var env: Node = _root.get_node_or_null(WorldAPI.PATH_ENVIRONMENT)
+	if env != null and env.has_method("set_player_query"):
+		env.set_player_query(_query_player_entity)
+
+
+## 玩家实体查询（注入给 EnvironmentSystem 的营火光跟随）。保留 GameRoot 既有两级
+## 语义：优先当前接管实体（UserControlInterface），无则玩家实体；均无返回 null。
+func _query_player_entity() -> Node2D:
+	var uci: Node = _root.get_user_control_interface()
+	if uci != null and uci.has_method("get_user_controlled_entity"):
+		var p: Variant = uci.get_user_controlled_entity()
+		if p != null and is_instance_valid(p) and p is Node2D:
+			return p as Node2D
+	return _root.get_player_entity()
 
 
 ## 装配步骤表：每项 = [细分标签, 可调用]。顺序有依赖（UI 根/核心系统先于

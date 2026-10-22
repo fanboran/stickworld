@@ -832,6 +832,10 @@ func _build_solid_bodies(hd: Node3D) -> void:
 		body.add_child(shape)
 	if body.get_child_count() > 0:
 		add_child(body)
+	else:
+		# 零实心区间（无建筑/道具的图）：刚 new 出的 body 无子节点也未入树，
+		# 不留引用就会在进程退出时被 ObjectDB 记为孤儿——直接释放。
+		body.free()
 
 
 # ─────────────────────────────── 城门引导/传送 ────────────────────────────────

@@ -154,7 +154,7 @@ modules/units/scripts/ai/（✅=已实现注册，📋=设计未实现）
 
 **Job 板派工**（决策/执行解耦，`work_crew_assigner.gd`）：搬运与建造是板上的两类任务族，不再是同一项目下的行为分支：
 - **挂板**：任务是项目状态的派生视图——每个活跃项目提供 `build` 族（接受工人期间常驻）与 `haul` 族（`needs_material()` 期间随需）两类可领任务
-- **认领**：空闲工人按（距离 → 挂板序）挑项目（ROOT-9；无位置工人退化挂板序），持提示词 `{can_build, can_haul, has_warehouse}`（编队职责过滤 + 仓库可达性，由 AIController 组装）定族；认领即项目成员化（首人自动开工）
+- **认领**：空闲工人按（距离 → 挂板序）挑项目（10.4；无位置工人退化挂板序），持提示词 `{can_build, can_haul, has_warehouse}`（编队职责过滤 + 仓库可达性，由 AIController 组装）定族；认领即项目成员化（首人自动开工）
 - **刷新**：材料耗尽 build→haul、材料到货 haul→build，经 `refresh_job` 在原项目内原地换族（不发射派工信号、不动池）
 - **转发**：AIController `_try_work` 按任务 kind 转发行为——`haul` → `travel("haul", {project})`，`build` → `travel("work", {project})`；行为层只执行不问族别
 - 多工人各自认领，不限制搬运工数量

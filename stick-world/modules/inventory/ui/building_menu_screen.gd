@@ -54,10 +54,11 @@ func open_with(building_name: String, actions: Array) -> void:
 
 
 func _modal_stack() -> UIModalStack:
-	var root := Engine.get_main_loop() as SceneTree
-	if root == null or root.root == null:
+	# UIRoot 经注册 group 通道定位（勿全树扫描）；无 UIRoot（裸树/测试）走空值分支
+	var tree := get_tree()
+	if tree == null:
 		return null
-	var ui_root: Node = root.root.find_child("UIRoot", true, false)
+	var ui_root: Node = tree.get_first_node_in_group("ui_root")
 	if ui_root != null and ui_root.has_method("get_modal_stack"):
 		return ui_root.get_modal_stack()
 	return null

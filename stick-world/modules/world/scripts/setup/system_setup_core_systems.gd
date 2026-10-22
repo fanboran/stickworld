@@ -30,6 +30,7 @@ func _setup_combat_system() -> void:
 		# 注入地图节点路径（拆 combat→world 硬引用，路径常量真相源仍在 world/api.gd）
 		_host._root.battle_director.battle_anchor_path = NodePath(WorldAPI.PATH_MAP_BATTLE_ANCHOR)
 		_host._root.battle_director.building_host_path = NodePath(WorldAPI.PATH_MAP_BUILDING_HOST)
+		_host._root.battle_director.entity_host_path = NodePath(WorldAPI.PATH_MAP_ENTITY_HOST)
 	# 实例化 CombatApi（公共接口契约）
 	var api := Node.new()
 	api.set_script(_host._CombatApiScript)

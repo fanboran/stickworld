@@ -180,6 +180,7 @@ func _setup_unit_lod() -> void:
 	lod.set_script(_host._UnitLodDirectorScript)
 	lod.name = "UnitLodDirector"
 	_host._root.add_child(lod)
-	# 自动发现模式：无需外部喂数据，注入宿主后自取地图/单位集/相机
+	# 自动发现模式：无需外部喂数据，注入宿主与实体宿主路径后自取地图/单位集/相机
+	# （路径常量真相源 = WorldAPI，units 侧不反向依赖 world）
 	if lod.has_method("setup"):
-		lod.setup(_host._root)
+		lod.setup(_host._root, NodePath(WorldAPI.PATH_MAP_ENTITY_HOST))

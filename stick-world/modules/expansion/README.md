@@ -1,7 +1,7 @@
 # expansion：驻军生成管道
 
 > 纯管道模块：按调用方传入的编成 Dictionary 在地图 `ConquestAnchor` 处刷出守军实体（含敌将）。
-> 无 api.gd、无信号、零出向依赖，暂无生产调用方（数据源将来 = 世界模型政权账面，测试可代发驱动）。
+> 无 api.gd、无信号，出向仅 units/world（世界装配消费），暂无生产调用方（数据源将来 = 世界模型政权账面，测试可代发驱动）。
 > 只刷军不开战——接敌开战编排归调用方，战斗归 CombatApi/BattleInstance。
 > 系统级参考见 [docs/技术/架构/世界与战略图/出征与领地架构.md](docs/技术/架构/世界与战略图/出征与领地架构.md)（据点玩法层已按完整版蓝图 §6.1 拆除，该文降为管道参考）。
 
@@ -34,6 +34,7 @@ modules/expansion/
 
 ## 依赖
 
-- 零模块出向：单位场景经 UnitsApi 常量引用，不 preload 模块内部路径。
+- 出向（实测 `python tools/audit_deps.py`）：`→ units`（`UnitsAPI.STICKMAN_ENTITY_SCENE` 单位场景常量、`WeaponMount.WeaponType` 武器类型常量）、`→ world`（`ConquestAnchor.find_in(map)` 锚点查找）。
+- 世界装配消费型管道：地图宿主与编成由调用方传入，本模块只消费已挂载的 world 锚点并在其上布阵刷军，不反向驱动装配。
 - 不发射/订阅 EventBus 信号；无对外契约面。
 - 被依赖：无（暂无装配调用方）。`ConquestAnchor` 锚点类在 `modules/world/scripts/map/`（随宿主场景挂载，HD-2D 宿主直接消费），不在本模块。

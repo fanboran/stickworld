@@ -100,6 +100,12 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_death_drops.gd",
 ]
 
+## unit 层 .tscn 反向自检豁免名单（默认空）。
+## 格式："res://tests/unit/xxx.tscn": "保留理由（为什么必须留在 unit 层且不参与批跑）"。
+## unit 层只跑 .gd 套件（batch_runner 直接 load），.tscn 壳不会被任何入口执行；
+## 盘上出现即视为回潮——确需保留必须在此写明理由，否则判失败。
+const TSCN_ALLOWLIST: Dictionary = {}
+
 const PER_TEST_TIMEOUT_SEC: float = 30.0
 
 var _failed: Array[String] = []
@@ -148,8 +154,12 @@ func _trace(line: String) -> void:
 	f.close()
 
 
-## 清单自检：tests/unit/ 下每个 .gd 都必须在 UNIT_SCRIPTS 里——套件文件躺在盘上
-## 却没登记进清单 = 它永远不会跑，且不会有任何红灯（静默漏测盲区）。
+## 清单自检（双向）：
+##   - 正向：tests/unit/ 下每个 .gd 都必须在 UNIT_SCRIPTS 里——套件文件躺在盘上
+##     却没登记进清单 = 它永远不会跑，且不会有任何红灯（静默漏测盲区）。
+##   - 反向：tests/unit/ 下出现 .tscn 壳且不在 TSCN_ALLOWLIST 里 = 判失败。unit 层
+##     由本运行器直接 load(.gd)，.tscn 不会被任何入口执行，留着只会让"有场景就能
+##     单独跑"的误解复燃。
 ## 目录枚举不可用（打包/异常）时只提示不判失败，避免误报。
 func _check_manifest() -> void:
 	var dir := DirAccess.open("res://tests/unit")
@@ -160,15 +170,23 @@ func _check_manifest() -> void:
 	for p in UNIT_SCRIPTS:
 		registered[p] = true
 	var found: int = 0
+	var found_tscn: int = 0
 	var unregistered: Array[String] = []
+	var stray_tscn: Array[String] = []
 	dir.list_dir_begin()
 	var fn := dir.get_next()
 	while fn != "":
-		if not dir.current_is_dir() and fn.ends_with(".gd"):
-			found += 1
-			var full := "res://tests/unit/" + fn
-			if not registered.has(full):
-				unregistered.append(full)
+		if not dir.current_is_dir():
+			if fn.ends_with(".gd"):
+				found += 1
+				var full_gd := "res://tests/unit/" + fn
+				if not registered.has(full_gd):
+					unregistered.append(full_gd)
+			elif fn.ends_with(".tscn"):
+				found_tscn += 1
+				var full_tscn := "res://tests/unit/" + fn
+				if not TSCN_ALLOWLIST.has(full_tscn):
+					stray_tscn.append(full_tscn)
 		fn = dir.get_next()
 	dir.list_dir_end()
 	if found == 0:
@@ -176,8 +194,10 @@ func _check_manifest() -> void:
 		return
 	for p in unregistered:
 		_failed.append(p + "（未登记进 UNIT_SCRIPTS——本套件不会被运行）")
-	print("[BATCH-CHECK] 清单自检：盘上 %d 个套件 / 清单 %d 条，未登记 %d 个" % [
-		found, UNIT_SCRIPTS.size(), unregistered.size()
+	for p in stray_tscn:
+		_failed.append(p + "（unit 层 .tscn 壳不参与批跑——删除它；确需保留请在 TSCN_ALLOWLIST 写明理由）")
+	print("[BATCH-CHECK] 清单自检：盘上 %d 个 .gd 套件 / 清单 %d 条，未登记 %d 个；.tscn 壳 %d 个，未豁免 %d 个" % [
+		found, UNIT_SCRIPTS.size(), unregistered.size(), found_tscn, stray_tscn.size()
 	])
 
 

@@ -6,8 +6,8 @@ extends Node
 ##   3. 速率公式 = 档位速率 × areaFactor × mesh面积 × SpawnRate（面积/areaFactor 单调递增）
 ##   4. 档位→寿命绑定表与出土值一致
 ##   5. 宿主轮廓测量支持 Sprite2D / Polygon2D(shoelace) / ColorRect
-## 运行：
-##   godot --headless --path stick-world res://tests/unit/test_crystal_sparkles.tscn
+## 运行（unit 层以 .gd 为套件，经 batch_runner 批量执行）：
+##   bash tests/run_unit.sh
 
 signal test_done(code: int)
 

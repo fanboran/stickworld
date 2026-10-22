@@ -167,7 +167,7 @@ func produce(resource_id: String, amount: float, region_id: String, source: Stri
 func transfer(resource_id: String, amount: float, from_region: String, to_region: String) -> Dictionary
 # [Q] from 扣减, to 增加（有运输损耗, 实际到达 = amount * (1 - 损耗率)）
 
-# ⚠ 市场参数接口属旧市场模型实录；新口径价格机制为提案级（初期高度非市场），随 DEC-15 经济重做重审。
+# ⚠ 市场参数接口属旧市场模型实录；新口径价格机制为提案级（初期高度非市场），随 8.15 经济重做重审。
 # 市场参数调节（L4+ 层级可用）
 func set_price_ceiling(resource_id: String, price: float) -> Dictionary
 func set_price_floor(resource_id: String, price: float) -> Dictionary

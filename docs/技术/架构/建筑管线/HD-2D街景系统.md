@@ -75,7 +75,7 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 - **边界自适应**：布局驱动模式按布局街宽收 map_left/right（±半宽+8 格）。
 - **出口**：东西村口 ChunkTrigger（纯代码创建），旅行链注册在 game_root。
 - **设施门控**：`supports_village_facilities()`=false 跳过 2D 建筑设施（仓库/程序化资源点）；`wants_villager_npcs()`=true 照常生成村民——两个门控分开，因为村民不需要 2D 建筑也能干活（见 2.6）。
-- **建筑宿主**：`_setup_building_hosting()`（_ready 尾部）装配 `PlacementGrid`（duck 属性 + WorldAPI 子节点名双契约，覆盖整图含负 cell）、把 3D 前排建筑/杂物/城墙带登记为 blocked（玩家建筑不叠街景）、推导 `building_baseline_offset`（楼排墙脚线中位）与逐格 `get_building_baseline_at`（建造范围压到哪栋楼卡就站那栋的 foot 线——预览/工地/成品与 3D 邻居同线；foot = 516 + z×24，实测 530~574）、补 `BuildMaskLayer`（工地占位/进度条挂载）——建造菜单→选址→占用→落位链在本图全通。建筑视觉为过渡态：2D 程序化外观叠画在画布层（画布在 3D 之上），3D 卡视觉随 plan 物化（ROOT-2）替换。
+- **建筑宿主**：`_setup_building_hosting()`（_ready 尾部）装配 `PlacementGrid`（duck 属性 + WorldAPI 子节点名双契约，覆盖整图含负 cell）、把 3D 前排建筑/杂物/城墙带登记为 blocked（玩家建筑不叠街景）、推导 `building_baseline_offset`（楼排墙脚线中位）与逐格 `get_building_baseline_at`（建造范围压到哪栋楼卡就站那栋的 foot 线——预览/工地/成品与 3D 邻居同线；foot = 516 + z×24，实测 530~574）、补 `BuildMaskLayer`（工地占位/进度条挂载）——建造菜单→选址→占用→落位链在本图全通。建筑视觉为过渡态：2D 程序化外观叠画在画布层（画布在 3D 之上），3D 卡视觉随 plan 物化（10.2）替换。
 
 ### 2.4 角色渲染：2D 逻辑 + 3D 视觉（char_rig_3d.gd 关节烘焙）
 
@@ -484,7 +484,7 @@ offset/limits 变化时手搓漂、变换不会）。
 ## 五、待迁移与已知边界
 
 - 道路/守城/森林/室内/L1 聚落图仍是 2D 旧图；战斗类测试以 battlefield_2d（2D 空旷演练场，`boot_map_id_override` 开机）为底。
-- 设施类测试 7 套 SUSPENDED（.tscn.suspended 摘出矩阵；盘上 6 套，驻军套随据点 M0 拆除退役）：待 `ROOT-3` 翻 `supports_village_facilities()` + `ROOT-5` 在生产图重建。设施宿主本体已就位——ROOT-1 装配 PlacementGrid/BuildingHost，ROOT-2把 CityGen plan 前排物化为视觉壳 Building 实体（3D 烘卡继续只做视觉；映射表 `building_gen/api.gd`；`ConstructionManager.set_map` 自动物化，存档不落档）。
+- 设施类测试 7 套 SUSPENDED（.tscn.suspended 摘出矩阵；盘上 6 套，驻军套随据点 M0 拆除退役）：待 `4.1` 翻 `supports_village_facilities()` + `4.3` 在生产图重建。设施宿主本体已就位——10.1 装配 PlacementGrid/BuildingHost，10.2 把 CityGen plan 前排物化为视觉壳 Building 实体（3D 烘卡继续只做视觉；映射表 `building_gen/api.gd`；`ConstructionManager.set_map` 自动物化，存档不落档）。
 - 角色 3D 视觉已镜像主手武器：`weapon_mount.weapon_type` → `char_rig_3d.set_weapon_type`，武器场景读 Sprite 贴图 + GripPoint 补偿挂手骨（贴图分桶 quad，口径同 WeaponMount._mount_one）——武器随 2D RigHost 隐藏导致的"村民空手=没有职业"观感由此闭合；副手/盾不在 WeaponMount 类型表内，未镜像。
 - 村民待业/工作行为依赖 WorldState.game_time 节律，与昼夜挂钩同源。
 

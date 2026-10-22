@@ -53,6 +53,25 @@ static func ensure_driver(tree: SceneTree) -> void:
 	tree.root.add_child.call_deferred(_driver)
 
 
+## 复位全部静态持有（仅测试 teardown 调用；运行时不要调）。
+## 帧集贴图与注册盒是进程级缓存，进程退出前不清会被 ObjectDB 记成泄漏；
+## 清空后下次 ensure_driver/register_box 按原懒加载路径重建，行为不变。
+static func reset_static_caches() -> void:
+	if _driver != null and is_instance_valid(_driver):
+		if _driver.is_inside_tree() and _driver.get_parent() != null:
+			_driver.get_parent().remove_child(_driver)
+		_driver.free()
+	_driver = null
+	_frame_sets.clear()
+	_boxes.clear()
+	_slot_map.clear()
+	_owners.clear()
+	_step = 0
+	_cursor = 0
+	_write_idx = 0
+	animation_enabled = true
+
+
 ## 注册九宫格 stylebox 到帧轮换（SketchStyle._box 内部调用）。
 ## owner 可选：换帧时 owner 不在树中可见则跳过该盒，省无谓的主题失效。
 static func register_box(sb: StyleBoxTexture, slot: StringName, owner: CanvasItem = null) -> void:

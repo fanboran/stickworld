@@ -13,6 +13,12 @@ static var _hand: FontFile
 static var _bold: FontVariation
 
 
+## 复位字体静态缓存（仅测试 teardown 调用；下次按 hand()/bold() 懒加载重建）
+static func reset_static_caches() -> void:
+	_hand = null
+	_bold = null
+
+
 ## 手写加粗（伪粗：FreeType embolden 外扩轮廓，站酷快乐体无 Bold 字重）
 static func bold() -> FontVariation:
 	if _bold == null:

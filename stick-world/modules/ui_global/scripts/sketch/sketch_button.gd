@@ -153,6 +153,11 @@ func set_list_icon(tex: Texture2D, max_width: int = SketchStyle.ICON_INLINE_MAX_
 static var _box_cache: Dictionary = {}
 
 
+## 复位静态 StyleBox 缓存（仅测试 teardown 调用；下次按需重建，运行时语义不变）
+static func reset_static_caches() -> void:
+	_box_cache.clear()
+
+
 static func _box(slot: StringName) -> StyleBoxTexture:
 	if not _box_cache.has(slot):
 		_box_cache[slot] = SketchStyle._box(slot, StickTokens.PAD_X + 2, 2)

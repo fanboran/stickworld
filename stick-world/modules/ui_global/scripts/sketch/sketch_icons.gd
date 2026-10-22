@@ -17,6 +17,11 @@ const ARROW_SIZE := Vector2i(12, 10)
 static var _cache: Dictionary = {}
 
 
+## 复位手绘图标纹理缓存（仅测试 teardown 调用；下次按需重绘，运行时语义不变）
+static func reset_static_caches() -> void:
+	_cache.clear()
+
+
 ## CheckBox 勾选框图标：方框白描边；选中琥珀描边 + 琥珀 14% 底 + 白对勾（§1.5 只上底不上字）
 static func checkbox(checked: bool, disabled: bool = false) -> ImageTexture:
 	var key := "cb_%s_%s" % [checked, disabled]

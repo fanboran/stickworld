@@ -9,8 +9,8 @@ signal test_done(code: int)
 ##   - AAA：Arrange-Act-Assert，每个用例只断言一件事的主题
 ##   - 确定性：无 await、无固定帧等待、无时序依赖
 ##
-## 运行：
-##   godot --headless --path "F:\VSCode\game-2\stick-world" "res://tests/unit/test_placement_grid.tscn"
+## 运行（unit 层以 .gd 为套件，经 batch_runner 批量执行）：
+##   bash tests/run_unit.sh
 ## 退出码：0 全过，1 有失败
 
 @warning_ignore("shadowed_global_identifier")

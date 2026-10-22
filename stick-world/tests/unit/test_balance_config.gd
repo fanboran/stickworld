@@ -3,10 +3,8 @@ extends Node
 signal test_done(code: int)
 ## 单元测试：BalanceConfig 装载时机 + 路径读取 + 空数据精确警告。
 ##
-## 本套件【不进 batch_runner】（batch_runner.gd 冻结 + 准入标准"不碰 autoload"
-## 天然不满足：套件依赖真实 autoload 装载时机与 EventBus.balance_changed）。
-## 运行方式：独立场景进程跑
-##   godot --headless --path <project> res://tests/unit/test_balance_config.tscn
+## 运行方式：进 batch_runner 批量清单（UNIT_SCRIPTS）——`bash tests/run_unit.sh`
+## （套件依赖真实 autoload 装载时机与 EventBus.balance_changed）。
 ##
 ## 回归背景：BalanceConfig 曾仅在 SystemSetup.setup() 显式 reload() 才有数据，
 ## GameRoot 装配前实例化的实体查询全部落空（警告"路径不存在"并静默回退默认值）。

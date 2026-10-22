@@ -386,7 +386,8 @@ declare -a report_entries=()
 # unit 层：单进程批量
 if [ "$run_unit" -eq 1 ]; then
 	t0=$(date +%s%3N)
-	unit_count=$(grep -c '"res://tests/unit/' "$SCRIPT_DIR/batch_runner.gd")
+	# 只数清单条目行（行首缩进后紧跟带引号的 res:// 路径），避免注释/代码里的路径字样虚增
+	unit_count=$(grep -cE '^[[:space:]]*"res://tests/unit/' "$SCRIPT_DIR/batch_runner.gd")
 	if "$GODOT" --headless --path "$PROJECT_DIR_WIN" res://tests/batch_runner.tscn >"$TMP_DIR/unit.out" 2>"$TMP_DIR/unit.err"; then
 		t1=$(date +%s%3N)
 		total_pass=$((total_pass + 1))

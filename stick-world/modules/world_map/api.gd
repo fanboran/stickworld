@@ -174,7 +174,8 @@ func is_initialized() -> bool:
 
 
 ## 加载指定老 L1 的地图数据（L2 点击 L1 下钻用）
-## l1_label: 老 L1 全局 label（1..69），数据在 config/strategic_map/l1_packs/l1_%03d/l1_world.json
+## l1_label: 老 L1 全局 label（1..69），数据在 config/strategic_map/l1_packs/l1_%03d/
+## （导出包只有 l1_world.bin；源码环境 json 与 bin 并存，bin 缺失时才读 json）
 ## 成功后替换当前数据（renderer/camera 同步切换），返回是否成功
 func open_l1(l1_label: int) -> bool:
 	var data: L1WorldData = null
@@ -184,11 +185,13 @@ func open_l1(l1_label: int) -> bool:
 	else:
 		var dir_name := "l1_%03d" % l1_label
 		var base_dir := "res://config/strategic_map/l1_packs/%s" % dir_name
-		var json_path := "%s/l1_world.json" % base_dir
-		if not FileAccess.file_exists(json_path):
-			push_error("[StrategicMapAPI] L1 数据缺失: %s" % json_path)
+		# gate 认 bin（导出包排除 *.json，非出生 L1 只有 bin；load_from/_read_data_dict
+		# 本身 bin 优先 json 兜底，bin-only 可独立加载，这里只需放开存在性判定）
+		var data_path := L1WorldData.probe_data_file(base_dir)
+		if data_path.is_empty():
+			push_error("[StrategicMapAPI] L1 数据缺失: %s/l1_world.bin" % base_dir)
 			return false
-		data = L1WorldData.load_from(json_path, base_dir)
+		data = L1WorldData.load_from(data_path, base_dir)
 	if data == null or data.base_texture == null:
 		push_error("[StrategicMapAPI] L1 加载失败: %s" % l1_label)
 		return false
@@ -234,11 +237,13 @@ func get_region_for_l1(l1_label: int) -> String:
 
 ## 该老 L1 是否有可直接打开的数据（出生省 = 根目录单份数据；其余 = l1_packs 包）。
 ## 供 UI 判可用性（切省箭头只列可打开的目标），避免点下去才报错。
+## 探测认 bin：导出包排除 *.json，非出生 L1 只有 l1_world.bin
+## （json-only 判定在导出包恒 false，切省箭头会不列任何目标）。
 func has_l1_data(l1_label: int) -> bool:
 	if l1_label == BIRTH_L1_LABEL:
 		return _birth_data != null
-	return FileAccess.file_exists(
-			"res://config/strategic_map/l1_packs/l1_%03d/l1_world.json" % l1_label)
+	return not L1WorldData.probe_data_file(
+			"res://config/strategic_map/l1_packs/l1_%03d" % l1_label).is_empty()
 
 
 ## 玩家位置动态接线（F2/C1，总体设计 §5.6）：玩家所在场景图 map_id → 反查聚落。

@@ -329,6 +329,20 @@ static func _roads_from(arr: Array, tiles: Array[L1TileDef]) -> Array:
 	return out
 
 
+## L1 包数据探测：返回 base_dir 下可加载数据的路径（bin 优先，json 兜底），
+## 两者皆缺返回空串。base_dir 接受任意 FileAccess 可达前缀（res:// / user://），
+## 单元测试用 user:// 假目录即可验证 bin-only 场景。
+## 导出 pck 排除 strategic_map 的 *.json（export_presets.cfg），非出生 L1 只有
+## l1_world.bin——可用性 gate 必须认 bin（json-only 判定在导出包恒 false，
+## 下钻静默失效）。与 _read_data_dict 的 bin 优先读取口径配对使用。
+static func probe_data_file(base_dir: String) -> String:
+	for file_name in ["l1_world.bin", "l1_world.json"]:
+		var path := "%s/%s" % [base_dir, file_name]
+		if FileAccess.file_exists(path):
+			return path
+	return ""
+
+
 ## 读取 l1_world 数据：优先同名紧凑 bin（LWDB + var_to_bytes，原样序列化——L1 顶点序
 ## [x,y] 与 L2/L3 不同，polygon 保持 Array，构造逻辑 _polygon_from 不变）；
 ## bin 缺失/格式不符（Godot 升级等）自动回退 JSON。

@@ -14,7 +14,7 @@ const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptItemsAPI := preload("res://modules/items/api.gd")
 const ScriptItemContainer := preload("res://modules/items/core/item_container.gd")
 const ScriptItemDef := preload("res://modules/items/core/item_def.gd")
-const ScriptItemDB := preload("res://modules/items/item_db.gd")
+const ScriptItemDB := preload("res://modules/items/core/item_db.gd")
 const ScriptItemTransfer := preload("res://modules/items/core/item_transfer.gd")
 
 func _ready() -> void:

@@ -19,7 +19,7 @@ const ScriptWeaponMount := preload("res://modules/units/scripts/entity/weapon_mo
 const ScriptPlayerInventory := preload("res://modules/inventory/scripts/player_inventory.gd")
 const ScriptItemContainer := preload("res://modules/items/core/item_container.gd")
 const ScriptItemDef := preload("res://modules/items/core/item_def.gd")
-const ScriptItemDB := preload("res://modules/items/item_db.gd")
+const ScriptItemDB := preload("res://modules/items/core/item_db.gd")
 
 func _ready() -> void:
 	_runner = TestRunner.new()

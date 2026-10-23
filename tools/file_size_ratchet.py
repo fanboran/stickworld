@@ -103,7 +103,6 @@ SIZE_BASELINE = {
     "modules/units/scripts/weapons/arrow_projectile.gd": 454,
     "modules/world/scripts/camera/camera_rig.gd": 673,
     "modules/world/scripts/game_root.gd": 786,
-    "modules/world/scripts/map/city_gen.gd": 709,
     "modules/world/scripts/map/hd2d_map_base.gd": 951,
     "modules/world/scripts/setup/save_handler.gd": 515,
     "modules/world/scripts/setup/system_setup.gd": 474,

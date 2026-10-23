@@ -123,8 +123,7 @@ func _open_building_menu(_building: Node2D, building_name: String) -> void:
 	InventoryAPI.open_building_menu(building_name, actions)
 
 
-## 打开村仓（RegionStorage 物品视图：资源品 def ↔ 经济台账）。
-## 账本端口在此绑定（items 零出向，resources 适配由本消费方提供）。
+## 打开村仓（RegionStorage 物品视图：资源品 def ↔ 经济台账；账本端口在此绑定，items 零出向）。
 func _open_region_storage() -> void:
 	var backend: RegionStorageBackend = ResourcesStorageBackend.new(_get_resources_api())
 	var storage := RegionStorage.new("", backend)

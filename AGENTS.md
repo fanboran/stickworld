@@ -8,6 +8,7 @@
 - 设计先行：实现任何模块前，须先用 Read 工具读取对应的设计文档（`docs/设计/系统/<模块名>.md` ）。如果 GDD 标记了 `[待补充]`，须向用户确认。
 - 文档同步：每批代码修改完成后，记得同步更新受影响的架构文档和交接文档，随本批代码一批提交。
 - UI 布局单一真相源：场景是布局唯一真相源，禁止 `Control.new()` 当 UI 根（会丢 anchor 致控件静默不可见）；代码建控件的合规出口（全屏 `full_rect()` / 角落部件 `widget()` + 槽位）见 `docs/技术/架构/场景与战斗/UI.md`。
+- **原型转正门槛**：新模块/原型场景进生产链路前五查——①无条件 print 清零（诊断一律 STICK_* 环境变量门控或 push_warning/push_error）；②CLI/截图/对照实验等工装隔离在 `tools/dev/`、`tests/dev/`；③static var 静态持有逐处注释生命周期，autoload 登记 `docs/技术/架构/数据与契约/自动加载依赖.md`；④对外交互只经模块 `api.gd`；⑤过 `python tools/file_size_ratchet.py` 行数棘轮（≥400 行拆子域助手或入册带理由）。
 
 ### 脚手架与工位
 
@@ -92,6 +93,7 @@
 2. **耦合原则**：模块间通信优先使用 `core/autoload/event_bus.gd` 的全局事件总线，或通过模块的 `api.gd` 定义信号。不要跨模块 `get_node` 或引用非 API 内部方法。
 3. **接口契约**：模块对外交互须通过其根目录下的 `api.gd` 文件。
 4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（items/ui_global/fx/texture_gen/building_gen/environment/hd2d/stick_rig）→ L2 玩法（combat/formation/tactics/units/construction/organization/resources/inventory/player_control/world_map/debug_gui/expansion/town_life）→ L3 组装（world 唯一 composition root）。stick_rig = 火柴人唯一视觉骨架（L1），tactics = 目标选择/战术号令共享词汇（L2，零出向）；items 为物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer，零出向），inventory 为其玩家侧消费者。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
+5. **新代码落点约定**：模块内单文件分四角色——**编排根/宿主**（状态字典+信号+公共 API+节拍编排，不新增成块逻辑，新域只落状态字段+API 壳）/ **子域助手**（`scripts/<域>/` 目录或 `<host>_<域>.gd`，RefCounted 持宿主回引，或状态自持组件）/ **纯算法** static 库 / **开发工装**（只准 `tools/dev/` 与 `tests/dev/`）。操作判据：单文件一次新增逻辑预计超约 100 行且功能域可命名 → 当场落子域助手文件，与功能同批提交，不等审计点名（行数棘轮 `python tools/file_size_ratchet.py` 拦 ≥400 新文件与在册增行）。
 
 **解耦核心策略**：
 

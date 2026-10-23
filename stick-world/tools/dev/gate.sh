@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# 门禁一体化（工位三件套之二）——一次跑完四段：import 自检 → 改动面编译 → 变更测试 → 报错扫描。
+# 门禁一体化（工位三件套之二）——一次跑完五段：静态审计 → import 自检 → 改动面编译 → 变更测试 → 报错扫描。
+# 静态审计段（audit_deps + file_size_ratchet）：纯文本扫描不启 Godot，秒级，
+#   依赖环/越界与文件行数棘轮在最先暴露——结构性违规不必等编译测试跑完。
 # 改动面编译段（批0 教训⑤：fx 并损=常量丢失属编译期错，测试才炸不如编译先炸）：
 #   diff 出改动/新增的 .gd 逐个 --check-only 编译，红一个即停。
 # 用法（任意目录均可）：
@@ -24,6 +26,12 @@ done
 cd "$PROJ_ROOT"
 fail() { echo "[gate] ✗ $1（耗时见上）" >&2; exit 1; }
 step() { SECONDS=0; echo "── [gate] $1"; }
+
+step "静态审计（依赖审计 + 行数棘轮，纯文本扫描不启 Godot）"
+# 两脚本均按自身 __file__ 定位工程根，与 cwd 无关；仓库根 tools/ 在 stick-world/ 上层
+python "$PROJ_ROOT/../tools/audit_deps.py" || fail "依赖审计有红线（新增环/越界超基线）"
+python "$PROJ_ROOT/../tools/file_size_ratchet.py" || fail "行数棘轮有红线（新超线文件/在册文件增行）"
+echo "   ok (${SECONDS}s)"
 
 if [ "$DO_IMPORT" -eq 1 ]; then
 	step "import 自检（--headless --import）"
@@ -74,4 +82,4 @@ step "报错扫描（user:// 日志，仅本 gate 窗口）"
 bash tools/check_godot_errors.sh -Since "$GATE_START" > /dev/null 2>&1 || fail "运行时报错非零"
 echo "   ok (${SECONDS}s)"
 
-echo "[gate] ✓ 全绿（import + 编译 + tests + errors）"
+echo "[gate] ✓ 全绿（静态审计 + import + 编译 + tests + errors）"

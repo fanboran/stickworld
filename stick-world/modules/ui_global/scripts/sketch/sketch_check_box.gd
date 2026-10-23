@@ -10,12 +10,11 @@ extends CheckBox
 const BOX := 16.0
 
 
-var _seed: int = 0
-var _timer: float = 0.0
+var _boil := SketchBoil.new()   # boiling 相位（种子+节拍公共件，_draw 读 _boil.phase）
 
 
 func _ready() -> void:
-	_seed = randi()
+	_boil.reset()
 	# 引擎图标全部置空：方框交给 _draw。图标用足尺寸透明纹理占住图标槽
 	# （最小宽 = 图标宽 + h_separation，1px 空纹理会让控件塌成 1px 宽被裁剪容器剪没）
 	for icon_name in ["checked", "unchecked", "checked_disabled", "unchecked_disabled",
@@ -27,13 +26,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	# boiling：与血条/面板同节拍重掷相位
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
+	if is_visible_in_tree() and _boil.tick(delta):
 		queue_redraw()
 
 
@@ -51,7 +44,7 @@ func _draw() -> void:
 		outline = StickTokens.BORDER_STRONG
 	else:
 		outline = Color(StickTokens.TEXT.r, StickTokens.TEXT.g, StickTokens.TEXT.b, 0.32 * dim)
-	SketchDraw.draw_panel(self, rect, _seed, fill, outline, 1.4, 4.0)
+	SketchDraw.draw_panel(self, rect, _boil.phase, fill, outline, 1.4, 4.0)
 	# 对勾：三折点马克笔笔画（白），逐点小幅扰动
 	if button_pressed:
 		var ink := Color(StickTokens.TEXT.r, StickTokens.TEXT.g, StickTokens.TEXT.b, dim)
@@ -63,6 +56,6 @@ func _draw() -> void:
 					rect.position.y + lerpf(BOX * 0.55, BOX * 0.25, t))
 			if i == 1:
 				p.y = rect.position.y + BOX * 0.74
-			p += Vector2(SketchDraw.wobble(i * 3, _seed), SketchDraw.wobble(i * 3 + 1, _seed)) * 0.8
+			p += Vector2(SketchDraw.wobble(i * 3, _boil.phase), SketchDraw.wobble(i * 3 + 1, _boil.phase)) * 0.8
 			pts.append(p)
 		draw_polyline(pts, ink, 2.2, true)

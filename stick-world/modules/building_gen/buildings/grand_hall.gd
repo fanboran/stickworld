@@ -78,7 +78,7 @@ func _build_exterior() -> void:
 
 	# ── L3 前景挂件：二层门板 + 阳台（外梯对接平台）──
 	var l3 := _nc("L3_FrontItems", ext)
-	_build_upper_door(l3, l2_left + 244.0, FLOOR2_Y, pal)
+	BuildingKit.upper_door(l3, l2_left + 244.0, FLOOR2_Y, pal)
 	_balcony(l3, "Balcony", l2_left, l2_left + BALCONY_SPAN, FLOOR2_Y, pal)
 
 	# ── L4 前景：一层大门 + 外部楼梯 + 悬挑楼板 ──
@@ -164,34 +164,7 @@ func _build_front_door(parent: Node2D, cx_mid: float, pal: Dictionary) -> void:
 		root.add_child(ring)
 
 
-## 二层门板（对接阳台，平顶门 + 横板条 + 门楣）
-func _build_upper_door(parent: Node2D, cx: float, floor_y: float, pal: Dictionary) -> void:
-	var root := _nc("UpperDoor", parent)
-	root.position = Vector2(cx, floor_y)
-	var wood: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
-	var half := 24.0
-	var h := 54.0
-	var door := Polygon2D.new()
-	door.name = "Door"
-	door.polygon = PackedVector2Array([
-		Vector2(-half, 0), Vector2(-half, -h), Vector2(half, -h), Vector2(half, 0)])
-	door.color = wood.lightened(0.08)
-	root.add_child(door)
-	for i in 2:
-		var bar := Line2D.new()
-		bar.name = "Plank%d" % i
-		var y := -16.0 - float(i) * 18.0
-		bar.points = PackedVector2Array([Vector2(-half + 2, y), Vector2(half - 2, y)])
-		bar.width = 2.0
-		bar.default_color = wood.darkened(0.4)
-		root.add_child(bar)
-	var lintel := Polygon2D.new()
-	lintel.name = "Lintel"
-	lintel.polygon = PackedVector2Array([
-		Vector2(-half - 5.0, -h - 10.0), Vector2(half + 5.0, -h - 10.0),
-		Vector2(half + 5.0, -h), Vector2(-half - 5.0, -h)])
-	lintel.color = wood.darkened(0.2)
-	root.add_child(lintel)
+## 二层门板走共享件 BuildingKit.upper_door（与 manor 同款，下沉见该件）
 
 
 ## 脊上钟楼：石塔身（钟窗 carve）+ 塔檐板 + 木构尖锥 + 旗杆三角旗。
@@ -249,10 +222,7 @@ func _build_belfry(parent: Node2D, cx_mid: float, f2_top: float, pal: Dictionary
 # ── 内饰（批次 4 家具库）：议事大厅布局 ──
 
 func _furnish_floor(floor_node: Node2D) -> void:
-	var w := float(width) * 32.0 - 24.0
-	var slab := InteriorProps.make_floor(int(w), 24, Color(0.36, 0.27, 0.17))
-	slab.position = Vector2(float(width) * 16.0, -12)
-	floor_node.add_child(slab)
+	BuildingKit.furnish_floor(floor_node, width, Color(0.36, 0.27, 0.17))
 
 
 func _furnish_interior(props: Node2D) -> void:

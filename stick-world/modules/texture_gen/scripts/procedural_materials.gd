@@ -7,6 +7,12 @@ extends RefCounted
 static var _tex_cache: Dictionary = {}
 
 
+## 复位同参贴图静态缓存（仅测试 teardown 调用；下次按需重建，运行时语义不变）。
+## 确定性测试用它绕开缓存命中——比的是生成数学而非 memo 复用。
+static func reset_static_caches() -> void:
+	_tex_cache.clear()
+
+
 # ═══════════════════════ 木材 ═══════════════════════
 
 ## 竖纹木柱贴图（w × h）
@@ -24,13 +30,18 @@ static func make_wood_pillar(w: int, h: int, base_color: Color = Color(0.45, 0.3
 			var c := base_color * shade * grain
 			c.a = 1.0
 			img.set_pixel(x, y, c)
-	# 加暗色边缘
+	# 加暗色边缘（边缘同样满不透明：Color*float 连 alpha 一起乘暗，漏钉 a=1.0
+	# 会让整圈边框半透明渗底——对齐主循环 c.a=1.0 口径）
+	var edge_v := base_color * 0.7
+	edge_v.a = 1.0
+	var edge_h := base_color * 0.75
+	edge_h.a = 1.0
 	for y in range(h):
-		img.set_pixel(0, y, base_color * 0.7)
-		img.set_pixel(w - 1, y, base_color * 0.7)
+		img.set_pixel(0, y, edge_v)
+		img.set_pixel(w - 1, y, edge_v)
 	for x in range(w):
-		img.set_pixel(x, 0, base_color * 0.75)
-		img.set_pixel(x, h - 1, base_color * 0.75)
+		img.set_pixel(x, 0, edge_h)
+		img.set_pixel(x, h - 1, edge_h)
 	_tex_cache[key] = ImageTexture.create_from_image(img)
 	return _tex_cache[key]
 

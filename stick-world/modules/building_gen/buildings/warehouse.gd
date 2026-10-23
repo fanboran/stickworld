@@ -91,10 +91,7 @@ func make_sack(node_name: String, color: Color) -> Node2D:
 # ── 内饰（批次 4）：仓储布局——双货架+麻袋堆+箱堆+吊挂蒜串+地面散货 ──
 
 func _furnish_floor(floor_node: Node2D) -> void:
-	var w := float(width) * 32.0 - 24.0
-	var slab := InteriorProps.make_floor(int(w), 24, Color(0.38, 0.28, 0.17))
-	slab.position = Vector2(float(width) * 16.0, -12)
-	floor_node.add_child(slab)
+	BuildingKit.furnish_floor(floor_node, width, Color(0.38, 0.28, 0.17))
 
 
 func _furnish_interior(props: Node2D) -> void:

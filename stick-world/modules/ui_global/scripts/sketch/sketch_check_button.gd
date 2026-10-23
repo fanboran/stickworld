@@ -13,12 +13,11 @@ const GROOVE := Vector2(34.0, 18.0)
 const KNOB_R := 6.5
 
 
-var _seed: int = 0
-var _timer: float = 0.0
+var _boil := SketchBoil.new()   # boiling 相位（种子+节拍公共件，_draw 读 _boil.phase）
 
 
 func _ready() -> void:
-	_seed = randi()
+	_boil.reset()
 	# 引擎图标全部置空：凹槽与圆钮交给 _draw。图标用足尺寸透明纹理占住图标槽
 	# （最小宽 = 图标宽 + h_separation，1px 空纹理会让控件塌成 1px 宽被裁剪容器剪没）
 	for icon_name in ["checked", "unchecked", "checked_disabled", "unchecked_disabled",
@@ -32,13 +31,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	# boiling：与血条/面板同节拍重掷相位
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
+	if is_visible_in_tree() and _boil.tick(delta):
 		queue_redraw()
 
 
@@ -57,7 +50,7 @@ func _draw() -> void:
 	else:
 		outline = Color(StickTokens.TEXT.r, StickTokens.TEXT.g, StickTokens.TEXT.b, 0.32 * dim)
 	# 凹槽：wobble 胶囊（圆角拉到半高）
-	SketchDraw.draw_panel(self, rect, _seed, fill, outline, 1.4, GROOVE.y * 0.5)
+	SketchDraw.draw_panel(self, rect, _boil.phase, fill, outline, 1.4, GROOVE.y * 0.5)
 	# 圆钮：wobble 圆，off 左 / on 右，各留 2px 内边
 	var cx: float = lerpf(rect.position.x + KNOB_R + 2.0,
 			rect.end.x - KNOB_R - 2.0, t)
@@ -70,7 +63,7 @@ func _draw_knob(center: Vector2, radius: float, dim: float) -> void:
 	var seg := 14
 	for i in seg:
 		var a := TAU * float(i) / float(seg)
-		var rr := radius + SketchDraw.wobble(i * 3, _seed + 31) * SketchDraw.WOBBLE_AMP
+		var rr := radius + SketchDraw.wobble(i * 3, _boil.phase + 31) * SketchDraw.WOBBLE_AMP
 		pts.append(center + Vector2(cos(a), sin(a)) * rr)
 	var fill := Color(StickTokens.ACCENT, dim) if button_pressed \
 			else Color(StickTokens.TEXT.r, StickTokens.TEXT.g, StickTokens.TEXT.b, dim)

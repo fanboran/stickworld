@@ -75,7 +75,7 @@ func _build_exterior() -> void:
 
 	# ── L3 前景挂件：二层门板 + 阳台（外部楼梯的对接平台）──
 	var l3 := _nc("L3_FrontItems", ext)
-	_build_upper_door(l3, l2_left + 172.0, FLOOR2_Y, pal)
+	BuildingKit.upper_door(l3, l2_left + 172.0, FLOOR2_Y, pal)
 	_balcony(l3, "Balcony", l2_left, l2_left + BALCONY_SPAN, FLOOR2_Y, pal)
 
 	# ── L4 前景：一层门板 + 外部楼梯 + 悬挑楼板 ──
@@ -147,35 +147,7 @@ func _build_front_door(parent: Node2D, cx_mid: float, pal: Dictionary) -> void:
 		root.add_child(bar)
 
 
-## 二层门板（对接阳台，平顶门 + 横板条）
-func _build_upper_door(parent: Node2D, cx: float, floor_y: float, pal: Dictionary) -> void:
-	var root := _nc("UpperDoor", parent)
-	root.position = Vector2(cx, floor_y)
-	var wood: Color = pal.get("C_WOOD_BEAM", Color(0.34, 0.24, 0.14))
-	var half := 24.0
-	var h := 54.0
-	var door := Polygon2D.new()
-	door.name = "Door"
-	door.polygon = PackedVector2Array([
-		Vector2(-half, 0), Vector2(-half, -h), Vector2(half, -h), Vector2(half, 0)])
-	door.color = wood.lightened(0.08)
-	root.add_child(door)
-	for i in 2:
-		var bar := Line2D.new()
-		bar.name = "Plank%d" % i
-		var y := -16.0 - float(i) * 18.0
-		bar.points = PackedVector2Array([Vector2(-half + 2, y), Vector2(half - 2, y)])
-		bar.width = 2.0
-		bar.default_color = wood.darkened(0.4)
-		root.add_child(bar)
-	# 门洞套框（顶横梁提示）
-	var lintel := Polygon2D.new()
-	lintel.name = "Lintel"
-	lintel.polygon = PackedVector2Array([
-		Vector2(-half - 5.0, -h - 10.0), Vector2(half + 5.0, -h - 10.0),
-		Vector2(half + 5.0, -h), Vector2(-half - 5.0, -h)])
-	lintel.color = wood.darkened(0.2)
-	root.add_child(lintel)
+## 二层门板走共享件 BuildingKit.upper_door（与 grand_hall 同款，下沉见该件）
 
 
 ## 穿坡烟囱：石柱 + 帽盖 + 烟口（L2 先画，L5 前坡盖住下段，帽露坡上）。

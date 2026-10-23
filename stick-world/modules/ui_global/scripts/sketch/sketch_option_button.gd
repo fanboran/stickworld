@@ -19,12 +19,11 @@ static func reset_static_caches() -> void:
 	_popup_theme_fallback = null
 
 
-var _seed: int = 0
-var _timer: float = 0.0
+var _boil := SketchBoil.new()   # boiling 相位（种子+节拍公共件，_draw 读 _boil.phase）
 
 
 func _ready() -> void:
-	_seed = randi()
+	_boil.reset()
 	_apply_flats()
 	# 引擎箭头图标置空：∨ 由 _draw 手绘
 	add_theme_icon_override("arrow", SketchDraw.empty_texture())
@@ -54,20 +53,14 @@ func _sync_popup_theme() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	# boiling：与血条/面板同节拍重掷相位
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
+	if is_visible_in_tree() and _boil.tick(delta):
 		queue_redraw()
 
 
 func _draw() -> void:
 	var border := _border_for(get_draw_mode())
 	if border.a > 0.0:
-		SketchDraw.draw_panel(self, Rect2(Vector2.ZERO, size), _seed,
+		SketchDraw.draw_panel(self, Rect2(Vector2.ZERO, size), _boil.phase,
 				Color.TRANSPARENT, border, SketchDraw.OUTLINE_WIDTH, _corner_for(size))
 	_draw_arrow()
 
@@ -122,7 +115,7 @@ func _draw_arrow() -> void:
 				lerpf(ay - 2.0, ay + 2.0, t))
 		if i == 1:
 			p.y = ay + 2.6
-		p += Vector2(SketchDraw.wobble(i * 7, _seed), SketchDraw.wobble(i * 7 + 1, _seed)) * 0.7
+		p += Vector2(SketchDraw.wobble(i * 7, _boil.phase), SketchDraw.wobble(i * 7 + 1, _boil.phase)) * 0.7
 		pts.append(p)
 	draw_polyline(pts, color, 1.6, true)
 

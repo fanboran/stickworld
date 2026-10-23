@@ -9,12 +9,11 @@ enum Dir { HORIZONTAL, VERTICAL }
 		direction = v
 		queue_redraw()
 
-var _seed: int = 0
-var _timer: float = 0.0
+var _boil := SketchBoil.new()   # boiling 相位（种子+节拍公共件，_draw 读 _boil.phase）
 
 
 func _ready() -> void:
-	_seed = randi()
+	_boil.reset()
 	if direction == Dir.HORIZONTAL:
 		custom_minimum_size = Vector2(0, maxf(custom_minimum_size.y, 8.0))
 	else:
@@ -23,12 +22,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
+	if is_visible_in_tree() and _boil.tick(delta):
 		queue_redraw()
 
 
@@ -37,7 +31,7 @@ func _draw() -> void:
 			StickTokens.BORDER.b, 0.35)
 	if direction == Dir.HORIZONTAL:
 		SketchDraw.draw_wavy_line(self, Vector2(2.0, size.y * 0.5),
-				Vector2(size.x - 2.0, size.y * 0.5), _seed, color)
+				Vector2(size.x - 2.0, size.y * 0.5), _boil.phase, color)
 	else:
 		SketchDraw.draw_wavy_line(self, Vector2(size.x * 0.5, 2.0),
-				Vector2(size.x * 0.5, size.y - 2.0), _seed, color)
+				Vector2(size.x * 0.5, size.y - 2.0), _boil.phase, color)

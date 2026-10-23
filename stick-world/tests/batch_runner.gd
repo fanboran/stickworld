@@ -61,6 +61,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_meric_heal.gd",
 	"res://tests/unit/test_balance_config.gd",
 	"res://tests/unit/test_texture_gen_api.gd",
+	"res://tests/unit/test_texture_gen_render.gd",
 	"res://tests/unit/test_fx.gd",
 	"res://tests/unit/test_incoming_threat_ledger.gd",
 	"res://tests/unit/test_items.gd",
@@ -104,6 +105,7 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_building_gen_registry.gd",
 	"res://tests/unit/test_environment_daycycle.gd",
 	"res://tests/unit/test_environment_system.gd",
+	"res://tests/unit/test_hd2d_street_placer.gd",
 ]
 
 ## unit 层 .tscn 反向自检豁免名单（默认空）。

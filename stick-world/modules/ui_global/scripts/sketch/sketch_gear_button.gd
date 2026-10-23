@@ -6,9 +6,13 @@ extends SketchButton
 ## 底/描边全自绘（kind = ICON_SQUARE 变体 self_draw 档：清贴图四态留内衬）。
 
 
+## boiling 相位（种子+节拍公共件；_draw 读 _boil.phase）
+var _boil := SketchBoil.new()
+
+
 func _ready() -> void:
 	kind = Kind.ICON_SQUARE  # 变体查表：self_draw 档 + center 图标
-	_seed = randi()
+	_boil.reset()
 	# 30 = 顶栏按钮行统一行高（单行等高不变式，见 test_ui_layout；原 31 与
 	# 文字钮差 1px，无主题环境下恰被默认主题高度掩住）
 	custom_minimum_size = Vector2(30, 30)
@@ -16,12 +20,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
+	if is_visible_in_tree() and _boil.tick(delta):
 		queue_redraw()
 
 
@@ -44,4 +43,4 @@ func _draw() -> void:
 		# 亮背景：深墨描边
 		border = Color(0.05, 0.04, 0.03, 1.0) if border.a > 0.0 else border
 	# 方形底 + 沸腾方框描边（空白正方形，无图标）
-	SketchDraw.draw_panel(self, r, _seed, bg, border)
+	SketchDraw.draw_panel(self, r, _boil.phase, bg, border)

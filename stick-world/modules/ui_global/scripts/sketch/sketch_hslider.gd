@@ -15,12 +15,11 @@ static var _empty_tex: ImageTexture = null
 static func reset_static_caches() -> void:
 	_empty_tex = null
 
-var _seed: int = 0
-var _timer: float = 0.0
+var _boil := SketchBoil.new()   # boiling 相位（种子+节拍公共件，_draw 读 _boil.phase）
 
 
 func _ready() -> void:
-	_seed = randi()
+	_boil.reset()
 	# 引擎绘制全部置空：底/填充交给 _draw（自绘在上，native 不画）
 	add_theme_stylebox_override("slider", StyleBoxEmpty.new())
 	add_theme_stylebox_override("grabber_area", StyleBoxEmpty.new())
@@ -41,13 +40,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	# boiling：与血条/面板同节拍重掷相位
-	_timer += delta
-	if _timer >= SketchDraw.WOBBLE_INTERVAL:
-		_timer = 0.0
-		_seed = randi()
+	if is_visible_in_tree() and _boil.tick(delta):
 		queue_redraw()
 
 
@@ -79,9 +72,9 @@ func _draw() -> void:
 			draw_line(Vector2(tx, cy - track_h * 0.5 - 1.5),
 					Vector2(tx, cy + track_h * 0.5 + 1.5), tick_c, 1.3)
 	SketchDraw.draw_wavy_line(self, track.position, Vector2(track.end.x, track.position.y),
-			_seed, outline, 1.3)
+			_boil.phase, outline, 1.3)
 	SketchDraw.draw_wavy_line(self, Vector2(track.position.x, track.end.y), track.end,
-			_seed + 13, outline, 1.3)
+			_boil.phase + 13, outline, 1.3)
 	# 填充 = 中心一条粗马克笔笔画（血条「实心线条」同思路，沸腾 + 长度 = 值）
 	if ratio > 0.01:
 		var fw: float = track.size.x * ratio
@@ -89,7 +82,7 @@ func _draw() -> void:
 		var cap_r: float = (track_h - 1.0) * 0.5
 		var from := Vector2(track.position.x + cap_r, mid_y)
 		var to := Vector2(track.position.x + fw - cap_r, mid_y)
-		SketchDraw.draw_wavy_line(self, from, to, _seed + 77,
+		SketchDraw.draw_wavy_line(self, from, to, _boil.phase + 77,
 				StickTokens.ACCENT, track_h - 1.0)
 		# 圆头端帽（血条收笔同款：方头 polyline 显机械）
 		draw_circle(from, cap_r, StickTokens.ACCENT)
@@ -104,7 +97,7 @@ func _draw_grabber(center: Vector2, radius: float) -> void:
 	var seg := 14
 	for i in seg:
 		var a := TAU * float(i) / float(seg)
-		var rr := radius + SketchDraw.wobble(i * 3, _seed + 31) * SketchDraw.WOBBLE_AMP
+		var rr := radius + SketchDraw.wobble(i * 3, _boil.phase + 31) * SketchDraw.WOBBLE_AMP
 		pts.append(center + Vector2(cos(a), sin(a)) * rr)
 	var fill := StickTokens.ACCENT if has_focus() else StickTokens.TEXT
 	var outline := Color(0.05, 0.04, 0.03, 0.95)  # 血条 COLOR_OUTLINE 同源墨色

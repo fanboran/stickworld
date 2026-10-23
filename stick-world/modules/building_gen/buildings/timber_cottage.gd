@@ -140,10 +140,7 @@ func _build_chimney(parent: Node2D, cx_mid: float) -> void:
 # ── 内饰（批次 4 家具库）：民居生活布局 ──
 
 func _furnish_floor(floor_node: Node2D) -> void:
-	var w := float(width) * 32.0 - 24.0
-	var slab := InteriorProps.make_floor(int(w), 24, Color(0.40, 0.30, 0.19))
-	slab.position = Vector2(float(width) * 16.0, -12)
-	floor_node.add_child(slab)
+	BuildingKit.furnish_floor(floor_node, width, Color(0.40, 0.30, 0.19))
 
 
 func _furnish_interior(props: Node2D) -> void:

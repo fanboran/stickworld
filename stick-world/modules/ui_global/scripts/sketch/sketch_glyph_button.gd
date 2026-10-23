@@ -40,7 +40,7 @@ func _ready() -> void:
 func _draw() -> void:
 	super._draw()   # 方底 + 沸腾方框描边（状态色见 SketchGearButton._draw）
 	SketchDraw.draw_glyph(self, glyph, size * 0.5,
-			minf(size.x, size.y) * GLYPH_RATIO, _seed, _glyph_color())
+			minf(size.x, size.y) * GLYPH_RATIO, _boil.phase, _glyph_color())
 
 
 ## 图形状态色（方底的态色在父类 _draw 里画，这里只管图形本身）。

@@ -13,6 +13,9 @@
   max_stack**;容器级 stack_overrides 可覆盖单类上限)
 - `core/item_transfer.gd` — 容器间原子转移(move/move_all,翻包/村仓共用)
 - `core/region_storage.gd` — 区域仓储的物品容器视图(ItemContainer 子类,
-  资源品 def ↔ resources 台账经弱类型 api 注入桥接,经济 float 链路零改动)
+  经济台账的实时视图;存取经 `core/region_storage_backend.gd` 端口转发,
+  具体绑定由 L2 消费方提供——本域不认识任何模块)
+- `core/region_storage_backend.gd` — 账本端口(抽象基类,produce/consume/
+  get_stock 三操作;基类即空账本=只读空视图)
 
 分层:零依赖(不引任何模块);`docs/设计/系统/14-背包与装备系统.md` §2.2。

@@ -1,7 +1,7 @@
 extends Node
 ## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费）
 signal test_done(code: int)
-## 单元测试：建筑解锁门禁（奖励闭环消费端，expansion unlock_granted → construction）。
+## 单元测试：建筑解锁门禁（construction 门禁 × WorldState.unlocks 台账）。
 ##
 ## 钉死四条语义：
 ## ① 开局基线：现役可建建筑要的门槛 id 在 WorldState.STARTING_UNLOCKS 里，
@@ -9,7 +9,7 @@ signal test_done(code: int)
 ## ② 未获解锁则拒建——数据侧拦在 start_construction_at（不靠 UI 自觉），
 ##    报错文案含 def_id 便于排查；
 ## ③ 授予解锁（WorldState.grant_unlock）后当场放行；重复授予幂等返回 false
-##    （授予方据此只广播新获项，防重复提示）；
+##    （授予方据此只对新获项做后续动作，防重复提示）；
 ## ④ 无要求（unlocked_by_tech 为空/缺字段）的建筑恒可建——旧 def 不受影响。
 ##
 ## fixture：真 buildings.tres 经 ConstructionManager._ready 装载（无地图、无资源注入，

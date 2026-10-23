@@ -60,12 +60,13 @@ var _block_filter: Callable = Callable()
 ## 战斗中标志（battle_started/battle_ended 计数维护；战斗中禁用快速旅行）
 var _battle_count: int = 0
 
-# ===== 疆域染色（region_owner_changed 管道） =====
+# ===== 疆域染色（归属累积管道） =====
 
-## 玩家政权 id（region_owner_changed 载荷口径；统一契约落地后为政权域 id）
+## 玩家政权 id（归属染色载荷口径；统一契约落地后为政权域 id）
 const PLAYER_OWNER_ID := "player"
-## 地块归属累积表：{tile_key: owner_id}——由 region_owner_changed 信号驱动
-## （发射方为世界模型政权归属变更；接入前测试可代发驱动染色管道）
+## 地块归属累积表：{tile_key: owner_id}——由 set_tile_owner 直调驱动
+## （归属染色不经 EventBus：征服机制落地时世界模型直调此入口，或按当时契约
+## 重新声明信号再接线）
 var _tile_owners: Dictionary = {}
 
 
@@ -103,24 +104,17 @@ func initialize(json_path: String, base_dir: String) -> void:
 		_player_settlement_id = _birth_data.spawn_settlement_id
 		_travel_planner = TravelPlanner.new()
 		_travel_planner.setup(_birth_data.roads_local)
-	# C2 blob 实时变动：建设系统广播 settlement_updated -> 当前/出生数据中该聚落
-	# 规模刷新 + 当前视图单城重算（L2/L3 为烘焙静态层，本局规模不变不重算）
 		if EventBus != null:
-			if not EventBus.settlement_updated.is_connected(_on_settlement_updated):
-				EventBus.settlement_updated.connect(_on_settlement_updated)
 			# 战斗中禁用快速旅行（计数维护：多场并发战斗全结束才解除）
 			if not EventBus.battle_started.is_connected(_on_battle_started):
 				EventBus.battle_started.connect(_on_battle_started)
 			if not EventBus.battle_ended.is_connected(_on_battle_ended):
 				EventBus.battle_ended.connect(_on_battle_ended)
-			# 疆域归属变动 → 政治模式逐地块染色刷新（占多少染多少）
-			if not EventBus.region_owner_changed.is_connected(_on_region_owner_changed):
-				EventBus.region_owner_changed.connect(_on_region_owner_changed)
 		refresh_territory_ownership()
 
 
-## 归属变动 → 累积表更新并重刷
-func _on_region_owner_changed(tile_key: String, new_owner: String) -> void:
+## 归属变动 → 累积表更新并重刷（疆域染色管道的直调入口）
+func set_tile_owner(tile_key: String, new_owner: String) -> void:
 	_tile_owners[tile_key] = new_owner
 	refresh_territory_ownership()
 
@@ -152,21 +146,6 @@ func _on_battle_ended(_battle_id: String, _victory: bool) -> void:
 ## 战斗中（任一战斗未结束）快速旅行禁用（GDD 约定，§5.10）
 func is_battle_active() -> bool:
 	return _battle_count > 0
-
-
-## settlement_updated 订阅：更新内存规模 + 当前 L1 视图 blob 单城重算
-func _on_settlement_updated(settlement_id: String, population_score: float) -> void:
-	# Tab 常态下 _data 就是 _birth_data：去重，防同一份数据处理两遍（blob 失效两连发）
-	var datas: Array = [_data] if _data == _birth_data else [_data, _birth_data]
-	for data in datas:
-		if data == null:
-			continue
-		var sref: SettlementRef = data.get_settlement(settlement_id)
-		if sref == null:
-			continue
-		sref.population_score = clampf(population_score, 0.0, 1.0)
-		if data == _data and _renderer != null and _renderer.has_method("invalidate_blob"):
-			_renderer.invalidate_blob(settlement_id)
 
 
 func is_initialized() -> bool:

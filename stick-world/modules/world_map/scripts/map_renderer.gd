@@ -101,7 +101,7 @@ var _blob_ready: bool = false
 ## （降档擦旧档像素，随后重画影响域各城）
 var _city_overlays: Dictionary = {}
 var _city_erases: Dictionary = {}
-## 待生成补丁的城队列（分帧消费防卡顿；settlement_updated 插队优先）
+## 待生成补丁的城队列（分帧消费防卡顿；单城档位刷新插队优先）
 var _overlay_queue: Array[String] = []
 ## 每帧补丁生成预算（栅格化单城 ~几十 ms，一帧两城把补齐窗口压在 ~0.5s 内）
 const OVERLAY_BUDGET_PER_FRAME := 2
@@ -405,13 +405,13 @@ func set_current_tile(tile_id: String) -> void:
 			return
 
 
-## 单城档位刷新（EventBus.settlement_updated → api 调用；SettlementRef.population_score
-## 已由 api 更新，这里重判档位并把该城排进补丁队列优先生成。不在当前数据中的 id 忽略）
+## 单城档位刷新（SettlementRef.population_score 更新后调用：重判档位并把该城
+## 排进补丁队列优先生成。不在当前数据中的 id 忽略）
 func invalidate_blob(settlement_id: String) -> void:
 	_blob().invalidate(settlement_id)
 
 
-## 玩家已占地块集合（tile_key 数组；api 从 expansion 归属真值喂入）。
+## 玩家已占地块集合（tile_key 数组；world_map api 从内部归属累积表喂入）。
 ## 政治模式的填充按此**逐地块**覆盖：占住多少格就染多少格（不整国变色——
 ## 归属的最小单位是 tile_key，见架构 §9.1）。空表 = 全部按所有权政色（原样）。
 func set_owned_tiles(tile_keys: Array) -> void:

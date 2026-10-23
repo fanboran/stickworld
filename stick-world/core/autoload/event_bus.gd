@@ -112,21 +112,6 @@ extends Node
 # 战略图层级切换请求：HUD 层级按钮 -> system_setup（装配方统一分派视图互斥与场景图输入暂停）
 # level: "L1"（本省地块）/ "L2"（地区）/ "L3"（大世界）
 @warning_ignore("unused_signal") signal strategic_map_level_requested(level: String)
-# 聚落规模变化（construction/事件系统 -> world_map）：payload 带新 population_score，
-# 战略图 L1 重算该聚落建成区 blob（总体设计 §5.7 实时变动；发射方建设系统接线前测试代发）
-@warning_ignore("unused_signal") signal settlement_updated(settlement_id: String, population_score: float)
-
-# ─────────────────────────────── 领土归属 / 解锁 ─────────────────────────────────
-# 地块归属变更 -> 战略图政治模式逐地块染色（世界地图数据流 §7.3 契约）；
-# region_id 发 tile 级 id（归属按面建模，据点=地块入口）；new_owner 为控制者
-# id（"player"=玩家，统一契约落地后为政权域 id）。发射方：世界模型政权归属变更
-# （接入前测试可代发驱动染色管道）
-@warning_ignore("unused_signal") signal region_owner_changed(region_id: String, new_owner: String)
-# 解锁发放 -> 各消费端自听（设计 04-科技系统 §二「科技随征服到手」；只发新获项，
-# 重复授予不再广播）。现役消费端：建筑可建集门禁（ConstructionManager 按
-# WorldState.unlocks 判定 + BuildMenu 重刷列表）；新解锁项入 WorldState.unlocks 台账
-@warning_ignore("unused_signal") signal unlock_granted(unlock_id: String)
-
 # ─────────────────────────────── UI 通用信号 ───────────────────────────────
 
 @warning_ignore("unused_signal") signal ui_notification(title: String, body: String, level: String)

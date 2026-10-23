@@ -487,7 +487,7 @@ func _test_owned_tile_dyeing() -> void:
 
 
 ## P4 染色：政治图例在有已占地块时补一条「我方疆域」，无已占地块时不留空条目。
-## 驱动 = EventBus.region_owner_changed（染色管道的信号入口，测试代发）
+## 驱动 = world_map api.set_tile_owner（染色管道直调入口；归属染色不经 EventBus）
 func _test_legend_player_entry() -> void:
 	# L1 无政治图例（创始人 2026-09-29）：「我方疆域」条目随政治图例一并退出 L1——
 	# 占据地块仍在地图上以玩家疆域色呈现（tile_fill_color），图例不再列政治条目
@@ -500,10 +500,10 @@ func _test_legend_player_entry() -> void:
 		return
 	var tile_key: String = data.tiles[0].tile_id
 	MapModeManager.set_layer_on(MapModeManager.Layer.POLITICAL, true)
-	EventBus.region_owner_changed.emit(tile_key, "player")
+	_l1_api.set_tile_owner(tile_key, "player")
 	_l1_content.call("_fill_legend")
 	_runner.assert_false(_legend_has_text("×"), "L1 图例无政治条目（文化圈聚合/我方疆域均不出现）")
-	EventBus.region_owner_changed.emit(tile_key, "fac_probe")
+	_l1_api.set_tile_owner(tile_key, "fac_probe")
 	_l1_content.call("_fill_legend")
 	_runner.assert_false(_legend_has_text("我方疆域"), "无已占地块时不留空条目")
 	_reset_layers()

@@ -22,7 +22,7 @@
 
 几何 bin（blob_v2_geo.bin）= [u32 LE 原始长度][zlib(json)]；json 环顶点为相对
 聚落锚点（settlement.position_px）的局部坐标（×10 取整量化）。运行时用于：
-初始档位对账叠加 / settlement_updated 单城重判档 / R2 当前城 mid 档流动描边。
+初始档位对账叠加 / 运行时单城重判档 / R2 当前城 mid 档流动描边。
 
 用法：
   python blob_v2_bake.py                 # 全部 70 包

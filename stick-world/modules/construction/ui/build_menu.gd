@@ -99,9 +99,6 @@ func setup(game_root: Node) -> void:
 	# 监听资源变化刷新按钮可用性
 	if _resources_api != null and _resources_api.has_signal("resource_changed"):
 		_resources_api.resource_changed.connect(_on_resource_changed)
-	# 监听解锁发放（奖励闭环消费端）：新解锁的建筑当场出现在列表里可用
-	if EventBus != null and EventBus.has_signal("unlock_granted"):
-		EventBus.unlock_granted.connect(_on_unlock_granted)
 	# 监听模式切换，仅 EXPLORE 显示建造按钮
 	if _input_dispatcher != null and _input_dispatcher.has_signal("mode_changed"):
 		_input_dispatcher.mode_changed.connect(_on_mode_changed)
@@ -256,13 +253,6 @@ func _missing_summary(def: Dictionary) -> String:
 
 func _on_resource_changed(_rid: String, _amt: float, _delta: float, _region: String) -> void:
 	# 隐藏期间跳过重建（resource_changed 高频触发）；打开路径 _on_toggle_pressed 必刷新
-	if _list_window == null or not _list_window.visible:
-		return
-	_refresh_list()
-
-
-## 解锁发放（奖励闭环消费端）：面板开着就当场重刷——刚解锁的建筑由灰显变可建
-func _on_unlock_granted(_unlock_id: String) -> void:
 	if _list_window == null or not _list_window.visible:
 		return
 	_refresh_list()

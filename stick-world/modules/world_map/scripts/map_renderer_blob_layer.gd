@@ -68,7 +68,7 @@ func invalidate(settlement_id: String) -> void:
 	_h.queue_redraw()
 
 
-## 每帧消费补丁队列（宿主 _process 调用；settlement_updated 走同步直通不走此队列等待）
+## 每帧消费补丁队列（宿主 _process 调用；单城档位刷新走同步直通不走此队列等待）
 func process_overlay_queue() -> void:
 	var n := 0
 	while not _h._overlay_queue.is_empty() and n < _h.OVERLAY_BUDGET_PER_FRAME:

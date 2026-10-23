@@ -983,8 +983,7 @@ config/
 | 编队 | `selection_changed(unit_ids)` / `squad_created(squad_id, unit_ids)` / `order_issued(order_type, target_squad_id, source_tier)` / `commander_assigned(squad_id, unit_id)` |
 | 指挥中继 | `relay_started(relay_id, order_type, from_org, to_org, hop_index, eta)` / `relay_arrived(relay_id, order_type, from_org, to_org, hop_index, outcome)` |
 | 场景/旅行 | `travel_requested(map_id, travel_mode)` / `travel_started(from_id, to_id, mode)` / `travel_completed(to_id)` / `map_loaded(map_id, map_type)` / `map_unloaded(map_id)` |
-| 战略图 | `strategic_map_opened` / `strategic_map_closed` / `strategic_map_level_requested(level)` / `settlement_updated(settlement_id, population_score)` |
-| 领地归属/解锁 | `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
+| 战略图 | `strategic_map_opened` / `strategic_map_closed` / `strategic_map_level_requested(level)` |
 | 接管 | `user_control_started(entity)` / `user_control_ended(entity)` |
 | 建筑/室内 | `interior_entered(building_id)` / `interior_exited(building_id)` / `mega_interior_entered(building_id, map_id)` |
 | UI | `ui_notification(title, body, level)` |

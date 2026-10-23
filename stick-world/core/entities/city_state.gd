@@ -19,8 +19,8 @@ enum SimTier {
 ## 主键，与 mapdata 生成端聚落 id 同格式（settlement_city_%03d）
 var settlement_id: String = ""
 
-## 城所在 tile 的染色口径 id（"city_<label>"）——EventBus.region_owner_changed
-## 载荷口径；领土最小单位是 tile，归属随政权流转（世界演化拉锯）
+## 城所在 tile 的染色口径 id（"city_<label>"）——疆域归属按 tile 建模（与
+## world_map api 归属累积表同口径）；领土最小单位是 tile，归属随政权流转（世界演化拉锯）
 var tile_key: String = ""
 
 ## 归属政权 id（worldgen 80 国表 id 或 "player"，见 WorldState.PLAYER_FACTION_ID）

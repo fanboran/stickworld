@@ -40,7 +40,7 @@ modules/construction/
 
 - 全部交互经 `api.gd`：开工 `start_construction_at(region_id, building_type, cell_x, ...)`、预置 `spawn_operational_building`、维护 `upgrade / demolish / repair_building`、存读档 `save_to_db / load_from_db`；查询与派工：`is_def_unlocked / get_building_state / get_nearest_warehouse / get_nearest_project / register_worker / try_assign_worker / get_worker_project` 等。
 - 公共信号 `building_started / building_completed / building_removed / building_upgraded / building_repaired` 由本 api 自建承担，EventBus 不重复声明。
-- **解锁门禁**（奖励闭环消费端）：def 的 `unlocked_by_tech` = 需已获的解锁/科技 id，比对 `WorldState.unlocks` 台账（`WorldState.STARTING_UNLOCKS` 开局基线恒算已获）——`ConstructionManager.is_def_unlocked` 是唯一判定处，开工入口据此拒建、建造菜单据此灰显并随 `EventBus.unlock_granted` 重刷。
+- **解锁门禁**（奖励闭环消费端）：def 的 `unlocked_by_tech` = 需已获的解锁/科技 id，比对 `WorldState.unlocks` 台账（`WorldState.STARTING_UNLOCKS` 开局基线恒算已获）——`ConstructionManager.is_def_unlocked` 是唯一判定处，开工入口据此拒建、建造菜单据此灰显；解锁项发放的广播方待解锁系统落地时按当时契约重新声明信号再接重刷。
 
 ---
 
@@ -55,5 +55,5 @@ modules/construction/
 
 ## 扩展指引
 
-- 新增可建造建筑：在 building_gen 侧补场景与 buildings.tres 定义行（见 [`../building_gen/README.md`](../building_gen/README.md)），本模块启动时自动注册进建造菜单；要"解锁项发放后才可建"就把该行的 `unlocked_by_tech` 填成解锁 id——门禁按 `WorldState.unlocks` 台账判定、`BuildMenu` 随 `unlock_granted` 重刷（发射方待世界模型接入；Excel 源 `config/excel/建筑数据.xlsx` 的 buildings sheet）。
+- 新增可建造建筑：在 building_gen 侧补场景与 buildings.tres 定义行（见 [`../building_gen/README.md`](../building_gen/README.md)），本模块启动时自动注册进建造菜单；要"解锁项发放后才可建"就把该行的 `unlocked_by_tech` 填成解锁 id——门禁按 `WorldState.unlocks` 台账判定（解锁发放广播待解锁系统落地时按当时契约重新声明；Excel 源 `config/excel/建筑数据.xlsx` 的 buildings sheet）。
 - 新增存档字段：改 scripts/catalog/building_persistence.gd 的表列与恢复映射，入口仍走 api.gd 的 save/load。

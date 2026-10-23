@@ -110,16 +110,8 @@
 | `strategic_map_opened` | - | world_map | UI / InputDispatcher / MusicDirector | 战略图打开 |
 | `strategic_map_closed` | - | world_map | UI / InputDispatcher / MusicDirector | 战略图关闭 |
 | `strategic_map_level_requested` | level: String | world_map L3 层级指示器（l3_zoom_indicator，HUD 层级按钮） | 装配方（system_setup_strategic_map，统一分派视图互斥与场景图输入暂停） | 战略图层级切换请求（"L1" 本省地块 / "L2" 地区 / "L3" 大世界） |
-| `settlement_updated` | settlement_id: String, population_score: float | 暂无发射方（全仓零 emit） | world_map api（订阅更新聚落规模 + L1 视图 blob 单城重算） | 聚落规模变化触发建成区 blob 重算（建设系统接线前为死订阅） |
 
-### 2.7 领地归属 / 解锁事件
-
-| 信号 | 参数 | 发射方 | 接收方 | 触发条件 |
-|------|------|--------|--------|----------|
-| `region_owner_changed` | region_id: String, new_owner: String | 世界模型政权归属变更（尚未接入；接入前测试可代发驱动染色管道） | 战略图（world_map/api.gd，唯一订阅方：累积归属表 → 重取已占地块表 → 政治模式逐格染色） | 地块政权归属变更；region_id 发 tile 级 id（归属最小单位是 tile，契约见世界地图数据流） |
-| `unlock_granted` | unlock_id: String | 待世界模型接入 | 建筑可建集门禁（`ConstructionManager.is_def_unlocked` × `WorldState.unlocks` 判定，BuildMenu 随信号重刷）、测试 | 解锁项发放（预留装备/科技等系统按需接线） |
-
-### 2.8 UI / 接管 / 室内事件
+### 2.7 UI / 接管 / 室内事件
 
 | 信号 | 参数 | 发射方 | 接收方 |
 |------|------|--------|--------|
@@ -130,7 +122,7 @@
 | `interior_exited` | building_id: int | Building | travel_handler（world，退房处理）、MusicDirector（情境回退） |
 | `mega_interior_entered` | building_id: int, map_id: String | Building | MusicDirector（情境回退）；传送链随 mega_interior 图清退拆除，信号保留待室内 v3 |
 
-### 2.9 其他
+### 2.8 其他
 
 | 信号 | 参数 | 发射方 | 接收方 | 说明 |
 |------|------|--------|--------|------|

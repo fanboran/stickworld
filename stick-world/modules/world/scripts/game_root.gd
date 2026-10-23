@@ -130,7 +130,6 @@ var _hotbar: Control = null
 ## 观战视图（观察场/战斗演练场等"只看不打"的机位置位）：置位时收起物品栏——
 ## 观战者没有背包语境，物品栏只是挡住战场画面的装饰。默认关（正常游玩不受影响）。
 var observer_view: bool = false
-@warning_ignore("unused_private_class_variable")
 
 # ─────────────────────────────── User Control 系统（§15 阶段 0.7）────────────────────────────────
 ## UserControlInterface 实例引用（运行时由 SystemSetup 装配）
@@ -178,7 +177,6 @@ var _strategic_map_l3: Node = null
 var _hover_indicator: Control = null
 @warning_ignore("unused_private_class_variable")
 var _middle_scroll_overlay: Control = null
-# ─────────────────────────────── 阶段 E 游玩 UI ────────────────────────────────
 var _resource_bar: Control = null
 var _build_menu: Control = null
 ## 编制管理窗口（运行时由 SystemSetup 装配到 UIRoot.ModalOverlay）
@@ -269,6 +267,11 @@ func _ready() -> void:
 	# 地图加载完成后 _on_map_loaded 视世界就绪淡出覆盖层）
 	_boot_world_phase = true
 	call_deferred("_load_start_village")
+
+
+func _exit_tree() -> void:
+	# 退出/重建拆除：对称清理模块级静态持有（formation 先例；dispatcher 自注销于 InputDispatcher._exit_tree）。
+	FxLibrary.clear_runtime_pools()
 
 
 ## 让一帧（「先画再干」的等帧原语，五处启动/切图等帧统一出口）。
@@ -696,7 +699,6 @@ func get_player_entity() -> Node2D:
 # ─────────────────────────────── 校验与事件绑定 ────────────────────────────────
 
 func _validate_children() -> void:
-	# 校验必需子节点存在（缺一不可）
 	var required := {
 		WorldAPI.PATH_ENVIRONMENT: "EnvironmentSystem",
 		WorldAPI.PATH_CAMERA_RIG: "CameraRig",
@@ -713,9 +715,8 @@ func _validate_children() -> void:
 func _bind_event_bus() -> void:
 	if not EventBus:
 		return
-	# 注：interior_exited 由 TravelHandler 绑定，
-	#     game_saving / game_loaded 由 SaveHandler 绑定
-	#     （ui_toggle_pause_requested 死连接已删：暂停走设置面板速度按钮，2026-08 审计）
+	# 注：interior_exited 由 TravelHandler 绑定，game_saving / game_loaded 由
+	#     SaveHandler 绑定（ui_toggle_pause_requested 死连接已删：暂停走设置面板速度按钮）
 
 # ─────────────────────────────── 公共 API ────────────────────────────────
 
@@ -771,9 +772,8 @@ func _apply_observer_view() -> void:
 		_hotbar.visible = not observer_view
 
 
-## 开关角色属性面板（C 键）：Hotbar 调用。逻辑在 game_root_shortcuts.gd。
-## 打开功能空面板（经 ui_global/placeholders，系统落地后替换真实面板）。
-## 快捷键（K/O/J/L）与暂停菜单「功能」分区共用此入口。
+## 开关角色属性面板（C 键）：Hotbar 调用；打开功能空面板（经 ui_global/placeholders，
+## 系统落地后替换真实面板）；快捷键（K/O/J/L）与暂停菜单「功能」分区共用此入口。
 ## 逻辑在 game_root_shortcuts.gd（薄壳转发，测试直调签名不变）。
 func _open_placeholder_panel(preset_id: String) -> void:
 	_shortcuts._open_placeholder_panel(preset_id)

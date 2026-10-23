@@ -53,5 +53,8 @@ extends Resource
 @export var spawn_area_radius_explosion: float = 3.0
 @export var speed_slowdown_explosion: float = 12.0
 
-## 帧缓存（游戏内引用）
+## 帧缓存（游戏内引用）。生命周期：无写入方（全仓零调用，恒空）——原版
+## IngredientVisualEffectController 的全局表占位；生效数据走 FxLibrary 的
+## ambient_sparkle_effect 静态（生命周期见 fx_library.gd）。若未来启用需
+## 按 formation/api.gd _active_host 模式补对称清理。
 static var all_effects: Dictionary = {}

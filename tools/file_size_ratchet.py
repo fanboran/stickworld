@@ -69,7 +69,6 @@ SIZE_BASELINE = {
     "modules/formation/ui/formation_panel.gd": 424,
     "modules/formation/ui/squad_card.gd": 633,
     "modules/fx/scripts/crystal_sparkles.gd": 519,
-    "modules/fx/scripts/fx_library.gd": 402,
     "modules/hd2d/scripts/char_rig_3d.gd": 790,
     "modules/hd2d/scripts/hd2d_world.gd": 945,
     "modules/hd2d/scripts/placer/hd2d_street_placer.gd": 523,

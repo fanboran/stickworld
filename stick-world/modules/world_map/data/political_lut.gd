@@ -45,6 +45,8 @@ static func vertex_r_to_code(r: float) -> int:
 const STATES_DATA_PATH := "res://config/strategic_map/l3_city.json"
 
 static var _shared: PoliticalLut = null
+## 生命周期：懒加载进程级数据单例（RefCounted，持 json 数据 + LUT Image/纹理，
+## 不持场景节点）——全局唯一、内容与数据文件同源，无清理出口（清了只触发重读盘）。
 
 ## 政权表（state_id -> info：name/culture/culture_label/color/lut_index/is_city_state/n_cities...）
 var states: Dictionary = {}

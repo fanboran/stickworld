@@ -83,8 +83,8 @@ const LAYER_SEQ_TEXTURES := {
 
 ## 基础层静态柔点（原版 Default-ParticleSystem 64px，UVModule 关闭）
 const SPARKLE_TEX_PATH := "res://modules/fx/assets/sparkle_dot_default_particle.png"
-static var _sparkle_tex: Texture2D = null
-static var _seq_tex_cache := {}
+static var _sparkle_tex: Texture2D = null  ## 生命周期：懒加载进程级纯贴图缓存（不持场景节点），无清理出口
+static var _seq_tex_cache := {}  ## 生命周期：进程级纯贴图缓存（键=序列图路径→load 结果），无清理出口
 
 static func _get_sparkle_tex() -> Texture2D:
 	if _sparkle_tex != null:

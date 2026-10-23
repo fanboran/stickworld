@@ -20,6 +20,12 @@ func _ready() -> void:
 		EventBus.interior_entered.connect(_on_interior_entered)
 
 
+func _exit_tree() -> void:
+	# 对称注销（formation_system._exit_tree 先例：仅当前注册者才清）——
+	# GameRoot 退出/重建时 PlayerControlAPI 静态注册表不再悬置本节点的旧引用
+	PlayerControlAPI.unregister_input_dispatcher(self)
+
+
 ## 玩家进入建筑交互区 → 切入 INDOOR 模式
 func _on_interior_entered(_building_id: int) -> void:
 	if get_mode() != PlayerControlAPI.Mode.INDOOR:

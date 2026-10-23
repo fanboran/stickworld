@@ -37,11 +37,21 @@ enum Mode {
 
 # ─────────────────────────────── InputDispatcher 注册表 ────────────────────────────────
 ## 由 GameRoot 装配时注册。units 等模块经本 api 获取（替代 group 反查，方向 units→player_control）。
+## 生命周期：GameRoot._ready 注册（register_input_dispatcher）→ InputDispatcher._exit_tree
+## 自注销（unregister_input_dispatcher，formation/api.gd _active_host 同款对称模式）——
+## GameRoot 退出/重建时不清，静态持有旧节点悬置引用。
 static var _input_dispatcher: Node = null
 
 
 static func register_input_dispatcher(dispatcher: Node) -> void:
 	_input_dispatcher = dispatcher
+
+
+## 生命周期出口：被注册节点退出场景树时自注销（InputDispatcher._exit_tree 调用）。
+## 仅当前注册者才清——防误清后注册的新实例。
+static func unregister_input_dispatcher(dispatcher: Node) -> void:
+	if _input_dispatcher == dispatcher:
+		_input_dispatcher = null
 
 
 static func get_input_dispatcher() -> Node:

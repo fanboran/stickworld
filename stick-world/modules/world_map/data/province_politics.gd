@@ -23,6 +23,9 @@ const DATA_PATH := "res://config/strategic_map/l1_province_politics.json"
 var provinces: Dictionary = {}
 
 static var _shared: ProvincePolitics = null
+## 生命周期：懒加载进程级数据单例（RefCounted，纯 json 数据，不持场景节点）
+## ——全局唯一、与 political_lut._shared 同款，无清理出口（清了只触发重读盘）。
+## _load_failed 为同族加载失败记忆（bool，防每帧重试）。
 ## 加载失败记忆（避免每帧重试读盘）
 static var _load_failed: bool = false
 

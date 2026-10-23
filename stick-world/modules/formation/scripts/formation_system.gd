@@ -52,10 +52,11 @@ extends Node
 ##   squad_authority_market.gd  权威值择班市场（周期评估/错峰相位/转投守卫；评分内核留本类）
 ##   squad_follow_director.gd   编队动态跟队（锚定落点维持/号令下发/锚定链防环）
 ##   squad_report_hooks.gd      信息上报挂点（§4.4 contact/casualty 上报 + 征用互斥）
-##   squad_snapshot.gd          跨图快照/恢复 + BalanceConfig 装载收敛（load_overrides）
+##   squad_snapshot.gd          跨图快照/恢复 + BalanceConfig 装载收敛（load_overrides/几何数值校准）
 ##   squad_cohesion.gd          班内一次性归队状态机（SWL 滞回+节流；常量在 api.gd）
 ##   squad_platoon.gd           排聚合层（创建/任命/查询/解散/指挥链缺口核对）
 ##   squad_fireteam.gd          火力组（班内指挥分组：创建/查询/解散/空组清扫）
+##   squad_presets.gd           编制预设/职责范围（预设表随域自持：唯一读写口在本域）
 ##   squad_combat_anchor.gd     战斗驻防锚（接战冻结/危险重冻结/脱战清除/槽位消费）
 ##   squad_target_director.gd   队伍级共享目标决策（排长/班长决策权 + contact 上报）
 
@@ -70,10 +71,8 @@ const RANK_PLATOON_LEADER: int = 2
 const SQUAD_SIZE_MIN: int = 8
 const SQUAD_SIZE_MAX: int = 12
 const SQUAD_SIZE_HARD_CAP: int = 15
-## 默认预设（未指定时使用战斗班，保持旧行为兼容）
+## 默认预设（未指定时使用战斗班，保持旧行为兼容；预设装载/解析在 squad_presets.gd）
 const DEFAULT_PRESET_ID := "fp_combat_squad"
-## 预设配置文件路径
-const PRESET_CONFIG_PATH := "res://config/formations/formation_presets.tres"
 ## 队形散开间距（px）：推进横排相邻队员间隔（反编译参考实装 D）。
 ## 默认值取 formation_spacing 单一真相源（不变式见彼处；调参表 var_spread_spacing 运行时覆盖）
 var SPREAD_SPACING: float = FormationSpacing.SPREAD_SPACING_DEFAULT
@@ -120,19 +119,13 @@ const ScriptBattleLine := preload("res://modules/formation/scripts/battle_line.g
 ## 拆分助手（三层拆分补齐：状态留本类，逻辑进助手，持宿主回引；助手经 _init 装配）
 const ScriptSquadPlatoon := preload("res://modules/formation/scripts/squad_platoon.gd")
 const ScriptSquadFireteam := preload("res://modules/formation/scripts/squad_fireteam.gd")
+const ScriptSquadPresets := preload("res://modules/formation/scripts/squad_presets.gd")
 const ScriptSquadCombatAnchor := preload("res://modules/formation/scripts/squad_combat_anchor.gd")
 const ScriptSquadTargetDirector := preload("res://modules/formation/scripts/squad_target_director.gd")
 
-## 工作类型（RimWorld 式抽象职责，见 docs 设计 §二）
-## 搬运（HAUL）是全员基础能力，不受职责范围限制（见 is_work_allowed）；
-## 运输（TRANSPORT）是跨城市运输/物资运往前线的物流职责（物流系统预留）。
-const WorkType := {
-	COMBAT = "WORK_COMBAT",       ## 战斗/掩体/撤退/接号令
-	BUILD = "WORK_BUILD",         ## 工地建造
-	HAUL = "WORK_HAUL",           ## 搬运材料（全员基础能力）
-	TRANSPORT = "WORK_TRANSPORT", ## 运输队：跨城市运输/物资运往前线（物流系统预留）
-	FORAGE = "WORK_FORAGE",       ## 采集劳作（预留）
-}
+## 工作类型（RimWorld 式抽象职责）：真身在拆分助手 squad_presets.gd（预设/职责域），
+## 此处 const 别名转发既有类名级消费面（FormationSystem.WorkType.*，formation_panel 等）。
+const WorkType := ScriptSquadPresets.WorkType
 
 # ─────────────────────────────── 信号 ────────────────────────────────
 ## 小队创建：squad_id + unit instance_id 数组
@@ -174,10 +167,6 @@ var _fireteams: Dictionary = {}
 var _unit_to_fireteam: Dictionary = {}
 ## 火力组 id 自增计数
 var _fireteam_counter: int = 0
-## 编制预设：preset_id -> {"id", "name", "tag", "work_types", "default_role"}
-var _presets: Dictionary = {}
-## 预设是否已加载
-var _presets_loaded: bool = false
 ## 队伍级共享攻击目标：squad_id -> Node（排长决策；反编译参考实装 D-B）
 var _squad_targets: Dictionary = {}
 ## 队伍级目标决策计时器（累计到 SQUAD_DECISION_INTERVAL 触发一轮决策）
@@ -191,6 +180,7 @@ var _report_hooks = null       ## 信息上报挂点（§4.4）+ 征用互斥
 var _snapshot_helper = null    ## 跨图携带快照/恢复
 var _platoon_helper = null     ## 排聚合层（创建/任命/查询/解散/缺口核对）
 var _fireteam_helper = null    ## 火力组（班内指挥分组）
+var _preset_helper = null      ## 编制预设/职责范围（_presets 随域自持，唯一例外见助手头）
 var _combat_anchor_helper = null  ## 战斗驻防锚（远程槽位锚定）
 var _target_director = null    ## 队伍级共享目标决策
 ## 战线（SWL Team.MoveInFormation 直译）：faction -> BattleLine——全组一个方阵
@@ -208,6 +198,7 @@ func _init() -> void:
 	_snapshot_helper = ScriptSquadSnapshot.new(self)
 	_platoon_helper = ScriptSquadPlatoon.new(self)
 	_fireteam_helper = ScriptSquadFireteam.new(self)
+	_preset_helper = ScriptSquadPresets.new(self)
 	_combat_anchor_helper = ScriptSquadCombatAnchor.new(self)
 	_target_director = ScriptSquadTargetDirector.new(self)
 
@@ -246,34 +237,9 @@ func _on_commander_assigned(org_id: String, unit_id: int) -> void:
 
 
 ## 从 config/formations/formation_presets.tres 加载编制预设（失败用内置默认兜底保证可用）。
+## 真身在拆分助手 squad_presets.gd（_preset_helper，_presets 随域自持）。
 func _load_presets() -> void:
-	if _presets_loaded:
-		return
-	_presets_loaded = true
-	# 内置兜底：战斗班（与旧行为一致）
-	_presets[DEFAULT_PRESET_ID] = {
-		"id": DEFAULT_PRESET_ID,
-		"name": "战斗班",
-		"tag": "MILITARY",
-		"work_types": [WorkType.COMBAT],
-		"default_role": "fighter",
-	}
-	var res: Resource = load(PRESET_CONFIG_PATH)
-	if res == null or not "variables" in res:
-		push_warning("[FormationSystem] 预设配置加载失败: %s，使用内置默认" % PRESET_CONFIG_PATH)
-		return
-	var data: Array = res.get("variables").get("data", [])
-	for p in data:
-		var pid: String = p.get("id", "")
-		if pid.is_empty():
-			continue
-		_presets[pid] = {
-			"id": pid,
-			"name": p.get("name", pid),
-			"tag": p.get("tag", "MILITARY"),
-			"work_types": (p.get("work_types", [WorkType.COMBAT]) as Array).duplicate(),
-			"default_role": p.get("default_role", "member"),
-		}
+	_preset_helper.load_presets()
 
 
 func _process(_delta: float) -> void:
@@ -1177,76 +1143,53 @@ func _follow_chain_has(squad_id: String, target_id: String) -> bool:
 
 
 # ─────────────────────────────── 预设 API ────────────────────────────────
+## 真身在拆分助手 squad_presets.gd（_preset_helper，_presets 随域自持）；以下为薄壳。
 
 ## 获取全部编制预设列表（用于 UI 下拉）。返回 Array[Dictionary]。
 func get_all_presets() -> Array:
-	_load_presets()
-	var result: Array = []
-	for pid in _presets.keys():
-		result.append(_presets[pid].duplicate(true))
-	return result
+	return _preset_helper.get_all_presets()
 
 
 ## 按 id 获取编制预设（不存在返回空 Dictionary）。
 func get_preset(preset_id: String) -> Dictionary:
-	_load_presets()
-	return _presets.get(preset_id, {})
+	return _preset_helper.get_preset(preset_id)
 
 
 ## 解析预设：不存在或字段缺失时回退内置战斗班。
 func _resolve_preset(preset_id: String) -> Dictionary:
-	_load_presets()
-	var p: Dictionary = _presets.get(preset_id, {})
-	if p.is_empty():
-		p = _presets[DEFAULT_PRESET_ID]
-	return p
+	return _preset_helper.resolve_preset(preset_id)
 
 
 # ─────────────────────────────── 职责 API ────────────────────────────────
+## 真身在拆分助手 squad_presets.gd（_preset_helper）；以下为公共 API 薄壳。
 
 ## 获取小队使用的预设 id。
 func get_squad_preset(squad_id: String) -> String:
-	if not _squads.has(squad_id):
-		return ""
-	return _squads[squad_id]["preset_id"]
+	return _preset_helper.get_squad_preset(squad_id)
 
 
 ## 获取小队当前职责范围（工作类型数组）。
 func get_squad_work_types(squad_id: String) -> Array:
-	if not _squads.has(squad_id):
-		return []
-	return (_squads[squad_id]["work_types"] as Array).duplicate()
+	return _preset_helper.get_squad_work_types(squad_id)
 
 
 ## 调整小队职责范围（工作类型数组，如 ["WORK_COMBAT", "WORK_HAUL"]）。
 ## 职责可自由调整；组织标签不随调整迁移（P0 简化，阶段 1 并入组织系统）。
 ## 返回是否成功。
 func set_squad_work_types(squad_id: String, work_types: Array) -> bool:
-	if not _squads.has(squad_id):
-		return false
-	_squads[squad_id]["work_types"] = work_types.duplicate()
-	return true
+	return _preset_helper.set_squad_work_types(squad_id, work_types)
 
 
 ## 判断单位是否允许执行某工作类型。
 ## 未编队单位视为全能（允许一切）；编队单位受队伍职责范围限制，
 ## 但搬运（WORK_HAUL）是全员基础能力恒放行——不存在搬不了东西的单位。
 func is_work_allowed(unit: Node, work_type: String) -> bool:
-	if work_type == WorkType.HAUL:
-		return true
-	if unit == null or not is_instance_valid(unit):
-		return true
-	var squad_id: String = _unit_to_squad.get(unit.get_instance_id(), "")
-	if squad_id == "" or not _squads.has(squad_id):
-		return true
-	return work_type in _squads[squad_id]["work_types"]
+	return _preset_helper.is_work_allowed(unit, work_type)
 
 
 ## 小队是否允许战斗类职责（供号令可用性过滤）。
 func is_combat_squad(squad_id: String) -> bool:
-	if not _squads.has(squad_id):
-		return false
-	return WorkType.COMBAT in _squads[squad_id]["work_types"]
+	return _preset_helper.is_combat_squad(squad_id)
 
 
 ## 设置小队"跟随玩家"模式：开启后成员自动跟随玩家移动（跟到战场）。
@@ -1370,27 +1313,10 @@ func restore_from_save(data: Dictionary, entity_map: Dictionary) -> int:
 
 
 ## 编队几何数值校准：balance.variables（Excel 平衡变量表）覆盖代码默认；setup 调用
-## （unit 测试不触发、不依赖 autoload）。循环内核见 squad_snapshot.load_overrides。
+## （unit 测试不触发、不依赖 autoload）。装载/校验循环在拆分助手
+## squad_snapshot.apply_balance_tuning（BalanceConfig 装载职责同面收敛，不分住两处）。
 func _apply_balance_tuning() -> void:
-	var merged: Dictionary = ScriptSquadSnapshot.load_overrides({
-		"var_spread_spacing": SPREAD_SPACING,
-		"var_follow_default_gap": FOLLOW_DEFAULT_GAP,
-		"var_row_gap": ROW_GAP,
-		"var_catchup_run_dist": CATCHUP_RUN_DIST,
-		"var_report_casualty_threshold": _casualty_report_threshold,
-	}, "balance.variables")
-	SPREAD_SPACING = float(merged["var_spread_spacing"])
-	FOLLOW_DEFAULT_GAP = float(merged["var_follow_default_gap"])
-	ROW_GAP = float(merged["var_row_gap"])
-	CATCHUP_RUN_DIST = float(merged["var_catchup_run_dist"])
-	_casualty_report_threshold = float(merged["var_report_casualty_threshold"])
-	# 间距不变式自检（formation_spacing 头部不变式的代码化）：调参表只覆盖间距，
-	# 不校验链式关系——压穿分离椭圆 = 分离力常驻 + 位置伺服极限环（全员蛇形
-	# 抽动，2026-10-05 实测 vx 翻转 8.67 次/s）。违例如实打 error，启动不阻断
-	#（数值档问题归调参，不让游戏起不来）
-	for violation in FormationSpacing.check_invariants(SPREAD_SPACING, ROW_GAP,
-			FormationSpacing.ARRIVE_TOLERANCE):
-		push_error("[Formation] 间距不变式违例：%s" % violation)
+	_snapshot_helper.apply_balance_tuning()
 
 
 # ──────────────────── A5 小队相位计划（设计文档12号 C8）────────────────────────────────

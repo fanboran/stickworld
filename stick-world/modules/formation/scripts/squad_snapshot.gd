@@ -7,12 +7,15 @@ extends RefCounted
 ## - restore_squads：按快照重建编队（跨图携带恢复，map_loaded 后由 GameRoot 调用，
 ##   经宿主 create_squad/assign_leader 等既有 API 重建，零新增迁移路径）；
 ## - load_overrides（static）：BalanceConfig 类型路径行覆盖装载的统一内核——
-##   宿主 _apply_balance_tuning（balance.variables）/ _load_phase_plan_params
-##   （ai.squad_phase_plan.global）/ _load_authority_params
-##   （ai.formation_authority.global）三段近似相同的装载循环收敛于此。
+##   宿主 _apply_balance_tuning（balance.variables，本文件 apply_balance_tuning）/
+##   _load_phase_plan_params（ai.squad_phase_plan.global）/ _load_authority_params
+##   （ai.formation_authority.global）各段装载循环收敛于此；
+## - apply_balance_tuning：编队几何数值校准（balance.variables 覆盖宿主几何 var +
+##   伤亡上报阈值 + 间距不变式自检），宿主 setup 调用。
 ##
 ## 纪律：_squads 状态留宿主经 _host 动态回引；恢复走宿主公共 API（快照导出后
-## 由宿主 disband_all_squads 清空，旧图实体 freed 不残留）。
+## 由宿主 disband_all_squads 清空，旧图实体 freed 不残留）；几何 var 与伤亡阈值
+## 亦留宿主，经 _host 读改（严禁缓存快照）。
 
 var _host  ## 宿主 FormationSystem（动态回引；状态唯一真相源在宿主）
 
@@ -310,3 +313,29 @@ static func _balance_config() -> Node:
 	if loop == null or not (loop is SceneTree):
 		return null
 	return (loop as SceneTree).root.get_node_or_null("BalanceConfig")
+
+
+## 编队几何数值校准（宿主 setup 调用）：balance.variables（Excel 平衡变量表）覆盖
+## 代码默认（装载循环 = 本文件 load_overrides，BalanceConfig 装载职责同一收敛面，
+## 不分住两处）。几何 var 与伤亡上报阈值状态留宿主，经 _host 回引读改（严禁缓存
+## 快照——balance 可覆盖，读改须直达宿主字段）。
+## 间距不变式自检（formation_spacing 头部不变式的代码化）：调参表只覆盖间距，
+## 不校验链式关系——压穿分离椭圆 = 分离力常驻 + 位置伺服极限环（全员蛇形
+## 抽动，2026-10-05 实测 vx 翻转 8.67 次/s）。违例如实打 error，启动不阻断
+##（数值档问题归调参，不让游戏起不来）
+func apply_balance_tuning() -> void:
+	var merged: Dictionary = load_overrides({
+		"var_spread_spacing": _host.SPREAD_SPACING,
+		"var_follow_default_gap": _host.FOLLOW_DEFAULT_GAP,
+		"var_row_gap": _host.ROW_GAP,
+		"var_catchup_run_dist": _host.CATCHUP_RUN_DIST,
+		"var_report_casualty_threshold": _host._casualty_report_threshold,
+	}, "balance.variables")
+	_host.SPREAD_SPACING = float(merged["var_spread_spacing"])
+	_host.FOLLOW_DEFAULT_GAP = float(merged["var_follow_default_gap"])
+	_host.ROW_GAP = float(merged["var_row_gap"])
+	_host.CATCHUP_RUN_DIST = float(merged["var_catchup_run_dist"])
+	_host._casualty_report_threshold = float(merged["var_report_casualty_threshold"])
+	for violation in FormationSpacing.check_invariants(_host.SPREAD_SPACING, _host.ROW_GAP,
+			FormationSpacing.ARRIVE_TOLERANCE):
+		push_error("[Formation] 间距不变式违例：%s" % violation)

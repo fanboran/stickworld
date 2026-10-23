@@ -321,7 +321,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 
 - **基线**：初版 `6908836d`（交接档「今日关键决策」决策 8），已回退对齐。
 - **已做**：人行道台面（PBR 高清 albedo+法线，`src/<key>_alb/_nrm`，注意**文件名要去 `_128` 后缀**）从地平线铺到台肩；台肩镶边长石 = **方形截面（高=深=台面高）**、顶面与台面齐平（`c9d9483f`）；建筑抬到台面上、离台肩远近错开。
-- **待办**：①`--save-scene` 生成的编辑器场景会把运行时纹理**内嵌**（395MB，已删）——正路是把所需贴图（约 10 余张：band_shoulder/road/kerb 的 _alb/_nrm + 卡片图）复制进 `res://tests/dev/proto_hd2d/tex/`，`_tex_abs` 优先用 res:// 加载，再重新存场景（体积即正常）；②可选 `--freecam` 自由视角模式（创始人想亲眼转视角看石条上表面）。
+- **待办**：①`--save-scene` 生成的编辑器场景会把运行时纹理**内嵌**（395MB，已删）——正路是把所需贴图（约 10 余张：band_shoulder/road/kerb 的 _alb/_nrm + 卡片图）复制进 `res://modules/hd2d/assets/tex/`，`_tex_abs` 优先用 res:// 加载，再重新存场景（体积即正常）；②可选 `--freecam` 自由视角模式（创始人想亲眼转视角看石条上表面）。
 
 ### HD-2D 样板街 · 下一会话第一优先级（创始人 2026-09-14 定案）
 
@@ -353,7 +353,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 - **构图**：`SKYLINE_Z=-6.73`（基线压屏幕下 1/3 线，26° 投影公式解得），层距 `BG_LAYER_GAP=6` 格（屏幕每层差 ≈6.3%）；前排楼身挡 bg1 根部、bg1 从前排楼顶上方露出（高低咬合）；末层基线=真实地平线（底衬远端同步收到实测卡基线）；三层距离染色 `BG_TINTS`（越远越淡越冷）。
 - **辅助线**：橙=屏幕 1/3 线（bg1 基线+第一排屏幕区上边界，一线两用）；绿=末层基线（地平线）。z 取实测卡基线中位数（anchor 深度偏移各卡不同，`_spawn_bg_card` 实测）。
 - **新参数 `--flat=1`**：关远焦 DOF 出辅助线核对版（DOF 满糊会把线一起晕开）。
-- 贴图副本进 `res://tests/dev/proto_hd2d/tex/ground_tiles/`（`_tex_abs` 优先 res:// 加载，场景外链不内嵌）——待办①的贴图侧已就位。
+- 贴图副本进 `res://modules/hd2d/assets/tex/ground_tiles/`（`_tex_abs` 优先 res:// 加载，场景外链不内嵌）——待办①的贴图侧已就位。
 
 **验收产物（二选一对照看）**
 - `F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\hd2d_f2_dof.png`——DOF 正常观感版
@@ -366,7 +366,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 - **路肩=城中心专属**：台面三段化（中段 ±28 格石板+石路肩，两侧夯土台面+土坎），交接线压 gtx 手工收边条；石/土 kerb 分段换色。
 - **门前短径**：guildhall 与落地建筑门口贴夯土径（台面段+路面段两截，dc_door_path decal 贴图未烘前先程序化代替）。
 - **辅助线收进调试模式**：`--debug=1` 才显示网格/紫线/1-3 线/末层基线（默认干净的成图）。
-- **纹理全部落 `res://tests/dev/proto_hd2d/tex/`**（建筑/道具/gtx 过渡，111 张）——`--save-scene` 外链化前提就位（待办①完成贴图侧）。
+- **纹理全部落 `res://modules/hd2d/assets/tex/`**（建筑/道具/gtx 过渡，张数以目录为准）——`--save-scene` 外链化前提就位（待办①完成贴图侧）。
 - 验收产物：`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\` 下 `hd2d_g3_dof.png`（正常观感）/`hd2d_g3_flat.png`（无糊细节）/`hd2d_g3_debug.png`（辅助线）。
 
 **第三轮（2026-09-14，道具复刻 + 游戏接入）**

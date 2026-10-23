@@ -27,7 +27,7 @@ tools/
 godot --headless --path "f:/VSCode/game-2/stick-world" res://tools/baking/bake_anims.tscn
 ```
 
-- **输出位置：** `res://modules/units/animations/*.tres`
+- **输出位置：** `res://modules/stick_rig/animations/*.tres`
 - **依赖：** `modules/units/scripts/stickman_skeleton.gd`（骨骼数据）
 
 ### bake_textures.tscn / bake_textures.gd

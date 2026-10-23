@@ -188,7 +188,7 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 - 分辨率：2x（1 格 = 64px）；输出透明底 PNG
 - 色彩管理：`Standard` 视图变换（保证与游戏内 2D 一致），不用 Filmic
 - 采样：EEVEE Next 64 / Cycles 视需要
-- 输出：烘卡入库 `stick-world/tests/dev/proto_hd2d/tex/proto25d/cards/`（`<def>_w<W>.png` + 同名 `_glow.png` + `cards.json`，§10.1⑩）
+- 输出：烘卡入库 `stick-world/modules/hd2d/assets/tex/proto25d/cards/`（`<def>_w<W>.png` + 同名 `_glow.png` + `cards.json`，§10.1⑩）
 
 ### 5.4 配色
 
@@ -415,7 +415,7 @@ tools/blender_buildings/（共 40 个 .py，逐文件职责见 §10.2 模块地�
 
 #### ⑩ 烘焙入库与运行时 —— `proto_25d` / `proto_hd2d`
 
-- **建筑烘卡**：`stick-world/tests/dev/proto_25d/blender_proto.py` 只读导入 `buildings.py`，逐栋烘 **albedo 卡 + glow 卡**（双层像素对齐、透明白底），写 `cards.json`（anchor = 卡中心对应世界点）。入库副本 `stick-world/tests/dev/proto_hd2d/tex/proto25d/cards/`。
+- **建筑烘卡**：`stick-world/tests/dev/proto_25d/blender_proto.py` 只读导入 `buildings.py`，逐栋烘 **albedo 卡 + glow 卡**（双层像素对齐、透明白底），写 `cards.json`（anchor = 卡中心对应世界点）。入库副本 `stick-world/modules/hd2d/assets/tex/proto25d/cards/`。
 - **道具/自然物烘卡**：`tests/dev/proto_hd2d/bake_props.py` / `bake_nature.py`，与建筑卡同相机口径（正交 / 2x / 透明底；坐标 Blender (x,y,z) → Godot (x,z,-y)/32，1 格 = 32 Blender 单位），产出 `<name>.png` / `<name>_glow.png` + `props.json` / `nature.json`。
 - **布局 JSON**：`export_city_layout.py` 把 `plan_city` 平面换算成 HD-2D 场景布局（cell 1:1；row 0 → 前排、row ≥1 → 背景层；def → 卡名按卡库实际档位挑选，特殊映射 church→cathedral_w16、plaster_house→house；market_stall/well 走道具卡）；`gen_initial_city.py` 为新裁决语义的生成器（长度按建筑数量、中心向两侧、五带不对称——**运行时真相源已移交 `stick-world/modules/world/scripts/map/city_gen.gd`**，本脚本仅离线参考，重启用前须对表）。
 - **运行时消费**：Godot HD-2D 场景（主街/算法村）。运行时系统（卡落位/双渲染路径/batch_rig 开关）的真相源 = **《HD-2D街景系统.md》**。

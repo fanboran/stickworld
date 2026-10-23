@@ -100,7 +100,7 @@ python tools/mocap/video_to_anim.py walk.mp4 --scale 0.9 -o walk.tres
 
 ### Step 5: 导入 Godot
 
-1. 将生成的 `.tres` 复制到 `stick-world/modules/units/animations/`
+1. 将生成的 `.tres` 复制到 `stick-world/modules/stick_rig/animations/`
 2. 在 Godot 中打开 `stickman_test.tscn`
 3. 在 `StickmanRig` 的 `AnimationPlayer` 中添加新动画
 4. 从文件加载 `.tres`
@@ -188,7 +188,7 @@ stickman_y = (mediapipe_y - hip_y) × scale_factor
 
 `stickman_test.tscn` 已配置 AnimationPlayer + AnimationTree 状态机。替换 walk 动画：
 
-1. 将生成的 `walk_extracted.tres` 放入 `stick-world/modules/units/animations/`
+1. 将生成的 `walk_extracted.tres` 放入 `stick-world/modules/stick_rig/animations/`
 2. 在 `stickman_test.tscn` 中，选中 `StickmanRig` 节点
 3. 在 Inspector 中找到 `AnimationPlayer` → `Animation Libraries`
 4. 将 `walk` 条目的资源替换为新生成的 .tres

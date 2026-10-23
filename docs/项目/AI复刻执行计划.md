@@ -258,7 +258,7 @@
 | 巨人/祭司/僵尸等骨架 | 同目录 `[giant].txt` `[meric].txt` `[zombie].txt` 等 |
 | legacy dump（14 个 Ai 类签名） | `F:\VSCode\game-2-aux\external\decompiled\legacy\dump\legacy_AI_classes.cs` |
 | legend dump（组件/系统清单） | `F:\VSCode\game-2-aux\external\decompiled\legend\dump\` |
-| 动画导入输出 | `res://modules/units/animations/`（spine_import 缺省目录） |
+| 动画导入输出 | `res://modules/stick_rig/animations/`（spine_import 缺省目录） |
 | 两代对比分析（机制清单） | `F:\VSCode\game-2-aux\external\decompiled\两款解包游戏完整代码分析与移植决策.md` |
 | 行为参数档案（兵种个性唯一入口） | `res://modules/units/scripts/ai/behavior_profiles.gd`（RWR 式基线+覆盖） |
 

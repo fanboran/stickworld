@@ -347,6 +347,11 @@ static func stop_audio_voices() -> void:
 	if audio == null and music == null:
 		return
 	var players: Array = []
+	# _ambience/_battle_ambience 是 MusicDirector 的常驻已配置子节点（autoload
+	# 跨套件存活）：停播参与混音等待，但不得 free——free 后成员引用悬垂，后续
+	# 套件的 .stream 访问点会打到 freed 实例刷 SCRIPT ERROR；留在树上由引擎
+	# 随进程退出回收，不产生退出泄漏计数。
+	var persistent: Array = []
 	var had_sound: bool = false
 	if audio != null and audio.has_method("stop_all_sfx"):
 		var tracked: Variant = audio.get("_sfx_players")
@@ -367,6 +372,7 @@ static func stop_audio_voices() -> void:
 			var p: Variant = music.get(key)
 			if p != null:
 				players.append(p)
+				persistent.append(p)
 		# 不走 stop_all(0)：它会建 0.3s 后 queue_free 的 tween，播放器已由本函数
 		# 直接 free，批跑后续帧里回调会打到已释放实例。这里只清状态表。
 		music.set("_players", {})
@@ -401,6 +407,7 @@ static func stop_audio_voices() -> void:
 				mixes += 1
 			last_mix = now_mix
 	# 无帧退出时 queue_free 不会执行：混音释放后直接 free 声部节点
+	# （常驻环境音层除外——见 persistent 注释）
 	for p in players:
-		if is_instance_valid(p):
+		if is_instance_valid(p) and not persistent.has(p):
 			p.free()

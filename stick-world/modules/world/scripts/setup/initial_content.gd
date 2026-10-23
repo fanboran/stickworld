@@ -77,6 +77,10 @@ func spawn_npcs(map: Node2D, spawn_y: float, on_progress: Callable = Callable())
 			# 注入 ConstructionAPI 引用（统一走 api，2026-08 审计收敛），使 NPC 可被派工（§15 阶段 0.4）
 			if npc.has_method("set_construction_manager") and _root.get_construction_api() != null:
 				npc.set_construction_manager(_root.get_construction_api())
+			# 注入 ResourcesApi 引用（村民劳作/采集入库经实体注入链取账本——
+			# BehaviorHarvest 只走注入不做节点名兜底查找，缺注入 = 静默不入账）
+			if npc.has_method("set_resources_api") and _root._resources_api != null:
+				npc.set_resources_api(_root._resources_api)
 			# 注入 FormationSystem 引用（编队职责查询，AIController 决策过滤）
 			if npc.has_method("set_formation_system") and _root._formation_system != null:
 				npc.set_formation_system(_root._formation_system)

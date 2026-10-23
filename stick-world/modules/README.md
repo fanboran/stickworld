@@ -50,7 +50,7 @@
 ## 2. 模块依赖图
 
 > **单向规则**：箭头方向 = "依赖"，高层依赖底层，低层不反向调用。`api.gd` 是允许的耦合点。
-> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 3 个依赖环（静态口径，含 class_name 边）：organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）与 hd2d→units（AR-1）已清偿。`expansion→{units, world}` 为世界装配消费型静态实边（非环）：消费 units 的单位场景/武器类型常量与 world 的 ConquestAnchor 锚点。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。
+> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 3 个依赖环（静态口径，含 class_name 边）：organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）与 hd2d→units（AR-1）已清偿。`expansion→{units, world}` 为世界装配消费型静态实边（非环）：消费 units 的单位场景/武器类型常量与 world 的 ConquestAnchor 锚点。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。另有 8 条**运行时注入型边**（下表带 (注入) 尾注）：目标 API 以 Node 弱类型经装配器/上游 `set_..._api` 注入，preload/路径/class_name 静态扫描不可见，登记在 `tools/audit_deps.py` 的 `RUNTIME_EDGES` 并与静态边同图展示；扫描器对未登记注入边给信息提示（暂不入红线）。
 
 ```
                               ┌────────────────────────────────┐
@@ -70,13 +70,15 @@
      │           │      └──────────────────────────┘    │
      ▼           ▼                                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  基础设施：items（零出向）｜ ui_global→fx ｜ player_control→ui_global │
-│   construction→{building_gen, player_control, ui_global}    │
+│  基础设施：items（零出向）｜ player_control→ui_global            │
+│   construction→{building_gen, fx, player_control, ui_global}  │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
 │   hd2d→{environment, stick_rig, ui_global}                  │
 │   expansion→{units, world}（世界装配消费：单位场景/武器类型/锚点） │
+│   运行时注入型边 8 条（静态不可见，见边表 (注入) 尾注）        │
 └─────────────────────────────────────────────────────────────┘
-   （items / fx / environment / resources / stick_rig / tactics 无出向依赖）
+   （items / fx / environment / resources / stick_rig 零出向；
+     tactics 静态零出向、注入型出向 organization——见边表）
 ```
 
 **实测边表**（`python tools/audit_deps.py`，直接依赖）：
@@ -85,21 +87,28 @@
 |------|------------|
 | `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/formation/fx/hd2d/inventory/organization/player_control/resources/tactics/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
-| `organization` | building_gen, ui_global, units, world |
+| `organization` | building_gen, ui_global, units, world + construction(注入), resources(注入) |
 | `expansion` | units, world |
 | `combat` | formation, fx, player_control, stick_rig, tactics, ui_global |
-| `units` | combat, formation, fx, items, player_control, stick_rig, tactics, town_life |
-| `formation` | tactics, ui_global |
+| `units` | combat, formation, fx, inventory, items, player_control, stick_rig, tactics, town_life + organization(注入), resources(注入) |
+| `formation` | tactics, ui_global + organization(注入) |
 | `town_life` | units |
 | `inventory` | items, ui_global |
-| `construction` | building_gen, player_control, ui_global |
+| `construction` | building_gen, fx, player_control, ui_global + resources(注入) |
 | `player_control` | ui_global |
 | `debug_gui` | fx, ui_global |
 | `texture_gen` | ui_global |
 | `building_gen` | texture_gen |
-| `ui_global` | fx |
+| `ui_global` | resources(注入) |
 | `hd2d` | environment, stick_rig, ui_global |
-| `items` / `fx` / `environment` / `resources` / `stick_rig` / `tactics` | （无） |
+| `items` / `fx` / `environment` / `resources` / `stick_rig` | （无） |
+| `tactics` | organization(注入) |
+
+> (注入) = 运行时注入型边，`RUNTIME_EDGES` 登记：目标 API 以 Node 弱类型经
+> 装配器/上游 `set_..._api` 注入（如 `units→resources` 的
+> `stickman_entity.set_resources_api` → BehaviorHarvest/interaction_controller
+> 消费链），静态扫描不可见。新注入边须先登记 `RUNTIME_EDGES` 并同步本表；
+> 未登记的注入模式命中由 audit_deps 扫描器给信息提示。
 
 **关键路径**：
 
@@ -418,12 +427,15 @@ L4 攻占北方行省
 `ItemStack`（运行时堆 def_id+count）· `ItemDB`（注册表，内置 GDScript 真相源）·
 `ItemContainer`（**列表制容器：无总数量限制，唯一上限=每类 max_stack**，容器级
 `stack_overrides` 可覆盖单类）· `ItemTransfer`（容器间原子转移 move/move_all）·
-`region_storage.gd`（区域仓储物品视图，资源品 def ↔ resources 台账弱类型桥接）。
+`region_storage.gd`（区域仓储物品视图，经济台账实时视图；存取经
+`region_storage_backend.gd` 账本端口转发，本域零出向，resources 绑定由
+units 消费方的 `ResourcesStorageBackend` 适配器提供）。
 
 **映射**：`ItemsAPI.RESOURCE_BY_ITEM`（物品↔经济资源双语词典）、
 `WEAPON_ITEM_BY_TYPE`（武器类型→def，尸体遗物生成消费）。
 
-**消费者**：inventory（玩家背包/装备/翻包/村仓）、units（尸体遗物、翻包交互）；
+**消费者**：inventory（玩家背包/装备/翻包/村仓）、units（尸体遗物、翻包交互、
+村仓账本适配）；
 新库存场景（工坊仓库/商店货柜）= ItemContainer 实例零新概念。详见其 README。
 
 #### `modules/inventory/` — 玩家背包与装备（items 域消费者）

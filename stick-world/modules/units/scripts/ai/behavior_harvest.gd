@@ -24,9 +24,11 @@ extends BehaviorBase
 ##   - profession: Dictionary  职业档案覆盖（可选；缺省经 TownLifeAPI 按
 ##     entity.get_profession() 自查。单测/特殊派工可显式传入）
 ##
-## 注入：resources_api 可显式注入（单测桩）；缺省经 ResourcesApi 节点
-## （current_scene 下具名 find_child，同 interaction_controller 先例）。
-## 本行为不引用 world/town_life 内部类，跨模块只走鸭子协议与 TownLifeAPI 契约。
+## 注入：resources_api 可显式注入（单测桩）；生产经实体注入链（装配时
+## set_resources_api → 实体 get_resources_api，同 interaction_controller 先例）。
+## 不做节点名查找兜底——units→resources 注入型边在 tools/audit_deps.py
+## RUNTIME_EDGES 登记。本行为不引用 world/town_life 内部类，跨模块只走
+## 鸭子协议与 TownLifeAPI 契约。
 ##
 ## 结束条件：无职业 / 无工位配置 / 无匹配资源点（决策层回 idle，稍后重试）。
 ## 遇战斗/号令被抢占正常 exit（AIController 决策次序处理）。
@@ -63,7 +65,7 @@ var _site_pos: Vector2 = Vector2.ZERO
 var _site_building: Node2D = null
 ## 拍计时器
 var _cycle_timer: float = 0.0
-## ResourcesApi（显式注入优先；缺省惰性查节点）
+## ResourcesApi（显式注入优先；缺省经实体注入链，未注入 = null 安全跳过入账）
 var resources_api: Variant = null
 ## 静态障碍避障组件（方案A；懒初始化——直构造不进树的测试路径同样可用；
 ## 目标切换（换资源点/工位）时组件随目标变更自动复位进度账本）
@@ -333,17 +335,17 @@ func _load_profession() -> Dictionary:
 	return TownLifeAPI.get_profession(String(entity.get_profession()))
 
 
-## ResourcesApi 获取：显式注入优先；缺省 current_scene 下具名查找
-## （同 interaction_controller 先例，采集入库必须走模块 API）。
+## ResourcesApi 获取：显式注入（单测桩直设 resources_api 字段）优先；生产经
+## 实体注入链（装配时 set_resources_api → 实体 get_resources_api，同
+## interaction_controller 先例，采集入库必须走模块 API）。不做节点名查找
+## 兜底（跨模块边显性化：units→resources 只走注入，RUNTIME_EDGES 登记）；
+## 未注入（测试直生实体）返回 null，_settle 安全跳过入账。
 func _get_resources_api() -> Variant:
 	if resources_api != null and is_instance_valid(resources_api):
 		return resources_api
-	if entity == null or not is_instance_valid(entity) or entity.get_tree() == null:
-		return null
-	var scene_root: Node = entity.get_tree().current_scene
-	if scene_root != null:
-		resources_api = scene_root.find_child("ResourcesApi", true, false)
-	return resources_api
+	if entity != null and is_instance_valid(entity) and entity.has_method("get_resources_api"):
+		return entity.get_resources_api()
+	return null
 
 
 # ─────────────────────────────── 观测（测试/调试用）───────────────────────────────

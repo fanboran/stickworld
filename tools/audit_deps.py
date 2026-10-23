@@ -3,8 +3,9 @@
 
 用法: python tools/audit_deps.py
 
-输出三段：模块依赖图 / 全部依赖环 / 跨模块越界引用（非 api.gd，分 preload 与
-裸字符串两类）。退出码即红线：新环或越界超基线 → exit 1。
+输出四段：模块依赖图（静态边 + 运行时注入边以"(注入)"标注）/ 全部依赖环 /
+跨模块越界引用（非 api.gd，分 preload 与裸字符串两类）/ 运行时注入边扫描
+（信息段，不入红线）。退出码即红线：新环或越界超基线 → exit 1。
 
 判定规则（2026-08-31 修正，此前版本结论不可用）：
   1. 匹配 class_name 前先剥离注释与字符串，否则注释里提一句就算一条依赖边。
@@ -49,6 +50,50 @@ STRING_VIOL_BASELINE = 0    # 裸字符串跨模块越界（AR-1 已清偿归零
 # 跨模块 preload 总数只降不升——模块自装配下沉（AR-1）应让它持续收缩，
 # 新增装配需求走对应模块 setup.gd，不在装配器堆深路径 preload
 ASSEMBLER_PRELOAD_BASELINE = 37
+
+# 运行时注入型跨模块边（2026-10-23 审计 P2-3）：目标 API 以 Node 弱类型经装配器/
+# 上游 set 进来，静态扫描（preload/路径/class_name）完全不可见，须在此登记。
+# 与 modules/README.md §2 边表同步登记；依赖图输出中以"(注入)"标注。
+# 只作显性化展示，不入环检测/红线——注入对的目标多为零出向基础层（resources 等），
+# 展示层先观察一轮，是否升格红线待定。
+RUNTIME_EDGES = {
+    # organization → construction：RecruitManager 持 ConstructionApi 取空闲村民/
+    #   征用退工（recruit_manager.gd _construction_api.unregister_worker /
+    #   get_available_workers；注入 system_setup_core_systems._setup_recruit_system
+    #   mgr.setup 首参）
+    ("organization", "construction"),
+    # organization → resources：RecruitManager 持 ResourcesApi 查/扣招兵资源
+    #   （recruit_manager.gd _resources_api.get_stock/consume；注入同上
+    #   mgr.setup 次参）
+    ("organization", "resources"),
+    # construction → resources：ConstructionManager/BuildingCosts（P0-9 成本扣减
+    #   /清场回收）/BuildMenu 持 ResourcesApi 调 get_stock/consume/produce
+    #   （注入 system_setup_core_systems set_resources_api 链）
+    ("construction", "resources"),
+    # units → resources：实体注入链（spawn 时 set_resources_api → 实体）→
+    #   interaction_controller 采集入库 / BehaviorHarvest 劳作入账 /
+    #   ResourcesStorageBackend 村仓账本适配（注入 game_root_map_flow /
+    #   save_handler / initial_content）
+    ("units", "resources"),
+    # units → organization：实体持 OrganizationApi（stickman_entity
+    #   set/get_organization_api；注入 game_root_map_flow 玩家 spawn 处）
+    ("units", "organization"),
+    # formation → organization：FormationSystem.setup(org_api) 读组织快照/
+    #   补位回写（"由 GameRoot 装配时注入"，system_setup_core_systems.
+    #   _setup_formation_system）
+    ("formation", "organization"),
+    # tactics → organization：TacticalOrders.setup 第三参 org_api（组织代理：
+    #   build_dispatch_plan/get_organization；注入 _setup_tactical_system）
+    ("tactics", "organization"),
+    # ui_global → resources：ResourceBar 持 ResourcesApi 渲染顶栏资源条
+    #   （GlobalHUD.attach_resources 注入，_setup_core_systems HUD 段）
+    ("ui_global", "resources"),
+}
+
+# 模块目录名集合（注入边扫描器的词→模块解析表；只认整名，org/res 等缩写不认
+# ——避免望文生义的误报，出现新别名时再显式扩表）
+MODULE_DIRS = {d for d in os.listdir(MODULES)
+               if os.path.isdir(os.path.join(MODULES, d))}
 
 
 def module_of(path: str):
@@ -137,6 +182,7 @@ preload_viol = []       # (rel_path, line, target)
 string_viol = []        # 裸字符串路径越界（非 preload 形式）
 preload_exempt = []     # 行内 audit-exempt 标记豁免的（rel_path, line, target）
 assembler_preloads = 0
+runtime_hits = defaultdict(set)  # (src_mod, tgt_mod) -> {rel_path} 注入模式命中
 for dirpath, _, files in os.walk(ROOT):
     if ".godot" in dirpath or "node_modules" in dirpath:
         continue
@@ -173,6 +219,19 @@ for dirpath, _, files in os.walk(ROOT):
         deps.discard(mod)       # 模块内部自引用不计入跨模块图
         file_deps[rel] = (mod, deps)
 
+        # 运行时注入边模式扫描：var _<模块名>_api 字段 / func set_<模块名>_api
+        # 注入方法（弱类型 Node 注入是本项目跨模块运行时耦合的惯例载体）。
+        # 只扫声明不扫赋值——GDScript 静态类型下赋值不产生声明之外的目标对；
+        # 词必须恰好是模块目录名（org/res 等缩写不认，见 MODULE_DIRS 注释）。
+        # 命中且模块对既不在 RUNTIME_EDGES、也不是静态边 → 疑似未登记注入边，
+        # 信息段提示不入红线：先观察一轮噪声水平，再决定是否升格棘轮。
+        for m in re.finditer(r"^\s*var\s+_([a-z_]+?)_api\s*:", code_no_str, re.M):
+            if m.group(1) in MODULE_DIRS and m.group(1) != mod:
+                runtime_hits[(mod, m.group(1))].add(rel)
+        for m in re.finditer(r"^\s*func\s+set_([a-z_]+?)_api\s*\(", code_no_str, re.M):
+            if m.group(1) in MODULE_DIRS and m.group(1) != mod:
+                runtime_hits[(mod, m.group(1))].add(rel)
+
         # 越界引用（装配器单独统计；行内 audit-exempt 标记显式豁免）。
         # preload 形式与裸字符串形式分开报：前者是编译期耦合，更重。
         def _exempt_or_violate(kind_list, rel, raw, code_keep_str, start, tgt):
@@ -208,15 +267,21 @@ for dirpath, _, files in os.walk(ROOT):
                 continue
             _exempt_or_violate(string_viol, rel, raw, code_keep_str, m.start(), (tgt_mod, tgt_path))
 
-# 3. 聚合模块图（有序）
+# 3. 聚合模块图（有序）；运行时注入边并入展示——静态图里没有的目标补在尾部
+# 带"(注入)"标注（已在静态图的注入对不重复标注，静态边信息更全）
 mod_deps = defaultdict(set)
 for rel, (mod, deps) in file_deps.items():
     mod_deps[mod] |= deps
 graph = {m: sorted(d) for m, d in mod_deps.items()}
+runtime_only = defaultdict(list)   # 模块 -> [静态图没有的注入目标]
+for src, tgt in sorted(RUNTIME_EDGES):
+    if tgt not in graph.get(src, ()):
+        runtime_only[src].append(tgt)
 
-print("=== 模块依赖图（直接依赖）===")
+print("=== 模块依赖图（直接依赖；带(注入)尾注的为运行时注入边，静态扫描不可见）===")
 for mod in sorted(graph):
-    print(f"{mod:18s} -> {', '.join(graph[mod]) if graph[mod] else '(无)'}")
+    cols = list(graph[mod]) + [f"{t}(注入)" for t in runtime_only.get(mod, ())]
+    print(f"{mod:18s} -> {', '.join(cols) if cols else '(无)'}")
 
 # 4. 枚举全部简单环（规范化为最小元素开头后去重，保证输出稳定）
 cycles = set()
@@ -271,6 +336,23 @@ if preload_exempt:
     for rel, line, tgt in sorted(preload_exempt):
         print(f"  {rel}:{line}: preload -> {tgt}")
     print(f"共 {len(preload_exempt)} 处")
+
+# 5.5 运行时注入边扫描（信息段，不入红线）：登记在册的注入对罗列一遍供人读，
+# 扫描器命中但未登记的列"疑似未登记注入边"。入红线的门槛（观察一轮后定）：
+# 注入登记靠人手维护，先看扫描器是否稳定零误报，再决定是否棘轮化。
+print("\n=== 运行时注入边（静态不可见，RUNTIME_EDGES 登记）===")
+for src, tgt in sorted(RUNTIME_EDGES):
+    print(f"  {src} -> {tgt} (注入)")
+unregistered = {pair: files for pair, files in runtime_hits.items()
+                if pair not in RUNTIME_EDGES and pair[1] not in graph.get(pair[0], ())}
+if unregistered:
+    print("  疑似未登记注入边（确认后登记进 RUNTIME_EDGES / modules/README.md 边表）:")
+    for (src, tgt), files in sorted(unregistered.items()):
+        for f in sorted(files):
+            print(f"    {src} -> {tgt}: {f}")
+    print(f"  共 {len(unregistered)} 对未登记")
+else:
+    print("  扫描器未发现未登记注入边")
 
 # 6. 棘轮红线：在册债务只降不升（AR-6 方向）
 failures = []

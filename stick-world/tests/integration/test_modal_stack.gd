@@ -15,6 +15,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 
 var _runner: TestRunner
@@ -45,7 +46,18 @@ func _run_tests_async() -> void:
 	if _helper != null and is_instance_valid(_helper.game_root):
 		_helper.game_root.free()
 		_helper.game_root = null
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
+
+
+## 数 ModalOverlay 下的占位面板实例数（同类单例断言用）
+func _overlay_placeholder_count(gr: Node) -> int:
+	var n: int = 0
+	var overlay: Control = gr.ui_root.get_slot("ModalOverlay") if gr.ui_root != null else null
+	if overlay != null:
+		for child in overlay.get_children():
+			if child.name.begins_with("UIPlaceholder_"):
+				n += 1
+	return n
 
 
 ## ESC 空栈 → 开暂停菜单并暂停；再 ESC → 关闭并恢复
@@ -105,33 +117,40 @@ func _test_placeholder_singleton() -> void:
 	gr._handle_escape()  # 开暂停菜单作底
 	# 打开两次同预设 → 提到栈顶（同一实例，不叠加）
 	gr._open_placeholder_panel("tech_tree")
-	await get_tree().process_frame
+	var first_ok: bool = await TestHelpers.await_condition(
+			func() -> bool: return stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL) != null,
+			2.0, "首次打开占位面板入栈")
+	_runner.assert_true(first_ok, "首次打开应有占位面板")
 	var first: Control = stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL)
-	_runner.assert_not_null(first, "首次打开应有占位面板")
 	gr._open_placeholder_panel("tech_tree")
-	await get_tree().process_frame
-	_runner.assert_true(stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL) == first,
-			"重复触发应提到栈顶（同一实例）")
-	# 换预设 → 替换（同类单例，不叠加）
+	var raised: bool = await TestHelpers.await_condition(
+			func() -> bool: return stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL) == first,
+			2.0, "重复触发提到栈顶")
+	_runner.assert_true(raised, "重复触发应提到栈顶（同一实例）")
+	# 换预设 → 替换（同类单例，不叠加）。就绪谓词含"旧实例已离场"：替换走
+	# queue_free 退役旧面板，只等新条目就位会撞上延迟删除窗口数出 2 个实例
 	gr._open_placeholder_panel("empire_overview")
-	await get_tree().process_frame
+	var replaced: bool = await TestHelpers.await_condition(
+			func() -> bool:
+				var cur: Control = stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL)
+				return cur != null and cur != first and _overlay_placeholder_count(gr) == 1,
+			2.0, "换预设替换旧实例")
+	_runner.assert_true(replaced, "换预设应替换旧实例")
 	var second: Control = stack.get_entry(UIModalStack.Layer.EMPIRE_PANEL)
-	_runner.assert_true(second != null and second != first, "换预设应替换旧实例")
 	var second_preset: Dictionary = second.get("_preset") if second != null and second.get("_preset") is Dictionary else {}
 	_runner.assert_equal(second_preset.get("id", ""), "empire_overview", "新实例应为总览报表预设")
-	var ph_count: int = 0
-	for child in gr.ui_root.get_slot("ModalOverlay").get_children():
-		if child.name.begins_with("UIPlaceholder_"):
-			ph_count += 1
-	_runner.assert_equal(ph_count, 1, "同类单例：ModalOverlay 只应有 1 个占位面板实例")
+	_runner.assert_equal(_overlay_placeholder_count(gr), 1, "同类单例：ModalOverlay 只应有 1 个占位面板实例")
 	# ESC → 逐层退栈：占位面板 → 暂停菜单 → 空
 	gr._handle_escape()
-	await get_tree().process_frame
-	_runner.assert_false(stack.is_open(UIModalStack.Layer.EMPIRE_PANEL), "ESC 应关占位面板")
+	var ph_closed: bool = await TestHelpers.await_condition(
+			func() -> bool: return not stack.is_open(UIModalStack.Layer.EMPIRE_PANEL),
+			2.0, "ESC 关占位面板")
+	_runner.assert_true(ph_closed, "ESC 应关占位面板")
 	_runner.assert_true(pm.visible, "ESC 后应恢复暂停菜单")
 	gr._handle_escape()
-	await get_tree().process_frame
-	_runner.assert_false(pm.visible, "再 ESC 应关暂停菜单")
+	var pm_closed: bool = await TestHelpers.await_condition(
+			func() -> bool: return not pm.visible, 2.0, "ESC 关暂停菜单")
+	_runner.assert_true(pm_closed, "再 ESC 应关暂停菜单")
 
 
 ## 确认框入 CONFIRM 层：ESC = 取消（不触发 on_confirm），恢复下层
@@ -148,16 +167,22 @@ func _test_confirm_escape_cancel() -> void:
 	StickKit.confirm(pm, "测试确认", "确认框 ESC 取消语义测试。", func(): confirmed[0] = true, "确定")
 	_runner.assert_true(stack.is_open(UIModalStack.Layer.CONFIRM), "确认框应入 CONFIRM 层")
 	_runner.assert_false(pm.visible, "确认框应盖住暂停菜单")
-	# 遮罩应铺满视口（根 FULL_RECT，防 0 尺寸静默不可见回归）
-	await get_tree().process_frame
+	# 遮罩应铺满视口（根 FULL_RECT，防 0 尺寸静默不可见回归）；
+	# 布局在一帧后落地，等"栈顶 Control 尺寸就位"而非数帧
+	var dialog_ready: bool = await TestHelpers.await_condition(
+			func() -> bool:
+				var top: Control = stack.top() as Control
+				return top != null and top.size.x > 1000.0,
+			2.0, "确认框遮罩铺满视口")
+	_runner.assert_true(dialog_ready, "确认框根应铺满视口（遮罩可见）")
 	var dialog_root: Control = stack.top() as Control  # 栈收 CanvasItem，此处取回 Control 断言遮罩尺寸
 	_runner.assert_not_null(dialog_root, "确认框应为栈顶")
-	if dialog_root != null:
-		_runner.assert_gt(dialog_root.size.x, 1000.0, "确认框根应铺满视口（遮罩可见）")
 	# ESC → 取消（不触发 on_confirm）
 	gr._handle_escape()
-	await get_tree().process_frame
-	_runner.assert_false(stack.is_open(UIModalStack.Layer.CONFIRM), "ESC 应取消确认框")
+	var cancelled: bool = await TestHelpers.await_condition(
+			func() -> bool: return not stack.is_open(UIModalStack.Layer.CONFIRM),
+			2.0, "ESC 取消确认框")
+	_runner.assert_true(cancelled, "ESC 应取消确认框")
 	_runner.assert_false(confirmed[0], "ESC 取消不应触发 on_confirm")
 	_runner.assert_true(pm.visible, "ESC 后应恢复暂停菜单")
 	# 收尾
@@ -173,15 +198,19 @@ func _test_save_panel_stack() -> void:
 	if stack == null:
 		return
 	gr.toggle_save_panel()
-	await get_tree().process_frame
-	_runner.assert_true(stack.is_open(UIModalStack.Layer.SAVE_PANEL), "toggle 应压存档面板入栈")
+	var sp_open: bool = await TestHelpers.await_condition(
+			func() -> bool: return stack.is_open(UIModalStack.Layer.SAVE_PANEL),
+			2.0, "toggle 压存档面板入栈")
+	_runner.assert_true(sp_open, "toggle 应压存档面板入栈")
 	var sp: Control = stack.get_entry(UIModalStack.Layer.SAVE_PANEL)
 	_runner.assert_not_null(sp, "存档面板应在栈中")
 	_runner.assert_true(sp.visible, "存档面板应显示")
 	_runner.assert_true(TimeManager.is_paused(), "存档面板打开应暂停（输入屏蔽随栈）")
 	gr.toggle_save_panel()
-	await get_tree().process_frame
-	_runner.assert_false(stack.is_open(UIModalStack.Layer.SAVE_PANEL), "再 toggle 应退栈")
+	var sp_closed: bool = await TestHelpers.await_condition(
+			func() -> bool: return not stack.is_open(UIModalStack.Layer.SAVE_PANEL),
+			2.0, "toggle 退存档面板")
+	_runner.assert_true(sp_closed, "再 toggle 应退栈")
 	_runner.assert_false(TimeManager.is_paused(), "栈空应恢复")
 
 
@@ -200,16 +229,19 @@ func _test_dual_pause_ownership() -> void:
 	var stack: Node = gr.ui_root.get_modal_stack()
 	# 2. StickScreen.open() 发现已暂停 → 不记录自己的恢复责任
 	gr.toggle_settings_menu()
-	await get_tree().process_frame
-	_runner.assert_true(sp.visible, "设置应显示")
+	var sp_shown: bool = await TestHelpers.await_condition(
+			func() -> bool: return sp.visible, 2.0, "设置面板显示")
+	_runner.assert_true(sp_shown, "设置应显示")
 	_runner.assert_true(TimeManager.is_paused(), "设置打开保持暂停")
 	# 3. 面板自身 close()（toggle 关闭路径）→ 不得提前恢复
 	sp.call("close")
-	await get_tree().process_frame
-	_runner.assert_false(sp.visible, "面板应关闭")
+	var sp_hidden: bool = await TestHelpers.await_condition(
+			func() -> bool: return not sp.visible, 2.0, "设置面板关闭")
+	_runner.assert_true(sp_hidden, "面板应关闭")
 	_runner.assert_true(TimeManager.is_paused(),
 			"关键回归：面板 close 不得抢在栈之前恢复速度（_prev_speed 应为 -1 跳过恢复）")
 	# 4. 栈逐层退空 → 才由栈恢复
 	gr._handle_escape()  # 关暂停菜单
-	await get_tree().process_frame
-	_runner.assert_false(TimeManager.is_paused(), "栈退空才恢复原速度")
+	var resumed: bool = await TestHelpers.await_condition(
+			func() -> bool: return not TimeManager.is_paused(), 2.0, "栈退空恢复速度")
+	_runner.assert_true(resumed, "栈退空才恢复原速度")

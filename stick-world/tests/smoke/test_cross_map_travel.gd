@@ -39,7 +39,7 @@ func _run_tests_async() -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_game_root = packed.instantiate()
 	add_child(_game_root)
@@ -68,7 +68,7 @@ func _run_tests_async() -> void:
 	# 汇总
 	print(_runner.summary())
 	var exit_code := 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────

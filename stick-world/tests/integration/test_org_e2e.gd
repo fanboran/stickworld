@@ -81,6 +81,7 @@ func _run_tests_async() -> void:
 	_connect_signals()
 	# 生成测试单位
 	_helper.spawn_test_units(UNIT_COUNT)
+	# 固定 settle（有界 2 帧）：实体进图注册余波；单位清单由各用例断言兜底
 	for i in 2:
 		await get_tree().process_frame
 	_units = _helper.units.duplicate()
@@ -102,7 +103,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 环境辅助 ────────────────────────────────
@@ -168,10 +169,7 @@ func _appoint_standalone(org_id: String, unit: Node) -> void:
 	_api.assign_commander(org_id, str(unit.get_instance_id()))
 
 
-## 等待小队解散信号触发（帧推进）
-func _wait_frames(n: int) -> void:
-	for i in n:
-		await get_tree().process_frame
+## 等待小队解散信号触发（帧推进）——保留为空操作兼容位（旧调用点已全部条件化后此助手可删）
 
 
 # ─────────────────────────────── 同步测试 ────────────────────────────────
@@ -297,10 +295,12 @@ func _test_company_succession() -> void:
 	_kill(chief)
 	var rm: Dictionary = _api.remove_stickman(_company_a, str(chief.get_instance_id()))
 	_runner.assert_true(rm.get("ok", false), "死亡到组织入口应受理")
-	for i in 3:
-		await get_tree().process_frame
+	# 等就绪不数帧：补位引擎把子指挥官（排甲1排长，cmd=5.0）顶上连长位
+	var promoted: bool = await TestHelpers.await_condition(
+			func() -> bool: return str(_api.get_organization(_company_a).get("data", {}).get("commander_id", "")) == str(successor.get_instance_id()),
+			3.0, "连甲补位")
 	var after: Dictionary = _api.get_organization(_company_a)
-	_runner.assert_equal(String(after.data.commander_id), str(successor.get_instance_id()), "连长甲阵亡应由子指挥官（排甲1排长）顶上")
+	_runner.assert_true(promoted, "连长甲阵亡应由子指挥官（排甲1排长）顶上")
 	_runner.assert_true(_assigned_events.any(func(e: Dictionary) -> bool: return e["org_id"] == _company_a and e["unit_id"] == successor.get_instance_id()), "补位应发射 commander_assigned（连甲→排甲1排长）")
 	var lost: Array = _reports.filter(func(r: Dictionary) -> bool:
 		return r["org_id"] == _company_a and String(r["report"].get("type", "")) == "commander_lost")
@@ -329,7 +329,11 @@ func _test_reissue_after_succession() -> void:
 	var target: Vector2 = _units[6].global_position + Vector2(-400, 0)
 	var ok: bool = _tactical.issue_to_org(_army, _tactical.OrderType.ADVANCE_ALL, target)
 	_runner.assert_true(ok, "补位后重发应受理")
-	await _wait_frames(6)
+	# 等就绪不数帧：复用幂一等条件（四排各送达恰一次），链路自愈可观测
+	var relayed: bool = await TestHelpers.await_condition(
+			func() -> bool: return _all_platoons_delivered(["甲1", "甲2", "乙1", "乙2"]),
+			5.0, "重发透传四排")
+	_runner.assert_true(relayed, "补位后重发应在超时内透传四排")
 	# 链路自愈：连甲新指挥官在任 → 命令照常透传，全部 4 排再次收到
 	for key in ["甲1", "甲2", "乙1", "乙2"]:
 		var sid: String = String(_platoons[key])
@@ -348,18 +352,22 @@ func _test_leaderless_persists() -> void:
 	_formation.squad_disbanded.connect(conn)
 	for i in range(6, 12):
 		_kill(_units[i])
-	await _wait_frames(6)
+	var all_wiped: bool = await TestHelpers.await_condition(
+			func() -> bool: return squad_disbanded.size() >= 2, 5.0, "连乙两排全灭解散")
 	_formation.squad_disbanded.disconnect(conn)
-	_runner.assert_true(squad_disbanded.size() >= 2, "连乙两排应全灭解散")
+	_runner.assert_true(all_wiped, "连乙两排应全灭解散")
 	_runner.assert_true(_api.get_child_orgs(_company_b).is_empty(), "连乙子组织应清空（解散上挂链路）")
 	# 杀连长乙：候选池空（personnel 空余他本人被移除、子组织已散）→ 持续空缺
 	_kill(_units[14])
 	var rm: Dictionary = _api.remove_stickman(_company_b, str(_units[14].get_instance_id()))
 	_runner.assert_true(rm.get("ok", false), "连长乙死亡到组织入口应受理")
-	for i in 2:
-		await get_tree().process_frame
+	# 等就绪不数帧：补位引擎空转（候选池空）落账为持续空缺
+	var stays_empty: bool = await TestHelpers.await_condition(
+			func() -> bool: return str(_api.get_organization(_company_b).get("data", {}).get("commander_id", "")).is_empty(),
+			3.0, "连乙持续空缺")
+	_runner.assert_true(stays_empty, "无人可用应持续空缺（指挥官不变量：不造空框之外的假主）")
 	var d: Dictionary = _api.get_organization(_company_b)
-	_runner.assert_true(String(d.data.commander_id).is_empty(), "无人可用应持续空缺（指挥官不变量：不造空框之外的假主）")
+	_runner.assert_true(String(d.data.commander_id).is_empty(), "空缺落账核对")
 	var lost: Array = _reports.filter(func(r: Dictionary) -> bool:
 		return r["org_id"] == _company_b and String(r["report"].get("type", "")) == "commander_lost")
 	_runner.assert_true(not lost.is_empty(), "连乙 commander_lost 也应必报")

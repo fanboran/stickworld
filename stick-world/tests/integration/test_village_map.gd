@@ -32,7 +32,7 @@ func _ready() -> void:
 	# 2D 村图功能面：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "2D 村图功能面")
 	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
-	get_tree().quit(0)
+	TestRunner.finish_process(self, 0)
 	_runner = TestRunner.new()
 	_register_tests()
 	_run_tests_async()
@@ -68,7 +68,7 @@ func _run_tests_async() -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_game_root = packed.instantiate()
 	# 启动直连后默认开局图是 HD-2D 主街；本套件测村A功能面，声明以村A为初始图
@@ -87,7 +87,7 @@ func _run_tests_async() -> void:
 	print(_runner.summary())
 
 	var exit_code := 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────

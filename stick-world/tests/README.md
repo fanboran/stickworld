@@ -25,6 +25,8 @@
 
 ```gdscript
 extends Node
+## 批量模式完成信号（TestRunner.finish_process 发射，batch_runner 消费；独立跑无消费者）
+signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 # 依赖纯逻辑/纯数据时用 const preload，禁止依赖 class_name 全局注册（headless 下不可靠）
 
@@ -34,7 +36,7 @@ func _ready() -> void:
 	runner.add_test("BattleInstance: 全员溃散即结束", _test_rout_collapse, true)  # async 用例第三参传 true
 	await runner.run_async()          # async 用例必须用 run_async()
 	print(runner.summary())
-	get_tree().quit(0 if runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if runner.all_passed() else 1)
 ```
 
 ---
@@ -70,7 +72,7 @@ func _ready() -> void:
 5. **未入树节点不要用 `queue_free()` 收尾**：进程通常在 `_ready` 末即退出，删除队列来不及 flush；直接交给 `track_node` 才是即时释放。
 6. **统一出口**：`TestRunner.finish_process(emitter, code)` 会顺带停掉在播 SFX 声部（`AudioStreamPlayback` 由 AudioServer 持有，秒退会被记泄漏）；新套件一律走该出口。
 
-验收口径：`tools/census_unit_leaks.sh` 逐 unit 套件单进程普查，除产品侧静态缓存/autoload 不可回收项外 `Leaked instance` 应为 0。
+验收口径：`tools/census_unit_leaks.sh` 逐套件单进程普查（`-Filter unit` 跑 unit 层，`-Filter integration` 逐个 headless 跑集成 .tscn，悬置套件天然跳过），除产品侧静态缓存/autoload 不可回收项外 `Leaked instance` 应为 0。
 
 ## 三、运行命令
 
@@ -109,7 +111,7 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 
 **当前结构（unit 批量 + integration + smoke 三层，`run_all.sh` 编排；套件数与结果以 Test Runner 实跑为准，integration 套件清单唯一真相源 = `run_all.sh` 的 `INTEGRATION_SUITES`；4 个集成校准待办见 [世界模型整合 §五](../../docs/项目/交接/世界模型整合.md)）**：
 - `tests/unit/`：单进程批量跑（`batch_runner.tscn`），套件清单 = `batch_runner.gd` 的 `UNIT_SCRIPTS`。**unit 层以 `.gd` 为套件**：运行器直接 `load(.gd)` 并实例化，`.tscn` 壳不参与批跑；`_check_manifest()` 双向自检——盘上 `.gd` 未登记进清单判失败，盘上出现 `.tscn` 且不在 `TSCN_ALLOWLIST`（默认空，登记须写理由）同样判失败（世界模型：test_world_contract 政权/城装载+聚合+存档兼容、test_political_data 政权档案/LUT/ID mask 校验）
-- `tests/integration/`（可跑 + 6 悬置，悬置名单见下方「悬置套件」）：battle_lifecycle、battle_retreat、recruit_flow*、town_life_harvest*、town_life_worksite*、save_roundtrip*、construction_cycle*、village_map*（* = 悬置）以及 org 系五套（org_panel/org_command_chain/org_e2e/org_report_narrator/org_panel_badges）、squad_card、music_director、sfx_policy、modal_stack、esc_key_input、ui_layout、settings_apply、notification_feed、debug_api、anim_finished、fx_damage_text 等
+- `tests/integration/`（可跑 + 6 悬置，悬置名单见下方「悬置套件」）：battle_lifecycle、recruit_flow*、town_life_harvest*、town_life_worksite*、save_roundtrip*、construction_cycle*、village_map*（* = 悬置）以及 org 系五套（org_panel/org_command_chain/org_e2e/org_report_narrator/org_panel_badges）、squad_card、music_director、sfx_policy、modal_stack、esc_key_input、ui_layout、settings_apply、notification_feed、debug_api、anim_finished、fx_damage_text 等
 - `tests/smoke/`：new_game_smoke、cross_map_travel
 - `tests/dev/`（不进 CI）：dev_playtest、battle_arena、各类 verify_*/探针场景
 

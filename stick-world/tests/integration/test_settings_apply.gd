@@ -54,7 +54,7 @@ func _run_tests_async() -> void:
 	print(_runner.summary())
 	var exit_code: int = 0 if _runner.all_passed() else 1
 	_restore_cfg_file()
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 用例 ────────────────────────────────

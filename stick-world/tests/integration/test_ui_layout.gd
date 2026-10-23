@@ -47,7 +47,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## 回归：材料条（ResourceBarHost）与顶栏按钮行不重叠，且位于顶栏（60px）下方

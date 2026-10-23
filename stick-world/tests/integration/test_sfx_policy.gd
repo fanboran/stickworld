@@ -53,7 +53,7 @@ func _run_tests_async() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _cleanup() -> void:

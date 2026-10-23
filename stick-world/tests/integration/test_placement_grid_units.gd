@@ -32,7 +32,7 @@ func _ready() -> void:
 	print(_runner.summary())
 
 	var exit_code := 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 测试注册 ────────────────────────────────

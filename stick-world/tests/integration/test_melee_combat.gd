@@ -47,6 +47,7 @@ func _run_tests_async() -> void:
 	await _helper.start(self)
 	# 生成 2 个测试单位
 	_helper.spawn_test_units(2)
+	# 固定 settle（有界 2 帧）：实体进图注册余波；单位在册由各用例断言兜底
 	for i in 2:
 		await get_tree().process_frame
 
@@ -59,7 +60,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## 把两个单位钉成固定间距（AI 会各自走开，测试期间需保持几何关系）。

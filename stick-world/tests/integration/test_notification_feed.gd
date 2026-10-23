@@ -13,6 +13,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const UiRootScene := preload("res://modules/ui_global/scenes/ui_root.tscn")
 
 var _runner: TestRunner
@@ -38,7 +39,7 @@ func _run_tests_async() -> void:
 	await _runner.run_async()
 	print(_runner.summary())
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## feed 条目面板里的文本标签
@@ -76,7 +77,10 @@ func _test_colors() -> void:
 func _test_cap_removes_oldest() -> void:
 	for i in 7:
 		EventBus.ui_notification.emit("压测", "第%d条" % i, "info")
-	await get_tree().process_frame
+	# 等就绪不数帧：压测条经信号入队+封顶裁剪，条件等可视条数到 5
+	var capped: bool = await TestHelpers.await_condition(
+			func() -> bool: return _feed.visible_count() == 5, 2.0, "通知封顶裁剪")
+	_runner.assert_true(capped, "压测后应收敛到封顶条数")
 	_runner.assert_equal(_feed.visible_count(), 5, "最多保留 5 条")
 	var oldest: Label = _label_of(0)
 	_runner.assert_true(String(oldest.text).contains("第2条"),
@@ -111,5 +115,7 @@ func _test_auto_expire() -> void:
 	EventBus.ui_notification.emit("过期", "会消失", "info")
 	await get_tree().process_frame
 	_runner.assert_equal(_feed.visible_count(), 1, "压入后应可见 1 条")
-	await get_tree().create_timer(0.4).timeout
-	_runner.assert_equal(_feed.visible_count(), 0, "停留+淡出后应自动销毁")
+	# 等就绪不数帧：短时长（toast 0.05s+fade 0.05s）过期链路，条件等到销毁
+	var expired: bool = await TestHelpers.await_condition(
+			func() -> bool: return _feed.visible_count() == 0, 2.0, "过期自动销毁")
+	_runner.assert_true(expired, "停留+淡出后应自动销毁")

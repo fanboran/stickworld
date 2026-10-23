@@ -32,7 +32,7 @@ func _ready() -> void:
 	_runner.add_test("快速旅行：执行与 travel_mode 透传 + 弹窗挂载（P6）", _test_fast_travel_exec, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_tab_follows_player_l1() -> void:
@@ -436,14 +436,15 @@ func _test_fast_travel_exec() -> void:
 		# 曾因 CanvasLayer 直下只设锚点不设偏移 → 根恒 0 尺寸 → 居中算出负坐标半屏外
 		dialog.open_for(target, "几何回归测试城", {"code": "UNVISITED", "reason": "尚未到访",
 				"path": [], "roads": [], "hops": 0, "length_px": 0.0})
-		for i in 2:
-			await get_tree().process_frame
 		var vp_size: Vector2 = dialog.get_viewport().get_visible_rect().size
 		var dim: Control = dialog.get_node_or_null("Dim")
 		_runner.assert_true(dim != null, "遮罩存在")
 		if dim != null:
-			_runner.assert_true(dim.size.distance_to(vp_size) < 1.0,
-					"遮罩铺满视口（实测 %s，期望 %s）" % [dim.size, vp_size])
+			# 等就绪不数帧：open_for 后布局一帧落地，条件等到遮罩铺满视口
+			var laid_out: bool = await TestHelpers.await_condition(
+					func() -> bool: return dim.size.distance_to(vp_size) < 1.0,
+					2.0, "城详情遮罩铺满视口")
+			_runner.assert_true(laid_out, "遮罩铺满视口（实测 %s，期望 %s）" % [dim.size, vp_size])
 			if dim.get_child_count() > 0:
 				var win: Control = dim.get_child(0)
 				_runner.assert_true(win.global_position.x >= 0.0 and win.global_position.y >= 0.0,

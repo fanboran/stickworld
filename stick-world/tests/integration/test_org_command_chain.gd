@@ -76,6 +76,7 @@ func _run_tests_async() -> void:
 	_connect_signals()
 	# 生成测试单位
 	_helper.spawn_test_units(UNIT_COUNT)
+	# 固定 settle（有界 2 帧）：实体进图注册余波；单位清单由各用例断言兜底
 	for i in 2:
 		await get_tree().process_frame
 	_units = _helper.units.duplicate()
@@ -97,7 +98,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 环境辅助 ────────────────────────────────
@@ -290,10 +291,12 @@ func _test_leader_succession() -> void:
 	_runner.assert_true(old_leader != null, "前置：排C 应有排长")
 	# 杀排长 → 死亡清理（下一帧）→ remove_stickman → 补位引擎
 	_kill(old_leader)
-	for i in 3:
-		await get_tree().process_frame
+	var promoted: bool = await TestHelpers.await_condition(func() -> bool:
+		var cur: Node = _formation.get_squad_leader(squad_c)
+		return cur != null and cur != old_leader, 3.0, "排长补位")
+	_runner.assert_true(promoted, "排长阵亡应自动补位（squad.leader 回写）")
 	var new_leader: Node = _formation.get_squad_leader(squad_c)
-	_runner.assert_true(new_leader != null and new_leader != old_leader, "排长阵亡应自动补位（squad.leader 回写）")
+	_runner.assert_not_null(new_leader, "补位后排长应在位")
 	_runner.assert_true(_assigned_events.any(func(e: Dictionary) -> bool: return e["org_id"] == squad_c), "应发射 commander_assigned")
 	var info: Dictionary = _api.get_organization(squad_c)
 	_runner.assert_true(info.get("ok", false), "排 org 应存在")
@@ -323,10 +326,10 @@ func _test_squad_wipe_disband() -> void:
 	_formation.squad_disbanded.connect(conn)
 	_kill(_units[4])
 	_kill(_units[5])
-	for i in 4:
-		await get_tree().process_frame
+	var wiped: bool = await TestHelpers.await_condition(
+			func() -> bool: return disbanded_flag[0], 3.0, "全灭触发解散")
 	_formation.squad_disbanded.disconnect(conn)
-	_runner.assert_true(disbanded_flag[0], "全灭后小队应解散（既有链路）")
+	_runner.assert_true(wiped, "全灭后小队应解散（既有链路）")
 	_runner.assert_true(squad_wiped not in _formation.get_all_squads(), "本地 squad 应移除")
 	_runner.assert_true(squad_wiped not in _api.get_child_orgs(company), "排 org 应从连 child_orgs 消失")
 
@@ -347,12 +350,14 @@ func _test_midtier_succession() -> void:
 	_runner.assert_true(e_leader != null, "前置：排E 应有排长（下级指挥官）")
 	# 连长空缺（撤职 = 补位同一入口；死者不在任何 squad 时死亡上报由组织侧入口触发）
 	_api.remove_commander(company)
-	for i in 2:
-		await get_tree().process_frame
+	var promoted: bool = await TestHelpers.await_condition(
+			func() -> bool: return str(_api.get_organization(company).get("data", {}).get("commander_id", "")) == str(e_leader.get_instance_id()),
+			3.0, "连长由下级指挥官顶上")
+	_runner.assert_true(promoted, "连长空缺应由下级指挥官（排E排长）顶上")
 	var info: Dictionary = _api.get_organization(company)
 	_runner.assert_true(info.get("ok", false), "连 org 应存在")
 	if info.get("ok", false):
-		_runner.assert_equal(String(info["data"]["commander_id"]), str(e_leader.get_instance_id()), "连长空缺应由下级指挥官（排E排长）顶上")
+		_runner.assert_equal(String(info["data"]["commander_id"]), str(e_leader.get_instance_id()), "连长 id 落账核对")
 	_runner.assert_true(_assigned_events.any(func(ev: Dictionary) -> bool: return ev["org_id"] == company), "中间层补位也应发射 commander_assigned")
 
 
@@ -366,8 +371,10 @@ func _test_noncombat_reject() -> void:
 		return
 	var ok: bool = _tactical.issue_to_org(sid, _tactical.OrderType.ADVANCE_ALL, builder.global_position + Vector2(300, 0))
 	_runner.assert_true(ok, "计划应受理（plan 不挡，送达时挡）")
-	for i in 3:
-		await get_tree().process_frame
+	var ordered: bool = await TestHelpers.await_condition(func() -> bool:
+		var ai: Node = builder.get_ai_controller() if builder.has_method("get_ai_controller") else null
+		return ai != null and ai.has_method("has_order") and ai.has_order(),
+			3.0, "成员 AI 挂上号令")
 	var ai: Node = builder.get_ai_controller() if builder.has_method("get_ai_controller") else null
 	_runner.assert_true(ai != null, "成员应有 AI 控制器")
 	if ai != null:

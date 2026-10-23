@@ -41,14 +41,14 @@ func _ready() -> void:
 	# 村民采集/工位产出：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "村民采集/工位产出")
 	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
-	get_tree().quit(0)
+	TestRunner.finish_process(self, 0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()
 	_runner.add_test("采集经济闭环: 三职业库存增长 + harvest 行为", Callable(self, "_test_harvest_economy"), true)
 	await _setup_world()
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 ## 世界搭建：聚落加载 + 补矿工 + 摆树/矿 + 预置铁匠原料
@@ -87,6 +87,9 @@ func _test_harvest_economy() -> void:
 	if miner != null:
 		miner.global_position.y = spawn_y - miner.foot_offset
 		miner.set_user_controlled(false)
+		# 注入账本（采集入库经实体注入链；BehaviorHarvest 只走注入不查节点名）
+		if miner.has_method("set_resources_api"):
+			miner.set_resources_api(api)
 		var got: String = TownLifeAPI.assign_village_job(miner, 2)
 		_runner.assert_equal(got, "miner", "轮转 index2 应得矿工")
 

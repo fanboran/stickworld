@@ -25,7 +25,7 @@ func _ready() -> void:
 	_runner.add_test("冒烟: 60s 持续运行不崩溃", _test_run_60s, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_boot() -> void:

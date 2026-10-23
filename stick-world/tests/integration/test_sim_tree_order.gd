@@ -92,6 +92,8 @@ func _test_sim_first() -> void:
 	if tm != null and "set_speed" in tm and "Speed" in tm:
 		tm.set_speed(tm.Speed.X1)
 	probe.battle = bi
+	# 固定仿真采样窗（有界 12 物理帧）：断言的是"逐帧采样序列"本身（首帧读数、
+	# 相邻帧恒定增量），窗口长度即采样样本数——不是就绪等待，无谓词可条件化
 	for i in 12:
 		await get_tree().physics_frame
 	var durs: Array = probe.durations

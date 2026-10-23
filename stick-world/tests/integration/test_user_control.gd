@@ -80,19 +80,24 @@ func _run_tests_async() -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_game_root = packed.instantiate()
 	add_child(_game_root)
-	# 等待地图加载和实体生成
-	for i in 8:
-		await get_tree().process_frame
+	# 等待地图加载（条件等待替代数帧，README 硬规矩）：就绪判据 = boot 翻 false
+	# （地图就绪/载入覆盖淡出，载入屏是强模态会吞输入）；超时由 _map 断言兜红
+	var booted: bool = await TestHelpers.await_condition(
+			func() -> bool: return _game_root.get("_boot_world_phase") == false,
+			10.0, "GameRoot boot 完成")
+	_runner.assert_true(booted, "GameRoot 应在 10s 内 boot 完成")
 	# 取消玩家接管（避免干扰）
 	_release_user_control_player()
 	# 切到 BATTLE 模式激活 SelectionSystem
 	var dispatcher: Node = _game_root.input_dispatcher
 	if dispatcher != null:
 		dispatcher.set_mode(PlayerControlAPI.Mode.BATTLE)
+	# 固定 settle（有界 2 帧）：模式切换经 dispatcher 跨帧分发（无完成信号），
+	# selection/user_control 引用由 _test_assembled 断言兜底
 	for i in 2:
 		await get_tree().process_frame
 	_selection = _game_root.get_selection_system()
@@ -101,8 +106,8 @@ func _run_tests_async() -> void:
 	_map = _game_root.get_current_map()
 	# 生成测试单位
 	_spawn_test_units()
-	for i in 1:
-		await get_tree().process_frame
+	# 固定 settle（有界 1 帧）：实体进图注册余波；单位在册由各用例断言兜底
+	await get_tree().process_frame
 
 	# 运行同步测试
 	for t in _tests:
@@ -121,7 +126,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────

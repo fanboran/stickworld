@@ -33,11 +33,8 @@ func _ready() -> void:
 	_runner.add_test("emission: Polygon2D 三角化采样点在多边形内", _test_emission_points_polygon)
 	_runner.run()
 	print(_runner.summary())
-	# 兼容批量模式：batch 下发完成信号而非退出进程
-	if Engine.has_meta("test_batch"):
-		TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
-	else:
-		get_tree().quit(0 if _runner.all_passed() else 1)
+	# 统一出口（finish_process 内含批量模式分支：batch 下发完成信号，独立跑退出进程）
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────── 测试夹具 ───────────────────────────

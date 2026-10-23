@@ -16,6 +16,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 const TacticalOrdersScript := preload("res://modules/tactics/scripts/tactical_orders.gd")
 
@@ -40,12 +41,13 @@ func _run() -> void:
 	_helper = CombatTestSetup.new()
 	await _helper.start(self)
 	_card = _helper.game_root.ui_root.get_node_or_null("ContextPanel/SquadInspector/SquadCard")
+	# 固定 settle（有界 2 帧）：装配余波，卡片存活性由 _test_mounted 断言兜底
 	for i in 2:
 		await get_tree().process_frame
 	_register_tests()
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────────── 用例注册 ────────────────────────────────
@@ -92,13 +94,14 @@ func _test_show_on_selection() -> void:
 	if _card == null:
 		return
 	_helper.spawn_test_units(UNIT_COUNT)
+	# 固定 settle（有界 1 帧）：实体进图注册余波；注册结果由后续建班断言兜底
 	await get_tree().process_frame
 	_squad_id = String(_helper.formation.create_squad(_helper.units, SQUAD_NAME))
 	_runner.assert_true(not _squad_id.is_empty(), "测试编队应创建成功")
 	_helper.selection.select_units(_helper.units)
-	for i in 3:
-		await get_tree().process_frame
-	_runner.assert_true(_card.visible, "框选小队后卡片应显示")
+	var shown: bool = await TestHelpers.await_condition(
+			func() -> bool: return _card.visible, 2.0, "框选后卡片显示")
+	_runner.assert_true(shown, "框选小队后卡片应显示")
 	_runner.assert_equal(_card.get_bound_squad(), _squad_id, "卡片应绑定被框选单位所在的编队")
 
 
@@ -107,6 +110,8 @@ func _test_slot_survives_mode_switch() -> void:
 	if _card == null:
 		return
 	_helper.game_root.ui_root.apply_mode_panel(UIAPI.PanelType.BATTLE)
+	# 固定 settle（有界 2 帧，承重等待）：被测对象正是 queue_free 延迟删除窗口——
+	# clear_context 若误释放槽位，卡片在这两帧内消亡；条件化会让断言空转提前通过
 	for i in 2:
 		await get_tree().process_frame
 	_runner.assert_true(is_instance_valid(_card), "切 BATTLE 模式后卡片不应被释放")
@@ -138,10 +143,12 @@ func _test_order_line() -> void:
 	var ok: bool = bool(_helper.tactical.issue(TacticalOrdersScript.OrderType.ADVANCE_ALL,
 			_squad_id, ADVANCE_TARGET))
 	_runner.assert_true(ok, "前进号令应下发成功")
-	for i in 2:
-		await get_tree().process_frame
+	# 号令栏经 order_issued 信号驱动：等文案就位而非数帧
+	var ordered: bool = await TestHelpers.await_condition(func() -> bool:
+		return String(_card.get_node("Body/OrderRow/Order").text).contains("前进"),
+			2.0, "号令栏显示前进号令")
+	_runner.assert_true(ordered, "号令栏应显示中文号令名")
 	var txt := String(_card.get_node("Body/OrderRow/Order").text)
-	_runner.assert_true(txt.contains("前进"), "号令栏应显示中文号令名（实测 %s）" % txt)
 	_runner.assert_true(txt.contains("玩家"), "玩家直令档应标注来源（实测 %s）" % txt)
 
 
@@ -154,16 +161,16 @@ func _test_phase_badge() -> void:
 	# HOLD 非推进号令撤销计划验隐藏（两态断言均保留，不依赖默认值）。
 	_helper.formation.set_phase_plan_params({"phase_plan_enabled": true})
 	_helper.tactical.issue(TacticalOrdersScript.OrderType.ADVANCE_ALL, _squad_id, ADVANCE_TARGET)
-	for i in 3:
-		await get_tree().process_frame
-	_runner.assert_true(phase_label.visible, "计划激活后应显示相位徽标")
+	var badge_on: bool = await TestHelpers.await_condition(
+			func() -> bool: return phase_label.visible, 2.0, "相位徽标显示")
+	_runner.assert_true(badge_on, "计划激活后应显示相位徽标")
 	_runner.assert_true(
 			String(phase_label.text).contains("跃进中"),
 			"徽标应为相位直译文案（实测 %s）" % String(phase_label.text))
 	_helper.tactical.issue(TacticalOrdersScript.OrderType.HOLD_POSITION, _squad_id, Vector2.ZERO)
-	for i in 2:
-		await get_tree().process_frame
-	_runner.assert_false(phase_label.visible, "计划撤销后不应显示相位徽标")
+	var badge_off: bool = await TestHelpers.await_condition(
+			func() -> bool: return not phase_label.visible, 2.0, "相位徽标隐藏")
+	_runner.assert_true(badge_off, "计划撤销后不应显示相位徽标")
 
 
 func _test_assign_leader() -> void:
@@ -172,14 +179,15 @@ func _test_assign_leader() -> void:
 	var members: VBoxContainer = _card.get_node("Body/Members")
 	var row: Node = members.get_child(0)
 	row.pressed.emit()
-	await get_tree().process_frame
 	var assign_btn: Button = _card.get_node("Body/Actions/ActionsA").get_child(0)
-	_runner.assert_false(assign_btn.disabled, "选中成员后任命班长应可用")
+	var selectable: bool = await TestHelpers.await_condition(
+			func() -> bool: return not assign_btn.disabled, 2.0, "选中成员后任命班长可用")
+	_runner.assert_true(selectable, "选中成员后任命班长应可用")
 	assign_btn.pressed.emit()
-	for i in 2:
-		await get_tree().process_frame
-	var leader: Node = _helper.formation.get_squad_leader(_squad_id)
-	_runner.assert_not_null(leader, "任命应落到编制侧班长位")
+	var appointed: bool = await TestHelpers.await_condition(
+			func() -> bool: return _helper.formation.get_squad_leader(_squad_id) != null,
+			2.0, "任命落到编制侧班长位")
+	_runner.assert_true(appointed, "任命应落到编制侧班长位")
 	_runner.assert_true(
 			not String(_card.get_node("Body/Commander/Leader").text).contains("空缺"),
 			"班长栏应显示已任命班长")
@@ -194,10 +202,10 @@ func _test_remove_member() -> void:
 	var remove_btn: Button = _card.get_node("Body/Actions/ActionsA").get_child(1)
 	_runner.assert_false(remove_btn.disabled, "有选中成员时移出班组应可用")
 	remove_btn.pressed.emit()
-	for i in 2:
-		await get_tree().process_frame
-	_runner.assert_equal(_helper.formation.get_squad_size(_squad_id), UNIT_COUNT - 1,
-			"编制侧人数应减一")
+	var removed: bool = await TestHelpers.await_condition(
+			func() -> bool: return _helper.formation.get_squad_size(_squad_id) == UNIT_COUNT - 1,
+			2.0, "编制侧人数减一")
+	_runner.assert_true(removed, "编制侧人数应减一")
 	_runner.assert_equal(_card.get_node("Body/Members").get_child_count(), UNIT_COUNT - 1,
 			"成员行应随之减少")
 
@@ -206,9 +214,9 @@ func _test_hide_on_clear() -> void:
 	if _card == null:
 		return
 	_helper.selection.clear_selection()
-	for i in 3:
-		await get_tree().process_frame
-	_runner.assert_false(_card.visible, "清空选择后卡片应收起")
+	var hidden: bool = await TestHelpers.await_condition(
+			func() -> bool: return not _card.visible, 2.0, "清空选择后卡片收起")
+	_runner.assert_true(hidden, "清空选择后卡片应收起")
 	_runner.assert_equal(_card.get_bound_squad(), "", "收起后不应残留绑定")
 
 
@@ -222,6 +230,7 @@ func _test_authority_compare() -> void:
 	var company := String((mk.get("data", {}) as Dictionary).get("org_id", ""))
 	# 再来两班（无班长）与三班（有班长），同为连队下属 —— 满足 L1 兄弟班口径
 	_helper.spawn_test_units(4)
+	# 固定 settle（有界 1 帧）：实体进图注册余波；建班成败由下方断言兜底
 	await get_tree().process_frame
 	var two := String(_helper.formation.create_squad([_helper.units[-4], _helper.units[-3]],
 			"二班", "fp_combat_squad", company))
@@ -241,10 +250,10 @@ func _test_authority_compare() -> void:
 			"权威差 1.5 > margin 应够格转投")
 	# 绑到二班：对比块应显示（本班 + 三班行），提示条应报「N 人有意转投 三班」
 	_card.show_squad(two)
-	for i in 4:
-		await get_tree().process_frame
-	var block: VBoxContainer = _card.get_node("Body/AuthCompare")
-	_runner.assert_true(block.visible, "有邻近班时权威对比块应显示")
+	var block_shown: bool = await TestHelpers.await_condition(func() -> bool:
+		var b: Control = _card.get_node_or_null("Body/AuthCompare")
+		return b != null and b.visible, 2.0, "权威对比块显示")
+	_runner.assert_true(block_shown, "有邻近班时权威对比块应显示")
 	var rows: VBoxContainer = _card.get_node("Body/AuthCompare/AuthRows")
 	_runner.assert_true(rows.get_child_count() >= 2, "对比行应含本班 + 至少一个邻近班（实测 %d）"
 			% rows.get_child_count())
@@ -291,13 +300,13 @@ func _test_orgpanel_selection_binding() -> void:
 			"OrgPanel 应导出选中变更信号（装配层接线入口）")
 	# 模拟 OrgPanel 选中该 L1 组织（信号路径全真）
 	op.org_selection_changed.emit(_squad_id)
-	for i in 4:
-		await get_tree().process_frame
-	_runner.assert_true(_card.visible, "选中 L1 后班组卡应被唤起")
+	var raised: bool = await TestHelpers.await_condition(
+			func() -> bool: return _card.visible, 2.0, "OrgPanel 选中唤起班组卡")
+	_runner.assert_true(raised, "选中 L1 后班组卡应被唤起")
 	_runner.assert_equal(_card.get_bound_squad(), _squad_id, "卡片应绑定该 L1 组织")
 	# 关闭面板 → 导出空选中 → 卡片收起（消费既有 hide 语义，不残留）
 	op.close()
-	for i in 3:
-		await get_tree().process_frame
-	_runner.assert_false(_card.visible, "关闭 OrgPanel 后班组卡应收起")
+	var dropped: bool = await TestHelpers.await_condition(
+			func() -> bool: return not _card.visible, 2.0, "OrgPanel 关闭后班组卡收起")
+	_runner.assert_true(dropped, "关闭 OrgPanel 后班组卡应收起")
 	_runner.assert_equal(_card.get_bound_squad(), "", "收起后不应残留绑定")

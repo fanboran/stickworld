@@ -57,7 +57,7 @@ func _run_tests_async() -> void:
 		_runner.end_test()
 		print("完成: %s" % t["name"])
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 ## 等在场飘字全部结束回池（0.7s 总时长，留余量），保证逐用例只有一个可见 Label

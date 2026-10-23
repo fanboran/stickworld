@@ -47,7 +47,7 @@ func _ready() -> void:
 	# 建造循环：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "建造循环")
 	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
-	get_tree().quit(0)
+	TestRunner.finish_process(self, 0)
 	_runner = TestRunner.new()
 	_runner.add_test("建造: 未设地图时开工返回失败", _test_no_map, true)
 	_runner.add_test("建造: 未注册建筑类型返回失败", _test_unregistered_def, true)
@@ -60,7 +60,7 @@ func _ready() -> void:
 	_runner.add_test("建造: apply_building_def 对 Excel 空单元格 null 字段容忍（2026-09 回归：String(null) 构造崩）", _test_apply_def_null_fields, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 ## 惰性初始化：加载地图 + 装配 ConstructionManager

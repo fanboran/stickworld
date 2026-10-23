@@ -60,8 +60,8 @@ func _run_tests_async() -> void:
 	_tactical = _helper.tactical
 	# 生成测试单位
 	_helper.spawn_test_units(UNIT_COUNT)
-	for i in 1:
-		await get_tree().process_frame
+	# 固定 settle（有界 1 帧）：实体进图注册余波；建班成败由各用例断言兜底
+	await get_tree().process_frame
 	# 注入 FormationSystem 引用（模拟 GameRoot spawn 注入）
 	for u in _helper.units:
 		if u != null and u.has_method("set_formation_system"):
@@ -84,7 +84,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 同步测试 ────────────────────────────────

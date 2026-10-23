@@ -35,7 +35,7 @@ func _ready() -> void:
 	# 招兵/人口再生：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "招兵/人口再生")
 	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
-	get_tree().quit(0)
+	TestRunner.finish_process(self, 0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()
 	_runner.add_test("兵营招兵：村民变身+资源扣减", Callable(self, "_test_recruit_success"), true)
@@ -57,7 +57,7 @@ func _run_tests() -> void:
 	_runner.assert_true(ok, "GameRoot 应在 20s 内装配完成（地图+RecruitManager）")
 	if not ok:
 		print(_runner.summary())
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_org_api = _game_root.get_organization_api()
 	_recruit = _game_root.get_recruit_manager()
@@ -71,7 +71,7 @@ func _run_tests() -> void:
 	_runner.assert_not_null(_recruit, "RecruitManager 就绪")
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────────── 测试用例 ────────────────────────────────

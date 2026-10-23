@@ -10,6 +10,12 @@ signal test_done(code: int)
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+# 依赖纯逻辑/纯数据一律显式 preload（tests/README 禁区：不依赖 class_name 全局注册）
+const ScriptItemsAPI := preload("res://modules/items/api.gd")
+const ScriptItemContainer := preload("res://modules/items/core/item_container.gd")
+const ScriptItemDef := preload("res://modules/items/core/item_def.gd")
+const ScriptItemDB := preload("res://modules/items/item_db.gd")
+const ScriptItemTransfer := preload("res://modules/items/core/item_transfer.gd")
 
 func _ready() -> void:
 	_runner = TestRunner.new()
@@ -33,12 +39,12 @@ func _ready() -> void:
 var _runner: TestRunner
 
 
-func _make_container() -> ItemContainer:
-	return ItemContainer.new()
+func _make_container() -> ScriptItemContainer:
+	return ScriptItemContainer.new()
 
 
 ## 装满 n 件（断言辅助：全部放入）
-func _fill(c: ItemContainer, def_id: StringName, n: int) -> void:
+func _fill(c: ScriptItemContainer, def_id: StringName, n: int) -> void:
 	var left: int = c.add(def_id, n)
 	_runner.assert_equal(left, 0, "%s 全部放入（余量 0）" % def_id)
 
@@ -46,15 +52,15 @@ func _fill(c: ItemContainer, def_id: StringName, n: int) -> void:
 func _test_no_total_limit() -> void:
 	var c := _make_container()
 	# 全部物品种类各来一件——无格数概念,种类数远超任何"格子数"也不拒
-	for id in ItemDB.all_ids():
+	for id in ScriptItemDB.all_ids():
 		_fill(c, id, 1)
-	_runner.assert_equal(c.entry_count(), ItemDB.all_ids().size(),
+	_runner.assert_equal(c.entry_count(), ScriptItemDB.all_ids().size(),
 			"全部物品种类各一件皆可入包（无总数量限制）")
 
 
 func _test_per_item_cap() -> void:
 	var c := _make_container()
-	var cap: int = ItemDB.get_def(&"mat_stone").max_stack  # 石料 50
+	var cap: int = ScriptItemDB.get_def(&"mat_stone").max_stack  # 石料 50
 	_fill(c, &"mat_stone", cap)
 	var left: int = c.add(&"mat_stone", 10)
 	_runner.assert_equal(left, 10, "超上限部分作为余量返回（不放入）")
@@ -112,15 +118,15 @@ func _test_transfer_atomic() -> void:
 	var from := _make_container()
 	var to := _make_container()
 	_fill(from, &"mat_stone", 50)  # 源满堆
-	var left: int = ItemTransfer.move(from, to, &"mat_stone", 50)
+	var left: int = ScriptItemTransfer.move(from, to, &"mat_stone", 50)
 	_runner.assert_equal(left, 0, "目标空,全量转移")
 	# 目标已满堆,再从源转——余量全留源
 	_fill(from, &"mat_stone", 50)
-	left = ItemTransfer.move(from, to, &"mat_stone", 50)
+	left = ScriptItemTransfer.move(from, to, &"mat_stone", 50)
 	_runner.assert_equal(left, 50, "目标无空间,余量全留源（原子截断）")
 	_runner.assert_equal(from.count_of(&"mat_stone"), 50, "源未受损")
 	# 源不足:请求超出持有量
-	left = ItemTransfer.move(from, to, &"mat_gold", 10)
+	left = ScriptItemTransfer.move(from, to, &"mat_gold", 10)
 	_runner.assert_equal(left, 10, "源无此物,转移量为 0")
 
 
@@ -129,52 +135,52 @@ func _test_move_all() -> void:
 	var to := _make_container()
 	to.add(&"mat_gold", 15)  # 金砂上限 20,目标已有 15
 	_fill(from, &"mat_gold", 20)
-	var left: int = ItemTransfer.move_all(from, to, &"mat_gold")
+	var left: int = ScriptItemTransfer.move_all(from, to, &"mat_gold")
 	_runner.assert_equal(left, 15, "目标只收得下 5,余 15 留源")
 	_runner.assert_equal(to.count_of(&"mat_gold"), 20, "目标满堆")
 	_runner.assert_equal(from.count_of(&"mat_gold"), 15, "源剩 15")
 
 
 func _test_resource_mapping() -> void:
-	_runner.assert_equal(ItemsAPI.resource_id_for(&"mat_stone"), &"res_stone",
+	_runner.assert_equal(ScriptItemsAPI.resource_id_for(&"mat_stone"), &"res_stone",
 			"石料→res_stone")
-	_runner.assert_equal(ItemsAPI.resource_id_for(&"mat_wood"), &"res_wood",
+	_runner.assert_equal(ScriptItemsAPI.resource_id_for(&"mat_wood"), &"res_wood",
 			"木材→res_wood")
-	_runner.assert_equal(ItemsAPI.item_id_for(&"res_iron_ingot"), &"mat_iron_ingot",
+	_runner.assert_equal(ScriptItemsAPI.item_id_for(&"res_iron_ingot"), &"mat_iron_ingot",
 			"res_iron_ingot→铁锭")
-	_runner.assert_equal(ItemsAPI.resource_id_for(&"wpn_sword_001"), &"",
+	_runner.assert_equal(ScriptItemsAPI.resource_id_for(&"wpn_sword_001"), &"",
 			"非资源品无映射")
 	# 映射表内的 def 必须真实存在（防漂移）
-	for def_id in ItemsAPI.RESOURCE_BY_ITEM:
-		_runner.assert_not_null(ItemDB.get_def(def_id), "映射物品 %s 已注册" % def_id)
+	for def_id in ScriptItemsAPI.RESOURCE_BY_ITEM:
+		_runner.assert_not_null(ScriptItemDB.get_def(def_id), "映射物品 %s 已注册" % def_id)
 
 
 # ─────────────────────────────── 弹药域（AMMO 接线，蓝图 §4.2）───────────────
 
 func _test_ammo_def_registered() -> void:
-	var def: ItemDef = ItemDB.get_def(&"ammo_arrow_001")
+	var def: ScriptItemDef = ScriptItemDB.get_def(&"ammo_arrow_001")
 	_runner.assert_not_null(def, "箭矢 def 已注册")
 	if def == null:
 		return
-	_runner.assert_equal(def.category, ItemDef.Category.AMMO, "类别=AMMO")
+	_runner.assert_equal(def.category, ScriptItemDef.Category.AMMO, "类别=AMMO")
 	_runner.assert_equal(def.max_stack, 50, "堆叠上限 50（箭进背包一叠五十）")
 	_runner.assert_false(def.is_equipment(), "弹药不占装备槽")
 	_runner.assert_not_null(def.icon, "图标接战斗箭矢贴图")
 
 
 func _test_ammo_weapon_wiring() -> void:
-	var bow: ItemDef = ItemDB.get_def(&"wpn_bow_001")
+	var bow: ScriptItemDef = ScriptItemDB.get_def(&"wpn_bow_001")
 	_runner.assert_not_null(bow, "弓 def 存在")
 	if bow != null:
 		_runner.assert_equal(bow.ammo_id, &"ammo_arrow_001", "弓耗弹指向箭矢")
 		_runner.assert_equal(int(bow.stat("spawn_ammo", 0)), 20, "弓手出生带箭 20")
 	# 免弹武器（数据开关：ammo_id 空 = 免弹）
 	for id in [&"wpn_sword_001", &"wpn_spear_001", &"wpn_staff_001", &"wpn_pickaxe_001"]:
-		var d: ItemDef = ItemDB.get_def(id)
+		var d: ScriptItemDef = ScriptItemDB.get_def(id)
 		_runner.assert_equal(d.ammo_id if d != null else &"<missing>", &"",
 				"%s 免弹（ammo_id 空）" % id)
 	# 弹药自身不耗弹（防自引用）
-	var arrow: ItemDef = ItemDB.get_def(&"ammo_arrow_001")
+	var arrow: ScriptItemDef = ScriptItemDB.get_def(&"ammo_arrow_001")
 	_runner.assert_equal(arrow.ammo_id if arrow != null else &"<missing>", &"",
 			"箭矢自身免弹")
 

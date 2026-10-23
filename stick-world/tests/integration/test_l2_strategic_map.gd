@@ -34,7 +34,7 @@ func _ready() -> void:
 	_runner.add_test("L2 单击 L1 地块 -> 打开对应老 L1 地图，ESC 返回 L2", _test_l1_drilldown, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_packs_exist() -> void:

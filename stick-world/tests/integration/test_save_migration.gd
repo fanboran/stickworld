@@ -34,7 +34,7 @@ func _ready() -> void:
 	await _runner.run_async()
 	print(_runner.summary())
 	SaveManager.delete_game(SLOT)
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────── 样例库构造 ───────────────────────────

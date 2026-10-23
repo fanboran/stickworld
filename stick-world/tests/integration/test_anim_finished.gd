@@ -12,6 +12,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
 
 var _runner: TestRunner
@@ -23,11 +24,14 @@ func _ready() -> void:
 
 
 func _run_tests_async() -> void:
-	# 实例化火柴人实体（独立场景，自包含骨骼/动画/武器）
+	# 实例化火柴人实体（独立场景，自包含骨骼/动画/武器）：
+	# 就绪等待 = rig 装配完成（条件等待替代数帧，README 硬规矩）
 	var entity: Node2D = STICKMAN_SCENE.instantiate()
 	add_child(entity)
-	for i in 4:
-		await get_tree().process_frame
+	var rig_ready: bool = await TestHelpers.await_condition(
+			func() -> bool: return entity.get("rig") != null,
+			5.0, "火柴人实体 rig 装配")
+	_runner.assert_true(rig_ready, "实体应在 5s 内装配出 rig")
 
 	var rig: Node2D = entity.get("rig")
 	if rig == null:
@@ -35,7 +39,7 @@ func _run_tests_async() -> void:
 		_runner.assert_true(false, "实体无 rig")
 		_runner.end_test()
 		print(_runner.summary())
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	var finished: Array = []
 	rig.connect("animation_finished", func(anim_name): finished.append(anim_name))
@@ -45,9 +49,11 @@ func _run_tests_async() -> void:
 	_runner.begin_test("攻击动画: attack 播完发射 animation_finished")
 	visual.play("attack")
 	_runner.assert_equal(entity.get("_current_anim"), "attack", "实体当前动画应为 attack")
-	# 等 1.6s（attack 约 1.33s 播完 + 回切余量）
-	await get_tree().create_timer(1.6).timeout
-	_runner.assert_true(finished.size() >= 1, "attack 应触发 animation_finished，实际 %d 次" % finished.size())
+	# 动画约 1.33s 播完：等 animation_finished 信号面（finished 非空）而非固定等 1.6s
+	var first_done: bool = await TestHelpers.await_condition(
+			func() -> bool: return not finished.is_empty(),
+			2.5, "attack 播完触发 animation_finished")
+	_runner.assert_true(first_done, "attack 应触发 animation_finished，实际 %d 次" % finished.size())
 	if not finished.is_empty():
 		_runner.assert_equal(finished[0], "attack", "结束信号动画名应为 attack")
 	_runner.assert_true(entity.get("_current_anim") != "attack", "第一刀播完应回切 walk/idle")
@@ -56,6 +62,8 @@ func _run_tests_async() -> void:
 	# ── 用例 2：播放中重播（第二刀，走 rig.play 的 start() 强制重播分支）──
 	_runner.begin_test("攻击动画: 播放中重播第二刀仍发射 animation_finished 并回切")
 	visual.play("attack")
+	# 固定 settle 语义：必须停在动画**未播完**的中段（0.2s < 1.33s）才能走进
+	# start() 强制重播分支——这正是被测前提，条件化会改变测试对象，保留有界实等待
 	await get_tree().create_timer(0.2).timeout
 	# 0.2s < 动画 1.33s：此刻 state 仍是 attack → 再 play 走 start() 重播分支
 	_runner.assert_equal(rig._state_machine.get_current_node(), "attack", "重播前应仍在 attack 状态")
@@ -65,8 +73,11 @@ func _run_tests_async() -> void:
 	# 重播应把播放位置打回起点（结束信号重新武装的证据）
 	_runner.assert_lt(rig._state_machine.get_current_play_position(), 0.5,
 			"重播后播放位置应回到开头")
-	await get_tree().create_timer(1.8).timeout
-	_runner.assert_true(finished.size() > count_before,
+	# 等第二刀播完再发一次 animation_finished（信号面条件等待，预算 2.5s）
+	var second_done: bool = await TestHelpers.await_condition(
+			func() -> bool: return finished.size() > count_before,
+			2.5, "第二刀播完再次发射 animation_finished")
+	_runner.assert_true(second_done,
 			"第二刀播完应再次发射 animation_finished（重播前 %d 次 → 现 %d 次）"
 					% [count_before, finished.size()])
 	_runner.assert_true(entity.get("_current_anim") != "attack",
@@ -74,4 +85,4 @@ func _run_tests_async() -> void:
 	_runner.end_test()
 
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)

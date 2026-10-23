@@ -17,6 +17,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 
@@ -55,7 +56,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## 设置菜单装配且默认隐藏（启动不弹菜单）
@@ -168,9 +169,16 @@ func _test_default_infantry() -> void:
 		var sp: Control = _helper.game_root.get_settings_menu_panel()
 		if sp != null and sp.visible:
 			_helper.game_root.toggle_settings_menu()
+	var map_before: Node2D = sl.get_current_map() if sl.has_method("get_current_map") else null
+	var old_eid: int = map_before.get_instance_id() if map_before != null else 0
 	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
-	for i in 4:
-		await get_tree().process_frame
+	# 等就绪不数帧（tests/README §二.1）：换图完成 = 地图实例更换；超时由下方入口断言兜红
+	var arrived: bool = await TestHelpers.await_condition(
+			func() -> bool:
+				var m: Node2D = sl.get_current_map() if sl.has_method("get_current_map") else null
+				return m != null and m.get_instance_id() != old_eid,
+			10.0, "直达战场换图完成")
+	_runner.assert_true(arrived, "travel_to_map 应在超时内完成换图")
 	# 战场图已退役自动刷敌（出征与领地架构 §4.3）：直达组织遭遇战，
 	# 验证默认步兵补位（allies 少于 3 补至 3）链路仍在
 	var gen: Node = _helper.game_root.get("_worldgen")
@@ -180,13 +188,14 @@ func _test_default_infantry() -> void:
 		return
 	var field_map: Node2D = _helper.game_root.get_current_map()
 	gen.spawn_battlefield_enemies(field_map, [player], 2)
-	for i in 4:
-		await get_tree().process_frame
 	var bd: Node = _helper.game_root.get_battle_director_node() if _helper.game_root.has_method("get_battle_director_node") else null
 	_runner.assert_true(bd != null and bd.has_method("has_active_battle"), "BattleDirector 应就绪")
 	if bd == null or not bd.has_method("has_active_battle"):
 		return
-	_runner.assert_true(bd.has_active_battle(), "战场应有活跃战斗")
+	# 等就绪不数帧：补位刷敌 → 遭遇战成立（战斗激活是唯一被关心的终态）
+	var engaged: bool = await TestHelpers.await_condition(
+			func() -> bool: return bd.has_active_battle(), 10.0, "遭遇战激活")
+	_runner.assert_true(engaged, "战场应有活跃战斗")
 	if not bd.has_active_battle() or not bd.has_method("get_active_battles"):
 		return
 	var battles: Array = bd.get_active_battles()

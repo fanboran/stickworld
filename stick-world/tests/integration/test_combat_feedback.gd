@@ -18,6 +18,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 
 var _runner: TestRunner
@@ -48,6 +49,7 @@ func _run_tests_async() -> void:
 	await _helper.start(self)
 	# 生成 2 个测试单位
 	_helper.spawn_test_units(2)
+	# 固定 settle（有界 2 帧）：实体进图注册余波；单位在册由各用例断言兜底
 	for i in 2:
 		await get_tree().process_frame
 
@@ -60,7 +62,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## 血条组件已装配
@@ -274,6 +276,8 @@ func _test_static_separation() -> void:
 	_place_x(b, a.global_position.x + 200.0)
 	# 清上一用例残余速度（否则 a 带速滑行污染"零位移"采样），落定后再快照
 	_helper.reset_units([a, b])
+	# 固定物理 settle（有界 3 物理帧）：清速后残余冲量随物理刻收敛——断言的是
+	# "完全静止基线"，无单一完成信号可轮询，只能按物理节拍等收敛
 	for i in 3:
 		await get_tree().physics_frame
 	var a_pos_before: Vector2 = a.global_position

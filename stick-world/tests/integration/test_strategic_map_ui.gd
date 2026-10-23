@@ -62,7 +62,7 @@ func _ready() -> void:
 	_runner.add_test("视图互斥：L1 打开时 L3（含 L2）自动收起", _test_view_exclusion, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_l1_assembly() -> void:

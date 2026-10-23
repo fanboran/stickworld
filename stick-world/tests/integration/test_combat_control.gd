@@ -15,6 +15,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 const ScriptBehaviorAttack := preload("res://modules/units/scripts/ai/behavior_attack.gd")
 
@@ -43,6 +44,7 @@ func _run_tests_async() -> void:
 	_formation = _helper.formation
 	# 生成测试单位（跟随/展开用）
 	_helper.spawn_test_units(4)
+	# 固定 settle（有界 2 帧）：实体进图注册余波；单位在册由各用例断言兜底
 	for i in 2:
 		await get_tree().process_frame
 	for u in _helper.units:
@@ -58,7 +60,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## Q 键：玩家 User Control 时切换 EXPLORE<->BATTLE，BATTLE 模式保持接管
@@ -115,14 +117,15 @@ func _test_follow_behavior() -> void:
 	if player.has_method("set_user_controlled"):
 		player.set_user_controlled(true)
 	await get_tree().process_frame
-	# 等待 AI 决策周期（0.3s）
-	await get_tree().create_timer(0.8).timeout
 	var ai: Node = _helper.units[1].get_ai_controller() if _helper.units[1].has_method("get_ai_controller") else null
 	if ai == null:
 		_runner.assert_true(false, "成员无 AIController")
 		return
-	var behavior: String = ai.get_current_behavior()
-	_runner.assert_equal(behavior, "follow", "成员行为应为 follow，实际: %s" % behavior)
+	# 等就绪不数帧：AI 决策周期（约 0.3s）内行为应切入 follow
+	var following: bool = await TestHelpers.await_condition(
+			func() -> bool: return ai.get_current_behavior() == "follow",
+			3.0, "成员切入 follow 行为")
+	_runner.assert_true(following, "成员行为应为 follow（超时未切入，实际: %s）" % ai.get_current_behavior())
 	# 清理：关闭跟随、解散小队、取消接管——小队/接管残留会改变后续用例前提
 	# （BehaviorFollow 按 map.get_user_controlled_entity() 找跟随目标，依赖 user_controlled 实体）
 	_formation.set_squad_follow(squad_id, false)
@@ -152,10 +155,16 @@ func _test_follow_moves() -> void:
 	_formation.set_squad_follow(squad_id, true)
 	await get_tree().process_frame
 	var dist_before: float = _helper.units[1].global_position.distance_to(player.global_position)
-	# 等 2.5s（成员 160px/s，1800px 需 11s——只验证"向玩家靠近"）
-	await get_tree().create_timer(2.5).timeout
-	var dist_after: float = _helper.units[1].global_position.distance_to(player.global_position)
-	_runner.assert_true(dist_after < dist_before, "成员应向玩家靠近，before=%.0f after=%.0f" % [dist_before, dist_after])
+	# 等就绪不数帧（tests/README §二.1）：成员 160px/s 全程需 11s，断言只关心
+	# "在向玩家靠近"——距离开始收敛即达标，条件等待比固定 2.5s 更快也更稳
+	var approaching: bool = await TestHelpers.await_condition(func() -> bool:
+		var u: Node2D = _helper.units[1]
+		return is_instance_valid(u) and u.global_position.distance_to(player.global_position) < dist_before - 1.0,
+			5.0, "成员向玩家靠近")
+	_runner.assert_true(approaching, "成员应向玩家靠近（before=%.0f，现 %.0f）" % [
+		dist_before,
+		_helper.units[1].global_position.distance_to(player.global_position),
+	])
 	# 清理：跟随/接管/小队全撤，不把移动中状态留给展开用例
 	_formation.set_squad_follow(squad_id, false)
 	if player.has_method("set_user_controlled"):

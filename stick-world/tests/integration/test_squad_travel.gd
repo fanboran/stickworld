@@ -17,6 +17,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 const ScriptGameRoot := preload("res://modules/world/scripts/game_root.gd")
 
@@ -70,7 +71,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 ## 在聚落编成战斗班（3 人 + 排长 + 跟随）
@@ -97,10 +98,13 @@ func _test_travel_with_squad() -> void:
 		_runner.assert_true(false, "SceneLoader 为空")
 		return
 	sl.travel_to_map(ScriptGameRoot.BATTLEFIELD_MAP_ID, WorldAPI.TravelMode.WALK, WorldAPI.EntrySide.LEFT)
-	# 等待新地图加载与跟随者 spawn（map_loaded 同步执行，多等几帧稳妥）
-	for i in 4:
-		await get_tree().process_frame
-	# 战场实体数 = 玩家(1) + 随行(PARTY_SIZE)——战场进图不再自动刷敌（架构 §4.3）
+	# 等就绪不数帧（tests/README §二.1）：新图加载 + 跟随者 spawn 完成 =
+	# 战场实体数达 玩家(1)+随行(PARTY_SIZE)——战场进图不再自动刷敌（架构 §4.3）
+	var arrived: bool = await TestHelpers.await_condition(func() -> bool:
+		var m: Node2D = _helper.game_root.scene_loader.get_current_map()
+		return m != null and m.get_entities().size() >= 1 + PARTY_SIZE,
+			10.0, "战场实体（玩家+随行）就位")
+	_runner.assert_true(arrived, "换图后玩家与随行应全部就位")
 	var map: Node2D = _helper.game_root.scene_loader.get_current_map()
 	_runner.assert_true(map != null, "战场地图应已加载")
 	if map == null or not map.has_method("get_entities"):

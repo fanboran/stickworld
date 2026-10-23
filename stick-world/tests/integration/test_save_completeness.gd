@@ -43,7 +43,7 @@ func _boot_async() -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_game_root = packed.instantiate()
 	_game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场（HD-2D 城郊战场图）
@@ -52,16 +52,16 @@ func _boot_async() -> void:
 		func(): return _get_map() != null, SETTLE_TIMEOUT, "GameRoot 地图就绪")
 	if not ok:
 		print("[FATAL] 地图未就绪")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
-	await _frames(2)
+	await _frames(2)  # settle: boot 地图就绪后的跨帧装配余波（不可条件化，见 _frames 注）
 	_runner.add_test("阵营: 存→读 faction 回填（位置配对全量断言）", _test_faction_roundtrip, true)
 	_runner.add_test("编队: 存→读 班/排原位还原 + formation 行落 world_state 表", _test_formation_roundtrip, true)
 	_runner.add_test("旧档: 无 formation 行 + 缺 faction_id → 空编队默认阵营不崩", _test_legacy_compat, true)
 	await _runner.run_async()
 	print(_runner.summary())
 	SaveManager.delete_game(SLOT)
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 # ─────────────────────────── 基建 ───────────────────────────
@@ -85,6 +85,8 @@ func _spawn_y() -> float:
 	return map.ground_y + (map.ground_bottom - map.ground_y) * 0.5
 
 
+## 固定 settle 语义（有界数帧）：等 spawn/读档恢复链路的跨帧传播落地——被等待面
+## 是多系统各自的 deferred 注册/回填，无单一完成信号可轮询，保留小步数帧。
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().process_frame
@@ -148,7 +150,7 @@ func _load_and_settle(min_entities: int) -> Node2D:
 	if not ent_ok:
 		_runner.assert_true(false, "恢复后实体数未达 %d（%.0fs）" % [min_entities, SETTLE_TIMEOUT])
 		return null
-	await _frames(3)
+	await _frames(3)  # settle: 恢复完成后的阵营/编队回填余波（不可条件化，见 _frames 注）
 	return _get_map()
 
 
@@ -208,7 +210,7 @@ func _test_faction_roundtrip() -> void:
 	for i in xs.size():
 		var e := _spawn_unit(xs[i], facs[i])
 		_runner.assert_not_null(e, "布阵单位 %d 生成" % i)
-	await _frames(2)
+	await _frames(2)  # settle: spawn 后实体注册/AI 前提落地（不可条件化，见 _frames 注）
 	var map := _get_map()
 	var before := _snapshot(map)
 	_runner.assert_true(before.size() >= xs.size(), "快照至少含布阵单位（实测 %d）" % before.size())
@@ -243,7 +245,7 @@ func _test_formation_roundtrip() -> void:
 		var e := _spawn_unit(2100.0 + i * 200.0, 0)
 		_runner.assert_not_null(e, "编队布阵单位 %d 生成" % i)
 		units.append(e)
-	await _frames(2)
+	await _frames(2)  # settle: spawn 后实体注册/AI 前提落地（不可条件化，见 _frames 注）
 	var sa: String = fs.create_squad([units[0], units[1]], "squad_save_a")
 	var sb: String = fs.create_squad([units[2], units[3]], "squad_save_b")
 	_runner.assert_false(sa.is_empty(), "班A 建成")

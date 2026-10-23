@@ -49,14 +49,14 @@ func _ready() -> void:
 	# 存档往返（村图设施）：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "存档往返（村图设施）")
 	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
-	get_tree().quit(0)
+	TestRunner.finish_process(self, 0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()
 	_runner.add_test("存档: 未完工项目 round-trip 不丢失（全新库）", _test_roundtrip_fresh_db, true)
 	_runner.add_test("存档: 旧库缺列自动迁移后可写（迁移回归）", _test_roundtrip_legacy_db, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 ## 惰性初始化：加载地图 + 装配 ConstructionManager（同 construction_cycle 的 fixture）

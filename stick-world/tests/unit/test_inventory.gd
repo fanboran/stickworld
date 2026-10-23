@@ -15,6 +15,11 @@ signal test_done(code: int)
 const TestRunner := preload("res://tests/core/test_runner.gd")
 const ScriptInventoryService := preload("res://modules/inventory/scripts/inventory_service.gd")
 const ScriptWeaponMount := preload("res://modules/units/scripts/entity/weapon_mount.gd")
+# 依赖纯逻辑/纯数据一律显式 preload（tests/README 禁区：不依赖 class_name 全局注册）
+const ScriptPlayerInventory := preload("res://modules/inventory/scripts/player_inventory.gd")
+const ScriptItemContainer := preload("res://modules/items/core/item_container.gd")
+const ScriptItemDef := preload("res://modules/items/core/item_def.gd")
+const ScriptItemDB := preload("res://modules/items/item_db.gd")
 
 func _ready() -> void:
 	_runner = TestRunner.new()
@@ -47,11 +52,11 @@ func _ready() -> void:
 var _runner: TestRunner
 
 
-func _make_inv() -> PlayerInventory:
-	return PlayerInventory.new()
+func _make_inv() -> ScriptPlayerInventory:
+	return ScriptPlayerInventory.new()
 
 
-func _has_exactly(inv: PlayerInventory, id: StringName, n: int) -> bool:
+func _has_exactly(inv: ScriptPlayerInventory, id: StringName, n: int) -> bool:
 	return inv.count_of(id) == n
 
 
@@ -63,10 +68,10 @@ func _test_add_and_stack() -> void:
 	_runner.assert_equal(inv.count_of(&"con_bandage"), 5, "条目计数")
 	# 无总数量限制：全部物品种类各一件皆入包（种类数远超任何旧"格数"）
 	var kinds: int = 0
-	for id in ItemDB.all_ids():
+	for id in ScriptItemDB.all_ids():
 		if inv.add_item(id, 1) == 0:
 			kinds += 1
-	_runner.assert_equal(kinds, ItemDB.all_ids().size(), "全种类皆可入包（无格数上限）")
+	_runner.assert_equal(kinds, ScriptItemDB.all_ids().size(), "全种类皆可入包（无格数上限）")
 	# 单类上限=max_stack：绷带 99 封顶
 	inv = _make_inv()
 	_runner.assert_equal(inv.add_item(&"con_bandage", 150), 51, "99 上限外余量返回")
@@ -124,7 +129,7 @@ func _test_unequip_always_ok() -> void:
 	var inv := _make_inv()
 	inv.add_item(&"wpn_sword_001", 1)
 	inv.equip_from_backpack(&"wpn_sword_001")
-	_runner.assert_true(inv.unequip(PlayerInventory.SlotType.MAIN_HAND), "卸装恒成功（列表制无背包满）")
+	_runner.assert_true(inv.unequip(ScriptPlayerInventory.SlotType.MAIN_HAND), "卸装恒成功（列表制无背包满）")
 	_runner.assert_equal(inv.count_of(&"wpn_sword_001"), 1, "武器回背包条目")
 
 
@@ -253,12 +258,12 @@ func _test_weapon_mount_none() -> void:
 func _test_starter_kit() -> void:
 	var service: Node = ScriptInventoryService.new()
 	service.grant_starter_kit()
-	var inv: PlayerInventory = service.inventory
+	var inv: ScriptPlayerInventory = service.inventory
 	_runner.assert_equal(inv.get_main_weapon().def_id, &"wpn_sword_001", "开局主手铁剑")
 	_runner.assert_true(inv.has_shield(), "开局副手木盾")
-	_runner.assert_not_null(inv.get_equipped(PlayerInventory.SlotType.HEAD), "开局布头")
-	_runner.assert_not_null(inv.get_equipped(PlayerInventory.SlotType.CHEST), "开局布胸")
-	_runner.assert_not_null(inv.get_equipped(PlayerInventory.SlotType.LEGS), "开局布腿")
+	_runner.assert_not_null(inv.get_equipped(ScriptPlayerInventory.SlotType.HEAD), "开局布头")
+	_runner.assert_not_null(inv.get_equipped(ScriptPlayerInventory.SlotType.CHEST), "开局布胸")
+	_runner.assert_not_null(inv.get_equipped(ScriptPlayerInventory.SlotType.LEGS), "开局布腿")
 	_runner.assert_true(_has_exactly(inv, &"wpn_spear_001", 1), "背包长矛")
 	_runner.assert_true(_has_exactly(inv, &"wpn_bow_001", 1), "背包短弓")
 	_runner.assert_true(_has_exactly(inv, &"wpn_pickaxe_001", 1), "背包铁镐")
@@ -278,12 +283,12 @@ func _test_mineral() -> void:
 		&"mat_stone": 50, &"mat_iron": 30, &"mat_gold": 20, &"mat_diamond": 10,
 	}
 	for id in cases:
-		var def: ItemDef = ItemDB.get_def(id)
+		var def: ScriptItemDef = ScriptItemDB.get_def(id)
 		_runner.assert_not_null(def, "%s 已定义" % id)
 		if def == null:
 			continue
 		_runner.assert_equal(def.max_stack, cases[id], "%s 堆叠上限" % id)
-		_runner.assert_equal(def.category, ItemDef.Category.MATERIAL, "%s 是矿物类" % id)
+		_runner.assert_equal(def.category, ScriptItemDef.Category.MATERIAL, "%s 是矿物类" % id)
 	var inv := _make_inv()
 	_runner.assert_equal(inv.add_item(&"mat_stone", 51), 1, "51 块石头余 1（上限 50）")
 	_runner.assert_equal(inv.slot_for(&"mat_gold"), -1, "矿物无装备槽")
@@ -331,7 +336,7 @@ func _test_status_list_active() -> void:
 func _test_ammo_starter_and_assignable() -> void:
 	var service: Node = ScriptInventoryService.new()
 	service.grant_starter_kit()
-	var inv: PlayerInventory = service.inventory
+	var inv: ScriptPlayerInventory = service.inventory
 	_runner.assert_equal(inv.count_of(&"ammo_arrow_001"), 50, "开局一叠箭（50）")
 	_runner.assert_false(inv.hotbar_assignable(&"ammo_arrow_001"), "弹药不可指派 Hotbar")
 	service.free()
@@ -357,7 +362,7 @@ func _test_ammo_spend_semantics() -> void:
 
 func _test_ammo_free_fire() -> void:
 	var wm: Node = ScriptWeaponMount.new()
-	var bag := ItemContainer.new()
+	var bag := ScriptItemContainer.new()
 	# 免弹武器（近战）：无源也有弹——数据开关口径
 	wm.weapon_type = 0  # SWORD
 	wm.ammo_source = null

@@ -16,6 +16,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
 const ScriptBattleInstance := preload("res://modules/combat/scripts/battle/battle_instance.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
@@ -69,15 +70,18 @@ func _run_tests_async() -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_game_root = packed.instantiate()
 	_game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场开机（旧 2D 演练场已随旧 2D 图清退删除）
 	add_child(_game_root)
-	# 等待地图加载和实体生成
-	for i in 8:
-		await get_tree().process_frame
+	# 等待地图加载（条件等待替代数帧，README 硬规矩）：就绪判据 = boot 翻 false
+	var booted: bool = await TestHelpers.await_condition(
+			func() -> bool: return _game_root.get("_boot_world_phase") == false,
+			10.0, "GameRoot boot 完成")
+	_runner.assert_true(booted, "GameRoot 应在 10s 内 boot 完成")
 	_release_user_control_player()
+	# 固定 settle（有界 2 帧）：接管释放的跨帧生效余波；后续断言兜底
 	for i in 2:
 		await get_tree().process_frame
 
@@ -98,7 +102,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────

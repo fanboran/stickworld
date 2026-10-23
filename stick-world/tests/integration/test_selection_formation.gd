@@ -23,6 +23,7 @@ extends Node
 
 @warning_ignore("shadowed_global_identifier")
 const TestRunner := preload("res://tests/core/test_runner.gd")
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 const CombatTestSetup := preload("res://tests/helpers/combat_test_setup.gd")
 
 ## 测试单位数量
@@ -65,8 +66,8 @@ func _run_tests_async() -> void:
 	_selection = _helper.selection
 	# 生成测试单位
 	_helper.spawn_test_units(UNIT_COUNT)
-	for i in 1:
-		await get_tree().process_frame
+	# 固定 settle（有界 1 帧）：实体进图注册余波；框选/建班断言兜底
+	await get_tree().process_frame
 
 	# 运行同步测试
 	for t in _tests:
@@ -85,7 +86,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 同步测试 ────────────────────────────────

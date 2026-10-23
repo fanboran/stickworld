@@ -54,8 +54,8 @@ func _run_tests_async() -> void:
 	_minimap = _helper.minimap
 	# 生成测试单位（框选响应测试需要）
 	_helper.spawn_test_units(UNIT_COUNT)
-	for i in 1:
-		await get_tree().process_frame
+	# 固定 settle（有界 1 帧）：实体进图注册余波；单位在册由各用例断言兜底
+	await get_tree().process_frame
 
 	# 运行同步测试
 	for t in _tests:
@@ -74,7 +74,7 @@ func _run_tests_async() -> void:
 	var summary := _runner.summary()
 	print(summary)
 	var exit_code: int = 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 同步测试 ────────────────────────────────

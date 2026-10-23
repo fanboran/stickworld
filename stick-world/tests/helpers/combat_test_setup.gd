@@ -10,6 +10,8 @@ extends RefCounted
 
 const ScriptStickmanEntity := preload("res://modules/units/scripts/stickman_entity.gd")
 const STICKMAN_SCENE: PackedScene = preload("res://modules/units/scenes/stickman_entity.tscn")
+# 等待规范化（tests/README 硬规矩"等就绪不数帧"）：boot 就绪用条件等待而非数帧
+const TestHelpers := preload("res://tests/core/test_helpers.gd")
 
 ## 测试单位起始 X
 const UNIT_X_START: float = 1500.0
@@ -35,6 +37,8 @@ var units: Array = []
 func start(host: Node) -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
+		# FATAL 兜底：此分支仅独立跑触达（batch 不用本 helper），GameRoot 未起、
+		# 无音频/无 UI 缓存可清，直退即可——不引 TestRunner 保持 helper 零依赖面
 		print("[FATAL] 无法加载 game_root.tscn")
 		host.get_tree().quit(1)
 		return
@@ -44,12 +48,13 @@ func start(host: Node) -> void:
 	host.add_child(game_root)
 	# 等 boot 完成（_boot_world_phase 翻 false＝地图就绪、加载覆盖已淡出）再跑断言：
 	# 载入屏在模态栈语义下是强模态（屏蔽 ESC/不接管时间），boot 未完就断言会被吞。
-	# 上限 600 帧防挂（headless 下 bake 已短路，正常数十帧内就绪）。
-	for i in 600:
-		if game_root.get("_boot_world_phase") == false:
-			break
-		await host.get_tree().process_frame
-	# 等待地图加载和实体生成
+	# 条件等待 + 10s 超时防挂（headless 下 bake 已短路，正常数十帧内就绪）；
+	# 超时不在此断言——各套件对 map/系统引用的 assert_not_null 会兜住红。
+	await TestHelpers.await_condition(
+			func() -> bool: return game_root.get("_boot_world_phase") == false,
+			10.0, "GameRoot boot 完成（地图就绪/载入屏淡出）")
+	# 固定 settle：boot 翻 false 后仍有个位数帧的实体/装饰延迟 spawn，无单一可用
+	# 就绪条件可轮询（spawn 完成无信号），保留有界 8 帧缓冲。
 	for i in 8:
 		await host.get_tree().process_frame
 	# 取消玩家接管（避免干扰）
@@ -58,6 +63,8 @@ func start(host: Node) -> void:
 	var dispatcher: Node = game_root.input_dispatcher
 	if dispatcher != null:
 		dispatcher.set_mode(PlayerControlAPI.Mode.BATTLE)
+	# 固定 settle：模式切换经 dispatcher 分发到各系统是跨帧传播（无完成信号），
+	# 保留有界 2 帧缓冲；后续 selection/formation 引用由各套件断言兜底。
 	for i in 2:
 		await host.get_tree().process_frame
 	selection = game_root.get_selection_system()

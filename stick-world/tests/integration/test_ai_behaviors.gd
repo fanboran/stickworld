@@ -54,7 +54,7 @@ func _run_tests_async() -> void:
 	var packed := load("res://modules/world/scenes/game_root.tscn") as PackedScene
 	if packed == null:
 		print("[FATAL] 无法加载 game_root.tscn")
-		get_tree().quit(1)
+		TestRunner.finish_process(self, 1)
 		return
 	_game_root = packed.instantiate()
 	_game_root.set("boot_map_id_override", "battlefield")  # HD-2D 城郊战场开机（旧 2D 演练场已随旧 2D 图清退删除）
@@ -86,7 +86,7 @@ func _run_tests_async() -> void:
 
 	print(_runner.summary())
 	var exit_code := 0 if _runner.all_passed() else 1
-	get_tree().quit(exit_code)
+	TestRunner.finish_process(self, exit_code)
 
 
 # ─────────────────────────────── 辅助 ────────────────────────────────
@@ -279,7 +279,9 @@ func _test_ai_cycle() -> void:
 	e.set_user_controlled(false)
 	# 强制重置到 idle，设短时长加速循环
 	sm.travel("idle", {"duration": 0.3})
-	# 等待 2 秒让 AI 完成至少一次 idle->wander 切换
+	# 固定观察窗（有界 2.0s 墙钟）：给 idle->wander 自动切换留时间。断言刻意
+	# 宽容 idle/wander 两态（wander 触发依赖模拟噪声，恒 idle 属设计允许），
+	# 条件化到 wander 会把合法的"未切换"误判红——这是观察窗口不是就绪等待
 	await get_tree().create_timer(2.0).timeout
 	var behavior := ai.get_current_behavior()
 	# 2 秒后行为应该是 idle 或 wander 之一（不能为空）

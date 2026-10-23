@@ -19,6 +19,8 @@ const ScriptEntityDeath := preload("res://modules/units/scripts/entity/entity_de
 const ScriptGroundItem := preload("res://modules/units/scripts/entity/ground_item.gd")
 const ScriptStickman := preload("res://modules/units/scripts/stickman_entity.gd")
 const ScriptWeaponMount := preload("res://modules/units/scripts/entity/weapon_mount.gd")
+# 依赖纯逻辑/纯数据一律显式 preload（tests/README 禁区：不依赖 class_name 全局注册）
+const ScriptItemContainer := preload("res://modules/items/core/item_container.gd")
 
 ## 掉落清单测试桩（entity_death 对实体的 duck 面最小化：get_loadout/weapon_mount）
 class StubEntity extends Node2D:
@@ -214,14 +216,14 @@ func _test_take_all() -> void:
 	var item = ScriptGroundItem.new()
 	add_child(item)
 	item.setup(&"ammo_arrow_001", 30)
-	var bag := ItemContainer.new()
+	var bag := ScriptItemContainer.new()
 	bag.add(&"ammo_arrow_001", 40)
 	var taken: int = item.take_all(bag)
 	_runner.assert_equal(taken, 10, "部分拾取=剩余容量")
 	_runner.assert_equal(item.count, 20, "余量留地")
 	_runner.assert_false(item.is_queued_for_deletion(), "有余量不自毁")
 	# 取空自毁
-	var bag2 := ItemContainer.new()
+	var bag2 := ScriptItemContainer.new()
 	taken = item.take_all(bag2)
 	_runner.assert_equal(taken, 20, "余量全取")
 	_runner.assert_true(item.is_queued_for_deletion(), "取空自毁")
@@ -229,7 +231,7 @@ func _test_take_all() -> void:
 	var sword = ScriptGroundItem.new()
 	add_child(sword)
 	sword.setup(&"wpn_sword_001", 1)
-	var bag3 := ItemContainer.new()
+	var bag3 := ScriptItemContainer.new()
 	bag3.add(&"wpn_sword_001", 1)
 	_runner.assert_equal(sword.take_all(bag3), 0, "目标满堆拒收")
 	_runner.assert_equal(sword.count, 1, "拒收不掉数量")

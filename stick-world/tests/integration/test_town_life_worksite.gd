@@ -49,7 +49,7 @@ func _ready() -> void:
 	# 工位槽位/降级/节律：待「玩法设施 HD-2D 化」后在主街/村B（HD-2D）上重建。
 	print("[SUSPENDED] ", "工位槽位/降级/节律")
 	print("=== 测试汇总: 0 / 0 通过（断言 0 次）===  [SUSPENDED 跳过]")
-	get_tree().quit(0)
+	TestRunner.finish_process(self, 0)
 	SaveManager.set_auto_save_enabled(false)
 	_runner = TestRunner.new()
 	_runner.add_test("WorkSlots 真槽位: 铁匠上班+槽位产出", Callable(self, "_test_real_slot"), true)
@@ -58,7 +58,7 @@ func _ready() -> void:
 	await _setup_world()
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _setup_world() -> void:

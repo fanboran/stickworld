@@ -29,7 +29,7 @@ func _ready() -> void:
 	_runner.add_test("HUD：默认缩放=100% + 按钮/缩放条/百分比互不重叠", _test_hud, true)
 	await _runner.run_async()
 	print(_runner.summary())
-	get_tree().quit(0 if _runner.all_passed() else 1)
+	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
 
 func _test_load() -> void:

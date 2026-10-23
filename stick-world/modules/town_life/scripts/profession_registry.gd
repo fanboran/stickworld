@@ -30,8 +30,8 @@ extends RefCounted
 ## 固定），节拍略快于采集，全链矿产出快于消耗（净增速为正），三资源库存可同时增长。
 ##
 ## 装具通道（批次 1 验收核心"职业可见"）：
-##   - 工具 entity.weapon_mount.weapon_type（garrison_spawner 先例：
-##     spawn 后设置安全，setter call_deferred 重挂）
+##   - 工具 entity.weapon_mount.weapon_type（spawn 后设置安全，
+##     setter call_deferred 重挂）
 ## 职业识别只走武器，不染身体色：身体色是火柴人的全局常量（Skeleton.DEFAULT_BODY），
 ## 与阵营一样不做身份染色（阵营走血条圆点/横条）。
 ##

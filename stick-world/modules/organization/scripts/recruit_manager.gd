@@ -161,8 +161,8 @@ func _scan_villagers(exclude: Node2D) -> Array:
 			continue
 		if bool(u.get_meta(META_SOLDIER, false)):
 			continue
-		# "garrison_unit" 是 expansion.GarrisonSpawner 的守军来源标记（跨模块 meta 契约，
-		# 不引内部脚本）；据点图无村民，此处防御性排除
+		# "garrison_unit" 是守军来源标记（征服线预留的跨模块 meta 契约，写入方待该线落地，
+		# 现恒 false）；据点图无村民，此处防御性排除
 		if bool(u.get_meta("garrison_unit", false)):
 			continue
 		if u.has_method("is_user_controlled") and u.is_user_controlled():

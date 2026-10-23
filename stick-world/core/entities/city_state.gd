@@ -36,7 +36,7 @@ var level: int = 1
 var population: int = 0
 
 ## 军队账面 {profile_id: int}——兵种档案 id → 数量（键为 String，JSON 口径；
-## 值为 int 计数）。M4 时可还原为 GarrisonSpawner 的编成 row
+## 值为 int 计数）。征服线落地时可还原为编成 row
 var garrison: Dictionary = {}
 
 ## 建筑账面（M1 恒空容器，M2 离屏 tick 的载体；内部键值结构 M2 定稿）

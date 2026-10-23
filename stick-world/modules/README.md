@@ -40,7 +40,6 @@
 | `fx`                   | 战斗特效（粒子池 FxPool + FxLibrary 效果配置：血溅/火花/飘字等） | ✅ 在役     |
 | `items`                | 物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer/资源品映射，独立于背包与仓储） | ✅ 在役     |
 | `inventory`            | 玩家背包与装备（列表制背包/装备槽/Hotbar 指派/合一窗口/翻包与村仓 UI，经 InventoryService） | ✅ 在役     |
-| `expansion`            | 驻军生成管道（GarrisonSpawner，世界装配消费型纯管道，无 api.gd） | 🟡 无装配调用方（数据源待世界模型） |
 | `town_life`            | NPC 小镇生活（职业分工/劳作/经济自动产出端）   | ✅ 在役     |
 
 > **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
@@ -50,7 +49,7 @@
 ## 2. 模块依赖图
 
 > **单向规则**：箭头方向 = "依赖"，高层依赖底层，低层不反向调用。`api.gd` 是允许的耦合点。
-> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 3 个依赖环（静态口径，含 class_name 边）：organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）与 hd2d→units（AR-1）已清偿。`expansion→{units, world}` 为世界装配消费型静态实边（非环）：消费 units 的单位场景/武器类型常量与 world 的 ConquestAnchor 锚点。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。另有 8 条**运行时注入型边**（下表带 (注入) 尾注）：目标 API 以 Node 弱类型经装配器/上游 `set_..._api` 注入，preload/路径/class_name 静态扫描不可见，登记在 `tools/audit_deps.py` 的 `RUNTIME_EDGES` 并与静态边同图展示；扫描器对未登记注入边给信息提示（暂不入红线）。
+> **边表即真相**（`tools/audit_deps.py` 自动实测，与图冲突时以边表为准）。当前存余 3 个依赖环（静态口径，含 class_name 边）：organization⇄world / town_life⇄units / world⇄world_map（均数据面弱耦合在册容忍）；combat⇄units（AR-2）与 hd2d→units（AR-1）已清偿。越界基线 = 非装配器跨模块 preload 6 处 + 裸字符串 2 处（audit_deps 越界清单）；环与越界均设棘轮红线，新环或超基线即 exit 1（AR-6）。另有 8 条**运行时注入型边**（下表带 (注入) 尾注）：目标 API 以 Node 弱类型经装配器/上游 `set_..._api` 注入，preload/路径/class_name 静态扫描不可见，登记在 `tools/audit_deps.py` 的 `RUNTIME_EDGES` 并与静态边同图展示；扫描器对未登记注入边给信息提示（暂不入红线）。
 
 ```
                               ┌────────────────────────────────┐
@@ -74,7 +73,6 @@
 │   construction→{building_gen, fx, player_control, ui_global}  │
 │   building_gen→texture_gen→ui_global ｜ debug_gui→{fx,ui}   │
 │   hd2d→{environment, stick_rig, ui_global}                  │
-│   expansion→{units, world}（世界装配消费：单位场景/武器类型/锚点） │
 │   运行时注入型边 8 条（静态不可见，见边表 (注入) 尾注）        │
 └─────────────────────────────────────────────────────────────┘
    （items / fx / environment / resources / stick_rig 零出向；
@@ -88,7 +86,6 @@
 | `world` | 全部 17 模块（building_gen/combat/construction/debug_gui/environment/formation/fx/hd2d/inventory/organization/player_control/resources/tactics/town_life/ui_global/units/world_map） |
 | `world_map` | ui_global, world |
 | `organization` | building_gen, ui_global, units, world + construction(注入), resources(注入) |
-| `expansion` | units, world |
 | `combat` | formation, fx, player_control, stick_rig, tactics, ui_global |
 | `units` | combat, formation, fx, inventory, items, player_control, stick_rig, tactics, town_life + organization(注入), resources(注入) |
 | `formation` | tactics, ui_global + organization(注入) |

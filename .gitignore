@@ -205,3 +205,6 @@ stick-world/tests/dev/*.jpg
 # rl_core（GDExtension RL 训练插件）编译产物
 stick-world/addons/rl_core/bin/
 stick-world/addons/rl_core/src/*.o
+
+# 旧嵌套仓库副本（.git 早已删除，gitlink 为历史僵尸条目；本地参考保留，不入库）
+tools/godot_ai_repo/

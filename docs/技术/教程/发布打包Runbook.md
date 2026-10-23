@@ -24,6 +24,8 @@ cp "F:/VSCode/game-2/stick-world/addons/rl_core/bin/librl_core.windows.template_
 
 要点：rl_core（RL 训练 C++ 扩展）**未实装进玩法**，export_presets.cfg 已把它排除在发布包外（`addons/rl_core/*`）——不需要编 template_release DLL；debug DLL 仅为让 headless 导入不报段崩。
 
+排除清单以 `export_presets.cfg` 的 `exclude_filter`/`include_filter` 为准：战略图只带 `.bin`（include_filter 白名单放行，各 `.json` 全排——运行时 `l3_world_data.gd` bin 优先，json 仅编辑器回退网）；字体只带运行时加载的 StickHand-Regular（LXGW×2/站酷快乐体是字体生成管线的骨架原料，无运行时路径）；环境音只带 `music_director` 实际消费的 wind_calm/night_insects/birds_day。
+
 ## 2. 清缓存全量导入 + 导出
 
 ```bash

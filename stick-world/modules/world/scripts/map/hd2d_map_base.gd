@@ -11,8 +11,8 @@ extends MapBase
 ##   - 深度视觉：depth_y_min/max、DEPTH_SCALE_*、depth_scale_at、_apply_depth_visual
 ##   - 视觉域坐标协议覆写：remap_fx_pos/unmap_fx_pos/entity_hover_rect/
 ##     screen_y_to_ground_y（数学核 Hd2dProjection）、BILLBOARD_BODY_H_PX
-##   - 3D 实心区间 → 2D 碰撞墙（_build_solid_bodies）、城门传送带与引导
-##     （gate_steer_point/_build_gate_portals）、旅行出口触发器（_exit_specs）
+##   - 3D 实心区间 → 2D 碰撞墙（_build_solid_bodies）、旅行出口触发器（_exit_specs）
+##   - 城门引导/传送域：薄壳转发 hd2d_gate_portals.gd（域组件持本图回引）
 ##   - resource_gen 野外资源点生成（forest_*/resource_* 参数由子类调档）
 ##   - 聚落设施/村民布点覆盖点（supports_village_facilities 等，默认按主街语义）
 ##
@@ -29,6 +29,8 @@ extends MapBase
 const _HD2D_WORLD_SCENE: PackedScene = preload("res://modules/hd2d/api.gd").WORLD_SCENE
 ## 城门选项框（玩家走近弹窗出城；村民走静默传送带）
 const _GatePromptScript := preload("res://modules/world/scripts/map/hd2d_gate_prompt.gd")
+## 城门引导/传送域组件（RefCounted 持本图回引；_ready 开头建，见该文件头）
+const _GatePortalsScript := preload("res://modules/world/scripts/map/hd2d_gate_portals.gd")
 ## 野外资源分布算法（world 模块内，群落散布+林区梯度）
 const _ResourceGenScript := preload("res://modules/world/scripts/map/resource_gen.gd")
 
@@ -53,16 +55,10 @@ const HOUR_NIGHT_FALL := 19.0
 
 ## 3D 街景节点引用（相机/光照档驱动用）
 var _hd: Node3D = null
-## 小地图底图（照片式烘焙结果；bake_minimap_base 写入，装配期一次 + 运行期脏重烘）
+## 小地图底图（照片式烘焙结果）：装配期首烘经烘焙域写入，运行期脏重烘由烘焙域
+## （hd2d_minimap_baker.gd：防抖状态与烘焙执行都在那侧）烘成后经回传口整体
+## 换图——小地图 15Hz 快照自动拾取。本类只留数据面（缓存 + 首烘/脏入口薄壳）。
 var _minimap_base: Dictionary = {}
-## 照片底图运行期重烘（低占用实时管线）：hd2d 发 minimap_base_dirty（光照档
-## 切换/3D 街景内容变更）→ 防抖窗口合并 → 重烘换图，小地图 15Hz 快照自动拾取。
-## 烘焙走渲染层剔除（不动 visible）→ 游戏内重烘零可见副作用；平时烘焙视口
-## UPDATE_DISABLED → 空闲零成本。
-const MINIMAP_REBAKE_DEBOUNCE_S := 0.5
-var _minimap_rebake_pending := false
-var _minimap_rebaking := false
-var _minimap_bake_size := Vector2i.ZERO
 ## 当前光照档（避免每帧重复切换）
 var _light_mode := ""
 
@@ -84,13 +80,9 @@ var resource_min_spacing := 96.0
 ## 子类可调（战场图调稀——野地要开阔可列阵）
 var resource_density := 0.03
 
-## 城门传送带（创始人 2026-09-14：到门口就传送，门外也得传送过去）。
-## 每端城墙内外各一条 Area2D 竖带（贴墙、门洞纵深带内）：只对"朝着墙走"
-## 的身体触发（斜向闲逛蹭到不触发），跨墙落到对面带外侧 + 冷却防弹跳。
-## 墙体碰撞已整带封死（proto get_solid_rects），传送是唯一过墙方式。
-const _TP_STRIP_W := 64.0          # 传送带厚度（px）
-const _TP_COOLDOWN_MS := 600       # 防弹跳冷却
-var _tp_cooldown: Dictionary = {}  # body instance_id -> 解禁时刻(msec)
+## 城门引导/传送域组件（RefCounted 持本图回引）：机制与传送冷却状态随域组件
+## （hd2d_gate_portals.gd），本类经同名薄壳转发，外部 duck 调用面不变
+var _gate_portals: RefCounted = null
 
 
 ## 深度视觉（HD-2D 最佳实践第一层）：行走带 y → 实体视觉近大远小 + 接地感。
@@ -135,6 +127,9 @@ var building_baseline_offset: float = 96.0
 # ─────────────────────────────── 生命周期 ────────────────────────────────
 
 func _ready() -> void:
+	# 城门引导/传送域组件先于一切消费点就位（get_wall_px 在 super() 装配链与
+	# 建造封锁推导就会被调，组件回引见 hd2d_gate_portals.gd 文件头）
+	_gate_portals = _GatePortalsScript.new(self)
 	# 壳参数解析钩子（布局图覆写：map_id → layout/city_tier 推导）——必须先于
 	# 本函数其余逻辑（3D 街景按解析结果生成）
 	_apply_map_params()
@@ -693,54 +688,46 @@ func get_minimap_base() -> Dictionary:
 	return _minimap_base
 
 
-## 烘焙小地图底图：装配期首烘（GameRoot 地图编排调）与运行期脏重烘
-## （_on_minimap_base_dirty）同走本口。只留前排建筑 + 地面的真渲染降采样
-## （火柴人/自然物/道具/云/背景排走烘焙相机剔除层，天幕/月盘/后处理天然
-## 不入 SubViewport），尺寸按传入的显示矩形。烘焙相机是独立 SubViewport
-## 里的专用相机——主相机与逐帧镜像不受影响，无需停 _process。
-## 烘焙失败返回空且**保旧图**（有旧图时换图原子性：要么新图要么旧图）。
-## 返回烘焙结果（同 hd2d_world.bake_minimap_strip），缓存在 _minimap_base 供取用。
+## hd2d 侧小地图烘焙域组件（hd2d_world.baker 公开成员；防抖与烘焙实现所在）。
+## 经门面成员取（同 _hd.get("battlefield") 的属性 duck 口径）；组件公开面
+## （bake_for_map/request_rebake）是两模块缝上的契约，api.gd 补记随 hd2d 侧批次。
+func _minimap_baker() -> Variant:
+	if _hd == null or not "baker" in _hd:
+		return null
+	var baker: Variant = _hd.get("baker")
+	return baker if baker != null and baker.has_method("bake_for_map") else null
+
+
+## 烘焙小地图底图（装配期首烘口，GameRoot 地图编排与 dev 工位调）：帧参数与
+## 结果缓存归属本类，烘焙执行在烘焙域组件（真渲染降采样/剔除/原子性等大段
+## 口径注释见 hd2d_minimap_baker.gd）。烘焙失败返回空且**保旧图**（回传口只
+## 收非空结果）。返回烘焙结果，缓存在 _minimap_base 供取用。
 func bake_minimap_base(target_w: int, target_h: int) -> Dictionary:
-	# headless 无渲染服务器：烘焙内部 await frame_post_draw 永不发射（与
-	# game_root._yield_frame 的短路口径同源）——返回空走小地图平面图兜底，
-	# 否则 _on_map_loaded 协程在此悬死、世界就绪链（加载覆盖淡出等）全部不到。
-	if DisplayServer.get_name() == "headless":
+	var baker: Variant = _minimap_baker()
+	if baker == null:
 		return {}
-	if _hd == null or not _hd.has_method("bake_minimap_strip"):
-		return {}
-	_minimap_bake_size = Vector2i(target_w, target_h)
-	var out: Dictionary = await _hd.bake_minimap_strip(
-			map_left, map_right, ground_y, get_ground_bottom(), target_w, target_h)
-	if out.is_empty():
-		return out
-	_minimap_base = out
-	return out
+	return await baker.bake_for_map(map_left, map_right, ground_y,
+			get_ground_bottom(), target_w, target_h, _on_minimap_rebaked)
 
 
-## 照片底图脏信号入口（hd2d.minimap_base_dirty：光照档切换 / 3D 街景内容变更）：
-## 防抖窗口内多次脏合并成一次重烘；尚无底图（未走过装配期首烘）则无事可做
-## ——小地图走平面图兜底，下次进图首烘自然会带上最新状态。
+## 照片底图脏信号入口（薄壳，hd2d.minimap_base_dirty 连接点）：数据侧守卫后
+## 转发烘焙域防抖重烘——同一条缝的两侧：触发时机/帧数据在本类，去抖与执行
+## 在烘焙域。尚无底图（未走过装配期首烘）则无事可做——小地图走平面图兜底，
+## 下次进图首烘自然会带上最新状态。
 func _on_minimap_base_dirty() -> void:
-	if _minimap_base.is_empty() or _minimap_bake_size.x <= 0:
+	if _minimap_base.is_empty():
 		return
-	_minimap_rebake_pending = true
-	if _minimap_rebaking:
-		return   # 在烘：本轮完成后 _drain 会补一轮
-	await get_tree().create_timer(MINIMAP_REBAKE_DEBOUNCE_S).timeout
-	_drain_minimap_rebake()
+	var baker: Variant = _minimap_baker()
+	if baker == null:
+		return
+	baker.request_rebake(_on_minimap_rebaked)
 
 
-## 执行（并收敛）待决的重烘：防抖已过才走到这；烘焙期间又有脏则再补一轮。
-## 换图即整体替换 _minimap_base —— 小地图 15Hz 快照下一拍（≤67ms）自动换新图。
-func _drain_minimap_rebake() -> void:
-	if not _minimap_rebake_pending or not is_inside_tree() or _hd == null:
-		return
-	_minimap_rebake_pending = false
-	_minimap_rebaking = true
-	await bake_minimap_base(_minimap_bake_size.x, _minimap_bake_size.y)
-	_minimap_rebaking = false
-	if _minimap_rebake_pending:
-		_drain_minimap_rebake()
+## 重烘回传口（烘焙域 sink）：换图即整体替换 _minimap_base —— 小地图 15Hz
+## 快照下一拍（≤67ms）自动换新图；空结果不换（保旧图原子性）
+func _on_minimap_rebaked(out: Dictionary) -> void:
+	if not out.is_empty():
+		_minimap_base = out
 
 
 ## 小地图数据供给（覆写 MapBase 虚方法）：3D 街景的地表色带与临街建筑
@@ -840,96 +827,23 @@ func _build_solid_bodies(hd: Node3D) -> void:
 
 # ─────────────────────────────── 城门引导/传送 ────────────────────────────────
 
-## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）：直线 steering 的
-## 采集村民遇城墙时，引导其先走到门洞口（墙内侧 1 格、y 对齐门洞中心），
-## 站到门口后直线不再被门洞带外的墙挡住，恢复直走。返回 Vector2.ZERO =
-## 无需引导（不跨墙线 / 跨越点已落在门洞带内）。
+## 机制与状态在 hd2d_gate_portals.gd（域组件，_ready 开头建 _gate_portals）；
+## 此处保留同名薄壳——gate_steer_point（BehaviorHarvest）/ get_wall_px
+## （hd2d_gate_prompt、dev 工位）被外部按名 duck 调用，_build_gate_portals
+## 在本类 _ready 链路调，连接面不变。
+
+## 城门引导点（gate_router 组协议，BehaviorHarvest 消费）——实现见域组件
 func gate_steer_point(from: Vector2, to: Vector2) -> Vector2:
-	if _hd == null or not _hd.has_method("get_gates"):
-		return Vector2.ZERO
-	for g: Variant in _hd.get_gates():
-		var gx: float = float(g["x"]) * CELL_PX
-		var y0: float = float(g["y0"])
-		var y1: float = float(g["y1"])
-		if (from.x - gx) * (to.x - gx) >= 0.0:
-			continue   # 不跨这条墙线
-		if absf(to.x - from.x) < 0.001:
-			continue
-		var t: float = (gx - from.x) / (to.x - from.x)
-		var y_cross: float = from.y + (to.y - from.y) * t
-		if y_cross >= y0 and y_cross <= y1:
-			continue   # 正对门洞，直走即穿
-		var side: float = signf(gx - from.x)   # 门洞口在墙的哪一侧（墙内）
-		return Vector2(gx - side * CELL_PX, (y0 + y1) * 0.5)
-	return Vector2.ZERO
+	return _gate_portals.gate_steer_point(from, to)
 
 
 func _build_gate_portals() -> void:
-	if _hd == null or not _hd.has_method("get_gates"):
-		return
-	var host := Node2D.new()
-	host.name = "GatePortals"
-	add_child(host)
-	for g: Variant in _hd.get_gates():
-		var wx: float = float(g["x"]) * CELL_PX
-		var y0: float = float(g["y0"])
-		var y1: float = float(g["y1"])
-		var toward_town: float = -signf(wx)   # 从墙指向城内的方向（西墙 +1）
-		var inner_face: float = wx + toward_town * 19.0   # 墙内面（墙厚半宽 19px）
-		for side: int in [-1, 1]:   # -1 = 城内侧带, +1 = 城外侧带
-			var strip := Area2D.new()
-			strip.name = "GateTP_%s_%s" % [("W" if wx < 0.0 else "E"), ("in" if side < 0 else "out")]
-			# 角色本体在 collision_layer=2（hitbox.gd 位约定 BODY）——默认 mask 1
-			# 只看得见墙体，永远收不到角色进入事件（创始人实测卡门口的根因）
-			strip.collision_mask = 2
-			strip.monitorable = false
-			var shape := CollisionShape2D.new()
-			var rect := RectangleShape2D.new()
-			rect.size = Vector2(_TP_STRIP_W, y1 - y0 - 8.0)
-			shape.shape = rect
-			shape.position = Vector2(inner_face + toward_town * side * -40.0, (y0 + y1) * 0.5)
-			strip.add_child(shape)
-			strip.body_entered.connect(_on_gate_strip_entered.bind(wx, y0, y1))
-			host.add_child(strip)
-
-
-func _on_gate_strip_entered(body: Node2D, wx: float, y0: float, y1: float) -> void:
-	if body is not CharacterBody2D or not is_instance_valid(body):
-		return
-	# 玩家不走静默瞬移：走近城门由 hd2d_gate_prompt 弹选项框（2D 村图同款
-	# "靠近城门蹦出弹窗"口径，创始人 2026-09-15）；村民采集走静默带
-	if body.has_method("is_user_controlled") and body.is_user_controlled():
-		return
-	# 方向判定：只传送"朝着墙走"的身体（沿街横穿/闲逛蹭进带子不触发）
-	var toward: float = signf(wx - body.global_position.x)
-	if toward == 0.0 or (body as CharacterBody2D).velocity.x * toward < 8.0:
-		return
-	_gate_teleport(body, wx, y0, y1)
-
-
-## 跨墙瞬移核心（村民静默带与玩家弹窗选项共用）：带冷却防弹跳
-func _gate_teleport(body: CharacterBody2D, wx: float, y0: float, y1: float) -> void:
-	# 方向判定：朝墙才传（弹窗路径玩家可能静止/背向，按当前朝墙意图算）
-	var toward: float = signf(wx - body.global_position.x)
-	if toward == 0.0:
-		return
-	# 冷却防弹跳（刚被传过来的身体在对面带不回传）
-	var id: int = body.get_instance_id()
-	var now: int = Time.get_ticks_msec()
-	if int(_tp_cooldown.get(id, 0)) > now:
-		return
-	_tp_cooldown[id] = now + _TP_COOLDOWN_MS
-	# 跨墙落点：墙线对面 ~4.3 格（带外缘再留 32px 白区），y 夹回行走带内
-	var land_x: float = wx + toward * 139.0
-	var land_y: float = clampf(body.global_position.y, y0 + 8.0, y1 - 8.0)
-	body.global_position = Vector2(land_x, land_y)
+	_gate_portals._build_gate_portals()
 
 
 ## 墙线 px（弹窗组件触发带用）
 func get_wall_px() -> float:
-	if _hd != null and _hd.has_method("get_wall_x"):
-		return _hd.get_wall_x() * CELL_PX
-	return 0.0
+	return _gate_portals.get_wall_px()
 
 
 # ─────────────────────────────── 野外资源点生成 ────────────────────────────────

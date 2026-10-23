@@ -34,5 +34,9 @@ const WORLD_SCENE: PackedScene = preload("res://modules/hd2d/scenes/hd2d_world.t
 ## - spawn_nature_card_at(card: String, x_px: float, y_px: float)  资源点 → PBR 卡随点落
 ## - get_open_work_sites() -> Array  露天工位（台面铁砧等，TownLife duck 消费）
 ## - get_layout_width() -> float     布局街宽（格；布局驱动模式）
+## 小地图（宿主 Hd2dMapBase duck 取 baker 域组件 `_hd.get("baker")`，去抖机器在 baker 侧）
+## - baker.bake_for_map(帧参数…, sink)  首烘底图（含 headless 守卫），完成后回调 sink 派发纹理
+## - baker.request_rebake()            脏重烘请求（防抖轮询由 baker 驱动）
+## - bake_minimap_strip(...)/get_minimap_layout(cell_px)  hd2d_world 门面薄壳转发，供宿主直调
 ## 构图换算
 ## - get_ground_squash() -> float    地面纵深屏幕压缩率 sin(俯角)，宿主特效坐标重映射用

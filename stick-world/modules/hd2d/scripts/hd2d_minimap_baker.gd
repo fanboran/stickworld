@@ -6,7 +6,10 @@ extends RefCounted
 ##     调用方传入；缓存与脏失效状态在门面 _minimap_layout_cache）；
 ##   · 照片式底图烘焙 bake_minimap_strip（共享主视口 World3D 的 SubViewport +
 ##     专用正交相机真渲染降采样；烘焙 rig 状态在门面 _bake_vp/_bake_cam，
-##     临烘排除层 BAKE_EXCLUDE_LAYER 常量与归层逻辑随本组件）。
+##     临烘排除层 BAKE_EXCLUDE_LAYER 常量与归层逻辑随本组件）；
+##   · 运行期脏重烘编排 bake_for_map/request_rebake（防抖窗口合并 + 按首烘帧
+##     复刻重烘；Hd2dMapBase 侧留 bake_minimap_base/_on_minimap_base_dirty 薄壳，
+##     照片底图缓存在宿主 _minimap_base，烘成经 sink 回传换图）。
 ## 门面保留 get_minimap_layout/bake_minimap_strip 同名转发壳（Hd2dMapBase
 ## 按方法名 duck 调用，签名不变）。
 ##
@@ -252,3 +255,80 @@ func _bake_exclude_layer(n: Node) -> void:
 		(n as GeometryInstance3D).layers = BAKE_EXCLUDE_LAYER
 	for c in n.get_children():
 		_bake_exclude_layer(c)
+
+
+# ─────────────────────────── 运行期脏重烘（防抖）───────────────────────────
+
+## 照片底图运行期重烘（低占用实时管线；Hd2dMapBase 脏入口薄壳转发至此）：
+## hd2d 发 minimap_base_dirty（光照档切换/3D 街景内容变更）→ 防抖窗口合并
+## → 重烘换图，小地图 15Hz 快照自动拾取。烘焙走渲染层剔除（不动 visible）→
+## 游戏内重烘零可见副作用；平时烘焙视口 UPDATE_DISABLED → 空闲零成本。
+const REBAKE_DEBOUNCE_S := 0.5
+
+## 待决重烘的取景帧：最近一次 bake_for_map 记下的地图帧（世界 x 范围/画布地面
+## 带/目标尺寸）——重烘按同帧同尺寸复刻；空 = 尚未走过装配期首烘，脏无事可做
+var _rebake_frame: Dictionary = {}
+## 烘成后的回传口（宿主照片底图缓存 _minimap_base 的写入侧，宿主换图后
+## 小地图 15Hz 快照下一拍自动拾取）
+var _rebake_sink: Callable = Callable()
+var _rebake_pending := false
+var _rebaking := false
+
+
+## 宿主发起的整版底图烘焙（装配期首烘口，宿主薄壳 bake_minimap_base 转发；
+## GameRoot 地图编排与 dev 工位经该壳到达）：只留前排建筑 + 地面的真渲染
+## 降采样（剔除/原子性口径见 bake_minimap_strip），尺寸按传入的显示矩形。
+## 记下取景帧供运行期脏重烘复用；烘成经 sink 回传宿主缓存。
+## 烘焙失败返回空且**保旧图**（sink 只收非空结果：要么新图要么旧图）。
+func bake_for_map(world_x0: float, world_x1: float,
+		canvas_ground_y: float, canvas_ground_bottom: float,
+		tex_w: int, tex_h: int, sink: Callable) -> Dictionary:
+	# headless 无渲染服务器：烘焙内部 await frame_post_draw 永不发射（与
+	# game_root._yield_frame 的短路口径同源）——返回空走小地图平面图兜底，
+	# 否则宿主 _on_map_loaded 协程在此悬死、世界就绪链（加载覆盖淡出等）全部不到。
+	if DisplayServer.get_name() == "headless":
+		return {}
+	_rebake_frame = {
+		"world_x0": world_x0, "world_x1": world_x1,
+		"canvas_ground_y": canvas_ground_y,
+		"canvas_ground_bottom": canvas_ground_bottom,
+		"tex_w": tex_w, "tex_h": tex_h,
+	}
+	_rebake_sink = sink
+	var out: Dictionary = await bake_minimap_strip(world_x0, world_x1,
+			canvas_ground_y, canvas_ground_bottom, tex_w, tex_h)
+	if not out.is_empty() and sink.is_valid():
+		sink.call(out)
+	return out
+
+
+## 脏重烘请求（宿主薄壳 _on_minimap_base_dirty 转发）：防抖窗口内多次脏合并
+## 成一次重烘；在烘则只记待决，本轮完成后补一轮。
+func request_rebake(sink: Callable) -> void:
+	if _rebake_frame.is_empty():
+		return   # 尚未首烘：小地图走平面图兜底，下次进图首烘自然带上最新状态
+	_rebake_sink = sink
+	_rebake_pending = true
+	if _rebaking:
+		return   # 在烘：本轮完成后 _drain_rebake 会补一轮
+	if w == null or not is_instance_valid(w) or not w.is_inside_tree():
+		return   # 宿主已离树（切图等）：待决标记保留，回树后的脏信号重走防抖
+	await w.get_tree().create_timer(REBAKE_DEBOUNCE_S).timeout
+	_drain_rebake()
+
+
+## 执行（并收敛）待决的重烘：防抖已过才走到这；烘焙期间又有脏则再补一轮。
+func _drain_rebake() -> void:
+	if not _rebake_pending or w == null or not is_instance_valid(w) \
+			or not w.is_inside_tree():
+		return
+	_rebake_pending = false
+	_rebaking = true
+	var f: Dictionary = _rebake_frame
+	var out: Dictionary = await bake_minimap_strip(f["world_x0"], f["world_x1"],
+			f["canvas_ground_y"], f["canvas_ground_bottom"], f["tex_w"], f["tex_h"])
+	_rebaking = false
+	if not out.is_empty() and _rebake_sink.is_valid():
+		_rebake_sink.call(out)
+	if _rebake_pending:
+		_drain_rebake()

@@ -277,7 +277,7 @@ StickmanEntity (CharacterBody2D)
 - `get_building_state(building_id)`
 - `upgrade_building(building_id)` / `demolish_building(building_id)` / `repair_building(building_id, org_id)`
 
-**信号**：`building_started` / `building_completed` / `building_removed` / `building_damaged` / `building_upgraded`
+**信号**：`building_completed` / `building_removed` / `building_damaged` / `building_upgraded` / `building_repaired`（construction/api.gd）
 
 **工程量系统**（非固定建造时间）：
 
@@ -960,7 +960,7 @@ config/
 | 类别 | 模块 | 信号 |
 | -- | -- | -- |
 | 资源 | `resources/api.gd` | `resource_changed` / `resource_not_enough` / `price_changed` |
-| 建筑 | `construction/api.gd` | `building_started` / `building_completed` / `building_removed` / `building_damaged` / `building_upgraded` / `building_repaired`（参数统一 `building_id, region_id`） |
+| 建筑 | `construction/api.gd` | `building_completed` / `building_removed`（`building_id, region_id`）/ `building_damaged`（`building_id, damage_amount`）/ `building_upgraded`（`building_id, old_tier, new_tier`）/ `building_repaired`（`building_id`） |
 | 组织 | `organization/api.gd` | `org_created` / `org_restructured` / `org_disbanded` |
 
 ### 9.2 跨模块事件（EventBus 转发）
@@ -970,13 +970,14 @@ config/
 | 类别 | 信号 |
 | -- | -- |
 | 生命周期 | `game_started` / `game_loaded(slot_index)` / `game_saving(slot_index)` / `game_saved(slot_index)` / `game_paused` / `game_resumed` |
-| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` / `team_ai_stance_changed(battle_id, faction, from_stance, to_stance, reason)` |
+| 战斗 | `battle_started(battle_id)` / `battle_ended(battle_id, victory)` / `battle_settled(battle_id, summary)` / `battle_engagement_changed(battle_id, alive_units)` / `team_ai_stance_changed(battle_id, faction, from_stance, to_stance, reason)` / `ai_behavior_switched(entity, from_behavior, to_behavior, params)` |
 | 编队 | `selection_changed(unit_ids)` / `squad_created(squad_id, unit_ids)` / `order_issued(order_type, target_squad_id, source_tier)` / `commander_assigned(squad_id, unit_id)` |
 | 指挥中继 | `relay_started(relay_id, order_type, from_org, to_org, hop_index, eta)` / `relay_arrived(relay_id, order_type, from_org, to_org, hop_index, outcome)` |
 | 场景/旅行 | `travel_requested(map_id, travel_mode)` / `travel_started(from_id, to_id, mode)` / `travel_completed(to_id)` / `map_loaded(map_id, map_type)` / `map_unloaded(map_id)` |
-| 战略图 | `strategic_map_opened` / `strategic_map_closed` / `settlement_updated(settlement_id, population_score)` |
+| 战略图 | `strategic_map_opened` / `strategic_map_closed` / `strategic_map_level_requested(level)` / `settlement_updated(settlement_id, population_score)` |
 | 领地归属/解锁 | `region_owner_changed(region_id, new_owner)` / `unlock_granted(unlock_id)` |
 | 接管 | `user_control_started(entity)` / `user_control_ended(entity)` |
+| 建筑/室内 | `interior_entered(building_id)` / `interior_exited(building_id)` / `mega_interior_entered(building_id, map_id)` |
 | UI | `ui_notification(title, body, level)` |
 | 其他 | `balance_changed` / `debug_visibility_changed(visible)` |
 
@@ -991,7 +992,7 @@ config/
 
 ## 10. Autoload 依赖
 
-> 全局单例清单（来自 `project.godot`，共 10 个）。
+> 全局单例清单（共 11 个，以 `project.godot` `[autoload]` 实际清单为准）。
 
 | 名称              | 脚本                                     | 职责                          | 接线状态     |
 | --------------- | -------------------------------------- | --------------------------- | -------- |
@@ -1000,13 +1001,14 @@ config/
 | `ConfigManager` | `core/autoload/config_manager.gd`      | 用户设置读写                      | ✅ core 内使用 |
 | `TimeManager`   | `core/autoload/time_manager.gd`        | 时间/速度管理                     | ✅ 活跃     |
 | `BalanceConfig` | `core/autoload/balance_config.gd`      | 平衡变量加载（`balance_changed` 热重载） | 🟡 预留     |
+| `InputBindings` | `core/autoload/input_bindings.gd`      | 输入绑定单一真相源（`input_actions.json` → InputMap 动作注册） | ✅ 活跃     |
 | `AudioManager`  | `core/services/audio_manager.gd`       | 音效播放（`SFX_EVENTS` 34 wav 映射） | ✅ 在役     |
 | `MusicDirector` | `core/services/music_director.gd`      | 音乐播放（主题变奏集/分层自适应/环境音层）      | ✅ 在役     |
 | `SaveManager`   | `core/autoload/save_manager.gd`        | 存档/读档（SQLite）                | ✅ 活跃     |
 | `DebugApi`      | `modules/debug_gui/api.gd`             | 调试覆盖层管理                     | ✅ 活跃     |
 | `DevSceneEscape` | `modules/debug_gui/scripts/dev_scene_escape.gd` | 开发场景 ESC 确认后回主页兜底（仅 debug 构建生效） | ✅ 活跃 |
 
-**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → AudioManager → MusicDirector → SaveManager → DebugApi → DevSceneEscape`
+**初始化顺序**（自上而下，project.godot 声明序）：`EventBus → WorldState → ConfigManager → TimeManager → BalanceConfig → InputBindings → AudioManager → MusicDirector → SaveManager → DebugApi → DevSceneEscape`
 
 **职责边界**：
 

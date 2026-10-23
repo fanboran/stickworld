@@ -10,10 +10,11 @@ extends Node
 ## - 资源/科技/组织/建筑等状态变更信号由对应模块 api.gd 自建并转发，EventBus 不重复声明。
 ## - 本文件只保留"已实际接线"的信号（2026-08 审计清理 35 个零引用信号）；
 ##   实现新系统时按当时契约重新声明，不要预先占位。
-## - 单向广播（生产 emit 无订户，2026-08 审计标注，UI/外部接入时连接）：
-##   game_saved（SaveManager 广播）、balance_changed（热重载预留）、
-##   battle_started/battle_ended（战斗生命周期）、selection_changed/squad_created/order_issued（编队 UI 数据通道）、
-##   team_ai_stance_changed（战斗可观测性：调试 HUD 接入时连接）
+## - 单向广播（生产 emit 无订户，UI/外部接入时连接）：
+##   game_saved（SaveManager 广播）、battle_settled（结算载荷，测试断言在用）、
+##   battle_started/battle_ended（战斗生命周期）、selection_changed/squad_created/order_issued（编队 UI 数据通道）
+## - 已接线原"预留"信号：balance_changed（organization default_behavior_writer 热重载回读）、
+##   team_ai_stance_changed（combat team_ai_hud 调试 HUD）
 ## - chunk_loaded/chunk_unloaded 不走 EventBus：scene_loader 自带同名信号是唯一通道
 ##   （chunk 流式为预留接口，EventBus 版零订户已下线）
 
@@ -63,8 +64,8 @@ extends Node
 # 单位行为状态机切换（BehaviorStateMachine.travel -> AI 决策可视化，纯可观测性）：
 # entity = 所属单位（含 AIController），from/to_behavior = 切换前后行为名
 #（from 可为空 = 初始 travel），params = travel 透传参数（诊断上下文，只读勿改）。
-# 每次切换必发（含号令/看门狗/决策层路径——travel 是唯一入口）；无订户零成本，
-# 决策逻辑零改动（埋点只在 travel 末尾追加 emit）。
+# 每次切换必发（含号令/看门狗/决策层路径——travel 是唯一入口）；纯可观测性信号，
+# 订户仅 debug_gui 的 AI 决策可视化窗口（不开窗即零订户成本），决策逻辑零改动（埋点只在 travel 末尾追加 emit）。
 ## 发射方：BehaviorStateMachine.travel
 @warning_ignore("unused_signal") signal ai_behavior_switched(entity, from_behavior: String, to_behavior: String, params: Dictionary)
 

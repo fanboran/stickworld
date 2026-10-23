@@ -71,7 +71,7 @@ SIZE_BASELINE = {
     "modules/fx/scripts/crystal_sparkles.gd": 519,
     "modules/fx/scripts/fx_library.gd": 402,
     "modules/hd2d/scripts/char_rig_3d.gd": 790,
-    "modules/hd2d/scripts/hd2d_world.gd": 1696,
+    "modules/hd2d/scripts/hd2d_world.gd": 945,
     "modules/hd2d/scripts/placer/hd2d_street_placer.gd": 523,
     "modules/organization/api.gd": 421,
     "modules/organization/scripts/organization_manager.gd": 734,

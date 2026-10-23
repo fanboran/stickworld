@@ -1,32 +1,25 @@
 extends Node3D
-## hd2d_world.gd —— 「八方旅人式 HD-2D」3D 世界：编排门面 + solids/相机/光照/烘焙域。
+## hd2d_world.gd —— 「八方旅人式 HD-2D」3D 世界：编排门面 + solids/相机域。
 ##
 ## 起源是可行性原型（把 2D 绘制的火柴人放进 3D 场景、配合景深 + 辉光 + 暗角 +
 ## 分级后处理得到 HD-2D 观感），正式化后为本模块的场景脚本；职责拆分后本文件
 ## 只保留：世界搭建编排（_build_world）、solid 数据域（碰撞/占地/城门/墙线）、
-## 相机与构图数学、光照档与后处理、天幕与天体、小地图烘焙、诊断出图。
-## 职责组件（scripts/ 下按域分子目录，_ready 注入门面回引 w）：
+## 相机与构图数学、光照/天幕/小地图烘焙/出图工装各域的接线与公开转发壳
+## （get_minimap_layout/bake_minimap_strip 被 Hd2dMapBase 按方法名 duck 调用）。
+## 职责组件（scripts/ 下按域分子目录/平铺，_ready 注入门面回引 w）：
 ##   cards/      卡呈现域（卡材质/落位数学/接地影/画面宽）
 ##   placer/     摆街域（前排求解/三层背景/道具自然物摆放/布局查询）
 ##   ground/     地面域（分带铺设/台肩镶边/门前径/地面抬升/地表色账本）
 ##   walls/      城墙域（墙板/门楼几何/墙体材质）
 ##   char_stage/ 角色舞台域（关节烘焙桶与每实体装配）
 ##   clouds/     云牌域（云池/漂移/昼夜着色；节点即 Clouds 容器）
+##   sky/        天幕天体域（贴图天幕/日月弧线/云牌装配口）
+##   hd2d_light_rig.gd                 光照后处理域（昼夜档/后处理/DOF 档）
+##   hd2d_minimap_baker.gd             小地图烘焙域（平面图数据/照片式底图）
+##   diagnostics/hd2d_shots_harness.gd 出图工装（CLI 参数/截图 harness/辅助线）
 ## 组件间经 w 互访成员属模块内部自由域；对外契约只有 modules/hd2d/api.gd。
 ##
-## 固定跑法（可反复运行，产物落 stick-world/temp/proto_hd2d/）::
-##
-##   "F:/SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" \
-##     --path stick-world res://modules/hd2d/scenes/hd2d_world.tscn -- --shots=all
-##
-##   # 只出某一张：--shots=a | b | c | d | e
-##   # 性能档（关 vsync + 可选放大分辨率压过刷新率上限）：--perf=1 [--res=2560x1440]
-##   # 角色 quad 通道对照：--char=blend|scissor
-##
-## 依赖（复用 proto_25d 已提交的 Blender 半场产物，本目录不改它）::
-##   stick-world/temp/proto25d/cards.json + cards/*.png    建筑卡（albedo + glow）
-##   stick-world/temp/ground_tiles/*.png                   地面分带贴图
-##   若缺，先跑： blender -b --factory-startup -P stick-world/tests/dev/proto_25d/blender_proto.py
+## 固定跑法（--shots 出图工装）见 diagnostics/hd2d_shots_harness.gd 文件头。
 ##
 ## 坐标约定：Godot 单位 = 1 格 = 24 引擎单位（2026-09-16 换轨，旧 32；zoom=1 时
 ## 1 单位 = 1 设计像素；卡 meta 里烘焙 px 口径的数据经 ×S 统一折算）。
@@ -36,7 +29,8 @@ extends Node3D
 ##   1. 卡与相机同基 → 像素级落位（cards 组件 _cam_basis 与卡 quad 的 basis 同源）；
 ##   2. albedo 亮度差分伪造法线，平面卡才吃真 3D 光照（card.gdshader）；
 ##   3. 光照别双计：卡是已带光照的烘焙图，场景光只做保底/氛围（现行昼档
-##      太阳 1.10 = 创始人拍板的高调口径，覆盖旧"总和≈1.0"基线，见 _apply_light）；
+##      太阳 1.10 = 创始人拍板的高调口径，覆盖旧"总和≈1.0"基线，见光照域
+##      hd2d_light_rig.gd 的 _apply_light）；
 ##   4. render_mode depth_prepass_alpha 消矩形影（card.gdshader）；
 ##   5. 色调映射用 LINEAR —— 卡是已带光照的烘焙图，filmic/aces 会把它压灰。
 
@@ -52,7 +46,10 @@ const Hd2dStreetPlacer := preload("res://modules/hd2d/scripts/placer/hd2d_street
 const Hd2dGround := preload("res://modules/hd2d/scripts/ground/hd2d_ground.gd")
 const Hd2dWalls := preload("res://modules/hd2d/scripts/walls/hd2d_walls.gd")
 const Hd2dCharStage := preload("res://modules/hd2d/scripts/char_stage/hd2d_char_stage.gd")
-const Hd2dClouds := preload("res://modules/hd2d/scripts/clouds/hd2d_clouds.gd")
+const Hd2dSkyCelestial := preload("res://modules/hd2d/scripts/sky/hd2d_sky_celestial.gd")
+const Hd2dMinimapBaker := preload("res://modules/hd2d/scripts/hd2d_minimap_baker.gd")
+const Hd2dLightRig := preload("res://modules/hd2d/scripts/hd2d_light_rig.gd")
+const Hd2dShotsHarness := preload("res://modules/hd2d/scripts/diagnostics/hd2d_shots_harness.gd")
 
 const CARDS_JSON := "proto25d/cards.json"
 const CARD_DIR := "proto25d/cards/"
@@ -127,21 +124,10 @@ const BAND_ROAD := Vector2(1.9, 46.0)       # 道路（角色活动面，铺到�
 ## 同用一档，野地草色一色（创始人 2026-09-17：AI 草地按原色呈现）
 const GRASS_TINT := Color(0.90, 0.93, 0.80)
 
-## ── 小地图地表色账（消费见 get_minimap_layout）──
-## 地表材质 → 代表色：贴图平均色的手填近似（贴图无从运行期采样），
-## 实际色 = 本表 × 该条带的 albedo_color 染色（见 get_minimap_layout）。
-## 键 = 纹理名去 `_128` 与 `_alb` 后缀（grass_alb_128.png → grass）。
-const SURFACE_COLORS: Dictionary = {
-	"grass": Color(0.46, 0.60, 0.34),
-	"flagstone": Color(0.60, 0.58, 0.55),
-	"band_road_stone": Color(0.55, 0.56, 0.58),
-	"band_shoulder_stone": Color(0.70, 0.69, 0.66),
-	"band_kerb_stone": Color(0.62, 0.61, 0.58),
-}
-const SURFACE_COLOR_FALLBACK := Color(0.46, 0.60, 0.34)
-## 小地图只收"大尺度"地表条带（格）：路肩 8.7 格、门前径 3.6 格这类细条带上图
-## 只会把主街糊成杂色——小地图要表达的是"城中石板 / 城外草地"这种一眼可辨的分区。
-const MINIMAP_MIN_BAND_CELLS := 20.0
+## 天幕色档（创始人 2026-09-16：纯蓝临时口径；夜档近黑蓝）。天幕天体域与
+## 光照域经 w 共读；换手绘贴图时只动天幕域的材质贴图口。
+const SKY_BLUE := Color(0.31, 0.47, 0.78)
+const SKY_NIGHT := Color(0.03, 0.05, 0.12)
 
 ## 城墙（创始人 2026-09-14：地图两侧到城墙，城镇由城墙收口；2026-09-15
 ## 城镇扩到 ±95——"没走多久就城门"；墙高升 10 格 town 档——"城墙这么矮"）。
@@ -187,6 +173,10 @@ var placer := Hd2dStreetPlacer.new()         # 摆街域（前排求解/背景�
 var ground := Hd2dGround.new()               # 地面域（分带/镶边/抬升/地表账本）
 var walls := Hd2dWalls.new()                 # 城墙域（墙板/门楼几何）
 var char_stage := Hd2dCharStage.new()        # 角色舞台域（关节烘焙装配）
+var sky := Hd2dSkyCelestial.new()            # 天幕天体域（天幕 quad/日月弧线/云牌装配）
+var baker := Hd2dMinimapBaker.new()          # 小地图烘焙域（平面图/照片底图）
+var light := Hd2dLightRig.new()              # 光照后处理域（昼夜档/后处理/DOF 档）
+var shots := Hd2dShotsHarness.new()          # 出图工装（CLI/截图 harness/辅助线）
 
 
 ## 战场地面占比推入（一屏战场宿主调；同带前缘的迟到重算语义）
@@ -211,10 +201,6 @@ var resource_field := false       # 城外资源图模式（同战场式开阔�
 var _tex_cache: Dictionary = {}
 
 var _env: Environment
-var _sky_quad: MeshInstance3D      # 贴图天幕（相机子 quad，见 _build_sky）
-var _sky_quad_mat: StandardMaterial3D
-var _moon_disc: MeshInstance3D     # 月亮小盘（2D 同款实心白盘，弧线运行）
-var _moon_disc_mat: StandardMaterial3D
 var _sun: DirectionalLight3D   # 主光（昼=太阳档/夜=月光档，方向按档位固定不随盘走）
 var _fill: DirectionalLight3D
 var _ground_root: Node3D
@@ -231,10 +217,7 @@ var _minimap_layout_cache: Dictionary = {}
 ## 照片底图脏信号：光照档切换或 3D 街景内容变更时发（Hd2dMapBase 收到后
 ## 防抖重烘，小地图 15Hz 快照自动换图）——运行时重烘管线的脏标记入口
 signal minimap_base_dirty
-## 烘焙排除层（第 20 层渲染层）：临烘排除内容（火柴人 billboard / 自然物与
-## 道具 / 云牌 / 背景排剪影）的可视件归入此层，烘焙相机 cull_mask 挖掉它。
-## 按相机剔除而非全局隐藏——主画面零闪烁，重烘可在游戏内随时发。
-const BAKE_EXCLUDE_LAYER := 1 << 19
+## 烘焙排除层常量（BAKE_EXCLUDE_LAYER）随小地图烘焙域组件；rig 节点挂门面。
 ## 小地图烘焙 rig（懒建；共享主视口 World3D 的 SubViewport + 专用正交相机）
 var _bake_vp: SubViewport = null
 var _bake_cam: Camera3D = null
@@ -263,12 +246,6 @@ var _bg_base_z := {}            # 背景层 -> 实测卡基线 z（辅助线/底
 
 var _last_light_mode := "day"
 
-var _opts := {
-	"shots": "none", "res": "", "layout": "",
-	"tag": "", "flat": false, "debug": false,
-	"hide": "",
-}  # shots 默认 "none" = 静默常驻模式（游戏地图挂载用；probe 出图须显式 --shots=…）
-
 # 帧采样
 var _measuring := false
 var _samples: PackedFloat32Array = PackedFloat32Array()
@@ -283,127 +260,59 @@ func _ready() -> void:
 	ground.w = self
 	walls.w = self
 	char_stage.w = self
-	_parse_args()
+	sky.w = self
+	baker.w = self
+	light.w = self
+	shots.w = self
+	shots._parse_args()
 	if not layout_name.is_empty():
-		_opts["layout"] = layout_name   # 地图宿主注入优先于命令行
-	print("[hd2d] 工程根=", _root)
-	print("[hd2d] 跑法: godot --path stick-world res://modules/hd2d/scenes/hd2d_world.tscn -- --shots=all")
+		shots._opts["layout"] = layout_name   # 地图宿主注入优先于命令行
+	if _verbose():
+		print("[hd2d] 工程根=", _root)
 	_load_cards()
 	# 运行时生成的布局优先（宿主"首次进入生成"）；否则读烘焙好的布局 JSON
 	if not layout_data.is_empty():
 		_layout = layout_data
-	elif not str(_opts["layout"]).is_empty():
-		_layout = _read_json_rel(LAYOUT_DIR + str(_opts["layout"]) + ".json")
+	elif not str(shots._opts["layout"]).is_empty():
+		_layout = _read_json_rel(LAYOUT_DIR + str(shots._opts["layout"]) + ".json")
 		if _layout.is_empty():
-			push_error("[hd2d] 布局缺失，退回手摆主街: " + str(_opts["layout"]))
-	print("[hd2d] 模式=", "布局驱动:" + str(_opts["layout"]) if not _layout.is_empty() else "手摆主街")
-	if battlefield:
-		print("[hd2d] 战场模式（无墙无街开阔野地）")
+			push_error("[hd2d] 布局缺失，退回手摆主街: " + str(shots._opts["layout"]))
+	if _verbose():
+		print("[hd2d] 模式=", "布局驱动:" + str(shots._opts["layout"]) if not _layout.is_empty() else "手摆主街")
+		if battlefield:
+			print("[hd2d] 战场模式（无墙无街开阔野地）")
 	_build_world()
-	_apply_hide_groups()
-	if bool(_opts.get("save_scene", false)):
-		# 只存**地面/台肩几何**（_ground_root 子树）——含运行时光栅的角色/后期会把场景撑到几百 MB
-		var gr: Node = _ground_root
-		_set_owner_recursive(gr, gr)
-		var packed := PackedScene.new()
-		var err := packed.pack(gr)
-		if err == OK:
-			var p := "res://temp/hd2d/ground_scene_dump.tscn"
-			var e2 := ResourceSaver.save(packed, p)
-			print("[hd2d] 地面场景已存 -> ", p, " err=", e2)
-		else:
-			print("[hd2d] pack 失败 err=", err)
-		get_tree().quit(0)
+	shots._apply_hide_groups()
+	if bool(shots._opts.get("save_scene", false)):
+		shots._save_ground_scene_then_quit()
 		return
-	if str(_opts["shots"]) == "none":
+	if str(shots._opts["shots"]) == "none":
 		# 静默常驻（游戏内地图模式）：白天全效档点亮场景即返回，不截屏不退出
-		_apply_light("day")
+		light._apply_light("day")
 		# 渲染链二分诊断口：STICK_HD2D_STAGE=a/b 跳过后处理/辉光/DOF（默认 c 全效）
-		_apply_stage(OS.get_environment("STICK_HD2D_STAGE") if OS.get_environment("STICK_HD2D_STAGE") != "" else "c")
-		_update_px_size()
+		light._apply_stage(OS.get_environment("STICK_HD2D_STAGE") if OS.get_environment("STICK_HD2D_STAGE") != "" else "c")
+		light._update_px_size()
 		return
 	else:
-		await _run_shots(str(_opts["shots"]))
+		await shots._run_shots(str(shots._opts["shots"]))
 	print("[hd2d] DONE")
-	await _settle(1.0)
+	await shots._settle(1.0)
 	get_tree().quit(0)
+
+
+## 运行期诊断 verbose 门（units 模块 STICK_TRACE_* 同款做法）：生产路径零
+## 无条件 print，排查时设 STICK_HD2D_VERBOSE=1 打开
+func _verbose() -> bool:
+	return OS.get_environment("STICK_HD2D_VERBOSE") != ""
 
 
 # ------------------------------------------------------------------ 参数
 
-## 诊断对照实验：按 --hide= 组名隐藏节点组（shadow=接地影面片 / plat=台面系几何 /
-## cards=建筑卡 / kerb=台肩镶边）。只影响显示，不改落位。
 func _exit_tree() -> void:
 	# 恢复 post 通道关掉的视口 2D MSAA（缘由见 post 层创建处注释）
 	if _post_viewport_msaa2d != 0 and get_viewport() != null:
 		get_viewport().msaa_2d = _post_viewport_msaa2d
 	_post_viewport_msaa2d = 0
-
-
-func _apply_hide_groups() -> void:
-	var spec := str(_opts.get("hide", ""))
-	if spec.is_empty():
-		return
-	for grp: String in spec.split(","):
-		var roots: Array = []
-		match grp:
-			"shadow":
-				roots = [_shadow_root]
-			"cards":
-				roots = [_card_root]
-			"plat":
-				for n: Node in _ground_root.get_children():
-					var nm := str(n.name)
-					if nm.begins_with("Seg_") or nm.begins_with("Band_") \
-							or nm.begins_with("PlatRim") or nm.begins_with("Decal_") \
-							or nm.begins_with("DoorPath"):
-						n.visible = false
-				continue
-			"kerb":
-				for n: Node in _ground_root.get_children():
-					if str(n.name).begins_with("PlatRim"):
-						n.visible = false
-				continue
-			_:
-				continue
-		for r: Node3D in roots:
-			r.visible = false
-	print("[hd2d] 已隐藏分组: ", spec)
-
-
-func _set_owner_recursive(n: Node, root: Node) -> void:
-	for c in n.get_children():
-		c.owner = root
-		_set_owner_recursive(c, root)
-
-
-func _parse_args() -> void:
-	for a in OS.get_cmdline_user_args():
-		var s := str(a)
-		if s == "--save-scene":
-			_opts["save_scene"] = true
-			continue
-		if s.begins_with("--shots="):
-			_opts["shots"] = s.get_slice("=", 1)
-		elif s.begins_with("--res="):
-			_opts["res"] = s.get_slice("=", 1)
-		elif s.begins_with("--tag="):
-			_opts["tag"] = s.get_slice("=", 1)
-		elif s.begins_with("--flat="):
-			# --flat=1：关远焦 DOF（辅助线核对版出图用——DOF 满糊会把辅助线一起晕开）
-			_opts["flat"] = s.get_slice("=", 1) != "0"
-		elif s.begins_with("--layout="):
-			# 布局驱动：读 city_layout 导出的布局 JSON 摆街（算法村，如村B）
-			_opts["layout"] = s.get_slice("=", 1)
-		elif s.begins_with("--battlefield="):
-			# 战场模式：无墙无街的开阔野地（战场图宿主注入同款）
-			battlefield = s.get_slice("=", 1) != "0"
-		elif s.begins_with("--debug="):
-			# --debug=1：辅助线（网格/紫线/1/3 线/末层基线）——调试模式才出现（创始人口径）
-			_opts["debug"] = s.get_slice("=", 1) != "0"
-		elif s.begins_with("--hide="):
-			# --hide=shadow,plat,cards：诊断用分组隐藏（对照实验定位视觉缺陷来源）
-			_opts["hide"] = s.get_slice("=", 1)
 
 
 # ------------------------------------------------------------------ 资源
@@ -426,13 +335,15 @@ func _load_meta_json(rel: String) -> Array:
 func _load_cards() -> void:
 	for c: Variant in _load_meta_json(CARDS_JSON):
 		_cards[str(c["card"])] = c
-	print("[hd2d] 烘焙卡 %d 张" % _cards.size())
 	for c: Variant in _load_meta_json(PROPS_JSON):
 		_props[str(c["card"])] = c
-	print("[hd2d] 道具卡 %d 张" % _props.size())
 	for c: Variant in _load_meta_json(NATURE_JSON):
 		_nature[str(c["card"])] = c
-	print("[hd2d] 自然物卡 %d 张" % _nature.size())
+	# 卡库规模属运行期诊断信息——verbose 门控（生产路径零无条件 print）
+	if _verbose():
+		print("[hd2d] 烘焙卡 %d 张" % _cards.size())
+		print("[hd2d] 道具卡 %d 张" % _props.size())
+		print("[hd2d] 自然物卡 %d 张" % _nature.size())
 
 
 ## 读 JSON（Object）：优先烘焙工作区 temp/，缺失回退工程内 tex/ 入库副本。
@@ -565,222 +476,22 @@ func get_building_rects() -> Array:
 	return out
 
 
-## ── 小地图数据供给（宿主 Hd2dMapBase 转发，签名含格→px 换算口径）──
-## 为什么在这里换算：1 格 = 多少 px 是"宿主地图"的口径（Hd2dMapBase.CELL_PX），
-## 本类只认格；由调用方传入既避免 hd2d 反向依赖 world 层的常量，也不复制一份。
-##
-## 返回（世界 px，原点 = 世界 x=0）：
-##   surfaces  = [{x0, x1, color}]  地面材质色带，**按铺设顺序**排列（后铺者压前，
-##               小地图照序重放即得正确叠色）
-##   buildings = [{x, width, y, depth, terrain, def, type, color}]  x = 中心；
-##               y = 占地后沿（基线）、depth = 占地纵深 —— 小地图据此画**真占地**
-##               而非图标（建筑是 3D 立体，缩略图上是俯视占地块）；
-##               type/color 语义见 Hd2dMinimapStyle
-##
-## 只报前排临街排：后排（bg1~bg3）是远景布景，缩略图上会叠成一团糊块。
+## ── 小地图数据供给（宿主 Hd2dMapBase 按方法名 duck 调用，签名不变）──
+## 实现在小地图烘焙域组件（hd2d_minimap_baker.gd）：平面图数据 + 照片式底图
+## 烘焙；缓存（_minimap_layout_cache）与烘焙 rig（_bake_vp/_bake_cam）状态留本面。
+## 返回结构与格→px 换算口径见该组件文件头。
+
 func get_minimap_layout(cell_px: float = 24.0) -> Dictionary:
-	if is_equal_approx(float(_minimap_layout_cache.get("cell_px", -1.0)), cell_px) \
-			and not _minimap_layout_cache.is_empty():
-		return _minimap_layout_cache
-	var surfaces: Array = []
-	for s in ground._ground_strips:
-		var w: float = float(s[1])
-		if w < MINIMAP_MIN_BAND_CELLS:
-			continue
-		var cx: float = float(s[0])
-		var tint: Color = s[3]
-		var base: Color = minimap_surface_color(str(s[2]))
-		surfaces.append({
-			"x0": (cx - w * 0.5) * cell_px,
-			"x1": (cx + w * 0.5) * cell_px,
-			"color": Color(base.r * tint.r, base.g * tint.g, base.b * tint.b),
-		})
-	var buildings: Array = []
-	for occ in _front_occ:
-		var meta: Dictionary = _cards.get(str(occ[2]), {})
-		var def: String = str(meta.get("def", ""))
-		var x0: float = float(occ[0]) * cell_px
-		var x1: float = float(occ[1]) * cell_px
-		# 占地纵深沿用 F3 碰撞带的同一口径（_building_solid_rect：烘焙实测 footprint
-		# 全深，下限 2 格防扁片，后沿不越行走带深端）——小地图与碰撞盒同源不出双份
-		var band: Array = _building_solid_rect(occ)
-		buildings.append({
-			"x": (x0 + x1) * 0.5,
-			"width": x1 - x0,
-			"y": float(band[3]),
-			"depth": maxf(float(band[3]) - float(band[2]), cell_px * 2.0),
-			"terrain": false,
-			"baked": true,   # 前排会烘进照片底图 → 照片模式下不重复画（见 minimap_painter）
-			"def": def,
-			"type": Hd2dMinimapStyle.type_for(def),
-			"color": Hd2dMinimapStyle.color_for(def),
-		})
-	_minimap_layout_cache = {
-		"cell_px": cell_px,
-		"surfaces": surfaces,
-		"buildings": buildings,
-	}
-	return _minimap_layout_cache
+	return baker.get_minimap_layout(cell_px)
 
 
-## 地表纹理名 → 代表色（去 `_128`/`_alb` 后缀查 SURFACE_COLORS，未收录走兜底草色）
-static func minimap_surface_color(tex_name: String) -> Color:
-	var key: String = tex_name.get_basename().replace("_128", "").trim_suffix("_alb")
-	return SURFACE_COLORS.get(key, SURFACE_COLOR_FALLBACK)
-
-
-# ─────────────────────────── 小地图底图烘焙（照片式）───────────────────────────
-
-## 小地图底图烘焙 —— "干净管线"：只留**前排建筑 + 地面**的真渲染，降采样成贴图。
-##
-## 与 get_minimap_layout（数据平面图）的区别：这里不做任何近似——颜色与形状是
-## 烘卡的真实美术，直接由渲染管线产出。
-##
-## 临烘排除（创始人 2026-10：火柴人与野外树木都烘掉）：火柴人（_char_entities_root
-## 实体 billboard 容器 + _char_host 演示宿主）、自然物与道具（_prop_root 含野外
-## 树木/矿物/摊位）、云牌、背景楼群（_card_root 里前排之后的 68 张剪影）的可视件
-## **独占**归入 BAKE_EXCLUDE_LAYER 渲染层（赋值 = ：留在第 1 层会漏进烘焙相机，
-## 云与实体火柴人两次泄漏的教训），烘焙相机 cull_mask 挖掉该层——**按相机剔除
-## 而非全局隐藏，主画面零闪烁**，游戏内随时可重烘（昼夜换档防抖重烘即走本口）。
-## 天幕与月盘是主相机子节点、后处理层是 CanvasLayer——都不在 SubViewport 的
-## 渲染里，天然不进烘焙图。
-## 背景清成透明（transparent_bg + 默认清屏色 alpha 0）＝"去天空"。
-## 后处理（DOF/辉光/雾）全关——景深远焦起点锚在世界线上，一开整幅糊掉。
-##
-## 参数：world_x0/x1 = 地图世界 x 范围（px）；canvas_ground_y/bottom = 2D 画布的
-## 地面带上下沿（点位换算与裁切基准）；（target_w, target_h）= 目标贴图尺寸，
-## 宽高比即裁切比（街带按该比从行走带前沿往上取）。
-##
-## 返回（相机/viewport 不可用或烘焙失败返回空字典）：
-##   texture      ImageTexture（已裁已降采样）
-##   x_ref        [world_x0, world_x1]
-##   y_ref        [canvas_y_back, t_back, canvas_y_front, t_front]（t 为 0..1 归一纵坐标）
-##   lift_ratio   台面抬升的竖直占比（城内点按台面标高画；墙外点不加）
-##   wall_x       台面抬升的 x 边界（px；|x| ≤ 它为城内）
-## 调用约定：相机接管只发生在烘焙 SubViewport 内部（专用烘焙相机，主相机与
-## 逐帧镜像不受影响）；清屏色在捕获后即还原。加载期与游戏内重烘同走本口。
+## 照片式底图烘焙转发（bake_minimap_strip 是协程，壳须 await 保持可等待——
+## Hd2dMapBase 侧 `await _hd.bake_minimap_strip(...)` 语义不变）
 func bake_minimap_strip(world_x0: float, world_x1: float,
 		canvas_ground_y: float, canvas_ground_bottom: float,
 		tex_w: int, tex_h: int) -> Dictionary:
-	if _cam == null or tex_w <= 0 or tex_h <= 0 or world_x1 <= world_x0:
-		return {}
-	var rig: Array = _ensure_bake_rig(tex_w, tex_h)
-	var bake_cam: Camera3D = rig[1]
-	var bake_vp: SubViewport = rig[0]
-	if bake_cam == null or bake_vp == null:
-		return {}
-	# 平时 DISABLED（不留常驻渲染通道）；烘焙期开渲染
-	bake_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	var map_w: float = world_x1 - world_x0
-
-	# ── 临烘排除：可视件独占归烘焙排除层（相机剔除，不动 visible）──
-	var saved_clear: Color = RenderingServer.get_default_clear_color()
-	# 背景清成透明（"去天空"）：烘焙视口透明的处露出小地图自己的背衬色
-	RenderingServer.set_default_clear_color(Color(0.0, 0.0, 0.0, 0.0))
-	_bake_exclude_layer(_char_entities_root)   # 实体 billboard（游戏图的火柴人全在这）
-	_bake_exclude_layer(_char_host)            # 演示宿主（游戏图常空，防御性排除）
-	_bake_exclude_layer(_prop_root)
-	# 云牌：整个容器归排除层（云贴图异步烘制——逐节点排除会漏掉烘焙后才入树的那些）
-	_bake_exclude_layer(_cloud_root)
-	var front_n: int = _front_occ.size()
-	if _card_root != null:
-		for i in _card_root.get_child_count():
-			if i >= front_n:
-				_bake_exclude_layer(_card_root.get_child(i))
-	# ── 全宽取景（含少量边距，防边缘卡裁）──
-	_apply_cam_framing(map_w * 1.02 / 24.0, bake_cam)
-	bake_cam.position.x = (world_x0 + world_x1) * 0.5 / 24.0
-	for i in 2:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-
-	var img: Image = (rig[0] as SubViewport).get_texture().get_image()
-	var result: Dictionary = {}
-	if img != null and img.get_width() > 0:
-		# 画布 y ↔ 世界 z 口径：canvas_y = 516 + z*24（全图统一，见 _building_solid_rect）
-		var y_front: float = _bake_screen_y(bake_cam, canvas_ground_bottom)
-		var y_back: float = _bake_screen_y(bake_cam, canvas_ground_y)
-		var h_px: float = float(maxi(img.get_height(), 1))
-		result = {
-			"texture": ImageTexture.create_from_image(img),
-			"x_ref": [world_x0, world_x1],
-			"y_ref": [canvas_ground_y, y_back / h_px, canvas_ground_bottom, y_front / h_px],
-			"lift_ratio": _bake_lift_ratio(bake_cam, h_px, canvas_ground_bottom),
-			"wall_x": _wall_x() * 24.0,
-		}
-	# ── 还原清屏色/烘焙视口渲染（层标记幂等无需还原；相机留在烘焙取景，
-	#    下次烘焙自行重设；可见性全程未动）──
-	RenderingServer.set_default_clear_color(saved_clear)
-	bake_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
-	return result
-
-
-## 画布 y 在烘焙相机下的屏幕 y（含台面抬升；以 x=0 处标高作统一基准，
-## 墙外低地面点位由 lift_ratio 在消费侧修正）
-func _bake_screen_y(bake_cam: Camera3D, canvas_y: float) -> float:
-	var z: float = (canvas_y - 516.0) / 24.0
-	var lift: float = get_ground_lift_world(0.0, z)
-	return bake_cam.unproject_position(Vector3(0.0, lift, z)).y
-
-
-## 台面抬升在街带里的竖直占比（消费侧：|x| > wall_x 的点加上它——墙外地面
-## 比城内台面低这一档）。取"抬升后 / 未抬升"同一 canvas z 的屏幕 y 之差，
-## 是正交俯角下该抬升的精确屏上落差。
-func _bake_lift_ratio(bake_cam: Camera3D, h_px: float, canvas_ground_bottom: float) -> float:
-	var z: float = (canvas_ground_bottom - 516.0) / 24.0
-	var lifted: float = bake_cam.unproject_position(
-			Vector3(0.0, get_ground_lift_world(0.0, z), z)).y
-	var flat: float = bake_cam.unproject_position(Vector3(0.0, 0.0, z)).y
-	return absf(flat - lifted) / maxf(h_px, 1.0)
-
-
-## 烘焙 rig（懒建）：SubViewport 共享主视口的 World3D → 只渲染 3D 世界，
-## 不含任何 CanvasLayer（UI/加载屏/后处理），尺寸即目标贴图尺寸（与玩家窗口解耦），
-## 专用相机不带相机属性 → 无景深；天幕/月盘挂在主相机上，天然不入图；
-## cull_mask 挖掉烘焙排除层（排除内容只对玩家相机可见）。
-## 返回 [SubViewport, Camera3D]。
-func _ensure_bake_rig(tex_w: int, tex_h: int) -> Array:
-	if _bake_vp == null or not is_instance_valid(_bake_vp):
-		_bake_vp = SubViewport.new()
-		_bake_vp.name = "MinimapBakeViewport"
-		_bake_vp.disable_3d = false
-		_bake_vp.transparent_bg = true
-		_bake_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		_bake_vp.msaa_3d = Viewport.MSAA_DISABLED
-		add_child(_bake_vp)
-		_bake_cam = Camera3D.new()
-		_bake_cam.name = "MinimapBakeCamera"
-		_bake_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-		_bake_cam.keep_aspect = Camera3D.KEEP_WIDTH
-		_bake_cam.near = 0.05
-		_bake_cam.far = 600.0
-		_bake_cam.cull_mask = 0xFFFFF & ~BAKE_EXCLUDE_LAYER
-		if _cam != null:
-			_bake_cam.rotation = _cam.rotation
-			_bake_cam.position.y = _cam.position.y
-		_bake_vp.add_child(_bake_cam)
-	# 共享主视口的世界（World3D 同一份 → 渲染同一批 3D 节点与灯光/环境）
-	var main_vp: Viewport = get_viewport()
-	if main_vp != null:
-		_bake_vp.world_3d = main_vp.world_3d
-	_bake_vp.size = Vector2i(maxi(tex_w, 1), maxi(tex_h, 1))
-	_bake_cam.current = true
-	return [_bake_vp, _bake_cam]
-
-
-## 把节点子树里的可视件（GeometryInstance3D）**独占**归入烘焙排除层：
-## 赋值（=）而非叠加（|=）——节点若仍留在第 1 层，烘焙相机（掩码 1..19）
-## 照样渲染它，云就是这么漏进去的（实测教训）。独占后：主相机全层照见、
-## 烘焙相机挖掉。幂等（重复赋同值），运行期新入树的排除件下次烘焙自然归层。
-## 火柴人 billboard 的外壳 quad、卡片、云全是 MeshInstance3D/Sprite3D 系；
-## billboard 内部的 SubViewport/逻辑节点按类型自然跳过。
-func _bake_exclude_layer(n: Node) -> void:
-	if n == null or not is_instance_valid(n):
-		return
-	if n is GeometryInstance3D:
-		(n as GeometryInstance3D).layers = BAKE_EXCLUDE_LAYER
-	for c in n.get_children():
-		_bake_exclude_layer(c)
+	return await baker.bake_minimap_strip(world_x0, world_x1,
+			canvas_ground_y, canvas_ground_bottom, tex_w, tex_h)
 
 
 ## 前后景分界线的 2D 等价 y（px）——可行走地面（前景）与后景的构图分界：
@@ -880,7 +591,7 @@ func set_cam_fit_width_px(world_px: float) -> void:
 
 ## 应用正交取景（size = 可视宽，格）到给定相机：算纵向构图锚 + 近平面退避 + 景深换算。
 ## 单一出口——玩家缩放（set_cam_zoom）、烘焙全图取景（set_cam_fit_width_px）与
-## 烘焙相机（_ensure_bake_rig）共用同一份构图锚数学，三处口径不会分叉。
+## 烘焙相机（烘焙域组件 _ensure_bake_rig）共用同一份构图锚数学，三处口径不会分叉。
 ## cam 的视口尺寸决定纵向可视范围（烘焙相机挂在 SubViewport 上，与主窗口解耦）；
 ## 景深只对主相机（带相机属性的那台）换算，烘焙相机无属性、本就不吃景深。
 func _apply_cam_framing(size_units: float, cam: Camera3D) -> void:
@@ -964,7 +675,7 @@ func get_ground_lift_px(x_px: float, y_px: float) -> float:
 ## 须重烘一版（Hd2dMapBase 防抖后自动执行）。
 func set_light_mode(mode: String) -> void:
 	var changed: bool = mode != _last_light_mode
-	_apply_light(mode)
+	light._apply_light(mode)
 	if changed:
 		minimap_base_dirty.emit()
 
@@ -985,7 +696,7 @@ func _build_world() -> void:
 	# 贴图天空（创始人 2026-09-16：弃程序化天空改天幕 quad，纯蓝临时口径）——
 	# 程序化天空在 26° 俯角正交相机下其"天空/地面半球"分界压在屏幕中线，
 	# 蓝天画不进"地面远端→中线"带（灰带读作天空只盖上半屏）。背景模式退
-	# BG_COLOR 只作天幕外的兜底色，真正的天空 = _build_sky 的相机子天幕。
+	# BG_COLOR 只作天幕外的兜底色，真正的天空 = 天幕域 _build_sky 的相机子天幕。
 	_env.background_mode = Environment.BG_COLOR
 	_env.background_color = SKY_BLUE
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -1114,14 +825,14 @@ func _build_world() -> void:
 	fb_mi.name = "GroundFallback"
 	_ground_root.add_child(fb_mi)
 	ground._add_sky_backdrop()            # 原 2D 天空贴图（远山/树线）立于背景之后（已删空壳）
-	_place_clouds()                       # 2D 手绘云烘贴图 → 漂移云牌（异步烘制）
+	sky._place_clouds()                   # 2D 手绘云烘贴图 → 漂移云牌（异步烘制）
 	if not battlefield:
 		ground._add_platform()            # 石板台面（拉通城内到墙线）+ 台肩石坎镶边
 		walls._build_walls()              # 城墙转角收边 + 门洞（碰撞走 get_solid_rects）
 		# 战场野地不再有第二/第三材质（创始人 2026-09-16：整个大地一个材质，
 		# 草灰绿夯土带与中轴夯土东路已删——地面只有上方那层全幅绿草）
-	_add_width_guides()                   # 建筑宽度辅助线（--debug 才显示）
-	_add_horizon_guides()                 # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
+	shots._add_width_guides()             # 建筑宽度辅助线（--debug 才显示）
+	shots._add_horizon_guides()           # 1/3 线（橙）+ 第三排基线（绿）（--debug 才显示）
 	for dx in _door_path_xs:
 		ground._add_door_path(float(dx), 3.6)   # 门前短径（楼脚→台肩→路面）
 	if not battlefield:
@@ -1174,7 +885,7 @@ func _build_world() -> void:
 	# hd2d_street_map 逐帧同步接管；测试场景没人接管，须同值否则渲染验收
 	# 与正式画面差一档缩放）+ 下边界锚定校正
 	set_cam_zoom(0.75)
-	_build_sky()        # 贴图天幕 + 日/月盘（相机子节点，须在 set_cam_zoom 之后建）
+	sky._build_sky()    # 贴图天幕 + 日/月盘（相机子节点，须在 set_cam_zoom 之后建）
 
 	# --- HD-2D 后处理（屏幕空间：移轴 + 暗角 + 分级）---
 	_post_layer = CanvasLayer.new()
@@ -1200,9 +911,9 @@ func _build_world() -> void:
 	_post_viewport_msaa2d = get_viewport().msaa_2d
 	get_viewport().msaa_2d = Viewport.MSAA_DISABLED
 
-	# HUD 标签（只在遮挡对照图里显示，给两格加字）
-	_hud = _make_label(Vector2(24, 18), 30)
-	_hud2 = _make_label(Vector2(984, 18), 30)
+	# HUD 标签（只在遮挡对照图里显示，给两格加字；工厂在出图工装组件）
+	_hud = shots._make_label(Vector2(24, 18), 30)
+	_hud2 = shots._make_label(Vector2(984, 18), 30)
 	_hud.visible = false
 	_hud2.visible = false
 
@@ -1226,471 +937,9 @@ func spawn_bg_for_front(front_card: String, fx: float) -> void:
 	placer.spawn_bg_for_front(front_card, fx)
 
 
-func _add_width_guides() -> void:
-	if not bool(_opts["debug"]):
-		return
-	# **整格网格**（1 格 = 一条线，每 4 格加亮）+ 每栋建筑左右边界紫线（方便数几格宽）
-	var thin := StandardMaterial3D.new()
-	thin.albedo_color = Color(0.55, 0.95, 1.0, 0.55)
-	thin.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	thin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var bold := StandardMaterial3D.new()
-	bold.albedo_color = Color(0.35, 0.85, 1.0, 0.95)
-	bold.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	bold.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var edge := StandardMaterial3D.new()
-	edge.albedo_color = Color(1.0, 0.25, 0.85, 1.0)
-	edge.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var x := -70.0
-	while x <= 70.0:
-		var pm := PlaneMesh.new()
-		pm.size = Vector2(0.02 if int(x) % 4 != 0 else 0.035, 8.6)
-		var mi := MeshInstance3D.new()
-		mi.mesh = pm
-		mi.material_override = thin if int(x) % 4 != 0 else bold
-		mi.position = Vector3(x, PLAT_H + 0.015, -2.6)
-		mi.name = "GridX"
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_ground_root.add_child(mi)
-		x += 1.0
-	for occ in _front_occ:
-		var w := float(occ[1]) - float(occ[0])
-		var cx := (float(occ[0]) + float(occ[1])) * 0.5
-		for s in [-1.0, 1.0]:
-			var pm2 := PlaneMesh.new()
-			pm2.size = Vector2(0.05, 8.6)
-			var mi2 := MeshInstance3D.new()
-			mi2.mesh = pm2
-			mi2.material_override = edge
-			mi2.position = Vector3(cx + s * w * 0.5, PLAT_H + 0.018, -2.6)
-			mi2.name = "BldEdge"
-			mi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_ground_root.add_child(mi2)
-
-
-func _add_horizon_guides() -> void:
-	if not bool(_opts["debug"]):
-		return
-	# 两条全屏水平辅助线（创始人 2026-09-14 要求；贴地 unshaded，无阴影）：
-	#   橙 = 屏幕 1/3 线（33.3% 从底）：第二排基线 + 第一排（+地面）屏幕区的上边界
-	#   绿 = 末排（bg2）基线 = 真实地平线（底衬远端收到同一点）
-	# z 取实测卡基线（anchor 深度偏移各卡不同，见 _spawn_bg_card）。
-	var specs := [
-		{"z": float(_bg_base_z.get(0, SKYLINE_Z)), "col": Color(1.0, 0.62, 0.10)},
-		{"z": float(_bg_base_z.get(BG_LAYERS - 1,
-			SKYLINE_Z - BG_LAYER_GAP * float(BG_LAYERS - 1))),
-			"col": Color(0.20, 1.0, 0.45)},
-	]
-	for i in specs.size():
-		var pm := PlaneMesh.new()
-		pm.size = Vector2(150.0, 0.12)
-		var mi := MeshInstance3D.new()
-		mi.mesh = pm
-		var m := StandardMaterial3D.new()
-		m.albedo_color = specs[i]["col"]
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mi.material_override = m
-		mi.position = Vector3(0, 0.025, float(specs[i]["z"]))
-		mi.name = "Guide%d" % i
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_ground_root.add_child(mi)
-
-
-# ------------------------------------------------------------------ 天幕与天体
-
-## 天幕蓝（创始人 2026-09-16：纯蓝临时口径；以后换手绘贴图时只动这里与
-## _build_sky 的材质贴图口）
-const SKY_BLUE := Color(0.31, 0.47, 0.78)
-const SKY_NIGHT := Color(0.03, 0.05, 0.12)
-## 月亮半径（格）：2D SkyStars 月亮 r=26px ÷ 32px/格（2D 月亮本就是实心白盘）
-const MOON_DISC_R: float = 26.0 / 32.0
-## 弧线参数（SkyStars Terraria Main.DrawSunAndMoon 直译，屏幕比例口径）：
-## 横穿 0.65 视宽（1250/1920）、正午高 0.685 半视高（(540-170)/540）、
-## 晨昏下沉 0.463 半视高（250/540）、晨昏放大 scale=1.2-0.4p
-const CELESTIAL_SPAN_FRAC: float = 0.65
-const CELESTIAL_NOON_FRAC: float = 370.0 / 540.0
-const CELESTIAL_DROP_FRAC: float = 250.0 / 540.0
-const SUN_HOUR_START: float = 5.0
-const SUN_HOUR_END: float = 21.0
-const MOON_HOUR_START: float = 19.0
-const MOON_HOUR_END: float = 29.0   # 跨午夜 = 次日 5 时（SkyStars 同窗）
-
-
-## 贴图天幕 + 屏幕后处理太阳/月亮盘（创始人 2026-09-16：程序化天空 → 贴图天空）。
-## 天幕 = 相机子 quad：正交视锥截面恒定（zoom 0.25..8 最大约 240×135 格），
-## 340×220 全缩放档覆盖；深度 120 在地面远端/楼群（≈52~57）之后——地平线
-## 分界由深度测试天然压出，quad 不随镜头平移（无穷远语义）。太阳不摆场景
-## 贴片，弧线位置驱动屏幕后处理炫光（_publish_sun_uv），复刻 2D SkyStars
-## 弧线公式（线性横穿+抛物线高度+晨昏放大），主光方向仍按档位固定（渲染确定性）。
-func _build_sky() -> void:
-	_sky_quad = MeshInstance3D.new()
-	var qm := QuadMesh.new()
-	qm.size = Vector2(340.0, 220.0)
-	_sky_quad.mesh = qm
-	_sky_quad_mat = StandardMaterial3D.new()
-	_sky_quad_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_sky_quad_mat.albedo_color = SKY_BLUE
-	# 天幕在雾程之外，不吃雾（否则 build 期默认雾档会把天幕整个洗成雾色）
-	_sky_quad_mat.disable_fog = true
-	_sky_quad.material_override = _sky_quad_mat
-	_sky_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_sky_quad.name = "SkyBackdrop"
-	_sky_quad.position = Vector3(0.0, 0.0, -120.0)
-	_cam.add_child(_sky_quad)
-	# 太阳 = 屏幕后处理炫光（创始人 2026-09-16：就是 PostProcessLayer 那颗
-	# 屏幕太阳，要它沿弧线到处移动）——场景里不摆任何太阳贴片，弧线位置
-	# 每帧经 _publish_sun_uv 写进后处理层 sun_uv；夜间由月盘接管（见下）
-	# 月亮 = 实心小盘（2D SkyStars 月亮本就是实心白盘；月相环面暂不做——
-	# 盘面过小读不出，创始人要再加）
-	_moon_disc = MeshInstance3D.new()
-	var sd := SphereMesh.new()
-	sd.radius = MOON_DISC_R
-	sd.height = MOON_DISC_R * 2.0
-	_moon_disc.mesh = sd
-	_moon_disc_mat = StandardMaterial3D.new()
-	_moon_disc_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_moon_disc_mat.albedo_color = Color(0.95, 0.97, 1.0)
-	_moon_disc_mat.emission_enabled = true
-	_moon_disc_mat.emission = Color(0.85, 0.9, 1.0)
-	_moon_disc_mat.emission_energy_multiplier = 1.6
-	_moon_disc_mat.disable_fog = true
-	_moon_disc.material_override = _moon_disc_mat
-	_moon_disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_moon_disc.name = "MoonDisc"
-	_moon_disc.visible = false
-	_sky_quad.add_child(_moon_disc)
-	_update_celestial()
-
-
-## 天体弧线逐帧更新（挂在 _process；时刻源 WorldState.game_time，缺失按正午）。
-## 太阳（5..21 时）与月亮（19..29 时）共用弧线：屏幕后处理炫光太阳全程跟随，
-## 夜间月盘接管天体读法
-func _update_celestial() -> void:
-	if _cam == null:
-		return
-	var hour: float = 12.0
-	if WorldState != null and WorldState.game_time > 0.0:
-		hour = WorldState.game_time
-	var vp := _cam.get_viewport().get_visible_rect().size
-	var half_w: float = _cam.size * 0.5
-	var half_h: float = half_w * vp.y / maxf(vp.x, 1.0)
-	var lum: float = EnvironmentAPI.sample_sky_bg_color(hour).get_luminance()
-	_moon_disc.visible = false
-	var t: float = _celestial_traverse(hour, SUN_HOUR_START, SUN_HOUR_END)
-	var sun_alpha: float = clampf((lum - 0.25) / 0.30, 0.0, 1.0) if t >= 0.0 else 0.0
-	if t >= 0.0 and sun_alpha > 0.02:
-		_publish_sun_uv(_celestial_uv(half_w, half_h, t))
-		return
-	# 月亮：白盘冷光，夜天越黑越显（SkyStars _sky_gate 同式）；炫光太阳跟随月位
-	var mt: float = _celestial_traverse(hour, MOON_HOUR_START, MOON_HOUR_END)
-	var gate: float = clampf((0.55 - lum) * 4.0, 0.0, 1.0)
-	if mt >= 0.0 and gate > 0.02:
-		_moon_disc_style(half_w, half_h, mt, gate)
-		_publish_sun_uv(_celestial_uv(half_w, half_h, mt))
-
-
-## 天体弧线屏幕位（UV）：x = (t−0.5)×0.65 视宽、y = 抛物线高度，换算 0~1 屏幕坐标
-func _celestial_uv(half_w: float, half_h: float, t: float) -> Vector2:
-	var p := pow(absf(t * 2.0 - 1.0), 2.0)
-	var x := (t - 0.5) * CELESTIAL_SPAN_FRAC * half_w * 2.0
-	var y := (CELESTIAL_NOON_FRAC - p * CELESTIAL_DROP_FRAC) * half_h
-	return Vector2(0.5 + x / (half_w * 2.0), 0.5 - y / (half_h * 2.0))
-
-
-## 屏幕后处理太阳（PostProcessLayer 的 glow+streak+ghost）钉到弧线位置——
-## 正式链路由 SystemSetup 装配该层，这里只驱动位置；独立渲染（shots）没有
-## SystemSetup，自建一层保证验收图与正式是同一颗屏幕太阳
-func _publish_sun_uv(uv: Vector2) -> void:
-	var layer: Node = get_tree().get_first_node_in_group("post_process_layer")
-	if layer == null:
-		layer = PostProcessLayer.new()
-		layer.name = "PostProcessLayer"
-		add_child(layer)
-	if layer.has_method("set_sun_uv"):
-		layer.set_sun_uv(uv)
-
-
-## 月亮盘摆位（小盘冷白；实心白盘是 2D SkyStars 月亮同款语义，月相环面暂不做）
-func _moon_disc_style(half_w: float, half_h: float, t: float, gate: float) -> void:
-	var p := pow(absf(t * 2.0 - 1.0), 2.0)
-	_moon_disc.visible = true
-	_moon_disc.position = Vector3(
-			(t - 0.5) * CELESTIAL_SPAN_FRAC * half_w * 2.0,
-			(CELESTIAL_NOON_FRAC - p * CELESTIAL_DROP_FRAC) * half_h, 1.0)
-	_moon_disc.scale = Vector3.ONE * (1.2 - 0.4 * p)
-	_moon_disc_mat.emission_energy_multiplier = 1.6 * gate
-
-
-## 天体横穿进度（0..1；不在时段 -1；跨午夜窗见 SkyStars._traverse 同式直译——
-## 跨模块只许引 api.gd，12 行公式就地复制）
-static func _celestial_traverse(hour: float, start_h: float, end_h: float) -> float:
-	if hour >= start_h and hour <= end_h:
-		return (hour - start_h) / (end_h - start_h)
-	if end_h > 24.0 and hour < end_h - 24.0:
-		return (hour + 24.0 - start_h) / (end_h - start_h)
-	return -1.0
-
-
-## 天幕/清屏色按昼夜档统一写（_apply_light 出口）
-func _set_sky_look(c: Color) -> void:
-	if _sky_quad_mat != null and is_instance_valid(_sky_quad_mat):
-		_sky_quad_mat.albedo_color = c
-	_env.background_color = c
-
-
-## 漂移云牌：装配与漂移随云组件（hd2d_clouds.gd，节点即 Clouds 容器——
-## 小地图烘焙按容器整体归排除层）。首次调用创建组件并触发云池异步烘焙
-##（headless 下 frame_post_draw 永不发射，协程悬置于首朵——与拆分前同口径）。
-func _place_clouds() -> void:
-	if _cloud_root == null or not is_instance_valid(_cloud_root):
-		_cloud_root = Hd2dClouds.new()
-		_cloud_root.name = CLOUD_ROOT_NAME
-		add_child(_cloud_root)
-	_cloud_root.place(self)
-
-
-func _make_label(pos: Vector2, size: int) -> Label:
-	var l := Label.new()
-	l.position = pos
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", Color(1, 1, 1))
-	l.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-	l.add_theme_constant_override("outline_size", 6)
-	_post_layer.add_child(l)
-	return l
-
-
-# ------------------------------------------------------------------ 光照档
-
-func _apply_light(mode: String) -> void:
-	# 每档先复位再覆盖（幂等，可反复调用）
-	# 白天 = "阳光明媚 + 高调照明"（创始人最终口径）：
-	#   · 去雾（fog 关）—— 大气不再把画面洗灰；
-	#   · 冷天空环境 0.58 抬暗部，冷补光 0.12 压明暗比（卡是已带白天光照的
-	#     烘焙图）；
-	#   · 白平衡略偏暖（主光暖 + gain 微暖 + lift 微抬）。
-	_set_sky_look(SKY_BLUE)
-	_env.ambient_light_color = Color(0.64, 0.71, 0.86)
-	_env.ambient_light_energy = 0.58
-	# 去雾：阳光明媚口径下大气密度 ≈0（保留开关，量级调到看不出）
-	_env.fog_enabled = false
-	_env.fog_density = 0.06
-	_env.fog_light_color = Color(0.84, 0.89, 0.96)
-	_env.fog_depth_begin = 55.0
-	_env.fog_depth_end = 160.0
-	_sun.light_color = Color(1.0, 0.95, 0.83)
-	# 太阳 1.10（创始人 2026-09-16：恢复提亮档原值——0.48 是场景回退时被连带
-	# 滚回去的；主光方向仍按档位固定，与天幕弧线日盘解耦）
-	_sun.light_energy = 1.10
-	_sun.rotation = Vector3(deg_to_rad(-46.0), deg_to_rad(-62.0), 0)
-	_fill.light_color = Color(0.70, 0.80, 1.0)
-	_fill.light_energy = 0.12
-	_fill.rotation = Vector3(deg_to_rad(-16.0), deg_to_rad(118.0), 0)
-	var glow := 0.0
-	var lamp := 0.0
-	var night_mix := 0.0   # 夜档=1：整卡换用 Blender 月夜灯位烘的 <卡>_night.png
-	var night_comp := 0.0  # 夜档卡亮度补偿（烘卡亮度不被场景光二次压暗，见 card.gdshader）
-	var post := {
-		# 主场景零模糊（创始人拍板）：移轴归零，模糊只由 DOF 的远焦层承担
-		"tilt_level": 0.0, "tilt_radius": 7.0, "tilt_center": 0.72,
-		"tilt_band": 0.17, "tilt_feather": 0.24,
-		"vig_strength": 0.28, "vig_inner": 0.55, "vig_outer": 1.10,
-		"exposure": 1.14, "contrast": 1.02, "saturation": 1.18,
-		"lift": Color(0.024, 0.022, 0.024), "gain": Color(1.0, 0.996, 0.986),
-		"split": 1.0,
-	}
-	match mode:
-		"night":
-			# 月夜档（创始人 2026-09-15 三条口径）：
-			#   ① **夜雾删掉**——后景/远处地面"纯黑"的元凶就是这层雾（雾色近黑
-			#     (0.05,0.07,0.14)、后景正好吃满雾程）；距离层次交给后景分层染色
-			#     + 远焦 DOF，与白天同口径；
-			#   ② 月光主要**烘在卡里**（Blender 夜版贴图），场景光按"卡已带光、
-			#     合成 ≈1.0"纪律给中性冷色保底——旧档有效亮度只有 ≈5%，是
-			#     "建筑卡夜里全黑"的主因；街边小物件夜里的月光同样来自夜版贴图；
-			#   ③ 窗光去黄——glow 染色收暖白（CARD_GLOW_TINT）、能量降档，街灯
-			#     降能减饱和，画面不再整片泛橙。
-			_set_sky_look(SKY_NIGHT)
-			_env.ambient_light_color = Color(0.60, 0.68, 0.90)
-			_env.ambient_light_energy = 0.42
-			_env.fog_enabled = false
-			_env.glow_intensity = 0.9
-			_env.glow_bloom = 0.08
-			# 月光方向光只给 0.15：月光主要烘在卡里（夜版贴图），能量一高会把
-			# 画面整体推蓝。夜空月盘 = 天幕弧线月盘（_update_celestial），能量
-			# 低不撑亮场景，只作天体读法
-			_sun.light_color = Color(0.62, 0.72, 1.0)
-			_sun.light_energy = 0.15
-			_sun.rotation = Vector3(deg_to_rad(-62.0), deg_to_rad(140.0), 0)
-			_fill.light_energy = 0.03
-			glow = 0.7
-			lamp = 1.3
-			night_mix = 1.0
-			night_comp = 0.6
-			# 夜景同样不做屏幕空间移轴：主场景零模糊是全局口径，夜幕的层次交给远焦 DOF
-			post["tilt_level"] = 0.0
-			post["vig_strength"] = 0.50
-			post["exposure"] = 1.08
-			post["saturation"] = 1.02
-			post["lift"] = Color(0.008, 0.010, 0.022)
-		_:
-			pass  # day
-	for m in cards._card_mats:
-		m.set_shader_parameter("glow_energy", glow)
-		m.set_shader_parameter("night_mix", night_mix)
-		m.set_shader_parameter("night_comp", night_comp)
-		m.set_shader_parameter("glow_tint", CARD_GLOW_TINT)
-	for m in cards._bg_card_mats:
-		m.set_shader_parameter("glow_energy", glow * BG_GLOW_RATIO)   # 后景窗火只做点缀
-		m.set_shader_parameter("night_mix", night_mix)
-		m.set_shader_parameter("night_comp", night_comp)
-		m.set_shader_parameter("glow_tint", CARD_GLOW_TINT)
-	for l in _lamps:
-		l.visible = lamp > 0.0
-		l.light_energy = lamp
-	_last_light_mode = mode
-	if _cloud_root != null:
-		_cloud_root._apply_cloud_light(mode)
-	_set_post(post)
-	print("[hd2d] 光照档=%s glow=%.2f lamp=%.2f night_mix=%.1f comp=%.2f" % [mode, glow, lamp, night_mix, night_comp])
-
-
-func _set_post(d: Dictionary) -> void:
-	for k in d.keys():
-		_post_mat.set_shader_parameter(k, d[k])
-
-
-## 屏幕像素尺寸（移轴模糊半径以 px 计）。canvas_item shader 在 4.7 没有
-## SCREEN_PIXEL_SIZE 内建，只能由脚本灌；窗口 resize / 性能档改分辨率后必须重灌。
-func _update_px_size() -> void:
-	var sz := get_viewport().get_visible_rect().size
-	if sz.x > 0.0 and sz.y > 0.0:
-		_post_mat.set_shader_parameter("px_size", Vector2(1.0 / sz.x, 1.0 / sz.y))
-
-
-## A/B/C 三张递进图的开关
-##   a: 无角色 + 无后处理（glow/DOF/后处理层全关 → 只有 3D 场景 + 建筑卡）
-##   b: 加角色（SubViewport -> billboard），仍无任何后处理
-##   c: 再加 HD-2D 后处理（glow + DOF + 移轴 + 暗角 + 分级）
-func _apply_stage(stage: String) -> void:
-	_post_rect.visible = stage == "c" or stage == "d" or stage == "e"
-	_update_px_size()
-	var hd := stage == "c" or stage == "d" or stage == "e"
-	_env.glow_enabled = hd
-	# 景深（CameraAttributesPractical；Godot 4 的 DOF 挂在相机属性上，不在 Environment）
-	# **业界口径**：八方旅人初代的强移轴被广泛批评（"让玩家想关掉"），三角战略已把它
-	# 改成可关设置。故本档口径 = 近焦**关**、主场景（临街一排 + 火柴人）**零模糊**，
-	# 只让远背景层吃远焦模糊。
-	# 深度坐标（相机视图空间，实测本机位）：角色 29~35 | 临街建筑卡 41~45.5 |
-	# 中景地面 44~62 | 远景剪影层(z=-24) ≈ 66。
-	# far 46.5 + 过渡 9：临街卡(41~45.5) 完全在 46.5 以内 → 100% 锐利；
-	# 第二排 bg1（≈51）→ (51-46.5)/9 = 50% 半档模糊（创始人：第二排景深要明显）；
-	# 末排 bg2（≈56）→ 满档。运行时经 set_cam_zoom 重算为同一世界线
-	# （天际线前移 DOF_FAR_START_AHEAD 格），两处口径一致。
-	_cam_attrs.dof_blur_near_enabled = false
-	_cam_attrs.dof_blur_far_enabled = hd and not bool(_opts["flat"]) and not battlefield
-	# 战场广角视关远焦（深带中景全落模糊带，绿草地糊成白幕、单位熔进背景——
-	# DOF 电影感是主街近景语言，RTS 观战视不适用）
-	_cam_attrs.dof_blur_near_distance = 24.0
-	_cam_attrs.dof_blur_near_transition = 10.0
-	# far 走 set_cam_zoom 同一条"天际线世界线"公式，不写死：正式链路有逐帧
-	# set_cam_zoom 兜底重算，静默/shots 路径 stage 覆盖后没人再算——写死 48
-	# 会停在 0.75 档两排背景楼的深度（≈42/45）以内，后排零模糊（与正式观感
-	# 脱节，创始人 2026-09-16 指出测试图没有正式场景一直有的模糊）
-	_cam_attrs.dof_blur_far_distance = (
-			_cam.position.z - SKYLINE_Z - DOF_FAR_START_AHEAD) / cos(deg_to_rad(TILT_DEG))
-	_cam_attrs.dof_blur_far_transition = 20.0
-	# amount 0.20：回到初始渐变（第二排半档、远景满档）——0.26+9 过渡把两层
-	# 糊成一档，渐变读不出来（创始人 2026-09-15）。
-	_cam_attrs.dof_blur_amount = 0.20
-
-
-# ------------------------------------------------------------------ 出图
-
-func _settle(sec: float) -> void:
-	await get_tree().create_timer(sec).timeout
-
-
-func _shot(name: String) -> String:
-	await RenderingServer.frame_post_draw
-	var img := get_viewport().get_texture().get_image()
-	DirAccess.make_dir_recursive_absolute(_temp + "proto_hd2d")
-	var tag := str(_opts.get("tag", ""))
-	if not tag.is_empty():
-		name += tag
-	var p := _temp + "proto_hd2d/" + name + ".png"
-	var err := img.save_png(p)
-	if err != OK:
-		push_error("[hd2d] 截图失败 %s (err=%d)" % [p, err])
-	else:
-		print("[hd2d] shot -> %s  %dx%d  帧时=%.2f ms" % [
-			p, img.get_width(), img.get_height(), _last_frame_ms()])
-	return p
-
-
-func _last_frame_ms() -> float:
-	return 1000.0 / max(1.0, Performance.get_monitor(Performance.TIME_FPS))
-
-
-func _run_shots(which: String) -> void:
-	var t0 := Time.get_ticks_usec()
-	var do: Array = []
-	if which == "all" or which == "":
-		do = ["a", "c", "e"]
-	else:
-		do = [which]
-
-	for st in do:
-		match st:
-			"a":
-				_apply_light("day")
-				_apply_stage("a")
-				await _settle(1.4)
-				await _shot("hd2d_a_base")
-			"c":
-				_apply_light("day")
-				_apply_stage("c")
-				await _settle(1.4)
-				await _shot("hd2d_c_final")
-			"e":
-				_apply_light("night")
-				_apply_stage("e")
-				await _settle(1.6)
-				await _shot("hd2d_e_night")
-			"s":
-				# 主街巡览（2026-09-14 手工摆+街长扩到村A全域的验收档）：
-				# 沿街机位横移（set_cam_x），含两端城墙/门洞与墙外野外带，
-				# 各出一张白天最终观感图
-				_apply_light("day")
-				_apply_stage("c")
-				for cam_x: float in [-115.0, -55.0, 0.0, 55.0, 100.0, 122.0]:
-					set_cam_x(cam_x)
-					await _settle(1.2)
-					await _shot("hd2d_s_street_x%d" % int(cam_x))
-				set_cam_x(0.0)
-	print("[hd2d] 出图用时 %.1f s" % (float(Time.get_ticks_usec() - t0) / 1000000.0))
-
-
-
-
-
-# ------------------------------------------------------------------ 出图（合成）
-
-
-
-
-# ------------------------------------------------------------------ 性能
-
-
-
-
-
-
-
 ## 门面逐帧：帧采样 + 天体弧线驱动。云漂移随云组件自己的 _process
 ##（hd2d_clouds.gd，子节点后于父节点跑，两者状态互不依赖——拆分前后同帧完成）
 func _process(delta: float) -> void:
 	if _measuring:
 		_samples.append(delta * 1000.0)
-	_update_celestial()
+	sky._update_celestial()

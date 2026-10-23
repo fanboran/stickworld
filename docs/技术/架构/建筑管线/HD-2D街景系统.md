@@ -22,11 +22,13 @@ Blender 离线端（tools/blender_buildings/）        Godot 运行时端
 > **正式化**：3D 世界场景与卡资产已从 `tests/dev/proto_hd2d/` 迁入正式模块
 > `modules/hd2d/`（api.gd 契约 + scenes/scripts/shaders/assets 四类目录）；烘卡机产物 temp/
 > 优先、随包镜像 `modules/hd2d/assets/tex/` 兜底，新机器 clone 后不跑 Blender 也能玩。
-> **职责拆分已落地**：`hd2d_world.gd` = 编排门面（世界搭建/solids 数据/相机/光照档/小地图
-> 烘焙），职责组件在 `scripts/` 职责子目录——`cards/`（卡呈现）、`placer/`（摆街）、
-> `ground/`（地面）、`walls/`（城墙）、`char_stage/`（角色舞台）、`clouds/`（云牌），
-> 组件经门面回引 `w` 互访（模块内部自由域）；分工与出入清单见
-> `docs/项目/交接/HD-2D架构正式化.md`。
+> **职责拆分已落地**：`hd2d_world.gd` = 编排门面（`_build_world` 世界装配/solids 数据/相机
+> 数学/组件接线），职责组件在 `scripts/`——子目录 `cards/`（卡呈现）、`placer/`（摆街）、
+> `ground/`（地面）、`walls/`（城墙）、`char_stage/`（角色舞台）、`clouds/`（云牌）、
+> `sky/`（天幕天体）、`diagnostics/`（CLI 出图 harness 与调试辅助线，工装只在此、不进生产路径），
+> 平级组件 `hd2d_minimap_baker.gd`（小地图烘焙）与 `hd2d_light_rig.gd`（光照档/后处理）；
+> 组件经门面回引 `w` 互访（模块内部自由域）；运行期诊断 print 一律 `STICK_HD2D_VERBOSE`
+> 环境门控；分工与出入清单见 `docs/项目/交接/归档/HD-2D架构正式化.md`。
 ```
 
 主街这张图的完整结构解剖（分层坐标 / 构图三钉 / 摆街数据流 / 光照档）见 **§六**——改布局、构图、背景前先读。
@@ -491,7 +493,7 @@ offset/limits 变化时手搓漂、变换不会）。
 ## 六、主街结构解剖（现状基线）
 
 > 本节把"主街这张图由什么组成、每层摆在哪、为什么"一次讲全，是改布局/构图/背景前的必读底账。
-> 依据 = `modules/hd2d/scripts/hd2d_world.gd`（门面：世界编排/solids/相机/光照）+ 其职责组件（`scripts/cards|placer|ground|walls|clouds/`）+ `modules/world/scripts/map/hd2d_street_map.gd`（宿主）+ `modules/world/scripts/map/city_gen.gd`（摆街数据）。
+> 依据 = `modules/hd2d/scripts/hd2d_world.gd`（门面：世界编排/solids/相机）+ 其职责组件（`scripts/cards|placer|ground|walls|char_stage|clouds|sky|diagnostics/` + `hd2d_minimap_baker.gd` + `hd2d_light_rig.gd`）+ `modules/world/scripts/map/hd2d_street_map.gd`（宿主）+ `modules/world/scripts/map/city_gen.gd`（摆街数据）。
 > 战场/资源图 = 同一场景的 `battlefield`/`resource_field` 开关（无墙无街的开阔野地，铺装与摆位走分支），本节只解剖主街形态。
 
 ### 6.1 坐标与相机

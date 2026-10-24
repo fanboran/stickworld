@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cgfb3i8pi47s5"]
 
 [ext_resource type="Script" path="res://tests/dev/unit_action_gallery.gd" id="1_g"]
 

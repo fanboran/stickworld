@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://cfgkeqrxni33l"]
 
 [ext_resource type="Script" path="res://modules/units/scripts/entity/ground_item.gd" id="1_script"]
 

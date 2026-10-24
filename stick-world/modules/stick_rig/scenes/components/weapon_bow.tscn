@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://crpg8w544kcfa"]
 
 ; 弓（Archidon）——数值直译自解包 mesh 附件数据，挂载骨=新骨 weapon_hand：
 ;   附件 = default 皮肤 weapon 槽 Bow_Full1（type=mesh；Archidon skin 无 weapon 槽

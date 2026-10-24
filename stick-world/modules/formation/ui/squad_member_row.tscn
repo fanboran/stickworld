@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=4 format=3 uid="uid://ob3hria1ucdu"]
 
 [ext_resource type="Script" path="res://modules/formation/ui/squad_member_row.gd" id="1_row"]
 [ext_resource type="Script" path="res://modules/ui_global/scripts/sketch/sketch_progress.gd" id="2_morale"]

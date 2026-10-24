@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://dj7l8mvxij0ru"]
 
 [ext_resource type="Script" path="res://tests/integration/test_placement_grid_units.gd" id="1_test"]
 

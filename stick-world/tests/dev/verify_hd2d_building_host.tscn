@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://b4e0pev0wvotl"]
 
 [ext_resource type="Script" path="res://tests/dev/verify_hd2d_building_host.gd" id="1_v"]
 

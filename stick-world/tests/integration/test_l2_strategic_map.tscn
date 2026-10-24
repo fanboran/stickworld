@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://b0ibp7ple53f0"]
 
 [ext_resource type="Script" path="res://tests/integration/test_l2_strategic_map.gd" id="1_test"]
 

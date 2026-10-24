@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://5sbx3urg1s65"]
 
 [ext_resource type="Script" path="res://tests/dev/dump_world_contract.gd" id="1"]
 

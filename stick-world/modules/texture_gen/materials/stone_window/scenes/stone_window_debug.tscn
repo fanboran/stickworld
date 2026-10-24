@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=5 format=3 uid="uid://kgd4pof4nj1e"]
 
 [ext_resource type="Script" path="res://modules/texture_gen/materials/stone_window/scripts/debug/stone_window_debug.gd" id="1_debug"]
 [ext_resource type="Script" path="res://modules/texture_gen/scripts/debug/capture_in_game.gd" id="2_capture"]

@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://bxyupd1qphtnp"]
 
 [ext_resource type="Script" path="res://tests/integration/test_fx_damage_text.gd" id="1_fxtext"]
 

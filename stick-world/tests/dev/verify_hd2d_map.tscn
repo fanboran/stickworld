@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://03obujnadqkv"]
 
 [ext_resource type="Script" path="res://tests/dev/verify_hd2d_map.gd" id="1_v"]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://bx5j1076cbcyj"]
 
 ; 法杖（Magikill）——数值直译自解包附件数据，挂载骨=新骨 weapon_hand：
 ;   附件 = Magikill 皮肤 weapon 槽唯一附件（name→region "magicstaff"）：

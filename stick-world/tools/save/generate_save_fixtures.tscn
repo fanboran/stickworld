@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://c6srxgobo3w6d"]
 
 [ext_resource type="Script" path="res://tools/save/generate_save_fixtures.gd" id="1_genfix"]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://4l42c5e1iiwy"]
 
 [ext_resource type="Script" path="res://tools/baking/extract_weapons.gd" id="1_script"]
 

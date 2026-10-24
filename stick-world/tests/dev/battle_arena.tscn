@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://n00t548jy48d"]
 
 [ext_resource type="Script" path="res://tests/dev/battle_arena.gd" id="1_a"]
 

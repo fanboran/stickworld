@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://bdkyvlbdwkwvo"]
 
 [ext_resource type="Script" path="res://tests/integration/test_org_e2e.gd" id="1_orge2e"]
 

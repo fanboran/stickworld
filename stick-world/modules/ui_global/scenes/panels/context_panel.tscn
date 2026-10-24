@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bk7sloqjwmdit"]
 
 [ext_resource type="Script" uid="uid://dr756nv1o33qm" path="res://modules/ui_global/scripts/panels/context_panel.gd" id="4_ctx"]
 

@@ -1,4 +1,4 @@
-[gd_resource type="Animation" format=3]
+[gd_resource type="Animation" format=3 uid="uid://crqo7c1apj40o"]
 
 [resource]
 tracks/0/type = "bezier"

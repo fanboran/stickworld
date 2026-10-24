@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://conyrvp8dw645"]
 
 [ext_resource type="Script" path="res://tools/baking/render_shot.gd" id="1_shot"]
 

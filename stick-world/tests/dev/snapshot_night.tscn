@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://ci0nm7iiv6bs6"]
 
 [ext_resource type="Script" path="res://tests/dev/snapshot_night.gd" id="1_sn"]
 

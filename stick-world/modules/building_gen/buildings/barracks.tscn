@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://csm1oth5wihhn"]
 
 [ext_resource type="Script" path="res://modules/building_gen/buildings/barracks.gd" id="1_building"]
 [ext_resource type="Resource" path="res://modules/building_gen/buildings/barracks_palette.tres" id="2_palette"]

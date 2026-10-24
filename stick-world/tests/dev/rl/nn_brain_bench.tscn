@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://c1jeq4pscm8v1"]
 
 [ext_resource type="Script" path="res://tests/dev/rl/nn_brain_bench.gd" id="1_nnbench"]
 

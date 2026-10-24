@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=8 format=3 uid="uid://dp713x8tdor8m"]
 
 [ext_resource type="Script" path="res://modules/world/scripts/game_root.gd" id="1_game_root"]
 [ext_resource type="Script" path="res://modules/environment/scripts/environment_system.gd" id="2_env"]

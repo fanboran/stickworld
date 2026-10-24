@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://djri57lq1d6cb"]
 
 [ext_resource type="Script" path="res://tests/dev/diag_arena.gd" id="1_d"]
 

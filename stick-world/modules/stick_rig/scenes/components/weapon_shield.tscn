@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://cfctg8fmv0n7u"]
 
 ; 盾（Spearton）——数值直译自解包附件数据，挂载骨=新骨 shield_hand：
 ;   附件 = Spearton 皮肤 Arrow1 槽唯一附件（键名 "Arrowskn"，name→region

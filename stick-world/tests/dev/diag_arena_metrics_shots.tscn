@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://vc4u6vabdqig"]
 
 [ext_resource type="Script" path="res://tests/dev/diag_arena_metrics_shots.gd" id="1_metrics"]
 

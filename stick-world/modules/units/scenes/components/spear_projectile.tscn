@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=4 format=3 uid="uid://bu8wfvmm7xunb"]
 
 ; 矛投射物（玩家蓄力投掷，SWL Spearton.ThrowSpear/SpawnSpear 语义）——
 ; 复用 arrow_projectile.gd 抛物线积分/命中/插地链路，贴图换 spear.png。

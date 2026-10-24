@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://cqkipoxy4xvf4"]
 
 [ext_resource type="Script" path="res://tests/integration/test_ai_behaviors.gd" id="1_test"]
 

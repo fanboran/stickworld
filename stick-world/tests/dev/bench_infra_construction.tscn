@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cx613l0b65mx5"]
 
 [ext_resource type="Script" path="res://tests/dev/bench_infra_construction.gd" id="1_bench"]
 

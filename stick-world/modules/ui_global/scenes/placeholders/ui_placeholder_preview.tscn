@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://dcndqxak4fwib"]
 
 [ext_resource type="Script" path="res://modules/ui_global/scripts/placeholders/ui_placeholder_preview.gd" id="1_preview"]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://n2xoa8gqc2n"]
 
 [ext_resource type="Script" path="res://tests/integration/test_battle_ambience.gd" id="1_test"]
 

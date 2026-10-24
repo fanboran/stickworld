@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://cr1scw7sjer1p"]
 
 [ext_resource type="Script" path="res://tests/integration/test_notification_feed.gd" id="1_test"]
 

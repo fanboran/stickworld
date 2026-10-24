@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://dp4wymjyahyo"]
 
 [ext_resource type="Script" path="res://modules/organization/ui/command_chain_view.gd" id="1_ccv"]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=7 format=3 uid="uid://6ctyd1r3rvo6"]
 
 [ext_resource type="Script" uid="uid://bhvemj6s8akro" path="res://modules/ui_global/scripts/hud/global_hud.gd" id="2_hud"]
 [ext_resource type="Script" uid="uid://cn4f70s21pher" path="res://modules/ui_global/scripts/hud/clock_widget.gd" id="5_clock"]

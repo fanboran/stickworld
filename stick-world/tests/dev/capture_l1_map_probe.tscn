@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://b6627fx5phe2i"]
 
 [ext_resource type="Script" path="res://tests/dev/capture_l1_map_probe.gd" id="1"]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://c5rxb05ampk8"]
 
 ; 剑（Swordwrath）——数值直译自解包附件数据，挂载骨=新骨 weapon_hand：
 ;   附件 = Swordwrath 皮肤 weapon 槽唯一附件（键名 "weapon"，name 字段→region "pickaxe"）：

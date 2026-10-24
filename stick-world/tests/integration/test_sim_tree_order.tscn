@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://ea3gdma3to1y"]
 
 [ext_resource type="Script" path="res://tests/integration/test_sim_tree_order.gd" id="1_test"]
 

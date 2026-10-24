@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://dlxf7dwa0sy0p"]
 
 [ext_resource type="Script" path="res://tests/dev/probe_brackets.gd" id="1_probe"]
 

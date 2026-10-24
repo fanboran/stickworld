@@ -1,4 +1,4 @@
-[gd_resource type="Resource" load_steps=2 format=3]
+[gd_resource type="Resource" load_steps=2 format=3 uid="uid://div30rrcouv0"]
 
 [ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
 

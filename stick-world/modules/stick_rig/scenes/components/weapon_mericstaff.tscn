@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://njoj4uctqfir"]
 
 ; 祭司法杖（Meric）——数值直译自解包附件数据，结构同 weapon_magicstaff.tscn：
 ;   附件 = Meric 皮肤 weapon 槽唯一附件（slot/name=Meric/meric-staff → region "meric-staff"）：

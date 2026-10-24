@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bi5k1tn761pnt"]
 
 [ext_resource type="Script" path="res://modules/building_gen/buildings/warehouse.gd" id="1_building"]
 [ext_resource type="Resource" path="res://modules/building_gen/buildings/warehouse_palette.tres" id="2_palette"]

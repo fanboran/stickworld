@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://cjvj1cdu74hgg"]
 
 [ext_resource type="Script" path="res://tests/dev/nn_live_demo.gd" id="1_nndemo"]
 

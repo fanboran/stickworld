@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://ngorjishppur"]
 
 [ext_resource type="Script" path="res://tests/dev/diag_weapon_panel.gd" id="1_d"]
 

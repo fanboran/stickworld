@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://dpcirose1in1p"]
 
 [ext_resource type="Script" path="res://tests/dev/dev_playtest.gd" id="1_dev"]
 

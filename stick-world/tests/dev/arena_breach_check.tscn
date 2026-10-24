@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://ce0j2nqxcvt0x"]
 
 [ext_resource type="Script" path="res://tests/dev/arena_breach_check.gd" id="1_breach"]
 

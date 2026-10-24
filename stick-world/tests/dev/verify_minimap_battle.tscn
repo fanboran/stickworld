@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://b1q07kj32fi88"]
 
 [ext_resource type="Script" path="res://tests/dev/verify_minimap_battle.gd" id="1_probe"]
 

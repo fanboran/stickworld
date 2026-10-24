@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://br62jsohrbjqw"]
 
 [ext_resource type="Script" path="res://tools/baking/render_weapon_check.gd" id="1_check"]
 

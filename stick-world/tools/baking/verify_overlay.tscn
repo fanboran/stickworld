@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://c5kb5n7rcap5a"]
 
 [ext_resource type="Script" path="res://tools/baking/verify_overlay.gd" id="1_verify"]
 

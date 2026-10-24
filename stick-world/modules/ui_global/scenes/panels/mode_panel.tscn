@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://d2u00yian5mgw"]
 
 [ext_resource type="Script" uid="uid://c0htxr0xbt2ix" path="res://modules/ui_global/scripts/panels/mode_panel.gd" id="3_mode"]
 

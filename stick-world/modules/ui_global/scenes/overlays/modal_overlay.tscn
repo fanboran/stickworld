@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://dbbdoyiq7l5fd"]
 
 [node name="ModalOverlay" type="Control" unique_id=1646500837]
 layout_mode = 3

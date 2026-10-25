@@ -41,6 +41,11 @@
 | `items`                | 物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer/资源品映射，独立于背包与仓储） | ✅ 在役     |
 | `inventory`            | 玩家背包与装备（列表制背包/装备槽/Hotbar 指派/合一窗口/翻包与村仓 UI，经 InventoryService） | ✅ 在役     |
 | `town_life`            | NPC 小镇生活（职业分工/劳作/经济自动产出端）   | ✅ 在役     |
+| `logistics`            | 物流骨架（占位表注册表 + 运输计划 CRUD；网络/派工/补给线机制待 06 号设计实装） | 🟡 骨架占位 |
+| `technology`           | 科技骨架（征服获得制：三分类占位表 + 授予/获得记录；征服规则待创始人设计） | 🟡 骨架占位 |
+| `achievement`          | 成就骨架（四档稀有度占位表 + 幂等解锁记录；逐枚清单待创始人） | 🟡 骨架占位 |
+| `blueprint`            | 构筑谱系骨架（蓝图定名/退役/重启 CRUD + DAG 校验；派生/融合待 11 号调优杆定稿） | 🟡 骨架占位 |
+| `law`                  | 法律骨架（占位法律表 + 颁布/废除 CRUD；清单与废除代价待创始人） | 🟡 骨架占位 |
 
 > **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
 

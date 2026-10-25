@@ -138,10 +138,35 @@ static func apply_thatch_cpu(polygon) -> void
 
 ---
 
-## 二、科技模块（阶段 1 按新策略重建，契约以届时实现为准）
+## 二、科技模块 `modules/technology/api.gd`（骨架占位：结构已接线、内容待创始人设计）
 
-> 科技系统按"征服获得即解锁"设计（无研究状态机），模块当前未实现。
-> 重建时以 [`../../../设计/系统/04-科技系统.md`](../../../设计/系统/04-科技系统.md) 的策略为准补充契约。
+> 征服获得制（获得即拥有、无研究状态机）。骨架只锚 GDD §6.4 断言：三分类占位表
+> （manufacturing/spell_techs/admin_techs）+ 知识随人走的获得记录（来源/携带者）。
+> 机制面（征服→自动授予规则、人才流失吊销、大科学工程）待设计定稿后实装。
+> 设计参考 [`../../../设计/系统/04-科技系统.md`](../../../设计/系统/04-科技系统.md)（AI 草稿非定稿）。
+
+```gdscript
+# 拥有查询（解锁池 = WorldState.unlocks，含开局基线；获得即拥有）
+static func has_tech(tech_id: String) -> bool
+# [P] tech_id 非空
+# [Q] 纯读，无副作用
+
+# 授予一笔科技（生产入口：解锁池取 WorldState.unlocks、时刻取 WorldState.game_time）
+static func grant_tech(tech_id: String, source: TechGrant.Source, carrier_stickman_id := "") -> Dictionary
+# [P] tech_id 在三分类占位表注册；source ∈ {CONQUEST, TALENT, EVENT}
+# [Q] 成功：解锁池写入 + 获得记录追加 + manager 发 tech_granted；重复授予拒绝（已拥有）
+
+# 注册表与记录
+static func get_techs() -> Array            # 三表合并行（含来源分类 category 戳）
+static func get_tech(tech_id: String) -> Dictionary
+static func get_grants() -> Array           # TechGrant 获得时序（来源+携带者+时刻）
+
+# 存档（模块自订阅 game_saving/game_loaded 直写 world_state 模块行 'technology'；
+# 解锁池本体在 WorldState.unlocks 自带存档，模块行只落来源明细）
+static func get_save_data() -> Dictionary
+static func load_save_data(data: Dictionary) -> void
+static func reset_for_new_run() -> void
+```
 
 ---
 
@@ -413,49 +438,142 @@ const WEAPON_SCENE_PATHS: Dictionary  # 武器类型 -> 表现场景路径（Wea
 
 ---
 
-## 七、物流模块 `modules/logistics/api.gd`（未实现，阶段 2 设计契约）
+## 七、物流模块 `modules/logistics/api.gd`（骨架占位：结构已接线、机制待 06 号设计实装）
+
+> 骨架做实：三类占位表（载体/道路/载具）装载注册表 + 运输计划 CRUD（字段集 =
+> 06 §2.3 断言，见 TransportPlan）。机制面（网络节点/路线建模、承运人派工、
+> 路线状态、补给线惩罚）待设计实装，占位方法走未实现守卫。
+> 设计真相源 [`../../../设计/系统/06-物流系统.md`](../../../设计/系统/06-物流系统.md)（调优杆全 [PLACEHOLDER]）。
 
 ```gdscript
-# 创建物流路线
-func create_supply_chain(origin_region: String, dest_region: String, 
-                          resource_id: String, quantity: float, 
-                          frequency: float, carrier_org_id: String) -> Dictionary
-# [P] carrier_org 标签=COMMERCE 或 MILITARY
-# [Q] 发射 supply_chain 创建, 资源开始流动
+# 占位表注册表（BalanceResource 行数组，行内容待策划——id placeholder 前缀/数值统一 10）
+static func get_carriers() -> Array
+static func get_roads() -> Array
+static func get_vehicles() -> Array
+static func get_carrier(carrier_id: String) -> Dictionary   # 未命中 {}
 
-# 查询
-func get_supply_chains() -> Array[Dictionary]
-func get_supply_efficiency(chain_id: String) -> float
+# 运输计划 CRUD（字段 = 从/到/货物/数量/频率/优先级；CargoKind ∈ {ITEM, RESOURCE, PERSONNEL}）
+static func add_transport_plan(origin: String, destination: String, cargo_id: String,
+        cargo_kind: TransportPlan.CargoKind, amount: int, frequency_days: int,
+        priority: TransportPlan.Priority) -> Dictionary
+# [P] origin/destination 非空且不同；cargo_id 非空
+# [Q] 成功：{"ok": true, "plan_id": "tp_NNN"} + manager 发 transport_plan_added
 
-# 修改
-func update_supply_chain(chain_id: String, changes: Dictionary) -> Dictionary
-func cancel_supply_chain(chain_id: String) -> Dictionary
+static func remove_transport_plan(plan_id: String) -> Dictionary
+static func get_transport_plans() -> Array
 
-# 基础设施
-func build_road(from_region: String, to_region: String, org_id: String) -> Dictionary
-func upgrade_road(from_region: String, to_region: String) -> Dictionary
+# 机制守卫（待 06 §四组织封装递进实装）
+static func assign_carrier(plan_id: String, stickman_iid: int) -> Dictionary
+# [Q] 恒 {"ok": false, "error": "骨架占位：承运人派工待 06 号设计实装"}
+
+# 存档（模块自订阅 game_saving/game_loaded 直写 world_state 模块行 'logistics'）
+static func get_save_data() -> Dictionary
+static func load_save_data(data: Dictionary) -> void
+static func reset_for_new_run() -> void
 ```
 
 ---
 
-## 八、成就模块 `modules/achievement/api.gd`（未实现，阶段 2 设计契约）
+## 八、成就模块 `modules/achievement/api.gd`（骨架占位：结构已接线、逐枚清单待创始人）
+
+> 骨架做实：四档稀有度占位表（common/rare/epic/hidden，07 §1.2）+ 幂等解锁记录
+> （获得时刻 + 帝国状态快照，07 §四）。图章存档绑定。机制面（条件判定、图章墙
+> UI、Steam 同步）待逐枚清单定稿后实装。设计真相源
+> [`../../../设计/系统/07-成就系统.md`](../../../设计/系统/07-成就系统.md)。
 
 ```gdscript
-# 查询
-func get_unlocked_badges() -> Array[String]
-func get_all_badges() -> Array[Dictionary]  # {id, name, description, rarity, unlocked}
+# 解锁一枚图章（幂等：已获得再调用 = 无操作不重发信号——收藏不膨胀）
+static func unlock(def_id: String, empire_snapshot: Dictionary = {}) -> Dictionary
+# [P] def_id 在占位表注册且 rarity 合法
+# [Q] 首次成功：记录追加（快照存副本）+ manager 发 achievement_unlocked；重复返回 {"ok": true, "already": true}
 
-# 检查（由其他系统调用，不建议玩家手动触发）
-func check_and_unlock(badge_id: String) -> Dictionary
-# [Q] 若条件满足 -> 解锁, 发射 badge_unlocked
+# 查询
+static func is_unlocked(def_id: String) -> bool
+static func get_achievement_defs() -> Array     # 占位表全行
+static func get_achievement_def(def_id: String) -> Dictionary
+static func get_records() -> Array              # AchievementRecord（def_id/rarity/时刻/快照）
+
+# 存档（模块自订阅 game_saving/game_loaded 直写 world_state 模块行 'achievement'）
+static func get_save_data() -> Dictionary
+static func load_save_data(data: Dictionary) -> void
+static func reset_for_new_run() -> void
+```
+
+---
+
+## 八A、法律模块 `modules/law/api.gd`（骨架占位：结构已接线、清单待创始人）
+
+> 骨架做实：占位法律表（二元形状：可量化效果 + 不可量化叙事后果，GDD §七/04 §四）
+> + 颁布/废除 CRUD（颁布集为可逆状态）。机制面（废除代价、道德张力呈现、执法组织
+> 联动）待法律清单定稿后实装。
+
+```gdscript
+static func enact_law(law_id: String) -> Dictionary
+# [P] law_id 在占位表注册且未颁布
+# [Q] 颁布集写入 + manager 发 law_enacted
+
+static func repeal_law(law_id: String) -> Dictionary
+# [P] law_id 已颁布
+# [Q] 颁布集移除 + manager 发 law_repealed（法律可废除——GDD §七断言）
+
+static func is_enacted(law_id: String) -> bool
+static func get_enacted_laws() -> Array
+static func get_laws() -> Array
+static func get_law(law_id: String) -> Dictionary
+
+# 机制守卫（废除代价机制待设计定稿）
+static func get_repeal_cost(law_id: String) -> Dictionary
+# [Q] 恒 {"ok": false, "error": "骨架占位：废除代价机制待法律设计定稿"}
+
+# 存档（模块自订阅 game_saving/game_loaded 直写 world_state 模块行 'law'）
+static func get_save_data() -> Dictionary
+static func load_save_data(data: Dictionary) -> void
+static func reset_for_new_run() -> void
+```
+
+---
+
+## 八B、构筑谱系模块 `modules/blueprint/api.gd`（骨架占位：结构已接线、调优杆待 11 号定稿）
+
+> 骨架做实：蓝图节点（编制模板/建筑型号/部门章程三种定名对象，GDD §6.8）定名/
+> 退役/重新启用 CRUD + DAG 不变量校验（11 §二）。谱系存档绑定、不跨档继承。
+> 机制面（派生/融合、熟练度成长、纹章生成算法）待 11 §三调优杆定稿后实装。
+> 设计真相源 [`../../../设计/系统/11-构筑谱系系统.md`](../../../设计/系统/11-构筑谱系系统.md)。
+
+```gdscript
+# 定名（占位入口：正式入口 = 从组织预设/建筑型号/章程"封存"，随各域实装）
+static func create_blueprint(display_name: String, kind: BlueprintNode.Kind, parents: Array = []) -> Dictionary
+# [P] display_name 非空；parents 中母本皆存在；在役槽位 < 上限（占位常量 10）
+# [Q] 成功：节点入册（代数 = 母本最大 +1）+ DAG 校验兜底 + manager 发 blueprint_created
+
+static func retire_blueprint(blueprint_id: String) -> Dictionary
+# [Q] 不删除，归荣誉档案（退役不丢源流线）+ manager 发 blueprint_retired
+
+static func reactivate_blueprint(blueprint_id: String) -> Dictionary
+# [P] 在役槽位 < 上限（受同 create 约束）
+
+# 机制守卫（待 11 §三调优杆定稿）
+static func derive_blueprint(parent_id: String, display_name: String) -> Dictionary
+static func fuse_blueprint(parent_a: String, parent_b: String, display_name: String) -> Dictionary
+# [Q] 恒 {"ok": false, "error": "骨架占位：派生/融合待 11 号调优杆定稿"}
+
+# 查询与不变量
+static func is_acyclic() -> bool                # DAG 环检测（11 §二不变量）
+static func get_blueprints(include_retired := true) -> Array
+static func active_count() -> int
+
+# 存档（模块自订阅 game_saving/game_loaded 直写 world_state 模块行 'blueprint'）
+static func get_save_data() -> Dictionary
+static func load_save_data(data: Dictionary) -> void
+static func reset_for_new_run() -> void
 ```
 
 ---
 
 ## 九、模块间 API 依赖图
 
-> 仅含已实现模块（construction / building_gen / texture_gen / resources / organization / combat / formation / tactics / stick_rig / world_map / world / units / player_control / environment / fx / debug_gui / inventory / expansion / town_life）。
-> technology（见 §二）、expansion / logistics / achievement（未实现）为阶段 2 设计契约，实现时补充出边。
+> 已实现模块（construction / building_gen / texture_gen / resources / organization / combat / formation / tactics / stick_rig / world_map / world / units / player_control / environment / fx / debug_gui / inventory / expansion / town_life）+ 五个骨架占位模块（logistics / technology / achievement / blueprint / law——零出向零装配，无 API 依赖边）。
+> expansion 未实现；骨架模块机制面随设计定稿后补充出边。
 > world 为组装根：SystemSetup 集中装配各模块组件，跨模块依赖汇聚于此而非散布（详见 场景与战斗架构.md）。
 
 ```

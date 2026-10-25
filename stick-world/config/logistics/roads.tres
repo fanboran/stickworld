@@ -7,53 +7,31 @@ script = ExtResource("1")
 resource_name = "roads"
 _meta = {
 	"resource_name": "roads",
-	"version": "0.1.0",
-	"description": "从 config/excel/运输数据.xlsx → roads sheet 自动生成",
-	"category": "excel_export",
-	"source_file": "config/excel/运输数据.xlsx",
-	"source_sheet": "roads"
+	"version": "0.2.0",
+	"description": "占位表：logistics 骨架消费（06-物流 §六战略层道路表结构）；行内容待策划——id placeholder 前缀、数值统一占位 10、内容列空",
+	"category": "skeleton_placeholder"
 }
 variables = {
 	"data": [
 		{
-			"id": "road_dirt",
-			"name_zh": "土路",
-			"speed_bonus": "1.2x",
-			"build_cost_stone": 9,
-			"build_cost_wood": 9,
-			"build_time": 5,
-			"maintenance": 1,
+			"id": "placeholder_road_01",
+			"name_zh": "占位道路01",
+			"speed_bonus": 10,
+			"build_cost_stone": 10,
+			"build_cost_wood": 10,
+			"build_time": 10,
+			"maintenance": 10,
 			"unlock_tech": null
 		},
 		{
-			"id": "road_stone",
-			"name_zh": "石板路",
-			"speed_bonus": "1.5x",
-			"build_cost_stone": 18,
-			"build_cost_wood": 9,
-			"build_time": 15,
-			"maintenance": 2,
-			"unlock_tech": "tech_stone_road"
-		},
-		{
-			"id": "road_highway",
-			"name_zh": "帝国大道",
-			"speed_bonus": "2.0x",
-			"build_cost_stone": 38,
-			"build_cost_wood": 18,
-			"build_time": 30,
-			"maintenance": 5,
-			"unlock_tech": "tech_imperial_road"
-		},
-		{
-			"id": "canal",
-			"name_zh": "运河",
-			"speed_bonus": "3.0x",
-			"build_cost_stone": 75,
-			"build_cost_wood": 0,
-			"build_time": 60,
-			"maintenance": 9,
-			"unlock_tech": "tech_canal"
+			"id": "placeholder_road_02",
+			"name_zh": "占位道路02",
+			"speed_bonus": 10,
+			"build_cost_stone": 10,
+			"build_cost_wood": 10,
+			"build_time": 10,
+			"maintenance": 10,
+			"unlock_tech": null
 		}
 	]
 }

@@ -4,6 +4,13 @@
 
 [resource]
 script = ExtResource("1")
+resource_name = "techs"
+_meta = {
+	"resource_name": "techs",
+	"version": "0.1.1",
+	"description": "旧研制口径表（research_cost 字段）——与征服获得制冲突，零消费留存；归属待创始人科技设计定稿后处置（正式制造分类锚点已迁 config/manufacturing/manufacturing.tres）",
+	"category": "legacy_unconsumed"
+}
 variables = {
 "data": [
     {"id": "tech_stone_tools", "name_zh": "石器工具", "tier": 1, "category": "economy", "research_cost": 9, "unlocks": ["stone_axe", "stone_pickaxe", "basic_quarry"]},

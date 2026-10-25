@@ -1,0 +1,145 @@
+[gd_scene load_steps=2 format=3 uid="uid://byh2qviecdacy"]
+
+[ext_resource type="Script" path="res://tests/dev/skeleton_systems.gd" id="1"]
+
+[node name="SkeletonSystems" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="VB" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Header" type="Label" parent="VB"]
+layout_mode = 2
+text = "五系统程序先行骨架 · 灰盒验收台（内容全占位；守卫按钮演示待设计拒绝）"
+
+[node name="Modules" type="HBoxContainer" parent="VB"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LogisticsBox" type="VBoxContainer" parent="VB/Modules"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="VB/Modules/LogisticsBox"]
+layout_mode = 2
+text = "物流（运输计划/占位表）"
+
+[node name="BtnLgxAdd" type="Button" parent="VB/Modules/LogisticsBox"]
+layout_mode = 2
+text = "+ 运输计划"
+
+[node name="BtnLgxRemove" type="Button" parent="VB/Modules/LogisticsBox"]
+layout_mode = 2
+text = "- 最后计划"
+
+[node name="BtnLgxTables" type="Button" parent="VB/Modules/LogisticsBox"]
+layout_mode = 2
+text = "打印占位表"
+
+[node name="BtnLgxAssign" type="Button" parent="VB/Modules/LogisticsBox"]
+layout_mode = 2
+text = "派工守卫"
+
+[node name="TechBox" type="VBoxContainer" parent="VB/Modules"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="VB/Modules/TechBox"]
+layout_mode = 2
+text = "科技（征服获得）"
+
+[node name="BtnTechGrant" type="Button" parent="VB/Modules/TechBox"]
+layout_mode = 2
+text = "授予占位科技"
+
+[node name="BtnTechDup" type="Button" parent="VB/Modules/TechBox"]
+layout_mode = 2
+text = "重复授予（拒绝）"
+
+[node name="BtnTechList" type="Button" parent="VB/Modules/TechBox"]
+layout_mode = 2
+text = "打印获得记录"
+
+[node name="AchBox" type="VBoxContainer" parent="VB/Modules"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="VB/Modules/AchBox"]
+layout_mode = 2
+text = "成就（幂等解锁）"
+
+[node name="BtnAchUnlock" type="Button" parent="VB/Modules/AchBox"]
+layout_mode = 2
+text = "解锁占位成就"
+
+[node name="BtnAchAgain" type="Button" parent="VB/Modules/AchBox"]
+layout_mode = 2
+text = "重复解锁（无操作）"
+
+[node name="BtnAchRecords" type="Button" parent="VB/Modules/AchBox"]
+layout_mode = 2
+text = "打印解锁记录"
+
+[node name="BpBox" type="VBoxContainer" parent="VB/Modules"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="VB/Modules/BpBox"]
+layout_mode = 2
+text = "谱系（定名/退役）"
+
+[node name="BtnBpCreate" type="Button" parent="VB/Modules/BpBox"]
+layout_mode = 2
+text = "定名蓝图"
+
+[node name="BtnBpRetire" type="Button" parent="VB/Modules/BpBox"]
+layout_mode = 2
+text = "退役最后蓝图"
+
+[node name="BtnBpDerive" type="Button" parent="VB/Modules/BpBox"]
+layout_mode = 2
+text = "派生守卫"
+
+[node name="BtnBpDag" type="Button" parent="VB/Modules/BpBox"]
+layout_mode = 2
+text = "DAG 校验"
+
+[node name="LawBox" type="VBoxContainer" parent="VB/Modules"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="VB/Modules/LawBox"]
+layout_mode = 2
+text = "法律（颁布/废除）"
+
+[node name="BtnLawEnact" type="Button" parent="VB/Modules/LawBox"]
+layout_mode = 2
+text = "颁布占位法律"
+
+[node name="BtnLawRepeal" type="Button" parent="VB/Modules/LawBox"]
+layout_mode = 2
+text = "废除首条"
+
+[node name="BtnLawList" type="Button" parent="VB/Modules/LawBox"]
+layout_mode = 2
+text = "打印颁布集"
+
+[node name="Log" type="RichTextLabel" parent="VB"]
+layout_mode = 2
+size_flags_vertical = 3
+scroll_following = true

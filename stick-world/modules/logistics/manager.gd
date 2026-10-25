@@ -2,14 +2,15 @@ class_name LogisticsManager
 extends RefCounted
 ## 物流骨架管理器 —— 占位表装载 + 运输计划 CRUD（程序先行骨架，零机制逻辑）。
 ##
-## 结构面（06-物流系统）：三类占位表（载体/道路/载具）装载进注册表可查询；
-## 运输计划（§2.3 字段集，见 TransportPlan）增删查 + 落档。
+## 结构面（06-物流系统）：载体占位表（载体/载具并一：运输方式即造出来的载具，
+## 一张表）+ 道路表装载进注册表可查询；运输计划（§2.3 字段集 + 计划依附组织
+## ——挂在组织节点上，见 TransportPlan.owner_org_id）增删查 + 落档。
 ## 机制面（待设计定稿，本类不实现，占位方法走未实现守卫）：
 ##   - 网络节点/路线建模（依赖 Region 建模与 worldgen L1 地块管线）；
 ##   - 承运人派工（§四 组织封装递进：手操个体 → 专人委托 → 运输队 → 部门）；
 ##   - 路线状态（§2.2 绿=顺畅/黄=拥堵/红=中断）与补给线惩罚（§三）。
 ## 存档：模块自订阅 game_saving/game_loaded 直写 world_state 模块行
-## （inventory/WorldState 同款契约，不经 save_handler；无行 = 旧档空态）。
+## （inventory/WorldState 同款契约；无行 = 旧档空态）。
 
 signal transport_plan_added(plan_id: String)
 signal transport_plan_removed(plan_id: String)
@@ -17,11 +18,9 @@ signal transport_plan_removed(plan_id: String)
 ## 占位表路径（BalanceResource 行数组；行内容/数值待策划，数值统一占位 10）
 const CARRIERS_PATH := "res://config/logistics/carriers.tres"
 const ROADS_PATH := "res://config/logistics/roads.tres"
-const VEHICLES_PATH := "res://config/logistics/vehicles.tres"
 
 var _carriers: Array = []
 var _roads: Array = []
-var _vehicles: Array = []
 var _plans: Dictionary = {}  # {plan_id: TransportPlan}
 var _next_plan_seq := 1
 var _tables_loaded := false
@@ -39,11 +38,6 @@ func get_roads() -> Array:
 	return _roads
 
 
-func get_vehicles() -> Array:
-	_ensure_loaded()
-	return _vehicles
-
-
 func get_carrier(carrier_id: String) -> Dictionary:
 	return _row_by_id(get_carriers(), carrier_id)
 
@@ -52,17 +46,12 @@ func get_road(road_id: String) -> Dictionary:
 	return _row_by_id(get_roads(), road_id)
 
 
-func get_vehicle(vehicle_id: String) -> Dictionary:
-	return _row_by_id(get_vehicles(), vehicle_id)
-
-
 func _ensure_loaded() -> void:
 	if _tables_loaded:
 		return
 	_tables_loaded = true
 	_carriers = _load_rows(CARRIERS_PATH)
 	_roads = _load_rows(ROADS_PATH)
-	_vehicles = _load_rows(VEHICLES_PATH)
 
 
 ## 装载占位表（ProfessionRegistry 同款：直读 .tres 不依赖 autoload 顺序，
@@ -89,9 +78,11 @@ static func _row_by_id(rows: Array, row_id: String) -> Dictionary:
 
 # ─────────────────────────── 运输计划 CRUD ────────────────────────────
 
-func add_transport_plan(origin: String, destination: String, cargo_id: String,
-		cargo_kind: TransportPlan.CargoKind, amount: int, frequency_days: int,
-		priority: TransportPlan.Priority) -> Dictionary:
+func add_transport_plan(owner_org_id: String, origin: String, destination: String,
+		cargo_id: String, cargo_kind: TransportPlan.CargoKind, amount: int,
+		frequency_days: int, priority: TransportPlan.Priority) -> Dictionary:
+	if owner_org_id.is_empty():
+		return {"ok": false, "error": "运输计划必须挂在组织节点上（owner_org_id 不能为空）"}
 	if origin.is_empty() or destination.is_empty():
 		return {"ok": false, "error": "运输计划起点/终点不能为空"}
 	if origin == destination:
@@ -101,6 +92,7 @@ func add_transport_plan(origin: String, destination: String, cargo_id: String,
 	var plan := TransportPlan.new()
 	plan.id = "tp_%03d" % _next_plan_seq
 	_next_plan_seq += 1
+	plan.owner_org_id = owner_org_id
 	plan.origin = origin
 	plan.destination = destination
 	plan.cargo_id = cargo_id

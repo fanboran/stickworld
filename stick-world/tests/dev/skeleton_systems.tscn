@@ -55,25 +55,25 @@ text = "打印占位表"
 layout_mode = 2
 text = "派工守卫"
 
-[node name="TechBox" type="VBoxContainer" parent="VB/Modules"]
+[node name="SkillBox" type="VBoxContainer" parent="VB/Modules"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Title" type="Label" parent="VB/Modules/TechBox"]
+[node name="Title" type="Label" parent="VB/Modules/SkillBox"]
 layout_mode = 2
-text = "科技（征服获得）"
+text = "技能台账（跟人走）"
 
-[node name="BtnTechGrant" type="Button" parent="VB/Modules/TechBox"]
+[node name="BtnSkillLearn" type="Button" parent="VB/Modules/SkillBox"]
 layout_mode = 2
-text = "授予占位科技"
+text = "习得占位技能"
 
-[node name="BtnTechDup" type="Button" parent="VB/Modules/TechBox"]
+[node name="BtnSkillDup" type="Button" parent="VB/Modules/SkillBox"]
 layout_mode = 2
-text = "重复授予（拒绝）"
+text = "重复习得（拒绝）"
 
-[node name="BtnTechList" type="Button" parent="VB/Modules/TechBox"]
+[node name="BtnSkillLedger" type="Button" parent="VB/Modules/SkillBox"]
 layout_mode = 2
-text = "打印获得记录"
+text = "打印技能台账"
 
 [node name="AchBox" type="VBoxContainer" parent="VB/Modules"]
 layout_mode = 2
@@ -81,7 +81,7 @@ size_flags_horizontal = 3
 
 [node name="Title" type="Label" parent="VB/Modules/AchBox"]
 layout_mode = 2
-text = "成就（幂等解锁）"
+text = "成就（幂等解锁·平权）"
 
 [node name="BtnAchUnlock" type="Button" parent="VB/Modules/AchBox"]
 layout_mode = 2

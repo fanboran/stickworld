@@ -1,7 +1,7 @@
 extends Control
-## 五系统程序先行骨架的灰盒验收台（tests/dev 惯例：不进 CI，主菜单开发构建自动收录）。
+## 程序先行骨架的灰盒验收台（tests/dev 惯例：不进 CI，主菜单开发构建自动收录）。
 ##
-## 每列一个模块：按钮触发骨架做实的操作（占位表装载/CRUD/授予/颁布/定名），
+## 每列一个模块：按钮触发骨架做实的操作（占位表装载/CRUD/习得/颁布/定名），
 ## 日志面板打印 Result；守卫按钮演示"机制面待设计定稿"的拒绝口径。
 ## 内容全为占位（id placeholder 前缀/数值统一 10）——策划与美术内容一概未填。
 ## 生产 UI 不建：正式界面接入点见 ui_global 占位面板（placeholder_presets.gd）。
@@ -16,9 +16,9 @@ func _ready() -> void:
 		["VB/Modules/LogisticsBox/BtnLgxRemove", _lgx_remove],
 		["VB/Modules/LogisticsBox/BtnLgxTables", _lgx_tables],
 		["VB/Modules/LogisticsBox/BtnLgxAssign", _lgx_assign],
-		["VB/Modules/TechBox/BtnTechGrant", _tech_grant],
-		["VB/Modules/TechBox/BtnTechDup", _tech_grant_dup],
-		["VB/Modules/TechBox/BtnTechList", _tech_list],
+		["VB/Modules/SkillBox/BtnSkillLearn", _skill_learn],
+		["VB/Modules/SkillBox/BtnSkillDup", _skill_learn_dup],
+		["VB/Modules/SkillBox/BtnSkillLedger", _skill_ledger],
 		["VB/Modules/AchBox/BtnAchUnlock", _ach_unlock],
 		["VB/Modules/AchBox/BtnAchAgain", _ach_unlock_again],
 		["VB/Modules/AchBox/BtnAchRecords", _ach_records],
@@ -41,9 +41,10 @@ func _ready() -> void:
 
 func _lgx_add() -> void:
 	_lgx_seq += 1
-	var r := LogisticsAPI.add_transport_plan("占位矿山%02d" % _lgx_seq, "占位仓库",
-			"mat_stone", TransportPlan.CargoKind.ITEM, 10, 10, TransportPlan.Priority.MEDIUM)
-	_log("[物流] +运输计划 → %s" % str(r))
+	var r := LogisticsAPI.add_transport_plan("占位运输队01", "占位矿山%02d" % _lgx_seq,
+			"占位仓库", "mat_stone", TransportPlan.CargoKind.ITEM, 10, 10,
+			TransportPlan.Priority.MEDIUM)
+	_log("[物流] +运输计划（挂占位运输队01）→ %s" % str(r))
 
 
 func _lgx_remove() -> void:
@@ -56,39 +57,40 @@ func _lgx_remove() -> void:
 
 
 func _lgx_tables() -> void:
-	_log("[物流] 占位表：载体 %d 行 / 道路 %d 行 / 载具 %d 行；计划 %d 条" % [
+	_log("[物流] 占位表：载体 %d 行（载体/载具并一）/ 道路 %d 行；计划 %d 条" % [
 		LogisticsAPI.get_carriers().size(), LogisticsAPI.get_roads().size(),
-		LogisticsAPI.get_vehicles().size(), LogisticsAPI.get_transport_plans().size()])
+		LogisticsAPI.get_transport_plans().size()])
 
 
 func _lgx_assign() -> void:
 	_log("[物流] 承运人派工（守卫）→ %s" % str(LogisticsAPI.assign_carrier("tp_001", 0)))
 
 
-# ─────────────────────────── 科技 ────────────────────────────
+# ─────────────────────────── 技能台账 ────────────────────────────
 
-func _tech_grant() -> void:
-	var tid := _first_tech_id()
-	var r := TechnologyAPI.grant_tech(tid, TechGrant.Source.CONQUEST, "占位携带者001")
-	_log("[科技] 授予 %s（征服）→ %s" % [tid, str(r)])
-
-
-func _tech_grant_dup() -> void:
-	var tid := _first_tech_id()
-	TechnologyAPI.grant_tech(tid, TechGrant.Source.TALENT)
-	var r := TechnologyAPI.grant_tech(tid, TechGrant.Source.TALENT)
-	_log("[科技] 重复授予 %s → %s（获得即拥有，已拥有不再获得）" % [tid, str(r)])
+func _skill_learn() -> void:
+	var sid := _first_skill_id()
+	var r := SkillAPI.learn_skill(sid, "占位角色01", SkillRecord.Source.TRAINING, "占位师傅")
+	_log("[技能] 习得 %s（占位角色01，训练/师承占位师傅）→ %s" % [sid, str(r)])
 
 
-func _tech_list() -> void:
-	var grants: Array = TechnologyAPI.get_grants()
-	if grants.is_empty():
-		_log("[科技] 暂无获得记录（注册表 %d 项占位科技）" % TechnologyAPI.get_techs().size())
+func _skill_learn_dup() -> void:
+	var sid := _first_skill_id()
+	SkillAPI.learn_skill(sid, "占位角色02", SkillRecord.Source.BIRTH)
+	var r := SkillAPI.learn_skill(sid, "占位角色02", SkillRecord.Source.BIRTH)
+	_log("[技能] 重复习得 %s → %s（会/不会二元，已会拒绝）" % [sid, str(r)])
+
+
+func _skill_ledger() -> void:
+	var records: Array = SkillAPI.get_records()
+	if records.is_empty():
+		_log("[技能] 台账为空（定义表 %d 项占位技能，三类：制造/使用/组织）" % SkillAPI.get_skills().size())
 		return
 	var parts: Array = []
-	for g in grants:
-		parts.append("%s(src=%d,携带者=%s)" % [g.tech_id, g.source, g.carrier_stickman_id])
-	_log("[科技] 获得记录 %d 笔：%s" % [grants.size(), "；".join(parts)])
+	for record in records:
+		parts.append("%s会%s" % [record.holder_id, record.skill_id])
+	_log("[技能] 台账 %d 条：%s；阵营会占位技能01 = %s" % [
+		records.size(), "；".join(parts), str(SkillAPI.faction_knows(_first_skill_id()))])
 
 
 # ─────────────────────────── 成就 ────────────────────────────
@@ -110,7 +112,7 @@ func _ach_records() -> void:
 		return
 	var parts: Array = []
 	for record in records:
-		parts.append("%s(%s)" % [record.def_id, record.rarity])
+		parts.append(record.def_id)
 	_log("[成就] 已解锁 %d 枚：%s" % [records.size(), "；".join(parts)])
 
 
@@ -178,9 +180,9 @@ func _law_list() -> void:
 
 # ─────────────────────────── 辅助 ────────────────────────────
 
-func _first_tech_id() -> String:
-	var techs: Array = TechnologyAPI.get_techs()
-	return String(techs[0].get("id", "")) if not techs.is_empty() else ""
+func _first_skill_id() -> String:
+	var defs: Array = SkillAPI.get_skills()
+	return String(defs[0].get("id", "")) if not defs.is_empty() else ""
 
 
 func _first_ach_id() -> String:

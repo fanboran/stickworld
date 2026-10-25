@@ -7,37 +7,27 @@ script = ExtResource("1")
 resource_name = "achievements"
 _meta = {
 	"resource_name": "achievements",
-	"version": "0.1.0",
-	"description": "占位表：achievement 骨架消费（07-成就 §1.2 四档稀有度结构）；逐枚清单待创始人——id placeholder 前缀、条件描述空",
+	"version": "0.2.0",
+	"description": "占位表：achievement 骨架消费（07-成就系统：平权手工清单，无稀有度无隐藏档）；逐枚清单待创始人——id placeholder 前缀、条件描述空",
 	"category": "skeleton_placeholder"
 }
 variables = {
 	"data": [
 		{
-			"id": "placeholder_ach_common_01",
+			"id": "placeholder_ach_01",
 			"name_zh": "占位成就01",
-			"rarity": "common",
 			"category": null,
 			"condition_desc": ""
 		},
 		{
-			"id": "placeholder_ach_rare_01",
+			"id": "placeholder_ach_02",
 			"name_zh": "占位成就02",
-			"rarity": "rare",
 			"category": null,
 			"condition_desc": ""
 		},
 		{
-			"id": "placeholder_ach_epic_01",
+			"id": "placeholder_ach_03",
 			"name_zh": "占位成就03",
-			"rarity": "epic",
-			"category": null,
-			"condition_desc": ""
-		},
-		{
-			"id": "placeholder_ach_hidden_01",
-			"name_zh": "占位成就04",
-			"rarity": "hidden",
 			"category": null,
 			"condition_desc": ""
 		}

@@ -1,15 +1,16 @@
 ## Logistics 模块公共接口契约（骨架占位）
 ##
-## 运输层骨架：占位表（载体/道路/载具）注册表 + 运输计划 CRUD + 落档。
+## 运输层骨架：载体/道路占位表注册表 + 运输计划 CRUD（计划挂组织节点）+ 落档。
 ## 结构/机制边界与升格路径见 LogisticsManager 类头；设计真相源 =
 ## docs/设计/系统/06-物流系统.md（调优杆全 [PLACEHOLDER] 待定）。
 ##
 ## 外部模块经本契约交互（禁 preload 模块内部脚本；存档走模块自订阅
 ## game_saving/game_loaded 直写 world_state 模块行——inventory/WorldState 同款契约）：
-##   - LogisticsAPI.get_carriers()/get_roads()/get_vehicles() -> Array
-##       占位表全行（BalanceResource 行式，内容待策划）。
-##   - LogisticsAPI.add_transport_plan(...) -> Dictionary
-##       运输计划增（Result：{"ok": true, "plan_id": ...} / {"ok": false, "error": ...}）。
+##   - LogisticsAPI.get_carriers()/get_roads() -> Array
+##       占位表全行（BalanceResource 行式，内容待策划；载体/载具已并一表）。
+##   - LogisticsAPI.add_transport_plan(owner_org_id, ...) -> Dictionary
+##       运输计划增（计划依附组织节点——手操挂玩家直辖、委任挂运输队；
+##       Result：{"ok": true, "plan_id": ...} / {"ok": false, "error": ...}）。
 ##   - LogisticsAPI.remove_transport_plan(plan_id) / get_transport_plans()
 ##   - LogisticsAPI.assign_carrier(plan_id, stickman_iid) -> Dictionary
 ##       骨架守卫（承运人派工待 06 号设计实装）。
@@ -62,18 +63,14 @@ static func get_roads() -> Array:
 	return _instance().get_roads()
 
 
-static func get_vehicles() -> Array:
-	return _instance().get_vehicles()
-
-
 static func get_carrier(carrier_id: String) -> Dictionary:
 	return _instance().get_carrier(carrier_id)
 
 
-static func add_transport_plan(origin: String, destination: String, cargo_id: String,
-		cargo_kind: TransportPlan.CargoKind, amount: int, frequency_days: int,
-		priority: TransportPlan.Priority) -> Dictionary:
-	return _instance().add_transport_plan(origin, destination, cargo_id,
+static func add_transport_plan(owner_org_id: String, origin: String, destination: String,
+		cargo_id: String, cargo_kind: TransportPlan.CargoKind, amount: int,
+		frequency_days: int, priority: TransportPlan.Priority) -> Dictionary:
+	return _instance().add_transport_plan(owner_org_id, origin, destination, cargo_id,
 			cargo_kind, amount, frequency_days, priority)
 
 

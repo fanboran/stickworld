@@ -1,0 +1,52 @@
+[gd_resource type="Resource" load_steps=2 format=3 uid="uid://8ni6i7m6csch"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "skills"
+_meta = {
+	"resource_name": "skills",
+	"version": "0.1.0",
+	"description": "技能定义表（04-科技系统 技能本位：制造/使用/组织三类平铺清单，替代旧 tech 三表与 manufacturing 表）；行内容待策划——id placeholder 前缀、target 关联对象占位空",
+	"category": "skeleton_placeholder"
+}
+variables = {
+	"data": [
+		{
+			"id": "placeholder_skill_mfg_01",
+			"name_zh": "占位制造技能01",
+			"category": "制造",
+			"target": null,
+			"description": ""
+		},
+		{
+			"id": "placeholder_skill_mfg_02",
+			"name_zh": "占位制造技能02",
+			"category": "制造",
+			"target": null,
+			"description": ""
+		},
+		{
+			"id": "placeholder_skill_use_01",
+			"name_zh": "占位使用技能01",
+			"category": "使用",
+			"target": null,
+			"description": ""
+		},
+		{
+			"id": "placeholder_skill_use_02",
+			"name_zh": "占位使用技能02",
+			"category": "使用",
+			"target": null,
+			"description": ""
+		},
+		{
+			"id": "placeholder_skill_org_01",
+			"name_zh": "占位组织技能01",
+			"category": "组织",
+			"target": null,
+			"description": ""
+		}
+	]
+}

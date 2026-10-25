@@ -7,8 +7,8 @@ script = ExtResource("1")
 resource_name = "carriers"
 _meta = {
 	"resource_name": "carriers",
-	"version": "0.2.0",
-	"description": "占位表：logistics 骨架消费（06-物流 §一载体表结构）；行内容待策划——id placeholder 前缀、数值统一占位 10、内容列空",
+	"version": "0.3.0",
+	"description": "占位表：logistics 骨架消费（06-物流 §一运输载体；载体/载具并一——运输方式即造出来的载具，一张表，不迁就旧 Excel 两表形）；行内容待策划——id placeholder 前缀、数值统一占位 10、内容列空",
 	"category": "skeleton_placeholder"
 }
 variables = {
@@ -19,8 +19,9 @@ variables = {
 			"speed": 10,
 			"capacity": 10,
 			"cost_per_km": 10,
+			"can_carry_people": false,
 			"terrain_penalty": null,
-			"unlock_tech": null
+			"unlock_skill": null
 		},
 		{
 			"id": "placeholder_carrier_02",
@@ -28,8 +29,9 @@ variables = {
 			"speed": 10,
 			"capacity": 10,
 			"cost_per_km": 10,
+			"can_carry_people": false,
 			"terrain_penalty": null,
-			"unlock_tech": null
+			"unlock_skill": null
 		},
 		{
 			"id": "placeholder_carrier_03",
@@ -37,8 +39,9 @@ variables = {
 			"speed": 10,
 			"capacity": 10,
 			"cost_per_km": 10,
+			"can_carry_people": false,
 			"terrain_penalty": null,
-			"unlock_tech": null
+			"unlock_skill": null
 		}
 	]
 }

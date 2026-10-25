@@ -7,8 +7,8 @@ script = ExtResource("1")
 resource_name = "roads"
 _meta = {
 	"resource_name": "roads",
-	"version": "0.2.0",
-	"description": "占位表：logistics 骨架消费（06-物流 §六战略层道路表结构）；行内容待策划——id placeholder 前缀、数值统一占位 10、内容列空",
+	"version": "0.3.0",
+	"description": "占位表：logistics 骨架消费（06-物流 §六战略层道路表结构）；行内容待策划——id placeholder 前缀、数值统一占位 10、内容列空；解锁门槛挂技能（04 技能本位）",
 	"category": "skeleton_placeholder"
 }
 variables = {
@@ -21,7 +21,7 @@ variables = {
 			"build_cost_wood": 10,
 			"build_time": 10,
 			"maintenance": 10,
-			"unlock_tech": null
+			"unlock_skill": null
 		},
 		{
 			"id": "placeholder_road_02",
@@ -31,7 +31,7 @@ variables = {
 			"build_cost_wood": 10,
 			"build_time": 10,
 			"maintenance": 10,
-			"unlock_tech": null
+			"unlock_skill": null
 		}
 	]
 }

@@ -59,7 +59,7 @@ var unlocks: Dictionary = {}
 
 ## 开局已获解锁/科技 id（基线）：门禁只挡"未获"项，基线保证门禁引入前后开局
 ## 可建集不变（当前唯一受门禁的现役建筑是 tech_military_1 的兵营）。
-## 科技系统实装（config/tech）后本基线随科技表迁出。
+## 技能/门禁内容定稿后本基线随定义表迁出（技能本位见 04；本池现役消费者是建筑门禁）。
 const STARTING_UNLOCKS: Array[String] = ["tech_military_1"]
 
 ## ── 步行旅行队列（F6/E5，瞬态不进存档——读档恒回出发聚落）──

@@ -13,6 +13,7 @@ enum CargoKind { ITEM, RESOURCE, PERSONNEL }
 enum Priority { HIGH, MEDIUM, LOW }
 
 var id := ""
+var owner_org_id := ""      ## 持有计划的组织节点（06 §2.3：计划依附组织——手操挂玩家直辖、委任挂运输队，组织解散计划随灭）
 var origin := ""            ## 起点节点 id（节点建模依赖 Region 建模，骨架期存字符串占位）
 var destination := ""       ## 终点节点 id
 var cargo_id := ""          ## 货物 id（物品域/资源域 id 或兵员编制 id）
@@ -25,6 +26,7 @@ var priority: Priority = Priority.MEDIUM
 func to_dict() -> Dictionary:
 	return {
 		"id": id,
+		"owner_org_id": owner_org_id,
 		"origin": origin,
 		"destination": destination,
 		"cargo_id": cargo_id,
@@ -38,6 +40,7 @@ func to_dict() -> Dictionary:
 static func from_dict(d: Dictionary) -> TransportPlan:
 	var p := TransportPlan.new()
 	p.id = String(d.get("id", ""))
+	p.owner_org_id = String(d.get("owner_org_id", ""))
 	p.origin = String(d.get("origin", ""))
 	p.destination = String(d.get("destination", ""))
 	p.cargo_id = String(d.get("cargo_id", ""))

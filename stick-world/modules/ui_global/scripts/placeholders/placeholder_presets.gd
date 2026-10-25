@@ -7,9 +7,9 @@ extends RefCounted
 const PRESETS: Array[Dictionary] = [
 	{
 		"id": "tech_tree",
-		"title": "科技树",
-		"desc": "征服获得制科技：征服解锁 + 事件获取，获得即拥有，无研究状态机。",
-		"note": "接入点：阶段 1 科技系统重建后，本面板移入 modules/technology/ui/",
+		"title": "技能台账",
+		"desc": "技能本位：科技=长在具体角色身上的技能（制造/使用/组织三类，会/不会二元），知识随人走、无技能树。",
+		"note": "接入点：技能台账界面落地后，本面板移入 modules/skill/ui/",
 	},
 	{
 		"id": "logistics",

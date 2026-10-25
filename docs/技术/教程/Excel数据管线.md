@@ -24,13 +24,13 @@
 | 资源定义 | `config/resources/resources.tres` | `BalanceConfig` / world_map |
 | 建筑定义 | `config/buildings/buildings.tres` | `BuildingCatalog`（construction） |
 | 单位/武器/防具 | `config/units/stickmen.tres` / `weapons.tres` / `armors.tres` | `BalanceConfig` |
-| 制造配方 | `config/manufacturing/manufacturing.tres` | manufacturing |
 | 战术档案 | `config/combat/tactics.tres` | combat |
 | 文明差异/地区 | `config/expansion/civ_differences.tres` / `regions.tres` | expansion |
 | 法律条目 | `config/law/law.tres` | law |
-| 科技 | `config/tech/spell_techs.tres` / `admin_techs.tres` | tech |
+| 技能定义 | `config/skills/skills.tres` | skill（制造/使用/组织三类） |
+| 成就图章 | `config/achievements/achievements.tres` | achievement |
 | 组织编制预设 | `config/formations/presets.tres` | organization |
-| 运输 | `config/logistics/roads.tres` / `vehicles.tres` / `carriers.tres` | logistics |
+| 运输 | `config/logistics/roads.tres` / `carriers.tres`（载体/载具并一表） | logistics |
 
 不在上表的 `config/ai/`、`config/town_life/` 等域同样以 `.tres` 为真源，本就未经 Excel 管线。
 

@@ -2,20 +2,17 @@ class_name AchievementManager
 extends RefCounted
 ## 成就骨架管理器 —— 图章占位表注册表 + 幂等解锁记录（程序先行骨架）。
 ##
-## 结构面（07-成就系统）：四档稀有度（§1.2）；解锁记录带获得时刻与帝国状态
-## 快照（§四 史诗图章的历史记录，见 AchievementRecord）；图章存档绑定（边缘
-## 情况——记录随档走，覆盖存档重新收集）。
+## 结构面（07-成就系统）：平权手工清单（无稀有度、无隐藏档——所有图章同等
+## 可见）；解锁记录带获得时刻与帝国状态快照（部分图章附带历史记录，见
+## AchievementRecord）；图章存档绑定（边缘情况——记录随档走，覆盖存档重新收集）。
 ## 机制面（待创始人——逐枚清单与实现方式都待定，本类不实现）：解锁条件判定、
-## 图章墙 UI、主菜单最近获得轮播、Steam 同步、模组图章"非官方"标记
-## （UI 接入点见 ui_global collection 占位预设的 note）。
+## 图章墙 UI（灰暗剪影规则归 UI 层）、主菜单轮播、Steam 同步、模组图章
+## "非官方"标记（UI 接入点见 ui_global collection 占位预设的 note）。
 
 signal achievement_unlocked(def_id: String)
 
 ## 占位表路径（BalanceResource 行数组；逐枚清单待创始人，行内容占位）
 const ACHIEVEMENTS_PATH := "res://config/achievements/achievements.tres"
-
-## 四档稀有度（07 §1.2；表列 rarity 与此对齐，校验以此为准）
-const RARITIES: Array[String] = ["common", "rare", "epic", "hidden"]
 
 var _defs: Array = []
 var _records: Dictionary = {}  # {def_id: AchievementRecord}
@@ -62,12 +59,8 @@ func unlock(def_id: String, unlocked_at := 0.0, empire_snapshot := {}) -> Dictio
 		return {"ok": false, "error": "未知成就 id: %s" % def_id}
 	if _records.has(def_id):
 		return {"ok": true, "already": true}
-	var rarity := String(def.get("rarity", ""))
-	if not RARITIES.has(rarity):
-		return {"ok": false, "error": "稀有度档位非法: %s（%s）" % [rarity, def_id]}
 	var record := AchievementRecord.new()
 	record.def_id = def_id
-	record.rarity = rarity
 	record.unlocked_at = unlocked_at
 	record.empire_snapshot = empire_snapshot.duplicate()
 	_records[def_id] = record

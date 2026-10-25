@@ -741,7 +741,7 @@ Technology  (1) ──unlocks───→ (N) Building/Equipment/Ability
     ├─ 调整军事编制/战术
     ├─ 调整科研架构/方向
     ├─ 调整经济参数
-    └─ 颁布新法律 →
+    └─ 改组组织结构（改制度）→
 观察自动化运转（5-15 分钟）→
     ├─ 放大看某个战场/工地/城市
     ├─ 看报表
@@ -952,13 +952,14 @@ L1 排长 AI 检测到前方有大量敌军
 config/
 ├── units/                  # 火柴人基础属性
 ├── buildings/              # 建筑配方（BuildingDef / ModuleDef / MaterialDef）
-├── tech_tree/              # 科技树
+├── skills/                 # 技能定义（制造/使用/组织三类平铺清单，skill 台账消费）
+├── achievements/           # 成就图章（平权手工清单）
 ├── resources/              # 资源定义
-├── organizations/          # 组织预设模板
-├── strategic_map/          # 战略图数据（manifest.tres + regions/ + tiles/）
+├── formations/             # 组织编制预设（层级模板/队伍类型）
+├── logistics/              # 运输（载体并一表 / 道路）
+├── strategic_map/          # 战略图数据（submodule：manifest + regions/ + tiles/）
 ├── balance/                # 全局平衡变量（可热加载）
-├── maps/                   # 地图定义
-└── excel/                  # Excel 数据源（导入 → .tres）
+└── town_life/ ai/ combat/ expansion/ scene_map/ snapshots/  # 其余域（.tres 直编，目录清单见 docs/技术/教程/Excel数据管线.md）
 ```
 
 ***

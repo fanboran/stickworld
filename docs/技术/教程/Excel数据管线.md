@@ -6,7 +6,7 @@
 
 ## 1. 现状口径：`.tres` 是唯一真源
 
-游戏中所有数据表（单位属性、建筑参数、科技树、平衡变量等）的权威来源是 `config/` 下的 `.tres` 资源文件，**改数据 = 直接编辑 `.tres`**。曾有的 Excel→tres 导出管线已废弃冻结，冷数据归档于 `stick-world/tools/pipeline/archive/excel_pipeline/`（原 12 张 xlsx 源表与导出脚本 `export_excel.py`，内容不再与游戏数据同步，仅作历史参考）。
+游戏中所有数据表（单位属性、建筑参数、技能表、平衡变量等）的权威来源是 `config/` 下的 `.tres` 资源文件，**改数据 = 直接编辑 `.tres`**。曾有的 Excel→tres 导出管线已废弃冻结，冷数据归档于 `stick-world/tools/pipeline/archive/excel_pipeline/`（原 12 张 xlsx 源表与导出脚本 `export_excel.py`，内容不再与游戏数据同步，仅作历史参考）。
 
 完整工作流：
 
@@ -26,7 +26,6 @@
 | 单位/武器/防具 | `config/units/stickmen.tres` / `weapons.tres` / `armors.tres` | `BalanceConfig` |
 | 战术档案 | `config/combat/tactics.tres` | combat |
 | 文明差异/地区 | `config/expansion/civ_differences.tres` / `regions.tres` | expansion |
-| 法律条目 | `config/law/law.tres` | law |
 | 技能定义 | `config/skills/skills.tres` | skill（制造/使用/组织三类） |
 | 成就图章 | `config/achievements/achievements.tres` | achievement |
 | 组织编制预设 | `config/formations/presets.tres` | organization |

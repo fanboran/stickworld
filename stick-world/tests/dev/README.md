@@ -57,7 +57,7 @@ godot --path stick-world res://tests/dev/dev_playtest.tscn
 
 | 场景 | 用途 | 运行 |
 |---|---|---|
-| `skeleton_systems.tscn` | 程序先行骨架灰盒验收台（logistics/skill/achievement/blueprint/law——占位表装载、CRUD/习得/颁布、机制守卫拒绝口径，一屏五列按钮触发、日志面板打印 Result；内容全占位） | `godot --path stick-world res://tests/dev/skeleton_systems.tscn` |
+| `skeleton_systems.tscn` | 程序先行骨架灰盒验收台（logistics/skill/achievement/blueprint＋组织槽位板——占位表装载、CRUD/习得、机制守卫拒绝口径，一屏五列按钮触发、日志面板打印 Result；内容全占位） | `godot --path stick-world res://tests/dev/skeleton_systems.tscn` |
 | `test_ui_overlap.tscn` | HUD 部件两两不重叠检查（自 tests/integration/ 下沉：非 TestRunner 规范套件、不进任何 CI 清单；断言口径停留在 zone 制之前的老布局，结果仅供参考） | `godot --path stick-world res://tests/dev/test_ui_overlap.tscn --resolution 1920x1080` |
 | `verify_hud_zones.tscn` | HUD zone 落位与顶部跨度合同验收（多分辨率截图 + 断言：小地图/缩放条居中、不压顶栏按钮群与右上时钟、放大版展开）；出图 `temp/shots_b/` | `godot --path stick-world res://tests/dev/verify_hud_zones.tscn` |
 | `verify_minimap_battle.tscn` | 战场图小地图验收（宽度随地图自适应、双方阵营点红蓝可分、点位反映实际纵深）；出图 `temp/shots_b/minimap_battle.png` | `godot --path stick-world res://tests/dev/verify_minimap_battle.tscn` |

@@ -30,7 +30,7 @@
 | `construction`         | 建造/升级/拆除/修理（运行时）            | ✅ P0 完整     |
 | `building_gen`         | 程序化建筑生成（BuildingDef → 节点树）  | 🟡 B0-B2 阶段 |
 | `texture_gen`          | CPU 贴图 + GPU Shader 材质库     | ✅ 完整        |
-| `organization`         | 五层级通用组织管理（军/科/工/政/商）        | ✅ 已收官（组织深化 + UI-W1~W4） |
+| `organization`         | 五层级通用组织管理（军/科/工/政/商）+ 槽位板子域（scripts/slots/：职能槽位/人员激活/机构嵌套，组织即制度） | ✅ 已收官（组织深化 + UI-W1~W4；槽位板骨架已立待接线） |
 | `resources`            | 资源库存/价格/消耗/产出               | ✅ 在役（town_life 经济产出端） |
 | `environment`          | 跨场景天空/天气/光照/震动              | 🟡 仅光照      |
 | `hd2d`                 | HD-2D 街景渲染栈（3D 世界 + 烘焙卡 + 角色 billboard，供 world 地图宿主消费） | ✅ 在役     |
@@ -45,7 +45,6 @@
 | `skill`                | 技能台账骨架（科技=技能本位：制造/使用/组织三类定义表 + 习得记录 + 派生查询；训练/研究组织职能待内容批次） | 🟡 骨架占位 |
 | `achievement`          | 成就骨架（平权占位表 + 幂等解锁记录；逐枚清单待创始人） | 🟡 骨架占位 |
 | `blueprint`            | 构筑谱系骨架（蓝图定名/退役/重启 CRUD + DAG 校验；派生/融合待 11 号调优杆定稿） | 🟡 骨架占位 |
-| `law`                  | 法律骨架（占位法律表 + 颁布/废除 CRUD；清单与废除代价待创始人） | 🟡 骨架占位 |
 
 > **已废弃**：~~`modules/world_map/scripts/world_map_controller.gd`~~ 已删除（重构为 `strategic_map_controller.gd`；P0 新 0.9 进一步重写为 L1 单层，旧三级粒度框架弃用，见 [待办事项.md](../../docs/项目/待办事项.md) 高优先级）。
 

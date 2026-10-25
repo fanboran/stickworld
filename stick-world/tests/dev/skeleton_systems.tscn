@@ -119,25 +119,29 @@ text = "派生守卫"
 layout_mode = 2
 text = "DAG 校验"
 
-[node name="LawBox" type="VBoxContainer" parent="VB/Modules"]
+[node name="SlotBox" type="VBoxContainer" parent="VB/Modules"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Title" type="Label" parent="VB/Modules/LawBox"]
+[node name="Title" type="Label" parent="VB/Modules/SlotBox"]
 layout_mode = 2
-text = "法律（颁布/废除）"
+text = "组织槽位（机构=组织嵌套）"
 
-[node name="BtnLawEnact" type="Button" parent="VB/Modules/LawBox"]
+[node name="BtnSlotAdd" type="Button" parent="VB/Modules/SlotBox"]
 layout_mode = 2
-text = "颁布占位法律"
+text = "开职能槽位"
 
-[node name="BtnLawRepeal" type="Button" parent="VB/Modules/LawBox"]
+[node name="BtnSlotPerson" type="Button" parent="VB/Modules/SlotBox"]
 layout_mode = 2
-text = "废除首条"
+text = "派人激活末槽"
 
-[node name="BtnLawList" type="Button" parent="VB/Modules/LawBox"]
+[node name="BtnSlotInstitution" type="Button" parent="VB/Modules/SlotBox"]
 layout_mode = 2
-text = "打印颁布集"
+text = "塞机构入末槽"
+
+[node name="BtnSlotBoard" type="Button" parent="VB/Modules/SlotBox"]
+layout_mode = 2
+text = "打印槽位板"
 
 [node name="Log" type="RichTextLabel" parent="VB"]
 layout_mode = 2

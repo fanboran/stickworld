@@ -503,38 +503,6 @@ static func reset_for_new_run() -> void
 
 ---
 
-## 八A、法律模块 `modules/law/api.gd`（骨架占位：结构已接线、清单待创始人）
-
-> 骨架做实：占位法律表（二元形状：可量化效果 + 不可量化叙事后果，GDD §七/04 §四）
-> + 颁布/废除 CRUD（颁布集为可逆状态）。机制面（废除代价、道德张力呈现、执法组织
-> 联动）待法律清单定稿后实装。
-
-```gdscript
-static func enact_law(law_id: String) -> Dictionary
-# [P] law_id 在占位表注册且未颁布
-# [Q] 颁布集写入 + manager 发 law_enacted
-
-static func repeal_law(law_id: String) -> Dictionary
-# [P] law_id 已颁布
-# [Q] 颁布集移除 + manager 发 law_repealed（法律可废除——GDD §七断言）
-
-static func is_enacted(law_id: String) -> bool
-static func get_enacted_laws() -> Array
-static func get_laws() -> Array
-static func get_law(law_id: String) -> Dictionary
-
-# 机制守卫（废除代价机制待设计定稿）
-static func get_repeal_cost(law_id: String) -> Dictionary
-# [Q] 恒 {"ok": false, "error": "骨架占位：废除代价机制待法律设计定稿"}
-
-# 存档（模块自订阅 game_saving/game_loaded 直写 world_state 模块行 'law'）
-static func get_save_data() -> Dictionary
-static func load_save_data(data: Dictionary) -> void
-static func reset_for_new_run() -> void
-```
-
----
-
 ## 八B、构筑谱系模块 `modules/blueprint/api.gd`（骨架占位：结构已接线、调优杆待 11 号定稿）
 
 > 骨架做实：蓝图节点（编制模板/建筑型号/部门章程三种定名对象，GDD §6.8）定名/
@@ -572,9 +540,46 @@ static func reset_for_new_run() -> void
 
 ---
 
+## 八C、组织槽位板 `modules/organization/scripts/slots/org_slot_system.gd`（骨架占位：01 §2.4 纯机制）
+
+> 组织 = 功能槽位的集合；每槽至少一名人员激活（空槽 = 职能不运转）；槽位可放机构
+> （组织嵌套组织，嵌套成环拒绝）。职能名是自由字符串，不设预设枚举（职能清单属内容）。
+> 骨架期消费方仅单测/灰盒台，直接经 class_name 访问——接入 organization/api.gd
+> 公共面随内容批次落（该文件受行数棘轮约束，本批零增行）。实现见 OrgSlotBoard 类头。
+
+```gdscript
+# 槽位增删（组织能做什么由槽位集合决定）
+static func add_slot(org_id: String, function_name: String) -> Dictionary
+static func remove_slot(org_id: String, function_name: String) -> Dictionary
+# [P] org_id/function_name 非空；add 不重复、remove 需存在
+# [Q] 拆槽连同激活关系整体移除；拆运转中的槽发 slot_deactivated
+
+# 人员激活（一槽可多人；"至少一名人员激活"是运转条件）
+static func assign_person(org_id: String, function_name: String, holder_id: String) -> Dictionary
+static func unassign_person(org_id: String, function_name: String, holder_id: String) -> Dictionary
+# [Q] 首次激活发 slot_activated；最后一人撤走发 slot_deactivated
+
+# 机构激活（组织嵌套：机构以组织形态运转该职能；一槽至多一机构）
+static func assign_institution(org_id: String, function_name: String, institution_org_id: String) -> Dictionary
+# [P] institution ≠ 自身；嵌套不成环（全边搜索）
+static func unassign_institution(org_id: String, function_name: String) -> Dictionary
+
+# 查询（组织的强弱来自"哪些槽位被什么激活"，不看面板数字）
+static func is_slot_active(org_id: String, function_name: String) -> bool
+static func active_functions(org_id: String) -> Array   # 在运转的职能清单
+static func get_slots(org_id: String) -> Array          # [{function, persons, institution, active}]
+
+# 存档（自订阅 game_saving/game_loaded 直写 world_state 模块行 'org_slots'）
+static func get_save_data() -> Dictionary
+static func load_save_data(data: Dictionary) -> void
+static func reset_for_new_run() -> void
+```
+
+---
+
 ## 九、模块间 API 依赖图
 
-> 已实现模块（construction / building_gen / texture_gen / resources / organization / combat / formation / tactics / stick_rig / world_map / world / units / player_control / environment / fx / debug_gui / inventory / expansion / town_life）+ 五个骨架占位模块（logistics / skill / achievement / blueprint / law——零出向零装配，无 API 依赖边）。
+> 已实现模块（construction / building_gen / texture_gen / resources / organization（含槽位板子域 scripts/slots/，见 §八C）/ combat / formation / tactics / stick_rig / world_map / world / units / player_control / environment / fx / debug_gui / inventory / expansion / town_life）+ 四个骨架占位模块（logistics / skill / achievement / blueprint——零出向零装配，无 API 依赖边）。
 > expansion 未实现；骨架模块机制面随设计定稿后补充出边。
 > world 为组装根：SystemSetup 集中装配各模块组件，跨模块依赖汇聚于此而非散布（详见 场景与战斗架构.md）。
 

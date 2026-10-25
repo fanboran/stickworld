@@ -26,9 +26,10 @@ func _ready() -> void:
 		["VB/Modules/BpBox/BtnBpRetire", _bp_retire],
 		["VB/Modules/BpBox/BtnBpDerive", _bp_derive],
 		["VB/Modules/BpBox/BtnBpDag", _bp_dag],
-		["VB/Modules/LawBox/BtnLawEnact", _law_enact],
-		["VB/Modules/LawBox/BtnLawRepeal", _law_repeal],
-		["VB/Modules/LawBox/BtnLawList", _law_list],
+		["VB/Modules/SlotBox/BtnSlotAdd", _slot_add],
+		["VB/Modules/SlotBox/BtnSlotPerson", _slot_person],
+		["VB/Modules/SlotBox/BtnSlotInstitution", _slot_institution],
+		["VB/Modules/SlotBox/BtnSlotBoard", _slot_board],
 	]
 	for pair in pairs:
 		var btn: Button = get_node_or_null(pair[0])
@@ -154,28 +155,56 @@ func _bp_dag() -> void:
 		BlueprintAPI.get_blueprints(true).size(), 10])
 
 
-# ─────────────────────────── 法律 ────────────────────────────
+# ─────────────────────────── 组织槽位 ────────────────────────────
 
-func _law_enact() -> void:
-	var r := LawAPI.enact_law(_first_law_id())
-	_log("[法律] 颁布 %s → %s" % [_first_law_id(), str(r)])
+var _slot_seq := 0
 
 
-func _law_repeal() -> void:
-	var enacted: Array = LawAPI.get_enacted_laws()
-	if enacted.is_empty():
-		_log("[法律] 颁布集为空，无可废除")
+func _slot_add() -> void:
+	_slot_seq += 1
+	var function_name := "占位职能%02d" % _slot_seq
+	var r := OrgSlotSystem.add_slot("占位集团01", function_name)
+	_log("[槽位] 开槽 占位集团01·%s → %s（空槽 = 职能不运转）" % [function_name, str(r)])
+
+
+func _slot_person() -> void:
+	var function_name := _last_function("占位集团01")
+	if function_name.is_empty():
+		_log("[槽位] 先开一个职能槽")
 		return
-	var law_id := String(enacted[0])
-	var r := LawAPI.repeal_law(law_id)
-	_log("[法律] 废除 %s → %s（废除代价机制见守卫：待设计定稿）" % [law_id, str(r)])
+	var r := OrgSlotSystem.assign_person("占位集团01", function_name, "占位角色01")
+	_log("[槽位] 派人 占位集团01·%s ← 占位角色01 → %s（至少一人激活即运转）" % [function_name, str(r)])
 
 
-func _law_list() -> void:
-	_log("[法律] 颁布集 %d 条：%s（占位定义 %d 条）" % [
-		LawAPI.get_enacted_laws().size(),
-		"，".join(PackedStringArray(LawAPI.get_enacted_laws())),
-		LawAPI.get_laws().size()])
+func _slot_institution() -> void:
+	OrgSlotSystem.add_slot("占位运输处01", "调度")
+	var function_name := _last_function("占位集团01")
+	if function_name.is_empty():
+		_log("[槽位] 先开一个职能槽")
+		return
+	var r := OrgSlotSystem.assign_institution("占位集团01", function_name, "占位运输处01")
+	_log("[槽位] 塞机构 %s ← 占位运输处01 → %s（组织嵌套组织，机构形态运转该职能）" % [function_name, str(r)])
+
+
+func _slot_board() -> void:
+	var slots: Array = OrgSlotSystem.get_slots("占位集团01")
+	if slots.is_empty():
+		_log("[槽位] 占位集团01 尚无槽位")
+		return
+	var parts: Array = []
+	for slot: Dictionary in slots:
+		parts.append("%s[%s]%s" % [slot["function"],
+				"运转" if bool(slot["active"]) else "空转",
+				"←机构" + String(slot["institution"]) if not String(slot["institution"]).is_empty() else ""])
+	_log("[槽位] 占位集团01 槽位板：%s；运转职能 = %s" % [
+		"；".join(parts), str(OrgSlotSystem.active_functions("占位集团01"))])
+
+
+func _last_function(org_id: String) -> String:
+	var slots: Array = OrgSlotSystem.get_slots(org_id)
+	if slots.is_empty():
+		return ""
+	return String(slots[slots.size() - 1]["function"])
 
 
 # ─────────────────────────── 辅助 ────────────────────────────
@@ -188,11 +217,6 @@ func _first_skill_id() -> String:
 func _first_ach_id() -> String:
 	var defs: Array = AchievementAPI.get_achievement_defs()
 	return String(defs[0].get("id", "")) if not defs.is_empty() else ""
-
-
-func _first_law_id() -> String:
-	var laws: Array = LawAPI.get_laws()
-	return String(laws[0].get("id", "")) if not laws.is_empty() else ""
 
 
 func _log(msg: String) -> void:

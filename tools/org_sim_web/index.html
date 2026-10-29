@@ -156,7 +156,7 @@
     <div id="graphWrap">
       <svg id="edges"></svg>
       <div id="nodes"></div>
-      <div class="legend"><i class="tree"></i>下辖 <i class="nest"></i>嵌套(机构入槽) <i class="flow"></i>制造上下游</div>
+      <div class="legend"><i class="nest"></i>嵌套/下辖(机构入驻槽) <i class="flow"></i>制造上下游</div>
     </div>
   </div>
 
@@ -196,6 +196,13 @@ const QUICK = [
   ["锻造坊", "锻造"], ["车辆工坊", "装配"], ["药剂坊", "熬制"],
 ];
 const MOREFNS = ["采集", "搬运", "施工", "锯木", "烧砖", "冶炼", "锻造", "装配", "熬制", "行政", "军事", "训练"];
+// 市政厅固定职能槽板（空槽也画——空槽=该职能未运转；下辖即嵌套：组织入驻对应槽）
+const HALL_SLOT_KEYS = ["军事", "行政", "采集", "搬运", "施工", "制造", "训练", "科研"];
+const HALL_NEST = {   // 组织首槽 → 入驻市政厅哪个槽
+  "采集": "采集", "搬运": "搬运", "施工": "施工",
+  "锯木": "制造", "烧砖": "制造", "冶炼": "制造", "锻造": "制造", "装配": "制造", "熬制": "制造",
+  "训练": "训练", "科研": "科研",
+};
 const BUILDS = [
   { b: "仓库",  cost: { "原木": 20, "石料": 10 }, work: 30 },
   { b: "训练营", cost: { "原木": 15, "木板": 5 },  work: 24 },
@@ -222,11 +229,14 @@ function reset() {
     feed: [], rates: {},
   };
   for (const s of Object.keys(SITES)) S.buf[s] = 0;
-  // 开局：出生城市政厅（根，领导=你）+ 军事槽动员官（耕战一体）+ 若干村民
-  addOrgRaw("市政厅", 3, "hall");
+  // 开局：出生城市政厅（根，领导=你）——固定职能槽板全画（空槽=未运转），
+  // 军事槽挂动员官（耕战一体），其余空着；村民若干待业
+  const hall = addOrgRaw("市政厅", 3, "hall");
+  for (const key of HALL_SLOT_KEYS)
+    hall.slots[key] = { persons: [], institution: "", site: Object.keys(SITES)[0] };
   addPersonRaw("动员官");
   S.people[0].org = "o01";
-  S.orgs.o01.slots["军事"] = { persons: ["p01"], institution: "", site: "" };
+  hall.slots["军事"].persons = ["p01"];
   for (let i = 0; i < 11; i++) addPersonRaw("村民");
   feed("开局：出生城市政厅（领导＝你），军事槽挂着动员官——耕战一体，村民平时生产、战时皆兵", "good");
 }
@@ -288,7 +298,15 @@ function createOrg(name, fn) {
   }
   const o = addOrgRaw(name, 2, "");
   o.slots[fn] = { persons: [], institution: "", site: Object.keys(SITES)[0] };
-  feed(`组建 ${o.name}（挂市政厅下，首槽「${fn}」）`, "good");
+  // 下辖即嵌套：新组织整体入驻市政厅对应职能槽
+  const hall = S.orgs.o01;
+  const hostKey = HALL_NEST[fn];
+  if (hostKey && hall && hall.slots[hostKey] && !hall.slots[hostKey].institution) {
+    hall.slots[hostKey].institution = o.id;
+    feed(`组建 ${o.name}，整体入驻市政厅「${hostKey}」槽（下辖即嵌套）`, "good");
+  } else {
+    feed(`组建 ${o.name}（市政厅「${hostKey || "?"}」槽已有机构——可经槽面板换入驻）`, hostKey ? "bad" : "good");
+  }
   S.sel = o.id; S.selSlot = null;
   renderAll();
 }
@@ -316,21 +334,15 @@ function pay(c) { for (const [r, n] of Object.entries(c)) S.res[r] -= n; }
 function membersOf(o) {
   let n = 0; for (const s of Object.values(o.slots)) n += s.persons.length; return n;
 }
-function workersOf(slot) {
-  if (slot.institution) {
-    const inst = S.orgs[slot.institution];
-    return inst ? membersOf(inst) : 0;   // 机构以组织形态运转该职能：其成员即在岗人手
-  }
-  return slot.persons.length;
-}
+// 槽挂机构 = 结构性入驻：宿主槽不重复产（机构的自有职能槽干活）
 function advance(dt) {
   const K = k();
   const mult = (S.mobilized ? 0.5 : 1) * (S.starving ? 0.5 : 1);
   const flow = {}; for (const r of Object.keys(S.res)) flow[r] = 0;
   // 采集 → 场外缓冲堆（不经采集队之手入库——搬运组织的物理意义）
   for (const o of Object.values(S.orgs)) for (const [fn, slot] of Object.entries(o.slots)) {
-    if (fn !== "采集" || !slot.site) continue;
-    const w = workersOf(slot); if (!w) continue;
+    if (fn !== "采集" || !slot.site || slot.institution) continue;
+    const w = slot.persons.length; if (!w) continue;
     const amt = K.gather * w * mult * dt;
     const room = K.buf - S.buf[slot.site];
     const got = Math.min(amt, Math.max(0, room));
@@ -344,8 +356,8 @@ function advance(dt) {
   // 搬运：场外堆 → 仓库（运输组织存在的物理意义）
   let haulCap = 0;
   for (const o of Object.values(S.orgs)) for (const [fn, slot] of Object.entries(o.slots)) {
-    if (fn !== "搬运") continue;
-    const w = workersOf(slot);
+    if (fn !== "搬运" || slot.institution) continue;
+    const w = slot.persons.length;
     if (w) haulCap += K.haul * w * mult * dt;
   }
   if (haulCap > 0) {
@@ -358,8 +370,8 @@ function advance(dt) {
   }
   // 制造：入库原料 → 制品（缺氧式上下游，同吃仓库）
   for (const o of Object.values(S.orgs)) for (const [fn, slot] of Object.entries(o.slots)) {
-    const d = FNS[fn]; if (!d || !d.input) continue;
-    const w = workersOf(slot); if (!w) continue;
+    const d = FNS[fn]; if (!d || !d.input || slot.institution) continue;
+    const w = slot.persons.length; if (!w) continue;
     let batches = K.craft * w * mult * dt;
     const have = Object.entries(d.input).map(([r, n]) => S.res[r] / n);
     const canDo = Math.min(batches, ...have);
@@ -373,7 +385,7 @@ function advance(dt) {
   if (S.buildOrder) {
     let w = 0;
     for (const o of Object.values(S.orgs)) for (const [fn, slot] of Object.entries(o.slots))
-      if (fn === "施工") w += workersOf(slot);
+      if (fn === "施工" && !slot.institution) w += slot.persons.length;
     if (w) {
       S.buildOrder.done += w * mult * dt;
       if (S.buildOrder.done >= S.buildOrder.work) {
@@ -422,23 +434,27 @@ function renderRight() {
   }
   const o = S.orgs[S.sel];
   let html = `<h3>${o.name} <span class="tier">L${o.tier}</span></h3>`;
-  if (o.kind === "hall") html += `<div class="lbl">城市根组织 · 领导＝你 · 全场组织与你负责</div>`;
+  if (o.kind === "hall") html += `<div class="lbl">城市根组织 · 领导＝你 · 固定职能槽板（空槽=未运转，可派人顶岗或入驻机构）</div>`;
   html += `<div class="lbl">职能槽（点图中槽行同效）</div>`;
   for (const [fn, slot] of Object.entries(o.slots)) {
     html += `<div class="row"><span class="fn" style="background:#324059;border-radius:5px;padding:1px 7px;color:#bcd0f5">${fn}</span>
       <span style="color:var(--dim);font-size:11px">${slotDesc(o, fn, slot)}</span></div>`;
   }
-  html += `<div class="row"><select id="addFn">${MOREFNS.filter(f => !o.slots[f]).map(f => `<option>${f}</option>`).join("")}</select>
-           <button id="addSlot" class="ghost">加职能槽</button></div>`;
-  html += `<div class="row"><button id="delOrg" class="warn ghost">解散组织（人员回待业）</button></div>`;
+  if (o.kind !== "hall") {
+    html += `<div class="row"><select id="addFn">${MOREFNS.filter(f => !o.slots[f]).map(f => `<option>${f}</option>`).join("")}</select>
+             <button id="addSlot" class="ghost">加职能槽</button></div>`;
+    html += `<div class="row"><button id="delOrg" class="warn ghost">解散组织（人员回待业）</button></div>`;
+  }
   if (S.selSlot && o.slots[S.selSlot]) html += slotPanel(o, S.selSlot);
   sp.innerHTML = html;
-  $("addSlot").onclick = () => {
+  const addSlotBtn = $("addSlot");
+  if (addSlotBtn) addSlotBtn.onclick = () => {
     const f = $("addFn").value;
     o.slots[f] = { persons: [], institution: "", site: Object.keys(SITES)[0] };
     feed(`${o.name} 开「${f}」职能槽（未标注职能无明面前提）`, "good"); renderAll();
   };
-  $("delOrg").onclick = () => {
+  const delBtn = $("delOrg");
+  if (delBtn) delBtn.onclick = () => {
     for (const slot of Object.values(o.slots)) for (const pid of slot.persons) person(pid).org = "";
     delete S.orgs[o.id]; S.order = S.order.filter(x => x !== o.id);
     for (const other of Object.values(S.orgs))
@@ -610,13 +626,7 @@ function drawEdges(metas, els, wrap) {
       <path d="M0,0 L7,3 L0,6 z" fill="#e359c4"/></marker>
   </defs>`;
   const lines = [defs];
-  // 1) 下辖（市政厅 → 各组织）：灰直线
-  const hall = metas[0];
-  if (hall) for (const m of metas.slice(1)) {
-    const a = anchor(hall.o.id, "bottom"), b = anchor(m.o.id, "top");
-    lines.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#5a6274" stroke-width="1.5" opacity="0.8"/>`);
-  }
-  // 2) 嵌套（机构 → 宿主槽）：品红虚线箭头
+  // 1) 嵌套（机构 → 宿主槽）：品红虚线箭头——下辖也是嵌套（组织入驻市政厅槽）
   for (const m of metas) for (const [fn, slot] of Object.entries(m.o.slots)) {
     if (!slot.institution || !byId[slot.institution]) continue;
     const a = anchor(slot.institution, "right"), b = slotAnchor(m.o.id, fn);

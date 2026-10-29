@@ -1,9 +1,10 @@
-## Skill 模块公共接口契约（技能台账，骨架占位）
+## Skill 模块公共接口契约（技能台账）
 ##
 ## 技能本位（04-科技系统 v2）：科技=长在具体火柴人身上的技能（制造/使用/组织
 ## 三类，会/不会二元）；无阵营科技池——"我国会什么"是台账的派生查询。
-## 机制面（训练/研究的组织职能、死亡移除、需技能标注消费、组织前置接线）
-## 待内容批次实装，见 SkillManager 类头。
+## 生产消费方：组织明面前提（OrgPrereqs 技能条件）、训练推进器（TrainingPost
+## 以 TRAINING 来源写入、教学教官记入 teacher_holder_id）；死亡移除、
+## "需技能"标注消费待后续批次，见 SkillManager 类头。
 ##
 ## 外部模块经本契约交互（禁 preload 模块内部脚本；存档走模块自订阅
 ## game_saving/game_loaded 直写 world_state 模块行——inventory/WorldState 同款契约）：
@@ -15,15 +16,14 @@
 ##   - SkillAPI.skills_of(holder_id) -> Array       # 某人会什么
 ##   - SkillAPI.get_skills()/get_skill(id)/get_skills_of_category(cat)
 ##   - SkillAPI.get_records()                       # 台账本体
-##   - SkillAPI.get_save_data()/load_save_data(data)/reset_for_new_run()
+##   - SkillAPI.get_save_data()/load_save_data(data)/reset_for_new_run()/prime()
 class_name SkillAPI
 extends RefCounted
 
 ## static var 生命周期（原型转正门槛③）：进程级单例（ItemDB 同模式）——运行态
-## 只有习得记录台账；读档经 game_loaded 回调重置、新开局经 reset_for_new_run
-## 重置（新游戏流程的接线随内容批次落——骨架期无生产写入方，无残留态风险）。
-## 存档事件在单例首建时挂接（数据只能经单例产生 ⇒ 有数据 ⇒ 已挂接），
-## reset 时对称摘除连接，不留僵尸订阅。
+## 只有习得记录台账；读档经 game_loaded 回调重置、新开局经装配步
+## reset_for_new_run + prime 重置（system_setup 组织系统步）。存档事件在单例
+## 首建时挂接（prime 保证 boot 读档的 game_loaded 回调不丢），reset 对称摘除。
 static var _mgr: SkillManager = null
 
 
@@ -32,6 +32,11 @@ static func _instance() -> SkillManager:
 		_mgr = SkillManager.new()
 		_hook_save_events()
 	return _mgr
+
+
+## 装配 priming：立即建单例挂好存档订阅（reset 后调用，防 game_loaded 早于首用）。
+static func prime() -> void:
+	_instance()
 
 
 static func reset_for_new_run() -> void:

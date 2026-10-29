@@ -19,6 +19,12 @@ modules/organization/
 │   ├── organization_manager.gd         # 管理逻辑：TIER 1-5 / 七标签校验、补位引擎（succession）、上报门控
 │   ├── recruit_manager.gd              # 招兵（扣资源+空闲村民变身士兵）与人口再生节律，常驻 GameRoot
 │   ├── default_behavior_writer.gd      # 按 config/ai/org_default_behavior.tres 灌 default_behavior（总闸缺省关）
+│   ├── prereqs/
+│   │   └── org_prereqs.gd              # 明面前提校验（01 §2.5：技能/属性条件，表驱特例制；provider 注入）
+│   └── slots/
+│       ├── org_slot_board.gd           # 槽位板纯机制（01 §2.4：人/机构激活、嵌套环校验、on_org_removed 清理）
+│       ├── org_slot_system.gd          # 槽位板进程门面：明面前提接线 + 存档行 org_slots + 装配重置
+│       └── training_post.gd            # 训练推进器（04 §三 组织对组织：层级对齐/内部进度制/隐形前提停摆）
 │   └── command/
 │       ├── org_command_dispatcher.gd   # 逐层命令分解：hop 0 玩家跳 + BFS 层序展开到 L1（同令透传）
 │       └── transport_layer.gd          # 延迟 = 距离 ÷ 传令速度；位置/距离查询经装配层注入的 provider
@@ -37,6 +43,8 @@ modules/organization/
 - 信号：`org_created / org_restructured / org_disbanded / report_filed`。
 - 高频入口：`transfer_stickman(stickman_id, from_org, to_org)` 跨组织调人原子接口（校验一体、失败零改动，成功对双方各发一次 org_restructured）；`build_dispatch_plan` + `get_delivery_time` 逐层投递；`evaluate_report_gate → file_report` 上报流；`recruit()` 招兵。
 - 组织状态实体为 core/entities/organization_state.gd，注册进 WorldState 容器，存档由 WorldState 统一序列化。
+- 明面前提与槽位：加职能槽/塞机构过 `OrgSlotSystem.add_slot/assign_institution`（先校验 `config/organizations/function_prereqs.tres` 的技能/属性条件，表里没定义的职能无门槛）；disband/remove_tier 成功后自动清槽（api 层接线）。
+- 训练推进器：`TrainingPost` 常驻 GameRoot（组织系统装配步），训练安排=训练组织←受训组织整建制（受训 tier ≤ 训练 tier+1；技能习得写入 skill 台账并记教学教官；缺建筑停摆进度保留）；存档行 org_training。数值模拟台 `tests/dev/org_sim_panel.tscn`。
 
 ---
 

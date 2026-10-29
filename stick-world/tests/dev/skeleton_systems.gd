@@ -71,8 +71,8 @@ func _lgx_assign() -> void:
 
 func _skill_learn() -> void:
 	var sid := _first_skill_id()
-	var r := SkillAPI.learn_skill(sid, "占位角色01", SkillRecord.Source.TRAINING, "占位师傅")
-	_log("[技能] 习得 %s（占位角色01，训练/师承占位师傅）→ %s" % [sid, str(r)])
+	var r := SkillAPI.learn_skill(sid, "占位角色01", SkillRecord.Source.TRAINING, "占位教官")
+	_log("[技能] 习得 %s（占位角色01，训练/占位教官）→ %s" % [sid, str(r)])
 
 
 func _skill_learn_dup() -> void:

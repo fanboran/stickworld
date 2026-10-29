@@ -17,6 +17,7 @@ func _ready() -> void:
 	_runner.add_test("嵌套环: 机构互塞拒绝", _test_institution_cycle)
 	_runner.add_test("查询: active_functions 与槽位全貌", _test_queries)
 	_runner.add_test("槽位板: round-trip 保真", _test_roundtrip)
+	_runner.add_test("生命周期: 组织消失清槽并剪除机构引用", _test_org_removed_cleanup)
 	_runner.run()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
@@ -109,3 +110,23 @@ func _test_roundtrip() -> void:
 	# 恢复后的板仍守环约束
 	_runner.assert_false(bool(b2.assign_institution("org_a", "指挥", "org_b").get("ok")),
 			"round-trip 后嵌套环仍被拒绝")
+
+
+## 组织消失（api 层解散/删层成功后经 OrgSlotSystem 调 board.on_org_removed）：
+## 该组织槽位全清；别家槽里塞着它的机构引用被剪除——那个槽位回到空置。
+func _test_org_removed_cleanup() -> void:
+	var b := ScriptOrgSlotBoard.new()
+	b.add_slot("org_dead", "指挥")
+	b.assign_person("org_dead", "指挥", "p1")
+	b.add_slot("org_host", "物流")
+	b.assign_person("org_host", "物流", "p2")  # 宿主槽另有人，机构撤走后仍运转
+	b.assign_institution("org_host", "物流", "org_dead")
+	_runner.assert_true(b.is_slot_active("org_host", "物流"), "机构在 = 宿主物流运转")
+	b.on_org_removed("org_dead")
+	_runner.assert_equal(b.get_slots("org_dead"), [], "消失组织的槽位全清")
+	var slots: Array = b.get_slots("org_host")
+	_runner.assert_equal(String(slots[0]["institution"]), "", "指向消失组织的机构引用被剪除")
+	_runner.assert_true(b.is_slot_active("org_host", "物流"), "宿主槽有人仍在运转")
+	# 孤儿机构边不再挡新机构入槽
+	_runner.assert_true(bool(b.assign_institution("org_host", "物流", "org_newcomer").get("ok")),
+			"剪除后槽位可塞新机构")

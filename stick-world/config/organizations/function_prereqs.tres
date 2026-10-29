@@ -1,0 +1,38 @@
+[gd_resource type="Resource" load_steps=2 format=3 uid="uid://dyifmjwtwi42h"]
+
+[ext_resource type="Script" path="res://config/balance/balance_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+resource_name = "function_prereqs"
+_meta = {
+	"resource_name": "function_prereqs",
+	"version": "0.1.0",
+	"description": "职能明面前提表（01-组织系统 §2.5：显式标注的硬条件，一般至多一两条；没定义的职能无明面前提）。行内容待策划——id placeholder 前缀，条件指向占位技能/属性",
+	"category": "skeleton_placeholder"
+}
+variables = {
+	"data": [
+		{
+			"id": "placeholder_prereq_01",
+			"function_name": "科研",
+			"conditions": [
+				{
+					"kind": "skill",
+					"skill_id": "placeholder_skill_org_01"
+				}
+			]
+		},
+		{
+			"id": "placeholder_prereq_02",
+			"function_name": "参谋",
+			"conditions": [
+				{
+					"kind": "attribute",
+					"attr": "cmd",
+					"min": 3
+				}
+			]
+		}
+	]
+}

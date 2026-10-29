@@ -241,8 +241,8 @@ var armor_speed_factor: float = 1.0
 ## 护甲减伤率（背包装备系统写入：三件 damage_reduction 加和，封顶 0.6）。
 ## DamagePipeline 单位类型减伤段经 get_armor_factor() 消费
 var armor_damage_reduction: float = 0.0
-## 个体属性标签（GDD §6.1 世界盒子式：影响适合的工作与战斗行为；
-## 出生掷骰 基础10±3，行为消费按批次接线）。键：str/int/agi/cft/cmd
+## 个体属性标签（GDD §6.1；出生掷骰域 0~10（17 号），分布 [待定] 占位均匀）。
+## 键：str/int/agi/cft/cmd（力量/智力/敏捷/工艺/指挥）
 var attributes: Dictionary = {}
 ## 体型缩放倍率（SWL minidon 召唤护卫比常规兵种小一圈；1.0 = 正常体型）。
 ## 影响 rig 渲染 + Collider/Range/Hitbox 判定 + 血条高度，经 set_body_scale 设置。
@@ -350,14 +350,14 @@ func _input(event: InputEvent) -> void:
 
 
 func _ready() -> void:
-	# 个体属性出生掷骰（基础 10 ± 3；行为/AI 消费按批次接线）
+	# 个体属性出生掷骰（域 0~10，17 号 §一；分布 [待定]——占位全域均匀）
 	if attributes.is_empty():
 		attributes = {
-			"str": 7 + randi() % 7,
-			"int": 7 + randi() % 7,
-			"agi": 7 + randi() % 7,
-			"cft": 7 + randi() % 7,
-			"cmd": 7 + randi() % 7,
+			"str": randi() % 11,
+			"int": randi() % 11,
+			"agi": randi() % 11,
+			"cft": randi() % 11,
+			"cmd": randi() % 11,
 		}
 	# 先拿到 StickmanRig 和 IK markers 引用——必须在 _mount_components 之前：
 	# VisualController.setup 连接 rig.animation_finished（攻击播完回切），

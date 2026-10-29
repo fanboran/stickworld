@@ -137,7 +137,8 @@ func _setup_selection_system() -> void:
 
 # ─────────────────────────────── 组织系统装配 ────────────────────────────────
 
-## 实例化 OrganizationManager + OrganizationApi 作为子节点并互相 setup。
+## 实例化 OrganizationManager + OrganizationApi 作为子节点并互相 setup；
+## 随后接槽位板/技能台账/明面前提/训练推进器的进程级装配（组织本位落地批）。
 func _setup_organization_system() -> void:
 	# OrganizationManager 是 RefCounted，直接 new
 	var mgr = _host._OrganizationManagerScript.new()
@@ -150,6 +151,40 @@ func _setup_organization_system() -> void:
 	# api.setup 需要 manager 引用
 	if api.has_method("setup"):
 		api.setup(mgr)
+	_setup_org_slot_system(mgr)
+
+
+## 槽位板/技能台账/明面前提/训练推进器装配（不加新装配步骤）：每局 reset+prime
+## 消跨局残留（GameRoot 每局一建、旅行不重建）；prime 保证 boot 读档的
+## game_loaded 行恢复不丢订阅；providers 注入实体侧实现。
+func _setup_org_slot_system(mgr: RefCounted) -> void:
+	OrgSlotSystem.reset_for_new_run()
+	OrgSlotSystem.instance()
+	SkillAPI.reset_for_new_run()
+	SkillAPI.prime()
+	OrgPrereqs.set_providers(
+		func(org_id: String) -> Array:
+			var r: Dictionary = mgr.get_organization(org_id)
+			if not r.get("ok", false):
+				return []
+			return r.get("data", {}).get("personnel", []),
+		_stickman_attribute,
+	)
+	var post := TrainingPost.new()
+	post.name = "TrainingPost"
+	_host._root.add_child(post)  # 常驻 GameRoot；消费方经 get_node_or_null("TrainingPost") 取
+	post.setup(
+		func(org_id: String) -> Dictionary:
+			var r: Dictionary = mgr.get_organization(org_id)
+			if not r.get("ok", false):
+				return {"ok": false}
+			var data: Dictionary = r.get("data", {})
+			return {"ok": true, "tier": int(data.get("tier", 0)),
+					"personnel": data.get("personnel", [])},
+		_training_building_present,
+		_stickman_attribute,
+		_bump_stickman_attribute,
+	)
 
 
 # ─────────────────────────────── 编队系统装配 ────────────────────────────────
@@ -272,6 +307,13 @@ func _region_distance(from_loc: String, to_loc: String) -> float:
 
 ## cmd 属性查询（补位排序，§4.3.1）：instance_id 字符串 → attributes.cmd；失败 -1 沉底
 func _stickman_cmd_attribute(stickman_id: String) -> float:
+	return _stickman_attribute(stickman_id, "cmd")
+
+
+# ───────────────────────── 组织本位：属性/建筑注入实现 ─────────────────────────
+
+## 任意基础属性查询（明面前提/训练速率用；id→实体→attributes，17 号 §一域 0~10）。
+func _stickman_attribute(stickman_id: String, attr_key: String) -> float:
 	var iid := int(stickman_id)
 	if iid <= 0:
 		return -1.0
@@ -281,8 +323,45 @@ func _stickman_cmd_attribute(stickman_id: String) -> float:
 	var attrs: Variant = unit.get("attributes")
 	if not (attrs is Dictionary):
 		return -1.0
-	var value: Variant = (attrs as Dictionary).get("cmd", -1.0)
+	var value: Variant = (attrs as Dictionary).get(attr_key, -1.0)
 	return float(value) if value is float or value is int else -1.0
+
+
+## 属性 +delta（钳 0~10）——训练进度落地用；返回新值（查无实体 -1）。
+func _bump_stickman_attribute(stickman_id: String, attr_key: String, delta: int) -> float:
+	var iid := int(stickman_id)
+	if iid <= 0:
+		return -1.0
+	var unit: Node = instance_from_id(iid)
+	if unit == null or not is_instance_valid(unit):
+		return -1.0
+	var attrs: Variant = unit.get("attributes")
+	if not (attrs is Dictionary):
+		return -1.0
+	var value: Variant = (attrs as Dictionary).get(attr_key, null)
+	if not (value is float or value is int):
+		return -1.0
+	var new_value := clampf(float(value) + float(delta), 0.0, 10.0)
+	(attrs as Dictionary)[attr_key] = new_value
+	return new_value
+
+
+## 职能对应建筑在场（训练等职能的隐形前提，01 §2.5）：占位口径 [待定]——
+## 职能→建筑映射待内容（03 场所需求清单），暂按兵营 OPERATIONAL 当训练建筑
+## （def 同 RecruitManager.BARRACKS_DEF_ID）。
+func _training_building_present(_function_name: String) -> bool:
+	var map: Node2D = _host._root.get_current_map()
+	if map == null:
+		return false
+	var host: Node2D = map.get("building_host") if "building_host" in map else null
+	if host == null:
+		return false
+	for b in host.get_children():
+		if b is Node2D and is_instance_valid(b) and String(b.get("def_id")) == "barracks":
+			var state: int = int(b.get("state")) if "state" in b else -1
+			if state == Building.State.OPERATIONAL:
+				return true
+	return false
 
 
 # ─────────────────────────────── 招兵与人口装配（游戏循环深化批次 1）───────────────────────────────

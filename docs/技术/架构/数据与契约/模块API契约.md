@@ -138,15 +138,16 @@ static func apply_thatch_cpu(polygon) -> void
 
 ---
 
-## 二、技能模块 `modules/skill/api.gd`（骨架占位：技能台账，结构已接线、内容待策划）
+## 二、技能模块 `modules/skill/api.gd`（技能台账：结构已接线、内容待策划）
 
 > 技能本位（04-科技系统 v2）：科技=长在具体火柴人身上的技能（制造/使用/组织
 > 三类，会/不会二元）；无阵营科技池——"我国会什么"是台账的派生查询。
-> 机制面（训练/研究的组织职能、死亡移除、"需技能"标注消费、组织技能前置
-> 接线）待内容批次实装。
+> 生产消费方：组织明面前提（OrgPrereqs 技能条件，§五B）、训练推进器
+>（TrainingPost 以 TRAINING 来源写入、教学教官记 teacher_holder_id，§五C）。
+> 待后续批次：死亡移除、"需技能"标注消费、研究组织职能。
 
 ```gdscript
-# 习得一项技能（生产入口：时刻取 WorldState.game_time；师承记录供谱系图）
+# 习得一项技能（生产入口：时刻取 WorldState.game_time；训练途径记教学教官）
 static func learn_skill(skill_id: String, holder_id: String, source: SkillRecord.Source,
         teacher_holder_id := "") -> Dictionary
 # [P] skill_id 在技能定义表注册（制造/使用/组织三类）；holder_id 非空
@@ -169,6 +170,7 @@ static func get_records() -> Array                    # 台账本体（SkillReco
 static func get_save_data() -> Dictionary
 static func load_save_data(data: Dictionary) -> void
 static func reset_for_new_run() -> void
+static func prime() -> void   # 装配 priming：建单例挂存档订阅（boot 读档回调不丢）
 ```
 
 ---
@@ -273,11 +275,12 @@ func insert_tier(org_id: String, new_org_name: String, position: String) -> Dict
 # 在 org 和其 parent 之间插入一个新组织, position="above"/"below"
 
 func remove_tier(org_id: String) -> Dictionary
-# 删除该组织，其子组织自动上挂到 parent
+# 删除该组织，其子组织自动上挂到 parent；成功后经 OrgSlotSystem.on_org_removed 清槽
 
 # 解散
 func disband_organization(org_id: String) -> Dictionary
-# [Q] 所有人员回归待分配池, 子组织上挂到 parent, 发射 org_disbanded
+# [Q] 所有人员回归待分配池, 子组织上挂到 parent, 发射 org_disbanded；
+#     成功后经 OrgSlotSystem.on_org_removed 清理该组织槽位与全板机构引用（§八C）
 
 # 预设
 func load_preset(preset_name: String, parent_id: String) -> Dictionary
@@ -540,18 +543,75 @@ static func reset_for_new_run() -> void
 
 ---
 
-## 八C、组织槽位板 `modules/organization/scripts/slots/org_slot_system.gd`（骨架占位：01 §2.4 纯机制）
+## 五B、组织明面前提 `modules/organization/scripts/prereqs/org_prereqs.gd`（01 §2.5）
+
+> 前提分明面/隐形两层。明面=显式标注的硬条件（一般至多一两条，特例制——表里
+> 没定义的职能无门槛）；隐形=运转物理（对应建筑/人手占槽/支撑链），不在此处、
+> 以运转状态表现（消费见 §五C 训练推进器与装配层建筑 provider）。
+> 条件种类：技能（`SkillAPI.knows`——organization 消费 skill 的静态边）、
+> 属性阈值（经 provider 注入，装配层回实体 attributes，域 0~10，17 号 §一）。
+> 表：`config/organizations/function_prereqs.tres`（占位行：科研→在编有人会
+> placeholder_skill_org_01；参谋→在编有人 cmd≥3）。
+
+```gdscript
+# 注入（装配层/单测：在编人员查询 + 属性查询）
+static func set_providers(personnel_provider: Callable, attribute_provider: Callable) -> void
+static func get_prereqs(function_name: String) -> Array    # 该职能的条件数组（无行=[]）
+# 校验：org 的在编人员是否满足职能的明面前提
+static func check(org_id: String, function_name: String) -> Dictionary
+# [Q] {ok, results: [{kind, label, passed}]}——results 供面板逐条 ✓/✗ 展示；
+#     未满足返回 error 含未过条件清单
+```
+
+## 五C、训练推进器 `modules/organization/scripts/slots/training_post.gd`（04 §三 训练=组织对组织）
+
+> 训练机构是普通组织（教官占其训练职能槽）；受训方是整只编制组织开过来受训，
+> 受训者=受训组织全体在编人员。层级对齐：受训 tier ≤ 训练 tier + 1（班训排）。
+> 内部进度制（17 §二）：每（受训者, 目标）进度 0~100，速率=基础×修正（属性
+> 当前值越高越慢[公式占位待定]）；满 100 → 属性 +1（钳 0~10）或经 SkillAPI
+> 习得（TRAINING 来源，教学教官=槽上会该技能者）。隐形前提在此生效：职能运转
+> = 槽激活 × 对应建筑在场（provider 注入）——缺建筑停摆不报错、进度保留；
+> 先满者留批（散批条件待定）；任一方组织解散 → 安排取消。
+> 装配：组织系统装配步内常驻 GameRoot（`get_node_or_null("TrainingPost")` 取）；
+> 存档自订阅 world_state 模块行 'org_training'。数值模拟台（验收工装）：
+> `tests/dev/org_sim_panel.tscn`。
+
+```gdscript
+# 注入（装配层/单测：组织信息/建筑在场/属性读写 四 provider）
+func setup(org_info_provider, building_provider, attr_read, attr_write) -> void
+# 建立训练安排 [P] 双方组织存在；受训 tier ≤ 训练 tier+1；训练职能槽有人；
+#              技能目标须槽上教官有人会（教学来源）；受训组织有在编
+func add_arrangement(trainer_org_id: String, function_name: String,
+        trainee_org_id: String, target_kind: String, target_id: String) -> Dictionary
+# target_kind ∈ {"attribute", "skill"}；attribute 的 target_id ∈ str/int/agi/cft/cmd
+func remove_arrangement(arrangement_id: String) -> Dictionary
+func get_arrangements() -> Array     # [{id, trainer_org, function, trainee_org,
+#                                    #   target_kind, target_id, teacher_holder_id, progress}]
+func advance(dt: float) -> Array     # 测试直调；生产 _process 喂 WorldState.game_time
+signal training_completed(arrangement_id, holder_id, target_kind, target_id)
+signal arrangement_cancelled(arrangement_id, reason)
+```
+
+---
+
+## 八C、组织槽位板 `modules/organization/scripts/slots/org_slot_system.gd`（01 §2.4 纯机制 + §2.5 明面前提接线）
 
 > 组织 = 功能槽位的集合；每槽至少一名人员激活（空槽 = 职能不运转）；槽位可放机构
 > （组织嵌套组织，嵌套成环拒绝）。职能名是自由字符串，不设预设枚举（职能清单属内容）。
-> 骨架期消费方仅单测/灰盒台，直接经 class_name 访问——接入 organization/api.gd
-> 公共面随内容批次落（该文件受行数棘轮约束，本批零增行）。实现见 OrgSlotBoard 类头。
+> 生产已接线：add_slot/assign_institution 先过明面前提（§五B，机构塞槽按机构自身
+> 在编人员校验）；api 层 disband/remove_tier 成功后调 on_org_removed（组织消失→
+> 槽位与全板机构引用随之清理）；装配步每局 reset+instance（system_setup 组织系统步）。
+> 纯机制本体见 OrgSlotBoard 类头；隐形前提（建筑在场等）以运转状态表现，
+> 消费见训练推进器（§五C）。
 
 ```gdscript
 # 槽位增删（组织能做什么由槽位集合决定）
 static func add_slot(org_id: String, function_name: String) -> Dictionary
 static func remove_slot(org_id: String, function_name: String) -> Dictionary
+static func check_prereqs(org_id: String, function_name: String) -> Dictionary
 # [P] org_id/function_name 非空；add 不重复、remove 需存在
+#     add 先过明面前提（OrgPrereqs.check，表里没定义的职能无门槛）；
+#     check_prereqs 只查不拦（面板逐条 ✓/✗ 展示用）
 # [Q] 拆槽连同激活关系整体移除；拆运转中的槽发 slot_deactivated
 
 # 人员激活（一槽可多人；"至少一名人员激活"是运转条件）
@@ -568,6 +628,10 @@ static func unassign_institution(org_id: String, function_name: String) -> Dicti
 static func is_slot_active(org_id: String, function_name: String) -> bool
 static func active_functions(org_id: String) -> Array   # 在运转的职能清单
 static func get_slots(org_id: String) -> Array          # [{function, persons, institution, active}]
+
+# 生命周期（api 层 disband/remove_tier 成功后调）
+static func on_org_removed(org_id: String) -> void
+# [Q] 清该组织全部槽位 + 全板剪除指向它的机构引用 + 逐槽发 slot_deactivated
 
 # 存档（自订阅 game_saving/game_loaded 直写 world_state 模块行 'org_slots'）
 static func get_save_data() -> Dictionary

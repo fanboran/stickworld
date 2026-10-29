@@ -111,6 +111,8 @@ const UNIT_SCRIPTS: Array[String] = [
 	"res://tests/unit/test_achievement_skeleton.gd",
 	"res://tests/unit/test_blueprint_skeleton.gd",
 	"res://tests/unit/test_org_slots.gd",
+	"res://tests/unit/test_org_prereqs.gd",
+	"res://tests/unit/test_training_post.gd",
 ]
 
 ## unit 层 .tscn 反向自检豁免名单（默认空）。

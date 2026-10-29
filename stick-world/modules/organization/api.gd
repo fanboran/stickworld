@@ -18,8 +18,7 @@ signal org_restructured(org_id: String)
 ## 组织已解散
 signal org_disbanded(org_id: String)
 
-## 上报已提交（§4.4 信息上报骨架：combat 挂点经 evaluate_report_gate 门控后 file_report；
-## 补位引擎 commander_lost 必报也走此信号。P0 一层直报，消费方自取 parent_org 归档）
+## 上报已提交（combat 挂点经 evaluate_report_gate 门控后 file_report；补位必报同走）
 signal report_filed(org_id: String, report: Dictionary)
 
 
@@ -35,8 +34,7 @@ var _is_initialized: bool = false
 func setup(manager: Object) -> void:
 	_manager = manager as OrganizationManager
 	_is_initialized = true
-	# 2026-08 集中制（WorldState 容器决策 A）：组织状态注册进 WorldState 容器，
-	# 存档由 WorldState 统一序列化（本模块不再自行注册 SaveManager）
+	# 集中制：组织状态注册进 WorldState 容器，存档由 WorldState 统一序列化
 	if WorldState != null and manager.has_method("set_world"):
 		manager.set_world(WorldState)
 	# manager 内部发射的上报（补位引擎 commander_lost 必报）转发到公共信号
@@ -77,9 +75,7 @@ func load_save_data(data: Dictionary) -> void:
 		_manager.load_save_data(data)
 
 
-## 读档收编（读档完整性批次）：从 WorldState 容器收编档内组织为本模块工作集。
-## save_handler 存档恢复编排调用（解散旧班 → 本方法 → 重建班），语义见
-## OrganizationManager.restore_from_world_container。
+## 读档收编：从 WorldState 容器收编档内组织（save_handler 编排调用，语义见 manager）。
 func restore_from_world() -> void:
 	if _is_initialized:
 		_manager.restore_from_world_container()
@@ -283,6 +279,7 @@ func remove_tier(org_id: String) -> Dictionary:
 		return {"ok": false, "error": "模块未初始化"}
 	var result := _manager.remove_tier(org_id)
 	if result.get("ok", false):
+		OrgSlotSystem.on_org_removed(org_id)  # 该节点删除→其槽位与机构引用随之清理
 		org_restructured.emit(org_id)
 	return result
 
@@ -296,6 +293,7 @@ func disband_organization(org_id: String) -> Dictionary:
 		return {"ok": false, "error": "模块未初始化"}
 	var result := _manager.disband_organization(org_id)
 	if result.get("ok", false):
+		OrgSlotSystem.on_org_removed(org_id)  # 组织消失→其槽位与机构引用随之清理
 		org_disbanded.emit(org_id)
 	return result
 

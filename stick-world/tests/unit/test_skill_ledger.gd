@@ -13,7 +13,7 @@ const ScriptSkillRecord := preload("res://modules/skill/data/skill_record.gd")
 func _ready() -> void:
 	_runner = TestRunner.new()
 	_runner.add_test("定义表: 装载三类且 id 为 placeholder 前缀", _test_defs_load)
-	_runner.add_test("习得: 台账写入+师承记录", _test_learn)
+	_runner.add_test("习得: 台账写入+谁教的记录", _test_learn)
 	_runner.add_test("习得: 重复/未知/空持有者拒绝", _test_learn_rejects)
 	_runner.add_test("派生: knows/holders_of/faction_knows/skills_of", _test_derived)
 	_runner.add_test("台账: round-trip 保真", _test_roundtrip)
@@ -42,13 +42,13 @@ func _test_learn() -> void:
 	var m := ScriptSkillManager.new()
 	var skill_id := _first_skill_id(m)
 	var r: Dictionary = m.learn_skill(skill_id, "占位角色01", ScriptSkillRecord.Source.TRAINING,
-			"占位师傅", 10.0)
+			"占位教官", 10.0)
 	_runner.assert_true(bool(r.get("ok")), "习得成功")
 	_runner.assert_true(m.knows("占位角色01", skill_id), "knows 命中")
 	_runner.assert_equal(m.get_records().size(), 1, "台账 1 条")
 	var record: ScriptSkillRecord = m.get_records()[0]
 	_runner.assert_equal(record.source, ScriptSkillRecord.Source.TRAINING, "来源=训练保真")
-	_runner.assert_equal(record.teacher_holder_id, "占位师傅", "师承记录保真（谱系图原料）")
+	_runner.assert_equal(record.teacher_holder_id, "占位教官", "谁教的记录保真（技能源流原料）")
 
 
 func _test_learn_rejects() -> void:
@@ -84,13 +84,13 @@ func _test_derived() -> void:
 func _test_roundtrip() -> void:
 	var m := ScriptSkillManager.new()
 	var skill_id := _first_skill_id(m)
-	m.learn_skill(skill_id, "占位角色09", ScriptSkillRecord.Source.TRAINING, "占位师傅乙", 20.0)
+	m.learn_skill(skill_id, "占位角色09", ScriptSkillRecord.Source.TRAINING, "占位教官乙", 20.0)
 	var m2 := ScriptSkillManager.new()
 	m2.from_dict(m.to_dict())
 	_runner.assert_true(m2.knows("占位角色09", skill_id), "round-trip 习得态")
 	_runner.assert_equal(m2.get_records().size(), 1, "round-trip 记录数")
 	var g2: ScriptSkillRecord = m2.get_records()[0]
-	_runner.assert_equal(g2.teacher_holder_id, "占位师傅乙", "round-trip 师承")
+	_runner.assert_equal(g2.teacher_holder_id, "占位教官乙", "round-trip 谁教的")
 	_runner.assert_equal(g2.learned_at, 20.0, "round-trip 时刻")
 
 

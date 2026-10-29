@@ -1,7 +1,8 @@
 ### 注意事项
 
 - Git写中文提交信息，格式：`类型(模块): 描述`，示例：`feat(combat): 实现基础自动战斗单位AI`
-创始人指出执行错误纠正后先停下对齐再执行：复述理解 + 拟执行动作给创始人过目，确认后才动手；过目内容对应他所纠正/询问的事，不夹带无关项。
+- 创始人指出执行错误纠正后先停下对齐再执行：复述理解 + 拟执行动作给创始人过目，确认后才动手；过目内容对应他所纠正/询问的事，不夹带无关项。
+- 纠正即模型对齐：创始人纠正认知/建模类错误时，默认连带审计文档与代码注释里的误导源头（带偏措辞、缺失断言）并同批修正——防同一误解在后续会话复发，不止当场改答案。
 - Godot路径：`F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
 - **打正式包前先核导入缓存**：`.import` 参数（如压缩模式）变更后，`--headless --import` 不一定触发重导入，会把 `.godot/imported/` 里的陈旧 ctex 原样打进 pck（实测虚胖到 511M）——改动过压缩参数后须删 `.godot/imported/`（可连带 `.godot/exported/`）再 `--import` 重建，打出的包才真实。
 - 主动沟通：当任务描述不清晰或与架构原则冲突时，积极主动提问，不做危险假设。但可从系统一致性推导的实现细节（如某系统接入另一系统的方式、宏观涌现类机制的节奏）**不问创始人**——自行推导并落档；只把真正需要创始人定方向、定了会改做法的分歧拿出来问。
@@ -95,7 +96,7 @@
 1. **文件夹结构**：模块一级目录按功能划分（`/modules/`、`/core/`），新功能 = 新模块，互不干扰，保证高可扩展性；模块内二级目录按类型划分（scenes/、scripts/、assets/ 等），找场景去 scenes/、找脚本去 scripts/，保证高速定位。功能定边界、类型定导航，两级结合。
 2. **耦合原则**：模块间通信优先使用 `core/autoload/event_bus.gd` 的全局事件总线，或通过模块的 `api.gd` 定义信号。不要跨模块 `get_node` 或引用非 API 内部方法。
 3. **接口契约**：模块对外交互须通过其根目录下的 `api.gd` 文件。
-4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（items/ui_global/fx/texture_gen/building_gen/environment/hd2d/stick_rig）→ L2 玩法（combat/formation/tactics/units/construction/organization/resources/inventory/player_control/world_map/debug_gui/town_life/logistics/skill/achievement/blueprint）→ L3 组装（world 唯一 composition root）。stick_rig = 火柴人唯一视觉骨架（L1），tactics = 目标选择/战术号令共享词汇（L2，零出向）；items 为物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer，零出向），inventory 为其玩家侧消费者；logistics/skill/achievement/blueprint 四模块为程序先行骨架占位（零出向、零装配、内容待策划，见各模块 api.gd 头注）；organization 内含槽位板子域（scripts/slots/，组织即制度的挂点）。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
+4. **依赖分层**：只允许高层依赖低层——L0 `core/` → L1 基础设施（items/ui_global/fx/texture_gen/building_gen/environment/hd2d/stick_rig）→ L2 玩法（combat/formation/tactics/units/construction/organization/resources/inventory/player_control/world_map/debug_gui/town_life/logistics/skill/achievement/blueprint）→ L3 组装（world 唯一 composition root）。stick_rig = 火柴人唯一视觉骨架（L1），tactics = 目标选择/战术号令共享词汇（L2，零出向）；items 为物品域 L1（ItemDef/ItemContainer 列表制/ItemTransfer，零出向），inventory 为其玩家侧消费者；logistics/achievement/blueprint 三模块为程序先行骨架占位（零出向、零装配、内容待策划，见各模块 api.gd 头注）；skill 台账已有生产消费（组织明面前提 + 训练写入，装配步 priming）；organization 内含槽位板子域（scripts/slots/，组织即制度的挂点）。改动跨模块结构后跑 `python tools/audit_deps.py` 自检（零依赖环；跨模块 preload 仅限 api.gd 或行内 `audit-exempt` 标记+理由）。架构收敛工作项（AR 系列）见 `docs/项目/待办事项.md`。
 5. **新代码落点约定**：模块内单文件分四角色——**编排根/宿主**（状态字典+信号+公共 API+节拍编排，不新增成块逻辑，新域只落状态字段+API 壳）/ **子域助手**（`scripts/<域>/` 目录或 `<host>_<域>.gd`，RefCounted 持宿主回引，或状态自持组件）/ **纯算法** static 库 / **开发工装**（只准 `tools/dev/` 与 `tests/dev/`）。操作判据：单文件一次新增逻辑预计超约 100 行且功能域可命名 → 当场落子域助手文件，与功能同批提交，不等审计点名（行数棘轮 `python tools/file_size_ratchet.py` 拦 ≥400 新文件与在册增行）。
 
 **解耦核心策略**：

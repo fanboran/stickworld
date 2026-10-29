@@ -1,16 +1,19 @@
 class_name OrgSlotSystem
 extends RefCounted
-## 组织槽位系统的进程级门面 —— 槽位板单例 + 存档行（骨架占位）。
+## 组织槽位系统的进程级门面 —— 槽位板单例 + 存档行 + 明面前提接线。
 ##
-## 实现在 OrgSlotBoard（01-组织系统 §2.4 纯机制，见其类头）；骨架期消费方仅
-## 单测与灰盒验收台，直接经本类 class_name 访问——接入 organization/api.gd
-## 公共面随内容批次落（该文件受行数棘轮约束，本批零增行）。
+## 实现在 OrgSlotBoard（01-组织系统 §2.4 纯机制，见其类头）；本门面在纯机制之上
+## 接两件事：
+##   - 明面前提（01 §2.5，OrgPrereqs）：add_slot / assign_institution 先过校验，
+##     表里没定义的职能无门槛（特例制）——机构塞槽按机构自身在编人员校验；
+##   - 组织生命周期：api 层解散/删层成功后调 on_org_removed，槽位随组织清理。
 ## 存档：自订阅 game_saving/game_loaded 直写 world_state 模块行 'org_slots'
 ## （inventory/WorldState 同款契约；无行 = 旧档空态）。
+## 装配：system_setup 组织系统步每局 reset_for_new_run + instance（消跨局残留）。
 
 ## static var 生命周期（原型转正门槛③）：进程级单例（ItemDB 同模式）——运行态
-## 只有槽位板；读档经 game_loaded 回调重置、新开局经 reset_for_new_run 重置
-## （新游戏流程的接线随内容批次落）。存档事件在单例首建时挂接，reset 对称摘除。
+## 只有槽位板；读档经 game_loaded 回调重置、新开局经装配步 reset_for_new_run 重置。
+## 存档事件在单例首建时挂接，reset 对称摘除。
 static var _board: OrgSlotBoard = null
 
 
@@ -34,7 +37,15 @@ static func reset_for_new_run() -> void:
 		_board = null
 
 
+## 明面前提查询（面板逐条 ✓/✗ 展示用，不做拦截）。
+static func check_prereqs(org_id: String, function_name: String) -> Dictionary:
+	return OrgPrereqs.check(org_id, function_name)
+
+
 static func add_slot(org_id: String, function_name: String) -> Dictionary:
+	var gate := OrgPrereqs.check(org_id, function_name)
+	if not gate.get("ok", false):
+		return gate
 	return instance().add_slot(org_id, function_name)
 
 
@@ -50,8 +61,12 @@ static func unassign_person(org_id: String, function_name: String, holder_id: St
 	return instance().unassign_person(org_id, function_name, holder_id)
 
 
+## 机构塞槽（01 §2.4 组织嵌套）：明面前提按**机构自身**在编人员校验。
 static func assign_institution(org_id: String, function_name: String,
 		institution_org_id: String) -> Dictionary:
+	var gate := OrgPrereqs.check(institution_org_id, function_name)
+	if not gate.get("ok", false):
+		return gate
 	return instance().assign_institution(org_id, function_name, institution_org_id)
 
 
@@ -69,6 +84,12 @@ static func active_functions(org_id: String) -> Array:
 
 static func get_slots(org_id: String) -> Array:
 	return instance().get_slots(org_id)
+
+
+## 组织消失（api 层解散/删层成功后调）：槽位与全板机构引用随之清理。
+static func on_org_removed(org_id: String) -> void:
+	if _board != null:
+		_board.on_org_removed(org_id)
 
 
 static func get_save_data() -> Dictionary:

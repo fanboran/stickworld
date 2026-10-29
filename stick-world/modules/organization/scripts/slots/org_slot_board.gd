@@ -150,6 +150,20 @@ func get_slots(org_id: String) -> Array:
 	return out
 
 
+# ─────────────────────────── 组织生命周期联动 ────────────────────────────
+
+## 组织消失（api 层解散/删层成功后调）：清该组织全部槽位，并全板剪除指向它的
+## 机构引用——别家槽里塞着它的，机构没了 = 那个槽位空置；逐槽发 slot_deactivated。
+func on_org_removed(org_id: String) -> void:
+	if _orgs.has(org_id):
+		for function_name: String in _orgs[org_id].keys().duplicate():
+			remove_slot(org_id, function_name)
+	for host_id: String in _orgs.keys():
+		for function_name: String in _orgs[host_id].keys().duplicate():
+			if String(_orgs[host_id][function_name]["institution"]) == org_id:
+				unassign_institution(host_id, function_name)
+
+
 # ─────────────────────────── 存档 round-trip ────────────────────────────
 
 func to_dict() -> Dictionary:

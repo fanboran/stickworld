@@ -144,7 +144,7 @@
     </details>
     <details id="late"><summary>后期组织（低存在感）</summary>
       <button data-org="科研院" data-fn="科研" class="ghost">+ 科研院 <span class="cost">木板×10 · 需在编有人会占位组织技能</span></button>
-      <button data-org="常备军" data-fn="训练" class="ghost">+ 常备军 <span class="cost">食物×50 · 训练职能</span></button>
+      <button data-org="常备军" data-fn="军事" class="ghost">+ 常备军 <span class="cost">食物×50 · 军事+训练槽</span></button>
       <button data-org="训练营" data-fn="训练" class="ghost">+ 训练营 <span class="cost">原木×15</span></button>
     </details>
     <h3>建筑（建造队施工）</h3>
@@ -197,12 +197,14 @@ const QUICK = [
 ];
 const MOREFNS = ["采集", "搬运", "施工", "锯木", "烧砖", "冶炼", "锻造", "装配", "熬制", "行政", "军事", "训练"];
 // 市政厅固定职能槽板（空槽也画——空槽=该职能未运转；下辖即嵌套：组织入驻对应槽）
-const HALL_SLOT_KEYS = ["军事", "行政", "采集", "搬运", "施工", "制造", "训练", "科研"];
-const HALL_NEST = {   // 组织首槽 → 入驻市政厅哪个槽
+const HALL_SLOT_KEYS = ["军事", "行政", "采集", "搬运", "施工", "制造", "科研"];
+const HALL_NEST = {   // 组织首槽 → 入驻哪个槽（训练类入驻市政厅「军事」槽——训练是军事组织下辖的槽）
   "采集": "采集", "搬运": "搬运", "施工": "施工",
   "锯木": "制造", "烧砖": "制造", "冶炼": "制造", "锻造": "制造", "装配": "制造", "熬制": "制造",
-  "训练": "训练", "科研": "科研",
+  "训练": "军事", "军事": "军事", "科研": "科研",
 };
+// 组织模板的槽板（多槽模板：常备军＝军事组织，训练是其下辖槽）
+const ORG_SLOTS = { "常备军": ["军事", "训练"], "训练营": ["训练"] };
 const BUILDS = [
   { b: "仓库",  cost: { "原木": 20, "石料": 10 }, work: 30 },
   { b: "训练营", cost: { "原木": 15, "木板": 5 },  work: 24 },
@@ -297,16 +299,25 @@ function createOrg(name, fn) {
     pay(cost.res);
   }
   const o = addOrgRaw(name, 2, "");
-  o.slots[fn] = { persons: [], institution: "", site: Object.keys(SITES)[0] };
-  // 下辖即嵌套：新组织整体入驻市政厅对应职能槽
+  for (const key of (ORG_SLOTS[name] || [fn]))
+    o.slots[key] = { persons: [], institution: "", site: Object.keys(SITES)[0] };
+  // 下辖即嵌套：入驻对应职能槽；槽已被军事组织占着且对方有同名空槽 → 深一层入驻其槽
+  //（训练类组织入驻常备军的「训练」槽——训练是军事组织下辖的槽）
   const hall = S.orgs.o01;
   const hostKey = HALL_NEST[fn];
-  if (hostKey && hall && hall.slots[hostKey] && !hall.slots[hostKey].institution) {
-    hall.slots[hostKey].institution = o.id;
-    feed(`组建 ${o.name}，整体入驻市政厅「${hostKey}」槽（下辖即嵌套）`, "good");
-  } else {
-    feed(`组建 ${o.name}（市政厅「${hostKey || "?"}」槽已有机构——可经槽面板换入驻）`, hostKey ? "bad" : "good");
+  let placed = false;
+  if (hostKey && hall && hall.slots[hostKey]) {
+    const occupant = hall.slots[hostKey].institution ? S.orgs[hall.slots[hostKey].institution] : null;
+    if (!occupant) {
+      hall.slots[hostKey].institution = o.id; placed = true;
+      feed(`组建 ${o.name}，整体入驻市政厅「${hostKey}」槽（下辖即嵌套）`, "good");
+    } else if (occupant.slots[fn] && !occupant.slots[fn].institution) {
+      occupant.slots[fn].institution = o.id; placed = true;
+      feed(`组建 ${o.name}，整体入驻 ${occupant.name} 的「${fn}」槽（${hostKey}职能下沉到军事组织内）`, "good");
+    }
   }
+  if (!placed)
+    feed(`组建 ${o.name}（目标槽已被占——可经槽面板手动入驻/换入驻）`, "bad");
   S.sel = o.id; S.selSlot = null;
   renderAll();
 }

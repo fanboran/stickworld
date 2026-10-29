@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>组织系统数值模拟台</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 14px; background: #16181d; color: #d8dce4;
+         font: 14px/1.5 system-ui, "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: #8b93a3; font-size: 12px; margin-bottom: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .cols { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .col { flex: 1 1 150px; min-width: 150px; background: #1d2027; border: 1px solid #2b2f3a;
+         border-radius: 8px; padding: 8px; }
+  .col h2 { font-size: 13px; margin: 0 0 8px; color: #a8b3c7; }
+  button { background: #2b3ba0; color: #fff; border: 0; border-radius: 6px; padding: 5px 9px;
+           margin: 2px 2px; font-size: 12px; cursor: pointer; width: 100%; text-align: left; }
+  button:hover { background: #3a4cc4; }
+  button.on { background: #1f7a4d; }
+  .knob { display: inline-flex; align-items: center; gap: 4px; background: #1d2027;
+          border: 1px solid #2b2f3a; border-radius: 6px; padding: 2px 6px; font-size: 12px; }
+  .knob input { width: 52px; background: #12141a; color: #d8dce4; border: 1px solid #2b2f3a;
+                border-radius: 4px; padding: 2px 4px; font-size: 12px; }
+  #clock { margin-left: auto; font-variant-numeric: tabular-nums; color: #a8b3c7; }
+  .panel { background: #12141a; border: 1px solid #2b2f3a; border-radius: 8px; padding: 8px;
+           overflow: auto; font: 12px/1.45 Consolas, monospace; white-space: pre-wrap; }
+  #status { height: 34vh; margin-bottom: 8px; }
+  #log { height: 16vh; color: #9aa5b8; }
+</style>
+</head>
+<body>
+<h1>组织系统数值模拟台 —— 组织本位可行性研究（网页对齐版）</h1>
+<div class="sub">机制口径与 Godot 侧一致（01 §2.4/§2.5、04 §三、17 §二）——本台为设计对齐草稿，参数随便拧、定稿后回铸 modules/organization；正片机制锚见 tests/dev/org_sim_panel.tscn。按 ①→⑤ 顺序点，再开 10×/100× 观演。</div>
+
+<div class="row" id="knobs">
+  <span class="knob">基础速率/时 <input id="kBaseRate" type="number" step="1" value="10"></span>
+  <span class="knob">递减系数/点 <input id="kDiminish" type="number" step="0.01" value="0.08"></span>
+  <span class="knob">满额进度 <input id="kCap" type="number" step="10" value="100"></span>
+  <span class="knob">速率下限 <input id="kMinMod" type="number" step="0.05" value="0.2"></span>
+  <span class="knob">层级窗口 <input id="kTierWin" type="number" step="1" value="1"></span>
+</div>
+
+<div class="row">
+  <button id="btnPause" class="on" style="width:auto">⏸ 暂停</button>
+  <button id="btnX1" style="width:auto">1×</button>
+  <button id="btnX10" style="width:auto">10×</button>
+  <button id="btnX100" style="width:auto">100×</button>
+  <button id="btnReset" style="width:auto;background:#7a2b2b">重开一局</button>
+  <span id="clock">模拟时钟 0.0 游戏小时（暂停）</span>
+</div>
+
+<div class="cols">
+  <div class="col"><h2>① 人口（属性 0~10）</h2>
+    <button id="btnPerson">+ 村民（随机属性）</button>
+    <button id="btnExpert">+ 行家（自带占位组织技能）</button>
+  </div>
+  <div class="col"><h2>② 建筑（隐形前提）</h2>
+    <button id="btnBuild">+ 盖训练营</button>
+    <button id="btnRaze">- 拆训练营</button>
+  </div>
+  <div class="col"><h2>③ 组织（编制·层级）</h2>
+    <button id="btnOrgTrainer">建 训练组织（L2，收1在编）</button>
+    <button id="btnOrgArmy">建 步兵排（L3，收全部待业）</button>
+    <button id="btnOrgFar">建 远征营（L4，收全部待业）</button>
+    <button id="btnDisband">解散 末建组织（人员回池）</button>
+  </div>
+  <div class="col"><h2>④ 职能槽（明面前提）</h2>
+    <button id="btnSlotTrain">训练组织开「训练」槽</button>
+    <button id="btnSlotResearch">开「科研」槽（明面:有人会）</button>
+    <button id="btnTeacherIn">在编第1人入「训练」槽(教官)</button>
+    <button id="btnPrereqPeek">查「科研」前提逐条✓/✗</button>
+  </div>
+  <div class="col"><h2>⑤ 训练（组织对组织）</h2>
+    <button id="btnArrStr">安排：步兵排练力量(str)</button>
+    <button id="btnArrSkill">安排：教占位使用技能</button>
+    <button id="btnArrFar">安排：远征营练力量（层级演示）</button>
+    <button id="btnArrCancel">- 取消末安排</button>
+  </div>
+</div>
+
+<div class="panel" id="status"></div>
+<div class="panel" id="log"></div>
+
+<script>
+"use strict";
+// ── 常量与占位内容（与 Godot 侧 function_prereqs.tres / skills.tres 同口径） ──
+const TRAIN_FN = "训练", RESEARCH_FN = "科研";
+const SKILL_ORG = "placeholder_skill_org_01", SKILL_USE = "placeholder_skill_use_01";
+const SKILL_NAMES = { [SKILL_ORG]: "占位组织技能01", [SKILL_USE]: "占位使用技能01" };
+const ATTR_KEYS = ["str", "int", "agi", "cft", "cmd"];
+const ATTR_NAMES = { str: "力量", int: "智力", agi: "敏捷", cft: "工艺", cmd: "指挥" };
+// 明面前提表（特例制：没定义的职能无门槛；占位行=正片同款）
+const PREREQS = {
+  [RESEARCH_FN]: [ { kind: "skill", skillId: SKILL_ORG } ],
+  "参谋":        [ { kind: "attribute", attr: "cmd", min: 3 } ],
+};
+const FUNCTION_BUILDINGS = { [TRAIN_FN]: "训练营" };  // 未映射职能无建筑要求
+
+// ── 状态（一局） ──
+let S;
+function reset() {
+  S = {
+    people: [], orgs: {}, buildings: { "训练营": 0 },
+    arrangements: [], hours: 0, speed: 0,
+    personSeq: 0, orgSeq: 0,
+    trainerId: "", armyId: "", farId: "",
+  };
+}
+reset();
+
+const $ = id => document.getElementById(id);
+const knob = () => ({
+  baseRate: Math.max(0.1, parseFloat($("kBaseRate").value) || 10),
+  diminish: Math.max(0, parseFloat($("kDiminish").value) || 0),
+  cap: Math.max(1, parseFloat($("kCap").value) || 100),
+  minMod: Math.max(0.05, parseFloat($("kMinMod").value) || 0.2),
+  tierWin: Math.max(0, parseInt($("kTierWin").value, 10) || 0),
+});
+const person = pid => S.people.find(p => p.id === pid);
+const idleIds = () => S.people.filter(p => !p.org).map(p => p.id);
+const knows = (pid, sid) => { const p = person(pid); return !!p && p.skills.includes(sid); };
+
+function log(text) {
+  const el = $("log");
+  el.textContent += text + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── ① 人口 ──
+function rollAttrs() { const a = {}; for (const k of ATTR_KEYS) a[k] = Math.floor(Math.random() * 11); return a; }
+function addPerson(expert) {
+  S.personSeq += 1;
+  const p = { id: "sim_p" + String(S.personSeq).padStart(2, "0"),
+              name: (expert ? "行家" : "村民") + String(S.personSeq).padStart(2, "0"),
+              attrs: rollAttrs(), org: "", skills: [] };
+  S.people.push(p);
+  if (expert) { p.skills.push(SKILL_ORG); log(`[人口] +${p.name}（自带 ${SKILL_NAMES[SKILL_ORG]}）`); }
+  refresh();
+}
+$("btnPerson").onclick = () => addPerson(false);
+$("btnExpert").onclick = () => addPerson(true);
+
+// ── ② 建筑 ──
+$("btnBuild").onclick = () => { S.buildings["训练营"] += 1; log("[建筑] +训练营（训练职能的隐形前提：在场才运转）"); refresh(); };
+$("btnRaze").onclick = () => { S.buildings["训练营"] = Math.max(0, S.buildings["训练营"] - 1);
+  log(`[建筑] -训练营（在场 ${S.buildings["训练营"]} → 训练将停摆，进度不丢）`); refresh(); };
+
+// ── ③ 组织 ──
+function makeOrg(tier, label, slotName, take) {
+  const idle = idleIds();
+  if (!idle.length) { log("[组织] 无待业人口，先 ① 加人"); return; }
+  S.orgSeq += 1;
+  const id = (tier === 2 ? "sim_trainer" : "sim_army") + String(S.orgSeq).padStart(2, "0");
+  S.orgs[id] = { name: `${label}${String(S.orgSeq).padStart(2, "0")}(L${tier})`, tier,
+                 personnel: idle.slice(0, take === 1 ? 1 : idle.length), slots: {} };
+  for (const pid of S.orgs[id].personnel) person(pid).org = id;
+  S[slotName] = id;
+  log(`[组织] 建${label} L${tier}（${id} 收编 ${S.orgs[id].personnel.length} 人）`);
+  refresh();
+}
+$("btnOrgTrainer").onclick = () => makeOrg(2, "训练组织", "trainerId", 1);
+$("btnOrgArmy").onclick = () => makeOrg(3, "步兵排", "armyId", 0);
+$("btnOrgFar").onclick = () => makeOrg(4, "远征营", "farId", 0);
+$("btnDisband").onclick = () => {
+  const ids = Object.keys(S.orgs);
+  if (!ids.length) return;
+  const id = ids[ids.length - 1];
+  for (const pid of S.orgs[id].personnel) person(pid).org = "";
+  delete S.orgs[id];
+  S.arrangements = S.arrangements.filter(a => a.trainerOrg !== id && a.traineeOrg !== id);
+  for (const k of ["trainerId", "armyId", "farId"]) if (S[k] === id) S[k] = "";
+  log(`[组织] 解散 ${id}（人员回池；正片侧槽位与机构引用随 api 自动清理）`);
+  refresh();
+};
+
+// ── ④ 职能槽（明面前提） ──
+function prereqCheck(orgId, fn) {
+  const conds = PREREQS[fn] || [];
+  if (!conds.length) return { ok: true, results: [] };
+  const org = S.orgs[orgId];
+  const results = conds.map(c => {
+    if (c.kind === "skill") {
+      const passed = org.personnel.some(pid => knows(pid, c.skillId));
+      return { label: `在编有人会 ${SKILL_NAMES[c.skillId] || c.skillId}`, passed };
+    }
+    const passed = org.personnel.some(pid => (person(pid).attrs[c.attr] || 0) >= c.min);
+    return { label: `在编有人 ${ATTR_NAMES[c.attr] || c.attr} ≥ ${c.min}`, passed };
+  });
+  const failed = results.filter(r => !r.passed);
+  return { ok: failed.length === 0, results,
+           error: failed.length ? `明面前提未满足：${fn}（${failed.map(f => f.label).join("；")}）` : "" };
+}
+function addSlot(orgId, fn) {
+  const org = S.orgs[orgId];
+  if (!org) { log("[槽位] 先建组织"); return; }
+  if (org.slots[fn]) { log(`[槽位] ✗ 「${fn}」槽已存在`); return; }
+  const gate = prereqCheck(orgId, fn);
+  if (!gate.ok) { log(`[槽位] ✗ 开「${fn}」槽 → ${gate.error}`); refresh(); return; }
+  org.slots[fn] = { persons: [] };
+  log(`[槽位] ✓ 开「${fn}」槽${PREREQS[fn] ? "（明面前提已过）" : "（未标注职能无明面前提）"}`);
+  refresh();
+}
+$("btnSlotTrain").onclick = () => { if (requireTrainer()) addSlot(S.trainerId, TRAIN_FN); };
+$("btnSlotResearch").onclick = () => { if (requireTrainer()) addSlot(S.trainerId, RESEARCH_FN); };
+$("btnTeacherIn").onclick = () => {
+  if (!requireTrainer()) return;
+  const org = S.orgs[S.trainerId];
+  if (!org.slots[TRAIN_FN]) { log(`[槽位] 先开「${TRAIN_FN}」槽`); return; }
+  if (!org.personnel.length) { log("[槽位] 组织无在编"); return; }
+  const slot = org.slots[TRAIN_FN];
+  const pid = org.personnel[0];
+  if (slot.persons.includes(pid)) { log("[槽位] 该员已在槽"); return; }
+  slot.persons.push(pid);
+  log(`[槽位] 教官 ${person(pid).name} 入「${TRAIN_FN}」槽 → 槽激活`);
+  refresh();
+};
+$("btnPrereqPeek").onclick = () => {
+  if (!requireTrainer()) return;
+  const r = prereqCheck(S.trainerId, RESEARCH_FN);
+  if (!r.results.length) { log(`[前提] 「${RESEARCH_FN}」无明面前提行（特例制：没标注=无门槛）`); return; }
+  for (const row of r.results) log(`[前提] ${row.passed ? "✓" : "✗"} ${row.label}（${S.trainerId}）`);
+};
+function requireTrainer() {
+  if (!S.trainerId) { log("[槽位] 先建训练组织"); return false; }
+  return true;
+}
+
+// ── ⑤ 训练（组织对组织） ──
+function addArrangement(targetOrgId, kind, targetId) {
+  if (!S.trainerId || !targetOrgId) { log("[训练] 先建训练组织与目标编制组织（受训方要整建制在场）"); return; }
+  const k = knob();
+  const trainer = S.orgs[S.trainerId], trainee = S.orgs[targetOrgId];
+  if (trainee.tier > trainer.tier + k.tierWin) {
+    log(`[训练] ✗ 层级超出：L${trainer.tier} 训练组织至多训 L${trainer.tier + k.tierWin} 编制（受训 L${trainee.tier}）`); refresh(); return;
+  }
+  const slot = trainer.slots[TRAIN_FN];
+  if (!slot) { log(`[训练] ✗ 训练组织无「${TRAIN_FN}」槽`); return; }
+  if (!slot.persons.length) { log(`[训练] ✗ 职能槽无人（教官缺位）`); return; }
+  let teacher = "";
+  if (kind === "skill") {
+    teacher = slot.persons.find(pid => knows(pid, targetId)) || "";
+    if (!teacher) { log(`[训练] ✗ 槽上教官无人会 ${SKILL_NAMES[targetId] || targetId}，无从施训`); return; }
+  }
+  if (!trainee.personnel.length) { log("[训练] ✗ 受训组织无在编人员"); return; }
+  const dup = S.arrangements.find(a => a.trainerOrg === S.trainerId && a.traineeOrg === targetOrgId && a.targetId === targetId);
+  if (dup) { log("[训练] ✗ 该安排已存在"); return; }
+  S.arrangements.push({ id: "tp" + String(S.arrangements.length + 1).padStart(3, "0"),
+                        trainerOrg: S.trainerId, fn: TRAIN_FN, traineeOrg: targetOrgId,
+                        targetKind: kind, targetId, teacherId: teacher, progress: {} });
+  log(`[训练] ✓ 安排 ${trainee.name} ← ${trainer.name}（${kind === "attribute" ? ATTR_NAMES[targetId] : SKILL_NAMES[targetId]}）`);
+  refresh();
+}
+$("btnArrStr").onclick = () => addArrangement(S.armyId, "attribute", "str");
+$("btnArrSkill").onclick = () => addArrangement(S.armyId, "skill", SKILL_USE);
+$("btnArrFar").onclick = () => addArrangement(S.farId, "attribute", "str");
+$("btnArrCancel").onclick = () => {
+  if (!S.arrangements.length) return;
+  const a = S.arrangements.pop();
+  log(`[训练] -安排 ${a.id}`);
+  refresh();
+};
+
+// ── 推进（与 Godot TrainingPost.advance 同构） ──
+function buildingOk(fn) {
+  const b = FUNCTION_BUILDINGS[fn];
+  return !b || S.buildings[b] > 0;
+}
+function advance(dt) {
+  const k = knob();
+  for (const a of [...S.arrangements]) {
+    const trainer = S.orgs[a.trainerOrg];
+    if (!trainer) { cancel(a, "训练组织已不存在"); continue; }
+    const trainee = S.orgs[a.traineeOrg];
+    if (!trainee) { cancel(a, "受训组织已不存在"); continue; }
+    const slot = trainer.slots[a.fn];
+    const active = slot && slot.persons.length > 0;      // 槽激活
+    if (!active || !buildingOk(a.fn)) continue;          // 隐形前提：停摆不报错、进度保留
+    for (const pid of [...trainee.personnel]) {
+      const p = person(pid);
+      if (!p) continue;
+      if (a.targetKind === "skill") {
+        if (p.skills.includes(a.targetId)) { delete a.progress[pid]; continue; }  // 先满者留批
+        let prog = (a.progress[pid] || 0) + k.baseRate * dt;
+        while (prog >= k.cap) {
+          p.skills.push(a.targetId);
+          log(`[完成] ${p.name} 习得 ${SKILL_NAMES[a.targetId] || a.targetId}（教学教官已记）`);
+          delete a.progress[pid]; prog = -1; break;
+        }
+        if (prog >= 0) a.progress[pid] = prog;
+      } else {
+        let v = p.attrs[a.targetId] || 0;
+        if (v >= 10) { delete a.progress[pid]; continue; }
+        const rate = k.baseRate * Math.max(1 - v * k.diminish, k.minMod);  // 越高越难涨
+        let prog = (a.progress[pid] || 0) + rate * dt;
+        while (prog >= k.cap) {
+          v = Math.min(10, v + 1);
+          p.attrs[a.targetId] = v;
+          log(`[完成] ${p.name} 练成 ${ATTR_NAMES[a.targetId]} → ${v}`);
+          prog -= k.cap;
+          if (v >= 10) { prog = -1; break; }
+        }
+        if (prog >= 0) a.progress[pid] = prog; else delete a.progress[pid];
+      }
+    }
+  }
+}
+function cancel(a, reason) {
+  S.arrangements = S.arrangements.filter(x => x !== a);
+  log(`[取消] ${reason}`);
+}
+
+// ── 时间 ──
+function setSpeed(v, label) {
+  S.speed = v;
+  for (const [id, val] of [["btnPause", 0], ["btnX1", 1], ["btnX10", 10], ["btnX100", 100]])
+    $(id).classList.toggle("on", S.speed === val);
+  log(`[时间] ${label}`);
+  refresh();
+}
+$("btnPause").onclick = () => setSpeed(0, "暂停");
+$("btnX1").onclick = () => setSpeed(1, "1×");
+$("btnX10").onclick = () => setSpeed(10, "10×");
+$("btnX100").onclick = () => setSpeed(100, "100×");
+$("btnReset").onclick = () => { reset(); $("log").textContent = ""; log("[重开] 新的一局"); refresh(); };
+setInterval(() => {
+  if (S.speed > 0) { const dt = 0.1 * S.speed; S.hours += dt; advance(dt); refresh(); }
+}, 100);
+
+// ── 状态面板 ──
+function bar(v, cap) {
+  const filled = Math.min(10, Math.floor(v / cap * 10));
+  return "▓".repeat(filled) + "░".repeat(10 - filled) + ` ${v.toFixed(0)}/${cap}`;
+}
+function refresh() {
+  $("clock").textContent = `模拟时钟 ${S.hours.toFixed(1)} 游戏小时（${S.speed === 0 ? "暂停" : S.speed + "×"}）`;
+  const k = knob();
+  let sb = `── 人口（${S.people.length} 人在册 / ${idleIds().length} 待业）── 建筑：训练营×${S.buildings["训练营"]}`
+         + ` ── 参数：速率${k.baseRate}/时 递减${k.diminish}/点 满额${k.cap} 下限×${k.minMod} 层级窗口+${k.tierWin}\n`;
+  for (const p of S.people) {
+    const a = p.attrs;
+    sb += `  ${p.name} [${p.org ? p.org : "待业"}] 力${a.str} 智${a.int} 敏${a.agi} 工${a.cft} 指${a.cmd}`
+        + `${p.skills.length ? " 会:" + p.skills.map(s => SKILL_NAMES[s] || s).join(",") : ""}\n`;
+  }
+  sb += "── 组织 ──\n";
+  if (!Object.keys(S.orgs).length) sb += "  （无）\n";
+  for (const [id, o] of Object.entries(S.orgs)) {
+    sb += `  ${id} ${o.name}（在编 ${o.personnel.length}）\n`;
+    for (const [fn, slot] of Object.entries(o.slots))
+      sb += `    槽「${fn}」 ${slot.persons.length ? "●运转" : "○空转"} 教官${slot.persons.length}\n`;
+  }
+  sb += "── 训练安排 ──\n";
+  if (!S.arrangements.length) sb += "  （无——训练组织←受训组织整建制受训）\n";
+  for (const a of S.arrangements) {
+    const trainer = S.orgs[a.trainerOrg], trainee = S.orgs[a.traineeOrg];
+    const slot = trainer && trainer.slots[a.fn];
+    const active = slot && slot.persons.length > 0;
+    const running = active && buildingOk(a.fn);
+    sb += `  ${a.id} ${trainee ? trainee.name : "?"} 练${a.targetKind === "attribute" ? ATTR_NAMES[a.targetId] : SKILL_NAMES[a.targetId]}`
+        + ` ← ${trainer ? trainer.name : "?"}  ${running ? "运转中" : "停摆（" + (active ? "缺建筑" : "教官不在槽") + "）"}\n`;
+    for (const pid of (trainee ? trainee.personnel : [])) {
+      const p = person(pid);
+      sb += `    ${p ? p.name : pid} ${a.progress[pid] !== undefined ? bar(a.progress[pid], k.cap) : "已训成（留批）"}\n`;
+    }
+  }
+  $("status").textContent = sb;
+}
+refresh();
+</script>
+</body>
+</html>

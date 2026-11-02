@@ -18,52 +18,16 @@ function depthOf(id) {
   return d;
 }
 
-/* ── 树形垂直布局：叶子按序铺开、父节点在子块垂直居中（连线不重合，首卡自然下移） ── */
-const cardH = o => 34 + Object.keys(o.slots).length * 24;
-const layoutY = computed(() => {
-  const kids = {};
-  for (const o of Object.values(S.orgs))
-    kids[o.id] = Object.values(o.slots).map(s => s.institution).filter(x => x && S.orgs[x]);
-  const y = {}; let cursor = 0; const seen = new Set();
-  const place = id => {
-    if (seen.has(id)) return y[id] ?? 0;
-    seen.add(id);
-    const ks = kids[id];
-    if (!ks.length) { y[id] = cursor; cursor += cardH(S.orgs[id]) + 12; return y[id]; }
-    const ys = ks.map(place);
-    // 父卡对准首个入驻槽的行位（市政厅自然下移到生产槽附近，连线就近不交叉）；
-    // 父卡与子树分属不同列，允许垂直重叠，不受游标钳制
-    const firstSlotIdx = Object.values(S.orgs[id].slots)
-      .findIndex(s => s.institution && S.orgs[s.institution]);
-    y[id] = Math.max(ys[0] - Math.max(0, firstSlotIdx) * 24, 0);
-    cursor = Math.max(cursor, y[id] + cardH(S.orgs[id]) + 12);
-    return y[id];
-  };
-  const root = S.order.find(id => S.orgs[id]?.kind === "hall") || S.order[0];
-  if (root) place(root);
-  for (const id of S.order)
-    if (S.orgs[id] && y[id] === undefined) { y[id] = cursor; cursor += cardH(S.orgs[id]) + 12; }
-  return y;
-});
-const colLayout = computed(() => {
-  const y = layoutY.value;
+/* ── 列＝深度，卡片区紧凑堆叠（重合避让交给连线的竖段轨道错开） ── */
+const columns = computed(() => {
   const byDepth = {};
   for (const id of S.order) {
     if (!S.orgs[id]) continue;
-    (byDepth[depthOf(id)] ||= []).push(id);
+    (byDepth[depthOf(id)] ||= []).push(S.orgs[id]);
   }
   const maxD = Math.max(...Object.keys(byDepth).map(Number));
   const cols = [];
-  for (let d = 0; d <= maxD; d++) {
-    const ids = (byDepth[d] || []).sort((a, b) => y[a] - y[b]);
-    let bottom = 0; const items = [];
-    for (const id of ids) {
-      const top = Math.max(y[id], bottom + (items.length ? 12 : 0));
-      items.push({ org: S.orgs[id], mt: items.length ? top - bottom : top });
-      bottom = top + cardH(S.orgs[id]);
-    }
-    cols.push({ items });
-  }
+  for (let d = 0; d <= maxD; d++) cols.push({ orgs: byDepth[d] || [] });
   return cols;
 });
 
@@ -111,7 +75,7 @@ function drawLines() {
   if (!root || !svg.value) return;
   const c = root.getBoundingClientRect();
   const sx = root.scrollLeft, sy = root.scrollTop;
-  const d = [];
+  const segs = [];
   for (const o of Object.values(S.orgs))
     for (const [fn, slot] of Object.entries(o.slots)) {
       if (!slot.institution || !S.orgs[slot.institution]) continue;
@@ -121,15 +85,29 @@ function drawLines() {
       const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
       const x1 = a.right - c.left + sx, y1 = a.top - c.top + sy + a.height / 2;
       const x2 = b.left - c.left + sx, y2 = b.top - c.top + sy + 14;
-      d.push(`M${x1},${y1} H${x1 + 10} V${y2} H${x2}`);
+      segs.push({ x1, y1, x2, y2, xv: x1 + 10 });
     }
+  // 竖段避让：同一竖直带内 y 区间重叠的线，按轨道前后错开（每轨 7px）
+  const bands = {};
+  for (const s of segs) (bands[Math.round(s.xv / 4)] ||= []).push(s);
+  for (const arr of Object.values(bands)) {
+    arr.sort((p, q) => p.y1 - q.y1 || p.y2 - q.y2);
+    const tracks = [];   // tracks[k]＝第 k 轨当前占用到的 y 末端
+    for (const s of arr) {
+      let k = tracks.findIndex(endY => endY <= s.y1 + 2);
+      if (k === -1) { k = tracks.length; tracks.push(-Infinity); }
+      tracks[k] = Math.max(tracks[k], Math.max(s.y1, s.y2));
+      s.xv = s.xv + k * 7;
+    }
+  }
   svg.value.setAttribute("width", Math.max(root.scrollWidth, c.width));
   svg.value.setAttribute("height", Math.max(root.scrollHeight, c.height));
-  svg.value.innerHTML = d.map(p =>
-    `<path d="${p}" fill="none" stroke="#e359c4" stroke-opacity=".55" stroke-width="1.5"/>`).join("");
+  svg.value.innerHTML = segs.map(s =>
+    `<path d="M${s.x1},${s.y1} H${s.xv} V${s.y2} H${s.x2}" fill="none" stroke="#e359c4" stroke-opacity=".55" stroke-width="1.5"/>`
+  ).join("");
 }
 watch(linesKey, () => nextTick(drawLines), { flush: "post" });
-watch(colLayout, () => nextTick(drawLines), { flush: "post" });
+watch(columns, () => nextTick(drawLines), { flush: "post" });
 onMounted(() => {
   nextTick(drawLines);
   window.addEventListener("resize", drawLines);
@@ -140,23 +118,22 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
 <template>
   <div id="orgCols">
     <svg ref="svg" class="lines"></svg>
-    <div class="ocol" v-for="(col, ci) in colLayout" :key="ci">
-      <div v-for="it in col.items" :key="it.org.id" class="card" :data-org="it.org.id"
-           :style="{ marginTop: it.mt + 'px' }"
-           :class="{ hall: it.org.kind === 'hall', sel: S.sel === it.org.id && !S.selSlot }">
-        <div class="hd" @click="select(it.org.id)">
-          <span>{{ it.org.name }}</span><span class="tier">L{{ it.org.tier }}</span>
-          <span class="sub">{{ it.org.kind === "hall" ? "根节点" :
-            (host[it.org.id] ? "入驻·" + host[it.org.id].fn + "槽" : "未入驻") }}{{ it.org.bldgType
-              ? (it.org.bldg ? " · 驻" + it.org.bldg.b + CIRC[it.org.bldg.idx] : " · 缺" + it.org.bldgType)
-              : "" }} · 在编 {{ membersOf(it.org) }}</span>
-          <button v-if="it.org.kind !== 'hall'" class="del warn" title="解散组织（人员回待业）"
-                  @click.stop="delOrg(it.org.id)">×</button>
+    <div class="ocol" v-for="(col, ci) in columns" :key="ci">
+      <div v-for="o in col.orgs" :key="o.id" class="card" :data-org="o.id"
+           :class="{ hall: o.kind === 'hall', sel: S.sel === o.id && !S.selSlot }">
+        <div class="hd" @click="select(o.id)">
+          <span>{{ o.name }}</span><span class="tier">L{{ o.tier }}</span>
+          <span class="sub">{{ o.kind === "hall" ? "根节点" :
+            (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }}{{ o.bldgType
+              ? (o.bldg ? " · 驻" + o.bldg.b + CIRC[o.bldg.idx] : " · 缺" + o.bldgType)
+              : "" }} · 在编 {{ membersOf(o) }}</span>
+          <button v-if="o.kind !== 'hall'" class="del warn" title="解散组织（人员回待业）"
+                  @click.stop="delOrg(o.id)">×</button>
         </div>
-        <div v-for="(slot, fn) in it.org.slots" :key="fn" class="slotwrap">
-          <div class="srow" :data-slot="it.org.id + '|' + fn"
-               :class="{ locked: isLocked(it.org, slot), sel: S.sel === it.org.id && S.selSlot === fn }"
-               @click="clickSlot(it.org, fn, slot)">
+        <div v-for="(slot, fn) in o.slots" :key="fn" class="slotwrap">
+          <div class="srow" :data-slot="o.id + '|' + fn"
+               :class="{ locked: isLocked(o, slot), sel: S.sel === o.id && S.selSlot === fn }"
+               @click="clickSlot(o, fn, slot)">
             <span class="fn" :class="'p-' + (slot.def.pos || 'run')"
                   :title="POS_NAME[slot.def.pos || 'run'] + '｜' + (slot.def.role || '')">{{ fn }}</span>
             <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slot.def.n }}</span>
@@ -166,41 +143,41 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
             </template>
             <span v-else class="chip empty">空槽</span>
             <!-- 借调动效：目标槽半透明人名+慢速圈 -->
-            <span v-for="(b, i) in borrowsOf(it.org.id).filter(x => x.to === fn)" :key="'g' + i" class="ghostbox">
-              <span>{{ chipName(it.org.slots[b.from]?.persons[0]) }}↦</span><span class="spin"></span>
+            <span v-for="(b, i) in borrowsOf(o.id).filter(x => x.to === fn)" :key="'g' + i" class="ghostbox">
+              <span>{{ chipName(o.slots[b.from]?.persons[0]) }}↦</span><span class="spin"></span>
             </span>
-            <span v-if="slot.def.step !== undefined && it.org.steps[slot.def.step]?.wip" class="wip">
-              {{ it.org.steps[slot.def.step].wip }} {{ (wipOf(it.org)[it.org.steps[slot.def.step].wip] || 0).toFixed(1) }}
+            <span v-if="slot.def.step !== undefined && o.steps[slot.def.step]?.wip" class="wip">
+              {{ o.steps[slot.def.step].wip }} {{ (wipOf(o)[o.steps[slot.def.step].wip] || 0).toFixed(1) }}
             </span>
             <span v-if="slot.persons.length" class="spin"
-                  :class="{ paused: borrowsOf(it.org.id).filter(x => x.from === fn).length >= slot.persons.length }"></span>
-            <span v-if="isLocked(it.org, slot)" class="need">
+                  :class="{ paused: borrowsOf(o.id).filter(x => x.from === fn).length >= slot.persons.length }"></span>
+            <span v-if="isLocked(o, slot)" class="need">
               需{{ slot.def.req.b }}{{ slot.def.req.item ? "·" + slot.def.req.item : "" }}
             </span>
             <span class="par">
               <template v-if="slot.def.terrain">{{ slot.def.terrain }}{{ slot.product ? "·" + slotProduct(slot) : "" }}</template>
-              <template v-else-if="slot.def.step !== undefined && it.org.steps[slot.def.step]">{{ stepDesc(it.org.steps[slot.def.step]) }}</template>
+              <template v-else-if="slot.def.step !== undefined && o.steps[slot.def.step]">{{ stepDesc(o.steps[slot.def.step]) }}</template>
               <template v-else-if="slot.def.role">{{ slot.def.role.slice(0, 14) }}</template>
             </span>
           </div>
           <!-- 槽位操作内联：构筑子组织（递归）/ 派人 / 选产物 -->
-          <div v-if="opsOpen(it.org, fn, slot)" class="sops" @click.stop>
+          <div v-if="opsOpen(o, fn, slot)" class="sops" @click.stop>
             <template v-if="emptySlot(slot) && slotCandidates(fn).length">
               <span class="ohint b">构筑：</span>
               <button v-for="name in slotCandidates(fn)" :key="name" class="cbtn"
                       :class="{ late: ORGS[name].late }" :disabled="!!createBlocked(name)"
                       :title="candTitle(name)"
-                      @click="createOrgAt(it.org.id, fn, name)">＋{{ name }}<i v-if="ORGS[name].late">后期</i></button>
+                      @click="createOrgAt(o.id, fn, name)">＋{{ name }}<i v-if="ORGS[name].late">后期</i></button>
             </template>
             <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slot.def.n">
               <option value="">{{ slot.def.homog && slot.persons.length >= slot.def.n ? "坑位已满" : "待业人员…" }}</option>
               <option v-for="p in idle()" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
-            <button :disabled="!pickPerson" @click="putPerson(it.org.id, fn, pickPerson); pickPerson = ''">派入</button>
-            <button v-if="slot.persons.length" @click="pullPersons(it.org.id, fn)">撤出全部</button>
+            <button :disabled="!pickPerson" @click="putPerson(o.id, fn, pickPerson); pickPerson = ''">派入</button>
+            <button v-if="slot.persons.length" @click="pullPersons(o.id, fn)">撤出全部</button>
             <select v-if="TERRAIN[slot.def.terrain] && TERRAIN[slot.def.terrain].products.length > 1"
                     :value="slotProduct(slot)" title="选产物"
-                    @change="setProduct(it.org.id, fn, $event.target.value)">
+                    @change="setProduct(o.id, fn, $event.target.value)">
               <option v-for="p in TERRAIN[slot.def.terrain].products" :key="p" :value="p">{{ p }}</option>
             </select>
             <span class="ohint">{{ slot.def.role || "" }}</span>
@@ -215,7 +192,7 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
 #orgCols { flex: 1; display: flex; align-items: flex-start; overflow-x: auto; overflow-y: auto;
            padding: 10px 4px 20px 10px; position: relative; }
 .lines { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
-.ocol { flex: none; width: 262px; display: flex; flex-direction: column; z-index: 2; }
+.ocol { flex: none; width: 262px; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
 .ocol + .ocol { border-left: 1px solid var(--line); padding-left: 12px; margin-left: 10px; }
 .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
         box-shadow: 0 2px 8px #0006; overflow: hidden; flex: none; }

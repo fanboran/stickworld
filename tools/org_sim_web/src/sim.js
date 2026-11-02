@@ -41,7 +41,8 @@ export const BUILDINGS = {
       { item: "熔炉", cost: { "木材": 10, "木板": 4 }, work: 10, unlock: "熔炼工序（铁矿+木材→铁水）" },
       { item: "铁砧", cost: { "铁矿": 4 }, work: 8, unlock: "锻打工序（铁水/铁锭→毛坯）" },
       { item: "水槽", cost: { "木材": 6 }, work: 5, unlock: "淬火工序（毛坯→淬火件）" },
-      { item: "磨石", cost: { "铁矿": 2 }, work: 5, unlock: "开刃工序（淬火件→铁剑）" } ] },
+      { item: "磨石", cost: { "铁矿": 2 }, work: 5, unlock: "开刃工序（淬火件→铁剑）" },
+      { item: "风箱", cost: { "木材": 4, "铁矿": 1 }, work: 4, unlock: "风箱岗：拉风箱助熔，熔炼提速（鼓风提炉温）" } ] },
   "药剂坊": { desc: "药材 → 净药材 → 药水",
     shell: { cost: { "木材": 12 }, work: 12 }, interior: [
       { item: "切药刀", cost: { "铁矿": 1 }, work: 4, unlock: "炮制工序（药材→净药材）" },
@@ -68,7 +69,7 @@ export const ORGS = {
       { fn: "制药", n: 1, pos: "gain", role: "药材→药水" },
       { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭（后期）" } ] },
   "工程队": { host: "建造", slots: [
-      { fn: "测量", n: 1, pos: "gain", role: "施工提效×1.15" },
+      { fn: "测量", n: 1, pos: "gain", role: "放线与验收" },
       { fn: "施工", n: 4, homog: true, pos: "must", role: "硬装软装都干" },
       { fn: "质检", n: 1, pos: "gain", role: "工序与落成核验" } ] },
   "运输队": { host: "运输", slots: [
@@ -91,6 +92,7 @@ export const ORGS = {
       steps: [ { name: "锯解", equip: "锯架", inCity: { "木材": 1 }, wip: "粗板" },
                { name: "刨光", equip: "刨台", wipIn: "粗板", outCity: { "木板": 1 } } ] },
   "锻造坊": { host: "锻造", bldg: "锻造坊", slots: [
+      { fn: "风箱", n: 1, pos: "semi", role: "拉风箱助熔——鼓风提炉温" },
       { fn: "熔炼", n: 1, pos: "semi", step: 0, role: "铁矿+木材化铁水" },
       { fn: "锻打", n: 1, pos: "semi", step: 1, role: "铁水或铁锭锻毛坯" },
       { fn: "淬火", n: 1, pos: "semi", step: 2, role: "毛坯淬火" },
@@ -106,6 +108,13 @@ export const ORGS = {
       steps: [
         { name: "炮制", equip: "切药刀", inCity: { "药材": 1 }, wip: "净药材" },
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 } } ] },
+  /* 信息槽下辖的专门组织（精细化示例：矿石信息内可继续下辖组织） */
+  "林务所": { host: "木材信息", slots: [
+      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看林中堆存与路况" },
+      { fn: "记档", n: 1, pos: "gain", role: "汇总木材台账" } ] },
+  "矿务所": { host: "矿石信息", slots: [
+      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看矿场堆存" },
+      { fn: "记档", n: 1, pos: "gain", role: "汇总矿石台账" } ] },
   /* 后期 */
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1, pos: "semi", role: "铁矿炼铁锭" } ], steps: [] },
   "常备军": { host: "军事", late: true, slots: [
@@ -180,7 +189,7 @@ export function reset() {
   };
   inst("伐木小屋", "办公桌椅", "工具架", "额外椅子");
   inst("锯木坊", "锯架", "刨台");
-  inst("锻造坊", "熔炉", "铁砧", "水槽", "磨石");
+  inst("锻造坊", "熔炉", "铁砧", "水槽", "磨石", "风箱");
   inst("药剂坊", "切药刀", "药炉");
   addPersonRaw("你");
   addPersonRaw("动员官");
@@ -219,11 +228,11 @@ export function reset() {
   staff(farm, "耕作", 2, q.slice(4));
   staff(haul, "调度", 1, q.slice(6)); staff(haul, "库管", 1, q.slice(7)); staff(haul, "搬运", 3, q.slice(8));
   staff(eng, "测量", 1, q.slice(11)); staff(eng, "施工", 2, q.slice(12));
-  staff(forge, "熔炼", 1, q.slice(14)); staff(forge, "锻打", 1, q.slice(15));
-  staff(forge, "淬火", 1, q.slice(16)); staff(forge, "开刃", 1, q.slice(17));
-  staff(sawmill, "锯解", 1, q.slice(18));
-  staff(pharmacy, "炮制", 1, q.slice(19));
-  staff(sci, "课题管理", 1, q.slice(20)); staff(sci, "实验", 2, q.slice(21)); staff(sci, "文献记录", 1, q.slice(23));
+  staff(forge, "风箱", 1, q.slice(14)); staff(forge, "熔炼", 1, q.slice(15)); staff(forge, "锻打", 1, q.slice(16));
+  staff(forge, "淬火", 1, q.slice(17)); staff(forge, "开刃", 1, q.slice(18));
+  staff(sawmill, "锯解", 1, q.slice(19));
+  staff(pharmacy, "炮制", 1, q.slice(20));
+  staff(sci, "课题管理", 1, q.slice(21)); staff(sci, "实验", 2, q.slice(22)); staff(sci, "文献记录", 1, q.slice(24));
   feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
 }
 
@@ -326,7 +335,8 @@ export function advance(dt) {
       const key = bufKey(ws.def.terrain, slotProduct(ws));
       const needNotify = S.buf[key] > notifyLine;
       if (!needNotify) { notified[key] = true; continue; }
-      const staffed = infoSlots.find(s => s.persons.length);
+      const staffed = infoSlots.find(s => s.persons.length ||
+        (s.institution && S.orgs[s.institution] && membersOf(S.orgs[s.institution]) > 0));   // 下辖组织有在编即履职
       if (staffed) { notified[key] = true; continue; }
       if (infoSlots.length && ws.persons.length) {
         notified[key] = true;
@@ -369,7 +379,8 @@ export function advance(dt) {
   // ③ 搬运（库管在岗才运转；被通报场地全速，未通报打折扣）
   let haulers = 0, keeper = false;
   for (const o of Object.values(S.orgs)) {
-    const kp = o.slots["库管"]; if (kp && kp.persons.length) keeper = true;
+    const kp = o.slots["库管"];
+    if (kp && (kp.persons.length || (kp.institution && S.orgs[kp.institution] && membersOf(S.orgs[kp.institution]) > 0))) keeper = true;
     const hp = o.slots["搬运"]; if (hp) haulers += hp.persons.length;
   }
   if (keeper && haulers > 0) {
@@ -385,7 +396,7 @@ export function advance(dt) {
     const move = Math.min(cap, totalBuf, Math.max(0, capTotal() - resTotal()));
     if (move > 0) for (const key2 of keys) {
       const part = S.buf[key2] / totalBuf;
-      const disc = notified[key2] === false ? (dispatcher ? 0.7 : K.uninfo) : 1;
+      const disc = notified[key2] === false ? K.uninfo : 1;
       const m = move * part * disc;
       S.buf[key2] -= m;
       S.res[key2.split("|")[1]] += m;
@@ -415,7 +426,9 @@ export function advance(dt) {
         const src = Object.values(o.slots).find(s => s.persons.length);
         if (src) (S.borrows[o.id] ||= []).push({ from: src.def.fn, to: st.name });
       }
-      const want = K.craft * perStep * mult * dt;
+      let want = K.craft * perStep * mult * dt;
+      // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
+      if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
       let produced = 0;
       if (st.inCity) {
         const can = Math.min(want, ...Object.entries(st.inCity).map(([r, n]) => S.res[r] / n));
@@ -450,16 +463,13 @@ export function advance(dt) {
       }
     }
   }
-  // ⑤ 施工队列（测量在岗=放线准少返工，施工效率×1.15）
+  // ⑤ 施工队列（工时=在岗施工人数）
   if (S.buildOrders.length) {
-    let w = 0, survey = false;
-    for (const o of Object.values(S.orgs)) {
-      const s = o.slots["施工"]; if (s) w += s.persons.length;
-      const m = o.slots["测量"]; if (m && m.persons.length) survey = true;
-    }
+    let w = 0;
+    for (const o of Object.values(S.orgs)) { const s = o.slots["施工"]; if (s) w += s.persons.length; }
     if (w) {
       const ord = S.buildOrders[0];
-      ord.done += w * (survey ? 1.15 : 1) * mult * dt;
+      ord.done += w * mult * dt;
       if (ord.done >= ord.work) {
         if (ord.kind === "shell") {
           S.buildings[ord.b].push({ interior: {}, org: "" });

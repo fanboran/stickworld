@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, TERRAIN, person, membersOf, wipOf, equipOK, stepDesc, slotProduct,
+import { S, TERRAIN, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
          idle, select, delOrg, feed,
          putPerson, pullPersons, putOrg, pullOrg, setProduct } from "../sim.js";
 
@@ -42,9 +42,10 @@ function chipsOf(slot) {
   }
   return [...m].map(([n, c]) => c > 1 ? `${n}×${c}` : n);
 }
-const isLocked = slot => !!(slot.def.req && !equipOK(slot.def.req.b, slot.def.req.item));
+/* 槽位解锁看本组织所驻建筑实例（03 §一），不看全城 */
+const isLocked = (o, slot) => !!(slot.def.req && !orgEquip(o, slot.def.req.item));
 function clickSlot(o, fn, slot) {
-  if (isLocked(slot)) {
+  if (isLocked(o, slot)) {
     const d = slot.def;
     feed(`${fn} 槽被禁：需 ${d.req.b}${d.req.item ? " 并装 " + d.req.item : ""}（组织无建筑仍可基础运转）`, "bad");
     return;
@@ -53,7 +54,7 @@ function clickSlot(o, fn, slot) {
   pickPerson.value = ""; pickOrg.value = "";
   select(o.id, fn);
 }
-const opsOpen = (o, fn, slot) => S.sel === o.id && S.selSlot === fn && !isLocked(slot);
+const opsOpen = (o, fn, slot) => S.sel === o.id && S.selSlot === fn && !isLocked(o, slot);
 const pickPerson = ref("");
 const pickOrg = ref("");
 </script>
@@ -67,12 +68,14 @@ const pickOrg = ref("");
         <div class="hd" @click="select(o.id)">
           <span>{{ o.name }}</span><span class="tier">L{{ o.tier }}</span>
           <span class="sub">{{ o.kind === "hall" ? "根节点" :
-            (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }} · 在编 {{ membersOf(o) }}</span>
+            (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }}{{ o.bldgType
+              ? (o.bldg ? " · 驻" + o.bldg.b + CIRC[o.bldg.idx] : " · 缺" + o.bldgType)
+              : "" }} · 在编 {{ membersOf(o) }}</span>
           <button v-if="o.kind !== 'hall'" class="del warn" title="解散组织（人员回待业）"
                   @click.stop="delOrg(o.id)">×</button>
         </div>
         <div v-for="(slot, fn) in o.slots" :key="fn" class="slotwrap">
-          <div class="srow" :class="{ locked: isLocked(slot), sel: S.sel === o.id && S.selSlot === fn }"
+          <div class="srow" :class="{ locked: isLocked(o, slot), sel: S.sel === o.id && S.selSlot === fn }"
                @click="clickSlot(o, fn, slot)">
             <span class="fn" :class="{ hall: ['领导','行政'].includes(fn),
                                        mil: ['军事','训练'].includes(fn) }">{{ fn }}</span>
@@ -91,7 +94,7 @@ const pickOrg = ref("");
             </span>
             <span v-if="slot.persons.length" class="spin"
                   :class="{ paused: borrowsOf(o.id).filter(x => x.from === fn).length >= slot.persons.length }"></span>
-            <span v-if="isLocked(slot)" class="need">
+            <span v-if="isLocked(o, slot)" class="need">
               需{{ slot.def.req.b }}{{ slot.def.req.item ? "·" + slot.def.req.item : "" }}
             </span>
             <span class="par">

@@ -54,6 +54,7 @@ const lack = (r, n) => S.res[r] < n;
             <div v-for="(inst, idx) in S.buildings[b]" :key="idx" class="inst">
               <div class="ihead">
                 <b>{{ CIRC[idx] }}</b>
+                <span class="fx" v-if="inst.org">驻 {{ S.orgs[inst.org]?.name }}</span>
                 <span class="fx">{{ d.interior.filter(it => inst.interior[it.item]).length }}/{{ d.interior.length }} 设备</span>
               </div>
               <div class="irow" v-for="it in d.interior" :key="it.item">

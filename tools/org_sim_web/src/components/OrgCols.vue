@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, ORGS, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
-         idle, select, delOrg, feed, slotCandidates, createBlocked,
+         idle, select, delOrg, feed, slotCandidates, createBlocked, slotCap,
          putPerson, pullPersons, createOrgAt } from "../sim.js";
 
 const host = computed(() => {
@@ -104,7 +104,7 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
                @click="clickSlot(o, fn, slot)">
             <span class="fn" :class="'p-' + (slot.def.pos || 'run')"
                   :title="POS_NAME[slot.def.pos || 'run'] + '｜' + (slot.def.role || '')">{{ fn }}</span>
-            <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slot.def.n }}</span>
+            <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slotCap(o, slot) }}</span>
             <template v-if="slot.persons.length || slot.institution">
               <span v-for="c in chipsOf(slot)" :key="c" class="chip">{{ c }}</span>
               <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>
@@ -137,8 +137,8 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
                       :title="candTitle(name)"
                       @click="createOrgAt(o.id, fn, name)">＋{{ name }}<i v-if="ORGS[name].late">后期</i></button>
             </template>
-            <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slot.def.n">
-              <option value="">{{ slot.def.homog && slot.persons.length >= slot.def.n ? "坑位已满" : "待业人员…" }}</option>
+            <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slotCap(o, slot)">
+              <option value="">{{ slot.def.homog && slot.persons.length >= slotCap(o, slot) ? "坑位已满" : "待业人员…" }}</option>
               <option v-for="p in idle()" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
             <button :disabled="!pickPerson" @click="putPerson(o.id, fn, pickPerson); pickPerson = ''">派入</button>

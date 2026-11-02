@@ -28,7 +28,8 @@ export const BASIC_RES = RES.filter(r => RES_INFO[r].cat === "basic");
 /* ═════════ 建筑（与组织独立：组织无建筑可基础运转；建筑解锁进阶槽位与设备工序） ═════════ */
 export const BUILDINGS = {
   "市政厅": { prebuilt: true, desc: "城市根组织所在" },
-  "仓库":   { prebuilt: true, desc: "资源与制品的集中存放" },
+  "仓库":   { prebuilt: true, desc: "资源与制品的集中存放；每座+容量、搬运坑位随座数增长",
+    shell: { cost: { "木材": 20 }, work: 20 } },
   "伐木小屋": { desc: "伐木队办公与工具场所（无它也能伐：探测/记录被禁）",
     shell: { cost: { "木材": 20 }, work: 20 }, interior: [
       { item: "办公桌椅", cost: { "木材": 6 }, work: 6, unlock: "解锁伐木队的探测/记录槽" },
@@ -225,11 +226,12 @@ export function reset() {
   inst("伐木小屋", "办公桌椅", "工具架", "额外椅子");
   inst("锯木坊", "锯架", "刨台");
   inst("锻造坊", "熔炉", "铁砧", "水槽", "磨石", "风箱");
+  inst("冶炼坊", "冶炼炉");
   inst("药剂坊", "切药刀", "药炉");
   inst("木工房", "木工台", "组装架");
   addPersonRaw("你");
   addPersonRaw("动员官");
-  for (let i = 0; i < 26; i++) addPersonRaw("村民");
+  for (let i = 0; i < 29; i++) addPersonRaw("村民");
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
@@ -253,6 +255,7 @@ export function reset() {
   const sawmill = addOrgRaw("锯木坊", 2, ""); place(works, "锯木", sawmill);
   const forge = addOrgRaw("锻造坊", 2, ""); place(works, "锻造", forge);
   const pharmacy = addOrgRaw("药剂坊", 2, ""); place(works, "制药", pharmacy);
+  const smelter = addOrgRaw("冶炼坊", 2, ""); place(works, "冶炼", smelter);
   const cartshop = addOrgRaw("木器坊", 2, ""); place(works, "木器", cartshop);
   const haul = addOrgRaw("运输队", 2, ""); place(hall, "运输", haul);
   const store = addOrgRaw("库务所", 2, ""); place(haul, "库管", store);   // 机构入驻库管槽＝库管履职
@@ -271,7 +274,8 @@ export function reset() {
   staff(sawmill, "锯解", 1, q.slice(19));
   staff(pharmacy, "炮制", 1, q.slice(20));
   staff(cartshop, "备料", 1, q.slice(25));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
-  staff(sci, "课题管理", 1, q.slice(21)); staff(sci, "实验", 2, q.slice(22)); staff(sci, "文献记录", 1, q.slice(24));
+  staff(smelter, "冶炼", 1, q.slice(24));
+  staff(sci, "课题管理", 1, q.slice(25)); staff(sci, "实验", 2, q.slice(26)); staff(sci, "文献记录", 1, q.slice(28));
   feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输队(库务所入驻库管)/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
 }
 
@@ -279,7 +283,13 @@ export function reset() {
 export const CIRC = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];   // 建筑实例枚举（区分座，非命名）
 export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
-export const capTotal = () => S.knobs.cap;
+/* 仓库按座计：每座一份容量（首座开局自带） */
+export const capTotal = () => S.knobs.cap * (S.buildings["仓库"]?.length || 1);
+/* 坑位上限随建筑规模：搬运坑位＝5×仓库座数；其余槽用模板定值 */
+export function slotCap(o, slot) {
+  if (slot.def.fn === "搬运") return 5 * (S.buildings["仓库"]?.length || 1);
+  return slot.def.n ?? 1;
+}
 export const resTotal = () => RES.reduce((a, r) => a + S.res[r], 0);
 /* 建筑按座计（同型可多座，每座独立软装）。组织进驻一座对应建筑实例（03 §一：
    组织所在的建筑需具备它需要的设施；换址留待后续设计）——设备/解锁按**本组织所驻那座**算 */
@@ -590,7 +600,7 @@ export function delOrg(orgId) {
 export function putPerson(orgId, fn, pid) {
   const o = S.orgs[orgId]; if (!o || !o.slots[fn] || !pid) return;
   const slot = o.slots[fn], d = slot.def;
-  if (d.homog && slot.persons.length >= d.n) { feed(`「${fn}」坑位已满（${d.n}，随建筑规模变动）`, "bad"); return; }
+  if (d.homog && slot.persons.length >= slotCap(o, slot)) { feed(`「${fn}」坑位已满（${slotCap(o, slot)}，随仓库规模变动）`, "bad"); return; }
   if (slot.institution) { feed(`${o.name}「${fn}」撤出机构，改为人员顶岗`); slot.institution = ""; }
   slot.persons.push(pid); person(pid).org = orgId;
   feed(`${person(pid).name} 入 ${o.name}「${fn}」槽（在编）`, "good");

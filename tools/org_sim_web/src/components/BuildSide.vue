@@ -32,7 +32,7 @@ const lack = (r, n) => S.res[r] < n;
     </div>
     <div class="bslist">
       <template v-for="[b, d] in Object.entries(BUILDINGS)" :key="b">
-        <div v-if="d.prebuilt" class="brow pre" :title="d.desc">
+        <div v-if="d.prebuilt && !d.shell" class="brow pre" :title="d.desc">
           <span class="bname">{{ b }}</span><span class="dim">自带</span>
         </div>
         <div v-else class="bwrap">

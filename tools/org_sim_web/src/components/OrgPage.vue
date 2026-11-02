@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { S, TERRAIN, idle, feed } from "../sim.js";
 import OrgCols from "./OrgCols.vue";
 import BuildSide from "./BuildSide.vue";
+import OrgPanel from "./OrgPanel.vue";
 
 /* 地形条：各采集场的场地堆存（缓冲堆，待运输队搬运） */
 const terrainRows = computed(() => Object.entries(TERRAIN).map(([site, t]) => {
@@ -37,6 +38,12 @@ function toggleMob() {
         </div>
       </div>
       <div class="oright">
+        <span class="legend" title="岗位标签按用人类型分色">
+          <i class="lg p-run" /><span>必需</span>
+          <i class="lg p-flex" /><span>借调</span>
+          <i class="lg p-any" /><span>弹性</span>
+          <i class="lg p-opt" /><span>增益</span>
+        </span>
         <span class="popu" title="在编=挂在各组织槽上；待业=可派">在编 {{ staffed }} · 待业 {{ idle().length }}</span>
         <button class="mob" :class="{ war: S.mobilized }" :disabled="!milStaffed"
                 :title="milStaffed ? '耕战一体：平时生产、战时皆兵（战备产率减半）' : '需动员官在编（市政厅军事槽或常备军军事槽）'"
@@ -47,7 +54,10 @@ function toggleMob() {
     </div>
     <div id="obody">
       <OrgCols />
-      <BuildSide />
+      <div id="rightcol">
+        <OrgPanel />
+        <BuildSide />
+      </div>
     </div>
   </div>
 </template>
@@ -63,8 +73,17 @@ function toggleMob() {
 .tchip .pile { color: var(--fg); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .tchip .tb { margin-top: 3px; }
 .tchip.full { border-color: var(--bad); }
-.oright { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.oright { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.legend { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); font-size: 10.5px; }
+.legend .lg { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-left: 5px; }
+.legend .lg:first-child { margin-left: 0; }
+.lg.p-run { background: #8a4a55; }
+.lg.p-flex { background: #8a7640; }
+.lg.p-any { background: #4a628a; }
+.lg.p-opt { background: #3a7a5a; }
 .popu { color: var(--dim); font-size: 11.5px; white-space: nowrap; }
+#rightcol { width: 248px; flex: none; display: flex; flex-direction: column;
+            background: var(--panel); border-left: 1px solid var(--line); min-height: 0; }
 .mob.war { background: #5c441f; border-color: var(--warn); color: var(--warn); }
 #obody { flex: 1; display: flex; min-height: 0; }
 </style>

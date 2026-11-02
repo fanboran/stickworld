@@ -77,8 +77,7 @@ const lack = (r, n) => S.res[r] < n;
 </template>
 
 <style scoped>
-#buildside { width: 248px; flex: none; background: var(--panel); border-left: 1px solid var(--line);
-             display: flex; flex-direction: column; min-height: 0; }
+#buildside { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .bshead { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px 5px;
           font-weight: 700; font-size: 13px; border-bottom: 1px solid var(--line); }
 .bshead .sub { color: var(--dim); font-size: 11px; font-weight: 400; margin-left: auto; }

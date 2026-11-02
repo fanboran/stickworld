@@ -48,68 +48,89 @@ export const BUILDINGS = {
 };
 
 /* ═════════ 组织模板。host＝可入驻的槽名（选中空槽即弹出该槽可构筑的子组织，可递归）；
-   市政厅槽＝市长/军事/生产/运输/科研；生产局（一级子节点）内含采集/建造/制造三槽；
-   bldg＝需进驻的建筑类型（03 §一）═════════ */
+   pos＝岗位用人类型：run=有人才能运行（无人停摆）· flex=需人运行但不必时刻有人（可借调顶岗）
+   · any=至少一人启动、人数越多越快 · opt=有无人都行，无人只是缺失该功能；
+   role＝「放人/放组织解锁什么」的能力标注；bldg＝需进驻的建筑类型（03 §一）═════════ */
 export const ORGS = {
   "生产局": { host: "生产", slots: [
-      { fn: "采集", n: 1, role: "放采集队或派人兜底（泛采集 0.4/人时，哪堆有空去哪堆）" },
-      { fn: "建造", n: 1, role: "放工程队或派人督造" },
-      { fn: "制造", n: 1, role: "放工坊或派人跟单" } ] },
+      { fn: "采集", n: 1, pos: "run", role: "放人解锁泛采集兜底（0.4/人时）；放采集队统筹三线" },
+      { fn: "建造", n: 1, pos: "run", role: "放人解锁亲自督造；放工程队系统化施工" },
+      { fn: "制造", n: 1, pos: "run", role: "放人解锁制造跟单；放工坊统筹各厂" } ] },
   "采集队": { host: "采集", slots: [
-      { fn: "伐木", n: 1, role: "放伐木队" },
-      { fn: "采矿", n: 1, role: "放采矿队" },
-      { fn: "农垦", n: 1, role: "放农垦队" } ] },
+      { fn: "伐木", n: 1, pos: "run", role: "放伐木队专精伐木线" },
+      { fn: "采矿", n: 1, pos: "run", role: "放采矿队专精采矿线" },
+      { fn: "农垦", n: 1, pos: "run", role: "放农垦队专精农耕线" } ] },
   "工坊": { host: "制造", slots: [
-      { fn: "锯木", n: 1, role: "放锯木坊" },
-      { fn: "锻造", n: 1, role: "放锻造坊" },
-      { fn: "制药", n: 1, role: "放药剂坊" },
-      { fn: "冶炼", n: 1, role: "放冶炼坊（后期）" } ] },
+      { fn: "锯木", n: 1, pos: "run", role: "放锯木坊制木板" },
+      { fn: "锻造", n: 1, pos: "run", role: "放锻造坊制铁剑" },
+      { fn: "制药", n: 1, pos: "run", role: "放药剂坊制药水" },
+      { fn: "冶炼", n: 1, pos: "run", role: "放冶炼坊量产铁锭（后期）" } ] },
   "工程队": { host: "建造", slots: [
-      { fn: "测量", n: 1, role: "放线与验收测量——在岗施工效率×1.15（少返工）" },
-      { fn: "施工", n: 4, homog: true, role: "土方/砌筑/木作施工（硬装与软装都干）" },
-      { fn: "质检", n: 1, role: "工序与落成核验（机制后续）" } ] },
+      { fn: "测量", n: 1, pos: "opt", role: "放人解锁施工提效：效率×1.15（放线准少返工）" },
+      { fn: "施工", n: 4, homog: true, pos: "any", role: "至少1人开工、越多越快；硬装软装都干" },
+      { fn: "质检", n: 1, pos: "opt", role: "放人解锁工序核验（机制后续）" } ] },
   "运输队": { host: "运输", slots: [
-      { fn: "调度", n: 1, role: "运输计划与派单——在岗则未通报场地的搬运折扣减轻（×0.5→×0.7）" },
-      { fn: "库管", n: 1, role: "仓库进出账目（在岗搬运才运转）" },
-      { fn: "搬运", n: 5, homog: true, role: "同质化×5，坑位上限随仓库规模" } ] },
+      { fn: "调度", n: 1, pos: "opt", role: "放人解锁运输计划：未通报场地搬运折扣 ×0.5→×0.7" },
+      { fn: "库管", n: 1, pos: "run", role: "放人才有搬运运转（仓库进出账目）" },
+      { fn: "搬运", n: 5, homog: true, pos: "any", role: "至少1人启动、越多运力越大；坑位随仓库规模" } ] },
   "伐木队": { host: "伐木", bldg: "伐木小屋", slots: [
-      { fn: "伐木", n: 4, homog: true, terrain: "树林" },
-      { fn: "木材信息", n: 1, role: "堆存需转运时通报运输队（人手/地点）——可被本队自动借调" },
-      { fn: "探测", n: 1, req: { b: "伐木小屋", item: "办公桌椅" }, role: "木材资源探测" },
-      { fn: "记录", n: 1, req: { b: "伐木小屋", item: "办公桌椅" }, role: "木材台账" } ] },
+      { fn: "伐木", n: 4, homog: true, pos: "any", terrain: "树林", role: "至少1人开工、越多越快" },
+      { fn: "木材信息", n: 1, pos: "flex", role: "放人解锁堆存通报（运输队按需来人）——可被本队借调顶岗" },
+      { fn: "探测", n: 1, pos: "opt", req: { b: "伐木小屋", item: "办公桌椅" }, role: "放人解锁木材资源探测" },
+      { fn: "记录", n: 1, pos: "opt", req: { b: "伐木小屋", item: "办公桌椅" }, role: "放人解锁木材台账" } ] },
   "采矿队": { host: "采矿", slots: [
-      { fn: "挖矿", n: 4, homog: true, terrain: "矿洞" },
-      { fn: "矿石信息", n: 1, role: "与运输队联络（可被借调）" } ] },
+      { fn: "挖矿", n: 4, homog: true, pos: "any", terrain: "矿洞", role: "至少1人开工、越多越快" },
+      { fn: "矿石信息", n: 1, pos: "flex", role: "放人解锁堆存通报——可被本队借调顶岗" } ] },
   "农垦队": { host: "农垦", slots: [
-      { fn: "耕作", n: 4, homog: true, terrain: "农田", role: "产物可选：粮/药材" } ] },
-  "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [ { fn: "锯解", n: 2, homog: true, step: 0 } ],
+      { fn: "耕作", n: 4, homog: true, pos: "any", terrain: "农田", role: "至少1人开工、越多越快；产物在组织面板选" } ] },
+  "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [ { fn: "锯解", n: 2, homog: true, pos: "flex", step: 0, role: "工序岗：有人才运转，可借调轮转（一人厂独轮回）" } ],
       steps: [ { name: "锯解", equip: "锯架", inCity: { "木材": 1 }, outCity: { "木板": 1 } } ] },
   "锻造坊": { host: "锻造", bldg: "锻造坊", slots: [
-      { fn: "熔炼", n: 1, step: 0 }, { fn: "锻打", n: 1, step: 1 },
-      { fn: "淬火", n: 1, step: 2 }, { fn: "开刃", n: 1, step: 3 } ],
-      steps: [   // 古代冶炼/锻造分工；半成品为厂内物品不可离厂；锻打可吃铁水也可吃外购铁锭
+      { fn: "熔炼", n: 1, pos: "flex", step: 0, role: "工序岗——可借调轮转" },
+      { fn: "锻打", n: 1, pos: "flex", step: 1, role: "工序岗——可借调轮转" },
+      { fn: "淬火", n: 1, pos: "flex", step: 2, role: "工序岗——可借调轮转" },
+      { fn: "开刃", n: 1, pos: "flex", step: 3, role: "工序岗——可借调轮转" } ],
+      steps: [   // 古代冶炼/锻造分工；半成品为厂内物品不可离厂；锻打原料偏好见组织面板
         { name: "熔炼", equip: "熔炉", inCity: { "铁矿": 1, "木材": 1 }, wip: "铁水" },
         { name: "锻打", equip: "铁砧", wipIn: "铁水", altCity: { "铁锭": 1 }, wip: "毛坯" },
         { name: "淬火", equip: "水槽", wipIn: "毛坯", wip: "淬火件" },
         { name: "开刃", equip: "磨石", wipIn: "淬火件", outCity: { "铁剑": 1 } } ] },
-  "药剂坊": { host: "制药", bldg: "药剂坊", slots: [ { fn: "炮制", n: 1, step: 0 }, { fn: "熬制", n: 1, step: 1 } ],
+  "药剂坊": { host: "制药", bldg: "药剂坊", slots: [
+      { fn: "炮制", n: 1, pos: "flex", step: 0, role: "工序岗——可借调轮转" },
+      { fn: "熬制", n: 1, pos: "flex", step: 1, role: "工序岗——可借调轮转" } ],
       steps: [
         { name: "炮制", equip: "切药刀", inCity: { "药材": 1 }, wip: "净药材" },
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 } } ] },
   /* 后期 */
-  "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1 } ], steps: [] },
-  "常备军": { host: "军事", late: true, slots: [ { fn: "军事", n: 1 }, { fn: "训练", n: 1 } ] },
-  "训练营": { host: "训练", late: true, slots: [ { fn: "训练", n: 1 } ] },
+  "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1, pos: "flex", role: "工序岗——可借调轮转" } ], steps: [] },
+  "常备军": { host: "军事", late: true, slots: [
+      { fn: "军事", n: 1, pos: "run", role: "放人解锁军事指挥（在编即可动员）" },
+      { fn: "训练", n: 1, pos: "run", role: "放训练营解锁训练职能" } ] },
+  "训练营": { host: "训练", late: true, slots: [ { fn: "训练", n: 1, pos: "run", role: "放人解锁对编制组织的训练" } ] },
   "科研院": { host: "科研", late: true, slots: [
-      { fn: "课题管理", n: 1, role: "选题立项与研究资源分配" },
-      { fn: "实验", n: 3, homog: true, role: "研究员——产出的新技能长在本人身上，再经训练扩散" },
-      { fn: "文献记录", n: 1, role: "台账与资料（技能图谱的呈报源）" } ] },
+      { fn: "课题管理", n: 1, pos: "run", role: "放人解锁选题立项与资源分配" },
+      { fn: "实验", n: 3, homog: true, pos: "any", role: "研究员越多产出越快——新技能长在本人身上" },
+      { fn: "文献记录", n: 1, pos: "opt", role: "放人解锁台账与资料（技能图谱呈报源）" } ] },
 };
 export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研"];
 export const LATE_COST = { "常备军": { res: { "粮": 50 } }, "训练营": { res: { "木材": 15 } },
                            "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能01" } };
-/* 空槽的可构筑候选（按槽名匹配 host——组织树即构筑树） */
-export const slotCandidates = fn => Object.entries(ORGS).filter(([, t]) => t.host === fn).map(([n]) => n);
+/* 空槽的可构筑候选（按槽名匹配 host——组织树即构筑树；别名＝放弃统筹层直挂单线的路径偏好） */
+export const SLOT_ALIAS = { "采集": ["伐木队", "采矿队", "农垦队"], "制造": ["锯木坊", "锻造坊", "药剂坊"] };
+export const slotCandidates = fn => {
+  const base = Object.entries(ORGS).filter(([, t]) => t.host === fn).map(([n]) => n);
+  return [...base, ...(SLOT_ALIAS[fn] || []).filter(n => !base.includes(n))];
+};
+/* 组织控制面板选项（实际游戏为各组织专属的复杂精美 UI，sim 只模拟基础功能；
+   选不同机构＝功能实现路径的偏好，如同计划 or 市场） */
+export const ORG_PANELS = {
+  "常备军": [ { key: "兵役制度", choices: [["动员兵役", "耕战一体：战时集结，动员时产率减半"],
+                                            ["常备兵役", "职业兵维持耗粮（后续），动员不减产率"]] } ],
+  "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"], ["手推车", "1.8/人时（需造车，暂直开）"]] } ],
+  "锻造坊": [ { key: "锻打原料", choices: [["铁水优先", "自炼为主，外购补口"],
+                                            ["铁锭优先", "外购为主，省下燃料"]] } ],
+  "农垦队": [ { key: "产物", choices: [["粮", "战粮类增益品原料"], ["药材", "炼药原料"]] } ],
+};
 /* 建不了的原因（拒止反馈落在按钮态上）：前提→资源，与构筑同序 */
 export function createBlocked(name) {
   const cost = LATE_COST[name];
@@ -158,7 +179,7 @@ export function reset() {
   for (let i = 0; i < 26; i++) addPersonRaw("村民");
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
-    hall.slots[key] = { def: { fn: key, n: 1, role: "" }, persons: [], institution: "", product: "" };
+    hall.slots[key] = { def: { fn: key, n: 1, pos: "run", role: key === "市长" ? "放你（城市根）" : "放人或构筑组织，解锁该系统运转" }, persons: [], institution: "", product: "" };
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
   const place = (container, fn, org) => { container.slots[fn].institution = org.id; };
   const staff = (org, fn, n, ids) => {
@@ -216,7 +237,8 @@ export function addOrgRaw(name, tier, kind) {
   const id = "o" + String(S.seq.o).padStart(2, "0");
   const tpl = ORGS[name] || {};
   const org = { id, name, tier, kind: kind || "", template: name, slots: {}, steps: tpl.steps || [],
-                bldgType: tpl.bldg || "", bldg: null };
+                bldgType: tpl.bldg || "", bldg: null, settings: {} };
+  for (const opt of (ORG_PANELS[name] || [])) org.settings[opt.key] = opt.choices[0][0];
   S.orgs[id] = org;
   if (kind !== "hall")
     for (const def of (tpl.slots || []))
@@ -272,7 +294,12 @@ export function slotProduct(slot) {
 /* ═════════ 经济推进 ═════════ */
 export function advance(dt) {
   const K = S.knobs;
-  const mult = S.mobilized ? 0.5 : 1;
+  // 动员产率：耕战（无军或动员兵役）集结减半；常备兵役的职业兵打仗、生产照转
+  let mult = 1;
+  if (S.mobilized) {
+    const army = Object.values(S.orgs).find(x => x.template === "常备军");
+    mult = army && army.settings["兵役制度"] === "常备兵役" ? 1 : 0.5;
+  }
   const flow = {}; for (const r of RES) flow[r] = 0;
   S.borrows = {};
   // ① 信息通报与借调（先于采集：被借调者本拍离岗）
@@ -338,7 +365,10 @@ export function advance(dt) {
     // 调度（运输队·运输计划与派单）在岗：未通报场地的搬运折扣减轻
     let dispatcher = false;
     for (const o of Object.values(S.orgs)) { const s = o.slots["调度"]; if (s && s.persons.length) dispatcher = true; }
-    const cap = K.haul * haulers * mult * dt;
+    let haulRate = K.haul;
+    for (const o of Object.values(S.orgs))
+      if (o.slots["搬运"] && o.settings["载具"] === "手推车") haulRate = K.haul * 1.5;
+    const cap = haulRate * haulers * mult * dt;
     const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001);
     const totalBuf = keys.reduce((a, key2) => a + S.buf[key2], 0);
     const move = Math.min(cap, totalBuf, Math.max(0, capTotal() - resTotal()));
@@ -384,13 +414,22 @@ export function advance(dt) {
         }
       }
       if (st.wipIn) {
-        const inner = Math.min(want, wipOf(o)[st.wipIn] || 0);
-        wipOf(o)[st.wipIn] -= inner;
-        let outer = 0;
-        if (st.altCity) {
-          const can = Math.min(want - inner, ...Object.entries(st.altCity).map(([r, n]) => S.res[r] / n));
-          if (can > 0) { for (const [r, n] of Object.entries(st.altCity)) { S.res[r] -= n * can; flow[r] -= n * can; }
-            outer = can; }
+        const ingotFirst = o.settings["锻打原料"] === "铁锭优先" && st.altCity;
+        let inner = 0, outer = 0;
+        if (ingotFirst) {   // 外购优先：先吃铁锭，不够再吃厂内半成品
+          const canOut = Math.min(want, ...Object.entries(st.altCity).map(([r, n]) => S.res[r] / n));
+          if (canOut > 0) { for (const [r, n] of Object.entries(st.altCity)) { S.res[r] -= n * canOut; flow[r] -= n * canOut; }
+            outer = canOut; }
+          inner = Math.min(want - outer, wipOf(o)[st.wipIn] || 0);
+          wipOf(o)[st.wipIn] -= inner;
+        } else {
+          inner = Math.min(want, wipOf(o)[st.wipIn] || 0);
+          wipOf(o)[st.wipIn] -= inner;
+          if (st.altCity) {
+            const canOut = Math.min(want - inner, ...Object.entries(st.altCity).map(([r, n]) => S.res[r] / n));
+            if (canOut > 0) { for (const [r, n] of Object.entries(st.altCity)) { S.res[r] -= n * canOut; flow[r] -= n * canOut; }
+              outer = canOut; }
+          }
         }
         produced = inner + outer;
       }
@@ -494,16 +533,6 @@ export function pullPersons(orgId, fn) {
   const slot = S.orgs[orgId]?.slots[fn]; if (!slot) return;
   for (const pid of slot.persons) person(pid).org = "";
   slot.persons = [];
-}
-export function putOrg(orgId, fn, instId) {
-  const o = S.orgs[orgId]; if (!o || !o.slots[fn] || !instId) return;
-  if (createsCycle(orgId, instId)) { feed("嵌套成环：拒绝", "bad"); return; }
-  o.slots[fn].persons = [];
-  o.slots[fn].institution = instId;
-  feed(`${S.orgs[instId].name} 整体塞进 ${o.name} 的「${fn}」槽（机构入驻）`, "nest");
-}
-export function pullOrg(orgId, fn) {
-  const slot = S.orgs[orgId]?.slots[fn]; if (slot) slot.institution = "";
 }
 export function setProduct(orgId, fn, product) {
   const slot = S.orgs[orgId]?.slots[fn]; if (slot) slot.product = product;

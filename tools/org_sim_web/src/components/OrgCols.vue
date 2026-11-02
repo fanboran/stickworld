@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { S, ORGS, TERRAIN, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
          idle, select, delOrg, feed, slotCandidates, createBlocked,
          putPerson, pullPersons, setProduct, createOrgAt } from "../sim.js";
@@ -82,55 +82,10 @@ function candTitle(name) {
 }
 const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "半必须：需人运行，可移调顶岗", gain: "增益：无人也行，只是未解锁该功能" };
 
-/* ── 嵌套连线：机构入驻槽 → 子组织卡片（SVG 覆盖层，肘形线） ── */
-const svg = ref(null);
-const linesKey = computed(() => Object.values(S.orgs).map(o =>
-  o.id + ":" + Object.values(o.slots).map(s => s.institution).join(",")).join(";"));
-function drawLines() {
-  const root = document.getElementById("orgCols");
-  if (!root || !svg.value) return;
-  const c = root.getBoundingClientRect();
-  const sx = root.scrollLeft, sy = root.scrollTop;
-  const byParent = {};   // 同一父卡的连线一组，组内按槽序＝落点序（单调不交叉）
-  for (const o of Object.values(S.orgs))
-    for (const slot of Object.values(o.slots)) {
-      if (!slot.institution || !S.orgs[slot.institution]) continue;
-      const from = root.querySelector(`[data-slot="${o.id}|${slot.def.fn}"]`);
-      const to = root.querySelector(`[data-org="${slot.institution}"]`);
-      if (!from || !to) continue;
-      const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
-      (byParent[o.id] ||= []).push({
-        x1: a.right - c.left + sx, y1: a.top - c.top + sy + a.height / 2,
-        x2: b.left - c.left + sx, y2: b.top - c.top + sy + 14,
-      });
-    }
-  // 每组一条居中均布的平行车道总线：竖段间距恒定 9px，无重合、无左右歧义
-  svg.value.setAttribute("width", Math.max(root.scrollWidth, c.width));
-  svg.value.setAttribute("height", Math.max(root.scrollHeight, c.height));
-  const d = [];
-  for (const arr of Object.values(byParent)) {
-    const n = arr.length;
-    const busX = (arr[0].x1 + arr[0].x2) / 2 - ((n - 1) * 9) / 2;
-    arr.forEach((s2, k) => {
-      const lane = busX + k * 9;
-      d.push(`M${s2.x1},${s2.y1} H${lane} V${s2.y2} H${s2.x2}`);
-    });
-  }
-  svg.value.innerHTML = d.map(p2 =>
-    `<path d="${p2}" fill="none" stroke="#e359c4" stroke-opacity=".55" stroke-width="1.5"/>`).join("");
-}
-watch(linesKey, () => nextTick(drawLines), { flush: "post" });
-watch(columns, () => nextTick(drawLines), { flush: "post" });
-onMounted(() => {
-  nextTick(drawLines);
-  window.addEventListener("resize", drawLines);
-});
-onUnmounted(() => window.removeEventListener("resize", drawLines));
 </script>
 
 <template>
   <div id="orgCols">
-    <svg ref="svg" class="lines"></svg>
     <div class="ocol" v-for="(col, ci) in columns" :key="ci">
       <div v-for="o in col.orgs" :key="o.id" class="card" :data-org="o.id"
            :class="{ hall: o.kind === 'hall', sel: S.sel === o.id && !S.selSlot }">
@@ -144,7 +99,7 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
                   @click.stop="delOrg(o.id)">×</button>
         </div>
         <div v-for="(slot, fn) in o.slots" :key="fn" class="slotwrap">
-          <div class="srow" :data-slot="o.id + '|' + fn"
+          <div class="srow"
                :class="{ locked: isLocked(o, slot), sel: S.sel === o.id && S.selSlot === fn }"
                @click="clickSlot(o, fn, slot)">
             <span class="fn" :class="'p-' + (slot.def.pos || 'run')"
@@ -204,9 +159,8 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
 <style scoped>
 #orgCols { flex: 1; display: flex; align-items: flex-start; overflow-x: auto; overflow-y: auto;
            padding: 10px 4px 20px 10px; position: relative; }
-.lines { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
 .ocol { flex: none; width: 262px; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
-.ocol + .ocol { border-left: 1px solid var(--line); padding-left: 20px; margin-left: 28px; }
+.ocol + .ocol { border-left: 1px solid var(--line); padding-left: 12px; margin-left: 10px; }
 .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
         box-shadow: 0 2px 8px #0006; overflow: hidden; flex: none; }
 .card.sel { border-color: var(--acc); }

@@ -90,7 +90,7 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
       <div v-for="o in col.orgs" :key="o.id" class="card" :data-org="o.id"
            :class="{ hall: o.kind === 'hall', sel: S.sel === o.id && !S.selSlot }">
         <div class="hd" @click="select(o.id)">
-          <span>{{ o.name }}</span><span class="tier">L{{ o.tier }}</span>
+          <span>{{ o.name }}</span><span class="tier">L{{ o.tier }}</span><span v-if="o.trainLv" class="tier">训{{ ["Ⅰ","Ⅱ","Ⅲ","Ⅳ","Ⅴ","Ⅵ","Ⅶ","Ⅷ"][o.trainLv - 1] }}</span>
           <span class="sub">{{ o.kind === "hall" ? "根节点" :
             (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }}{{ o.bldgType
               ? (o.bldg ? " · 驻" + o.bldg.b + CIRC[o.bldg.idx] : " · 缺" + o.bldgType)

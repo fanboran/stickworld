@@ -182,6 +182,8 @@ export const ORG_PANELS = {
                                         ["手推车", "1.8/人时——库中需有车（木器坊出品）", { need: "手推车" }]] },
               { key: "装卸规则", choices: [["均匀分运", "各场地按堆量比例搬运"],
                                             ["大宗优先", "先清最大堆——场地少顶格停采，小堆排后"]] } ],
+  "锯木坊": [ { key: "出材偏好", choices: [["优先木材", "锯解多出力：木材供燃料与建材"],
+                                          ["优先木板", "刨光多出力：木板供下游制造"]] } ],
   "锻造坊": [ { key: "锻打原料", choices: [["铁水优先", "自炼为主，外购补口"],
                                             ["铁锭优先", "外购为主，省下燃料"]] } ],
   "科研院": [ { key: "选题", choices: [["实用优先", "先解当前生产急用（机制后续）"],
@@ -342,7 +344,8 @@ export function addOrgRaw(name, tier, kind) {
   const id = "o" + String(S.seq.o).padStart(2, "0");
   const tpl = ORGS[name] || {};
   const org = { id, name, tier, kind: kind || "", template: name, slots: {}, steps: tpl.steps || [],
-                bldgType: tpl.bldg || "", bldg: null, settings: {} };
+                bldgType: tpl.bldg || "", bldg: null, settings: {},
+                trainLv: 0, trainProg: 0 };   // 受训等级与内部进度（0~100 点，04 §三）
   for (const opt of (ORG_PANELS[name] || [])) org.settings[opt.key] = opt.choices[0][0];
   S.orgs[id] = org;
   if (kind !== "hall")
@@ -508,6 +511,15 @@ export function advance(dt) {
     });
     const runCount = runnable.filter(Boolean).length;
     if (!runCount) continue;
+    // 工时分流：默认均摊；带出材偏好的厂按 2:1 加权（偏好工序多占人力）
+    const pref = o.settings["出材偏好"];
+    const wts = steps.map(st => {
+      if (!pref) return 1;
+      const main = pref === "优先木材" ? "锯解" : "刨光";
+      return st.name === main ? 2 : 1;
+    });
+    const wSum = wts.reduce((a, b, i) => a + (runnable[i] ? b : 0), 0);
+    const perStepOf = i => workers * wts[i] / wSum;
     const perStep = workers / runCount;
     for (let i = 0; i < steps.length; i++) {
       if (!runnable[i]) continue;
@@ -577,6 +589,22 @@ export function advance(dt) {
         feed(`${ord.b} ${tag}（建造队交付）`, "good");
         S.buildOrders.shift();
       }
+    }
+  }
+  // ⑥ 训练推进（04 §三：训练组织接收整只编制组织受训；100 点内部进度=升 1 级；
+  //    教官在编才有速率，中断停涨不丢；受训组织/训练营解散即取消）
+  for (const camp of Object.values(S.orgs)) {
+    if (camp.template !== "训练营") continue;
+    const trainee = camp.settings["受训组织"] ? S.orgs[camp.settings["受训组织"]] : null;
+    if (!trainee) continue;
+    const n = camp.slots["教官"]?.persons.length || 0;
+    if (!n) continue;   // 无教官=停摆（进度保留）
+    trainee.trainProg += 4 * n * mult * dt;
+    if (trainee.trainProg >= 100 - 1e-6) {   // 浮点累加边界
+      trainee.trainProg = 0;
+      trainee.trainLv += 1;
+      const roman = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ", "Ⅶ", "Ⅷ"][trainee.trainLv - 1] || trainee.trainLv;
+      feed(`${trainee.name} 完成训练${roman}（${camp.name} 教官呈报）`, "good");
     }
   }
   // 总览快照：按情报链的更新周期刷新（文书回运的物理节奏；停更=快照陈旧不冻结游戏本体）

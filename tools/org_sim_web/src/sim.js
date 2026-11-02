@@ -48,14 +48,23 @@ export const BUILDINGS = {
 };
 
 /* ═════════ 组织模板（同质化槽：一标签多坑位；异质化工序：每槽一道工序各需设备）。
-   host＝入驻市政厅的槽名（系统名：采集/运输/建造/制造/军事/科研，01 §2.6）；
-   bldg＝需要进驻的建筑类型（03 §一：组织所在的建筑需具备它需要的设施）═════════ */
+   host＝入驻的槽名：采集/建造/制造 三槽长在默认一级子节点「生产部」内（01 §2.6），
+   运输/军事/科研入驻市政厅对应槽；bldg＝需进驻的建筑类型（03 §一）═════════ */
 export const ORGS = {
+  /* 默认一级子节点（开局自带，不进建组织面板） */
+  "生产部": { host: "生产", sys: true, slots: [
+      { fn: "采集", n: 1, role: "泛采集兜底：无专门队时 0.4/人时，哪堆有空去哪堆" },
+      { fn: "建造", n: 1, role: "放建造组织或亲自督造" },
+      { fn: "制造", n: 1, role: "制造事务对接：跟单各厂（机制后续）" } ] },
   "运输队": { host: "运输", slots: [
+      { fn: "调度", n: 1, role: "运输计划与派单——在岗则未通报场地的搬运折扣减轻（×0.5→×0.7）" },
       { fn: "库管", n: 1, role: "仓库进出账目（在岗搬运才运转）" },
       { fn: "搬运", n: 5, homog: true, role: "同质化×5，坑位上限随仓库规模" } ] },
-  "建造队": { host: "建造", slots: [
-      { fn: "施工", n: 4, homog: true, role: "硬装与软装都干" } ] },
+  "建造组织": { host: "建造", slots: [
+      { fn: "测量", n: 1, role: "放线与验收测量——在岗施工效率×1.15（少返工）" },
+      { fn: "施工", n: 4, homog: true, role: "土方/砌筑/木作施工（硬装与软装都干）" },
+      { fn: "质检", n: 1, role: "工序与落成核验（机制后续）" },
+      { fn: "材料管理", n: 1, role: "建材收发与调度（对接运输队）" } ] },
   "伐木队": { host: "采集", bldg: "伐木小屋", slots: [
       { fn: "伐木", n: 4, homog: true, terrain: "树林" },
       { fn: "木材信息", n: 1, role: "堆存需转运时通报运输队（人手/地点）——可被本队自动借调" },
@@ -84,16 +93,22 @@ export const ORGS = {
   "冶炼坊": { host: "制造", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1 } ], steps: [] },
   "常备军": { host: "军事", late: true, slots: [ { fn: "军事", n: 1 }, { fn: "训练", n: 1 } ] },
   "训练营": { host: "军事", late: true, slots: [ { fn: "训练", n: 1 } ] },
-  "科研院": { host: "科研", late: true, slots: [ { fn: "科研", n: 1 } ] },
+  "科研院": { host: "科研", late: true, slots: [
+      { fn: "课题管理", n: 1, role: "选题立项与研究资源分配" },
+      { fn: "实验", n: 3, homog: true, role: "研究员——产出的新技能长在本人身上，再经训练扩散" },
+      { fn: "文献记录", n: 1, role: "台账与资料（技能图谱的呈报源）" } ] },
 };
-export const HALL_SLOT_KEYS = ["领导", "军事", "行政", "采集", "运输", "建造", "制造", "科研"];
+export const HALL_SLOT_KEYS = ["领导", "军事", "行政", "生产", "运输", "科研"];
+/* 采集/建造/制造三槽长在生产部里，专业组织入驻生产部对应槽 */
+export const DEPT_SLOT_KEYS = ["采集", "建造", "制造"];
 export const LATE_COST = { "常备军": { res: { "粮": 50 } }, "训练营": { res: { "木材": 15 } },
                            "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能01" } };
-/* 建组织面板的系统分类（序＝市政厅槽位序；组织类型会越来越多，靠分类+折叠承载） */
+/* 建组织面板的系统分类（组织类型会越来越多，靠分类+折叠承载；sys 模板不进面板） */
 export const ORG_CATS = (() => {
   const order = ["采集", "运输", "建造", "制造", "军事", "科研"];
   const m = new Map(order.map(k => [k, []]));
   for (const [name, t] of Object.entries(ORGS)) {
+    if (t.sys) continue;
     if (!m.has(t.host)) m.set(t.host, []);
     m.get(t.host).push(name);
   }
@@ -107,7 +122,7 @@ export const S = reactive({
   res: {}, buf: {}, wip: {}, buildings: {}, buildOrders: [],
   mobilized: false, borrows: {},
   sel: null, selSlot: null, feed: [], rates: {},
-  knobs: { gather: 0.8, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 250 },
+  knobs: { gather: 0.8, deptGather: 0.4, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 250 },
 });
 
 export function reset() {
@@ -130,7 +145,21 @@ export function reset() {
   addPersonRaw("你"); S.people[0].org = "o01"; hall.slots["领导"].persons = ["p01"];
   addPersonRaw("动员官"); S.people[1].org = "o01"; hall.slots["军事"].persons = ["p02"];
   for (let i = 0; i < 12; i++) addPersonRaw("村民");
-  feed("开局：出生城自带市政厅与仓库，树林/矿洞/农田三类地形都在。耕战一体——动员官挂军事槽（无饥饿系统）");
+  const vill = () => S.people.filter(p => !p.org).map(p => p.id);
+  /* 默认一级子节点：生产部（采集/建造/制造三槽）——开局城市即最低限度在运转
+     （采集/制造各一人；建造槽放建造组织——编制大而开局仅两人） */
+  const dept = addOrgRaw("生产部", 2, "");
+  hall.slots["生产"].institution = dept.id;
+  let q = vill();
+  dept.slots["采集"].persons = [q[0]]; person(q[0]).org = dept.id;
+  dept.slots["制造"].persons = [q[1]]; person(q[1]).org = dept.id;
+  const builder = addOrgRaw("建造组织", 2, "");
+  dept.slots["建造"].institution = builder.id;
+  q = vill();
+  for (const pid of [q[0], q[1]]) {
+    builder.slots["施工"].persons.push(pid); person(pid).org = builder.id;
+  }
+  feed("开局：市政厅+仓库自带；生产部为默认一级子节点（采集/制造各一人，建造槽放建造组织·两人）——城市最低限度在运转。耕战一体：动员官挂军事槽（无饥饿系统）");
 }
 
 /* ── 工具 ── */
@@ -252,6 +281,20 @@ export function advance(dt) {
       S.buf[key] += got; flow[slotProduct(slot)] += got;
     }
   }
+  // ②′ 生产部·采集兜底：无专门队时的泛采集（0.4/人时，均摊到仍有余量的缓冲堆）
+  const dept = Object.values(S.orgs).find(x => x.template === "生产部");
+  const deptGatherers = dept ? (dept.slots["采集"]?.persons.length || 0) : 0;
+  if (deptGatherers) {
+    const amt = K.deptGather * deptGatherers * mult * dt;
+    const roomKeys = Object.keys(S.buf).filter(k => S.buf[k] < K.buf - 0.001);
+    if (roomKeys.length) {
+      const part = amt / roomKeys.length;
+      for (const k of roomKeys) {
+        const got = Math.min(part, K.buf - S.buf[k]);
+        S.buf[k] += got; flow[k.split("|")[1]] += got;
+      }
+    }
+  }
   // ③ 搬运（库管在岗才运转；被通报场地全速，未通报打折扣）
   let haulers = 0, keeper = false;
   for (const o of Object.values(S.orgs)) {
@@ -259,13 +302,16 @@ export function advance(dt) {
     const hp = o.slots["搬运"]; if (hp) haulers += hp.persons.length;
   }
   if (keeper && haulers > 0) {
+    // 调度（运输队·运输计划与派单）在岗：未通报场地的搬运折扣减轻
+    let dispatcher = false;
+    for (const o of Object.values(S.orgs)) { const s = o.slots["调度"]; if (s && s.persons.length) dispatcher = true; }
     const cap = K.haul * haulers * mult * dt;
     const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001);
     const totalBuf = keys.reduce((a, key2) => a + S.buf[key2], 0);
     const move = Math.min(cap, totalBuf, Math.max(0, capTotal() - resTotal()));
     if (move > 0) for (const key2 of keys) {
       const part = S.buf[key2] / totalBuf;
-      const disc = notified[key2] === false ? K.uninfo : 1;
+      const disc = notified[key2] === false ? (dispatcher ? 0.7 : K.uninfo) : 1;
       const m = move * part * disc;
       S.buf[key2] -= m;
       S.res[key2.split("|")[1]] += m;
@@ -321,13 +367,16 @@ export function advance(dt) {
       }
     }
   }
-  // ⑤ 施工队列
+  // ⑤ 施工队列（测量在岗=放线准少返工，施工效率×1.15）
   if (S.buildOrders.length) {
-    let w = 0;
-    for (const o of Object.values(S.orgs)) { const s = o.slots["施工"]; if (s) w += s.persons.length; }
+    let w = 0, survey = false;
+    for (const o of Object.values(S.orgs)) {
+      const s = o.slots["施工"]; if (s) w += s.persons.length;
+      const m = o.slots["测量"]; if (m && m.persons.length) survey = true;
+    }
     if (w) {
       const ord = S.buildOrders[0];
-      ord.done += w * mult * dt;
+      ord.done += w * (survey ? 1.15 : 1) * mult * dt;
       if (ord.done >= ord.work) {
         if (ord.kind === "shell") {
           S.buildings[ord.b].push({ interior: {}, org: "" });
@@ -359,11 +408,17 @@ export function createOrg(name) {
   if (cost.res) pay(cost.res);
   const o = addOrgRaw(name, 2, "");
   const hostKey = ORGS[name].host, hall = S.orgs.o01;
+  /* 采集/建造/制造三槽长在生产部；运输/军事/科研在市政厅 */
+  const container = DEPT_SLOT_KEYS.includes(hostKey)
+    ? Object.values(S.orgs).find(x => x.template === "生产部") : hall;
   let placed = false;
-  if (hall && hall.slots[hostKey]) {
-    const occ = hall.slots[hostKey].institution ? S.orgs[hall.slots[hostKey].institution] : null;
-    if (!occ) { hall.slots[hostKey].institution = o.id; placed = true;
-      feed(`组建 ${o.name}，入驻市政厅「${hostKey}」槽`, "good"); }
+  if (container && container.slots[hostKey]) {
+    const occ = container.slots[hostKey].institution ? S.orgs[container.slots[hostKey].institution] : null;
+    if (!occ) {
+      for (const pid of container.slots[hostKey].persons) person(pid).org = "";   // 顶岗者让位回待业
+      container.slots[hostKey].persons = [];
+      container.slots[hostKey].institution = o.id; placed = true;
+      feed(`组建 ${o.name}，入驻${container.name}「${hostKey}」槽`, "good"); }
     else if (name === "训练营" && occ.slots["训练"] && !occ.slots["训练"].institution) {
       occ.slots["训练"].institution = o.id; placed = true;
       feed(`组建 ${o.name}，入驻 ${occ.name} 的「训练」槽（军事职能下沉）`, "good"); }

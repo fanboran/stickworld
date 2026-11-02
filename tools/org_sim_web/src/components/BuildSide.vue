@@ -10,9 +10,7 @@ const workers = computed(() => buildWorkers());
 const orderLabel = o => o.kind === "shell"
   ? o.b + "·新座硬装"
   : o.b + CIRC[o.idx] + "·" + o.item;
-const countOf = b => (S.buildings[b] || []).length;
-const equipN = b => S.buildings[b].filter(inst => Object.keys(inst.interior).length).length;
-function toggle(b) { openB.value = openB.value === b ? "" : b; }
+function toggle(b) { openB.value = openB === b ? "" : b; }
 function instQueued(b, item, idx) {
   return S.buildOrders.some(o => o.b === b && o.item === item && o.idx === idx);
 }
@@ -23,7 +21,7 @@ const lack = (r, n) => S.res[r] < n;
   <div id="buildside">
     <div class="bshead">
       建造
-      <span class="sub" title="施工人力＝建造队「施工」槽在岗人数；一单一个工地，可多单并进">人力 {{ workers }}</span>
+      <span class="sub" title="施工人力＝建造组织「施工」槽在岗人数；一单一个工地，可多单并进">人力 {{ workers }}</span>
     </div>
     <div class="bq" v-if="cur" title="硬装＝建筑体/窗位 · 软装＝设备/桌椅；组织无建筑可基础运转，建筑解锁进阶">
       <b>{{ orderLabel(cur) }}</b>
@@ -35,12 +33,11 @@ const lack = (r, n) => S.res[r] < n;
     <div class="bslist">
       <template v-for="[b, d] in Object.entries(BUILDINGS)" :key="b">
         <div v-if="d.prebuilt" class="brow pre" :title="d.desc">
-          <span class="bname">{{ b }}</span><span class="dim">自带 ×{{ countOf(b) }}</span>
+          <span class="bname">{{ b }}</span><span class="dim">自带</span>
         </div>
         <div v-else class="bwrap">
           <div class="brow" :class="{ open: openB === b }" @click="toggle(b)">
             <span class="bname">{{ b }}</span>
-            <span class="bbadge" :class="{ ok: countOf(b) > 0 }">×{{ countOf(b) }}</span>
           </div>
           <div v-if="openB === b" class="bexp" @click.stop>
             <div class="bdesc">{{ d.desc }}</div>
@@ -99,9 +96,6 @@ const lack = (r, n) => S.res[r] < n;
 .brow.pre { cursor: default; opacity: .55; }
 .brow .bname { font-weight: 600; }
 .brow .dim { color: var(--faint); font-size: 10.5px; margin-left: auto; }
-.bbadge { margin-left: auto; font-size: 10.5px; color: var(--dim);
-          background: var(--panel3); border-radius: 8px; padding: 1px 7px; }
-.bbadge.ok { background: #1f5c3e; color: #b8ecd0; }
 .bexp { padding: 2px 6px 8px; border-top: 1px dashed var(--line); margin-top: 1px; }
 .bdesc { color: var(--dim); font-size: 11px; padding: 4px 0 6px; }
 .newb { width: 100%; display: flex; align-items: center; justify-content: center;

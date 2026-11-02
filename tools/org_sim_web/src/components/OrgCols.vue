@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, ORGS, TERRAIN, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
+import { S, ORGS, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
          idle, select, delOrg, feed, slotCandidates, createBlocked,
-         putPerson, pullPersons, setProduct, createOrgAt } from "../sim.js";
+         putPerson, pullPersons, createOrgAt } from "../sim.js";
 
 const host = computed(() => {
   const h = {};
@@ -123,12 +123,12 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
               需{{ slot.def.req.b }}{{ slot.def.req.item ? "·" + slot.def.req.item : "" }}
             </span>
             <span class="par">
-              <template v-if="slot.def.terrain">{{ slot.def.terrain }}{{ slot.product ? "·" + slotProduct(slot) : "" }}</template>
+              <template v-if="slot.def.terrain">{{ slot.def.terrain }}·{{ slotProduct(slot) }}</template>
               <template v-else-if="slot.def.step !== undefined && o.steps[slot.def.step]">{{ stepDesc(o.steps[slot.def.step]) }}</template>
               <template v-else-if="slot.def.role">{{ slot.def.role.slice(0, 14) }}</template>
             </span>
           </div>
-          <!-- 槽位操作内联：构筑子组织（递归）/ 派人 / 选产物 -->
+          <!-- 槽位操作内联：构筑子组织（递归）/ 派人 -->
           <div v-if="opsOpen(o, fn, slot)" class="sops" @click.stop>
             <template v-if="emptySlot(slot) && slotCandidates(fn).length">
               <span class="ohint b">构筑：</span>
@@ -143,11 +143,6 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
             </select>
             <button :disabled="!pickPerson" @click="putPerson(o.id, fn, pickPerson); pickPerson = ''">派入</button>
             <button v-if="slot.persons.length" @click="pullPersons(o.id, fn)">撤出全部</button>
-            <select v-if="TERRAIN[slot.def.terrain] && TERRAIN[slot.def.terrain].products.length > 1"
-                    :value="slotProduct(slot)" title="选产物"
-                    @change="setProduct(o.id, fn, $event.target.value)">
-              <option v-for="p in TERRAIN[slot.def.terrain].products" :key="p" :value="p">{{ p }}</option>
-            </select>
             <span class="ohint">{{ slot.def.role || "" }}</span>
           </div>
         </div>

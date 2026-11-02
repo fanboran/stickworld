@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { S, BASIC_RES, resTotal, capTotal, reset } from "../sim.js";
+import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset } from "../sim.js";
 const props = defineProps({ page: String });
 const emit = defineEmits(["go", "knobs"]);
 const tabs = [
@@ -18,9 +18,8 @@ function doReset() { reset(); emit("go", "org"); }
   <!-- 标题栏：品牌 + 基础资源 + 时钟倍速/参数/重开 -->
   <div id="top">
     <div class="brand">组织模拟台</div>
-    <!-- 顶栏只放基础资源；材料/制品全在仓库页 -->
-    <span class="res" v-for="r in BASIC_RES" :key="r"
-          :title="({粮:'农田产出（进食可选增益、无饥饿；后续绑繁衍）',药材:'农田产出，炼药原料',木材:'伐木队采自树林',铁矿:'采矿队采自矿洞'})[r]">
+    <!-- 顶栏只放基础原料（原木/铁矿/农作物）；材料/制品全在仓库页，来源说明取 RES_INFO 单一真相源 -->
+    <span class="res" v-for="r in BASIC_RES" :key="r" :title="RES_INFO[r].src">
       {{ r }}<b>{{ Math.floor(S.res[r]) }}</b>
       <span class="rate" v-if="Math.abs(S.rates[r] || 0) >= 0.005">
         {{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}</span>

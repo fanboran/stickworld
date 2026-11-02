@@ -46,7 +46,7 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
         </div>
       </template>
       <template v-else-if="tab === 'wip'">
-        <div class="lbl">厂内半成品不出厂（铁水/毛坯/淬火件/净药材），随工序在厂内流转</div>
+        <div class="lbl">厂内半成品不出厂（铁水/毛坯/淬火件/净药材/车料），随工序在厂内流转</div>
         <div v-if="!wipRows.length" class="empty">厂内暂无半成品——向制造组织派工后在此可见</div>
         <div v-for="r in wipRows" :key="r.org + r.item" class="wiprow">
           <span class="org">{{ r.org }}</span><span class="item">▸ {{ r.item }}</span>

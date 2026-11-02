@@ -1,14 +1,13 @@
 <script setup>
 import { computed } from "vue";
-import { S, ORG_PANELS, CIRC, membersOf, setProduct, delOrg } from "../sim.js";
+import { S, ORG_PANELS, CIRC, membersOf, delOrg } from "../sim.js";
 
 /* 指令面板：各组织专属运行操作所在地（结构各异），实际游戏为定制精美 UI，sim 只模拟基础功能 */
 const sel = computed(() => S.sel && !S.selSlot && S.orgs[S.sel] ? S.orgs[S.sel] : null);
 const panels = computed(() => sel.value ? (ORG_PANELS[sel.value.template] || []) : []);
-function choose(org, opt, choice) {
-  org.settings[opt.key] = choice;
-  if (opt.key === "产物") setProduct(org.id, "耕作", choice);   // 农垦队产物落到耕作槽
-}
+function choose(org, opt, choice) { org.settings[opt.key] = choice; }
+/* 选项可带实物前提 { need: 资源名 }：库中无此物则禁用——载具等耐用品的物理在场门槛 */
+const lacks = c => c[2]?.need && S.res[c[2].need] < 1;
 const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.key])?.[1] || "";
 </script>
 
@@ -23,9 +22,11 @@ const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.ke
       <div v-for="opt in panels" :key="opt.key" class="opt">
         <div class="optkey">{{ opt.key }}</div>
         <div class="optbtns">
-          <button v-for="[choice, desc] in opt.choices" :key="choice"
-                  :class="{ on: sel.settings[opt.key] === choice }" :title="desc"
-                  @click="choose(sel, opt, choice)">{{ choice }}</button>
+          <button v-for="c in opt.choices" :key="c[0]"
+                  :class="{ on: sel.settings[opt.key] === c[0] }"
+                  :disabled="lacks(c)"
+                  :title="c[1] + (lacks(c) ? '｜库中无' + c[2].need + '，先让木器坊出一辆' : '')"
+                  @click="choose(sel, opt, c[0])">{{ c[0] }}</button>
         </div>
         <div class="optdesc">{{ curDesc(sel, opt) }}</div>
       </div>

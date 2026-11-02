@@ -18,16 +18,32 @@ function depthOf(id) {
   return d;
 }
 
-/* ── 列＝深度，卡片区紧凑堆叠（重合避让交给连线的竖段轨道错开） ── */
+/* ── 列＝深度，列内按「父卡槽序」排列：连线起点序＝落点序，兄弟线天然不交叉 ── */
 const columns = computed(() => {
   const byDepth = {};
   for (const id of S.order) {
     if (!S.orgs[id]) continue;
-    (byDepth[depthOf(id)] ||= []).push(S.orgs[id]);
+    (byDepth[depthOf(id)] ||= []).push(id);
   }
   const maxD = Math.max(...Object.keys(byDepth).map(Number));
   const cols = [];
-  for (let d = 0; d <= maxD; d++) cols.push({ orgs: byDepth[d] || [] });
+  let prevSorted = [];
+  for (let d = 0; d <= maxD; d++) {
+    let ids = byDepth[d] || [];
+    if (d > 0) {
+      const key = {};
+      for (const id of ids) {
+        const h = host.value[id];   // { org: 父id, fn: 入驻槽名 }
+        if (!h) { key[id] = 1e9; continue; }
+        key[id] = prevSorted.indexOf(h.org) * 1000 +
+                  Object.keys(S.orgs[h.org].slots).indexOf(h.fn);
+      }
+      ids = [...ids].sort((a, b) =>
+        (key[a] - key[b]) || (S.order.indexOf(a) - S.order.indexOf(b)));
+    }
+    prevSorted = ids;
+    cols.push({ orgs: ids.map(x => S.orgs[x]) });
+  }
   return cols;
 });
 

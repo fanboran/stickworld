@@ -112,13 +112,13 @@ export function reset() {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
     res: { "食物": 50, "药材": 0, "木材": 40, "铁矿": 10, "木板": 5, "铁锭": 4, "铁剑": 0, "药水": 0 },
-    buf: {}, wip: {}, buildings: {}, buildOrders: [],
+    buf: {}, wip: {}, buildings: {}, buildOrders: [],   // buildings[类型]＝实例数组（存在即硬装完成）
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {},
   };
   Object.assign(S, fresh);
   for (const b of Object.keys(BUILDINGS))
-    S.buildings[b] = { shell: !!BUILDINGS[b].prebuilt, interior: {} };
+    S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {} }] : [];
   for (const [site, t] of Object.entries(TERRAIN))
     for (const p of t.products) S.buf[site + "|" + p] = 0;
   const hall = addOrgRaw("市政厅", 3, "hall");
@@ -131,11 +131,14 @@ export function reset() {
 }
 
 /* ── 工具 ── */
+export const CIRC = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];   // 建筑实例枚举（区分座，非命名）
 export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
 export const capTotal = () => S.knobs.cap;
 export const resTotal = () => RES.reduce((a, r) => a + S.res[r], 0);
-export const equipOK = (b, item) => S.buildings[b] && S.buildings[b].shell && S.buildings[b].interior[item];
+/* 建筑按座计（同型可多座，每座独立软装）。设备解锁=城内存在任一座装了该设备
+   （组织↔具体建筑实例的入驻绑定是后续设计，先按存在语义算） */
+export const equipOK = (b, item) => (S.buildings[b] || []).some(inst => inst.interior[item]);
 export function addPersonRaw(name) {
   S.seq.p += 1;
   S.people.push({ id: "p" + String(S.seq.p).padStart(2, "0"), name, org: "" });
@@ -312,9 +315,10 @@ export function advance(dt) {
       const ord = S.buildOrders[0];
       ord.done += w * mult * dt;
       if (ord.done >= ord.work) {
-        if (ord.kind === "shell") S.buildings[ord.b].shell = true;
-        else S.buildings[ord.b].interior[ord.item] = true;
-        feed(`${ord.b} ${ord.kind === "shell" ? "硬装落成" : "软装·" + ord.item + "装好"}（建造队交付）`, "good");
+        if (ord.kind === "shell") S.buildings[ord.b].push({ interior: {} });
+        else S.buildings[ord.b][ord.idx].interior[ord.item] = true;
+        const tag = ord.kind === "shell" ? `第${S.buildings[ord.b].length}座硬装落成` : `${CIRC[ord.idx]}·${ord.item}装好`;
+        feed(`${ord.b} ${tag}（建造队交付）`, "good");
         S.buildOrders.shift();
       }
     }
@@ -344,16 +348,24 @@ export function createOrg(name) {
   if (!placed) feed(`组建 ${o.name}（${hostKey}槽被占——可经槽面板手动入驻）`, "bad");
   S.sel = o.id; S.selSlot = null;
 }
-export function queueBuild(kind, b, item) {
+export function queueBuild(kind, b, item, idx) {
   const d = BUILDINGS[b];
-  if (S.buildOrders.some(o => o.b === b)) { feed(`${b} 已在施工队列`, "bad"); return; }
   const it = item ? d.interior.find(x => x.item === item) : null;
   const cost = item ? it.cost : d.shell.cost;
   const work = item ? it.work : d.shell.work;
+  if (kind === "interior") {
+    const inst = S.buildings[b][idx];
+    if (!inst) { feed(`${b} 第${idx + 1}座尚不存在`, "bad"); return; }
+    if (inst.interior[item]) { feed(`${b} 第${idx + 1}座的${item}已装`, "bad"); return; }
+    if (S.buildOrders.some(o => o.b === b && o.item === item && o.idx === idx)) {
+      feed(`${b} 第${idx + 1}座的${item}已在施工队列`, "bad"); return;
+    }
+  }
   if (!canPay(cost)) { feed(`${b} 施工资源不足（${costStr(cost)}）`, "bad"); return; }
   pay(cost);
-  S.buildOrders.push({ kind, b, item: item || "", work, done: 0 });
-  feed(`开工 ${b}${kind === "shell" ? "·硬装" : "·" + item}（${costStr(cost)} 已扣）`, "good");
+  S.buildOrders.push({ kind, b, item: item || "", idx: idx ?? -1, work, done: 0 });
+  const instTag = kind === "interior" ? CIRC[idx] + "·" : "";
+  feed(`开工 ${b}${kind === "shell" ? "·新一座硬装" : "·" + instTag + item}（${costStr(cost)} 已扣）`, "good");
 }
 export function delOrg(orgId) {
   const o = S.orgs[orgId]; if (!o) return;

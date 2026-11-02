@@ -1,28 +1,20 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, BUILDINGS, RES_INFO, canPay, queueBuild, buildWorkers } from "../sim.js";
+import { S, BUILDINGS, RES_INFO, CIRC, canPay, queueBuild, buildWorkers } from "../sim.js";
 
-/* 建造侧栏：紧凑行+行内展开（点建筑行展开硬装/软装操作），不占整页 */
+/* 建造侧栏：建筑按座计（同型可多座、每座独立软装）。类型行点开＝再建一座 + 分座设备安装 */
 const openB = ref("");
 const cur = computed(() => S.buildOrders[0] || null);
 const pending = computed(() => S.buildOrders.slice(1));
 const workers = computed(() => buildWorkers());
-const orderLabel = o => o.kind === "shell" ? o.b + "·硬装" : o.b + "·" + o.item;
-const isBuilt = b => !!S.buildings[b]?.shell;
-const equipN = b => {
-  const d = BUILDINGS[b];
-  return d.interior ? d.interior.filter(it => S.buildings[b].interior[it.item]).length : 0;
-};
+const orderLabel = o => o.kind === "shell"
+  ? o.b + "·新座硬装"
+  : o.b + CIRC[o.idx] + "·" + o.item;
+const countOf = b => (S.buildings[b] || []).length;
+const equipN = b => S.buildings[b].filter(inst => Object.keys(inst.interior).length).length;
 function toggle(b) { openB.value = openB.value === b ? "" : b; }
-function queued(b, item) {
-  return S.buildOrders.some(o => o.b === b && (item ? o.item === item : o.kind === "shell"));
-}
-function badge(b) {
-  if (S.buildings[b].shell) {
-    const d = BUILDINGS[b];
-    return d.interior ? `硬装✓ 设备${equipN(b)}/${d.interior.length}` : "硬装✓";
-  }
-  return queued(b) ? "施工中" : "未建";
+function instQueued(b, item, idx) {
+  return S.buildOrders.some(o => o.b === b && o.item === item && o.idx === idx);
 }
 const lack = (r, n) => S.res[r] < n;
 </script>
@@ -31,7 +23,7 @@ const lack = (r, n) => S.res[r] < n;
   <div id="buildside">
     <div class="bshead">
       建造
-      <span class="sub" title="施工人力＝建造队「施工」槽在岗人数">人力 {{ workers }}</span>
+      <span class="sub" title="施工人力＝建造队「施工」槽在岗人数；一单一个工地，可多单并进">人力 {{ workers }}</span>
     </div>
     <div class="bq" v-if="cur" title="硬装＝建筑体/窗位 · 软装＝设备/桌椅；组织无建筑可基础运转，建筑解锁进阶">
       <b>{{ orderLabel(cur) }}</b>
@@ -43,41 +35,42 @@ const lack = (r, n) => S.res[r] < n;
     <div class="bslist">
       <template v-for="[b, d] in Object.entries(BUILDINGS)" :key="b">
         <div v-if="d.prebuilt" class="brow pre" :title="d.desc">
-          <span class="bname">{{ b }}</span><span class="dim">自带</span>
+          <span class="bname">{{ b }}</span><span class="dim">自带 ×{{ countOf(b) }}</span>
         </div>
         <div v-else class="bwrap">
-          <div class="brow" :class="{ open: openB === b, done: isBuilt(b) }" @click="toggle(b)">
+          <div class="brow" :class="{ open: openB === b }" @click="toggle(b)">
             <span class="bname">{{ b }}</span>
-            <span class="bbadge" :class="{ ok: isBuilt(b), busy: queued(b) }">{{ badge(b) }}</span>
+            <span class="bbadge" :class="{ ok: countOf(b) > 0 }">×{{ countOf(b) }}</span>
           </div>
           <div v-if="openB === b" class="bexp" @click.stop>
             <div class="bdesc">{{ d.desc }}</div>
-            <button v-if="!S.buildings[b].shell" class="pri"
-                    :disabled="queued(b) || !canPay(d.shell.cost)"
-                    :title="queued(b) ? '施工中' : (canPay(d.shell.cost) ? '' : '资源不足')"
+            <button class="pri newb" :disabled="!canPay(d.shell.cost)"
+                    :title="canPay(d.shell.cost) ? d.shell.work + '人时' : '资源不足'"
                     @click="queueBuild('shell', b)">
-              <template v-if="queued(b)">硬装施工中…</template>
-              <template v-else>建硬装·{{ d.shell.work }}人时
-                <span class="cost" v-for="[r, n] in Object.entries(d.shell.cost)" :key="r"
-                      :class="{ lack: lack(r, n) }">{{ RES_INFO[r].icon }}{{ n }}</span>
-              </template>
+              再建一座·{{ d.shell.work }}人时
+              <span class="cost" v-for="[r, n] of Object.entries(d.shell.cost)" :key="r"
+                    :class="{ lack: lack(r, n) }">{{ RES_INFO[r].icon }}{{ n }}</span>
             </button>
-            <template v-else>
+            <div v-for="(inst, idx) in S.buildings[b]" :key="idx" class="inst">
+              <div class="ihead">
+                <b>{{ CIRC[idx] }}</b>
+                <span class="fx">{{ d.interior.filter(it => inst.interior[it.item]).length }}/{{ d.interior.length }} 设备</span>
+              </div>
               <div class="irow" v-for="it in d.interior" :key="it.item">
                 <div class="ileft">
-                  <b>{{ it.item }}</b>
+                  <span class="iname">{{ it.item }}</span>
                   <span class="fx">{{ it.unlock || it.effect }}</span>
                 </div>
-                <span v-if="S.buildings[b].interior[it.item]" class="okk">已装</span>
-                <span v-else-if="queued(b, it.item)" class="dim">施工中</span>
-                <button v-else :disabled="queued(b) || !canPay(it.cost)"
-                        :title="queued(b) ? '该建筑已有工程在队' : (canPay(it.cost) ? it.work + '人时' : '资源不足')"
-                        @click="queueBuild('interior', b, it.item)">
+                <span v-if="inst.interior[it.item]" class="okk">已装</span>
+                <span v-else-if="instQueued(b, it.item, idx)" class="dim">施工中</span>
+                <button v-else :disabled="!canPay(it.cost)"
+                        :title="canPay(it.cost) ? it.work + '人时' : '资源不足'"
+                        @click="queueBuild('interior', b, it.item, idx)">
                   安装<span class="cost" v-for="[r, n] of Object.entries(it.cost)" :key="r"
                         :class="{ lack: lack(r, n) }">{{ RES_INFO[r].icon }}{{ n }}</span>
                 </button>
               </div>
-            </template>
+            </div>
           </div>
         </div>
       </template>
@@ -108,18 +101,21 @@ const lack = (r, n) => S.res[r] < n;
 .bbadge { margin-left: auto; font-size: 10.5px; color: var(--dim);
           background: var(--panel3); border-radius: 8px; padding: 1px 7px; }
 .bbadge.ok { background: #1f5c3e; color: #b8ecd0; }
-.bbadge.busy { color: var(--warn); }
 .bexp { padding: 2px 6px 8px; border-top: 1px dashed var(--line); margin-top: 1px; }
 .bdesc { color: var(--dim); font-size: 11px; padding: 4px 0 6px; }
-.bexp > button { width: 100%; display: flex; align-items: center; justify-content: center;
-                 gap: 5px; flex-wrap: wrap; font-size: 11.5px; }
-.irow { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px solid var(--line); }
-.irow:first-of-type { border-top: 0; }
+.newb { width: 100%; display: flex; align-items: center; justify-content: center;
+        gap: 5px; flex-wrap: wrap; font-size: 11.5px; }
+.inst { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 4px; }
+.ihead { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; }
+.ihead b { font-size: 12px; }
+.ihead .fx { color: var(--dim); font-size: 10.5px; }
+.irow { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .ileft { display: flex; flex-direction: column; min-width: 0; }
-.ileft b { font-size: 11.5px; }
+.ileft .iname { font-size: 11.5px; font-weight: 600; }
 .ileft .fx { color: var(--dim); font-size: 10.5px; }
 .irow button { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 3px;
                font-size: 11px; padding: 2px 7px; }
 .okk { margin-left: auto; color: #b8ecd0; font-size: 10.5px; background: #1f5c3e;
        border-radius: 8px; padding: 1px 7px; }
+.inst .dim { margin-left: auto; color: var(--warn); font-size: 10.5px; }
 </style>

@@ -88,18 +88,18 @@ export const ORGS = {
       { fn: "搬运", n: 5, homog: true, pos: "must", role: "负责搬运" } ] },
   "伐木队": { host: "伐木", bldg: "伐木小屋", slots: [
       { fn: "伐木", n: 4, homog: true, pos: "must", terrain: "树林", role: "负责伐木" },
-      { fn: "木材信息", n: 1, pos: "semi", role: "堆存需转运时通报运输队" },
-      { fn: "探测", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "探明木材资源" },
-      { fn: "记录", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "记木材出入账" } ] },
+      { fn: "木材信息", n: 1, pos: "semi", role: "收集木材线信息呈递给你" },
+      { fn: "探测", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "收集林木资源情报呈递给你" },
+      { fn: "记录", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "记录木材出入并呈递给你" } ] },
   "采矿队": { host: "采矿", slots: [
       { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿" },
       { fn: "支护", n: 1, pos: "gain", role: "架坑木支撑坑道" },
       { fn: "提升", n: 1, pos: "gain", role: "坑口吊运，矿石出坑装堆" },
-      { fn: "矿石信息", n: 1, pos: "semi", role: "负责转运通报" } ] },
+      { fn: "矿石信息", n: 1, pos: "semi", role: "收集矿石线信息呈递给你" } ] },
   "农垦队": { host: "农垦", slots: [
       { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "农田", role: "负责耕作" },
       { fn: "选种", n: 1, pos: "gain", role: "留优种作来年种籽" },
-      { fn: "农情信息", n: 1, pos: "semi", role: "田头堆满待运时通报运输队" } ] },
+      { fn: "农情信息", n: 1, pos: "semi", role: "收集农情信息呈递给你" } ] },
   "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [
       { fn: "锯解", n: 1, pos: "semi", step: 0, role: "原木开成木材" },
       { fn: "刨光", n: 1, pos: "semi", step: 1, role: "木材刨成木板" } ],
@@ -156,7 +156,7 @@ export const ORGS = {
   "科研院": { host: "科研", late: true, slots: [
       { fn: "课题管理", n: 1, pos: "gain", role: "选题与立项" },
       { fn: "实验", n: 3, homog: true, pos: "must", role: "产出新技能，长在本人身上" },
-      { fn: "文献记录", n: 1, pos: "gain", role: "技能台账呈报" } ] },
+      { fn: "文献记录", n: 1, pos: "gain", role: "汇总技能台账并呈递给你" } ] },
 };
 export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研"];
 /* 成军＝军械储备（铁剑×2 入库）+ 集结口粮（农作物×50）——制品与原料的实物资费 */
@@ -234,7 +234,7 @@ export function reset() {
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
       role: { "市长": "统辖全城（你）", "军事": "掌军，在编即可动员", "生产": "辖采集/建造/制造三线",
-              "运输": "负责运输", "科研": "负责科研" }[key] },
+              "运输": "启用物流系统", "科研": "负责科研" }[key] },
       persons: [], institution: "" };
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
   const place = (container, fn, org) => { container.slots[fn].institution = org.id; };

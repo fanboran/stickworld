@@ -6,25 +6,42 @@ export const TERRAIN = {
   "矿洞": { products: ["铁矿"] },
   "农田": { products: ["食物", "药材"] },   // 炼药原材料从农田来
 };
-/* 城市库存品（可进仓库）。铁水/毛坯/淬火件/净药材是厂内物品，不可离厂 */
+/* 城市库存品目录（可进仓库）。cat：basic=基础资源 / mat=材料 / prod=制品（顶栏只放 basic，全量在仓库页）。
+   铁水/毛坯/淬火件/净药材是厂内物品，不可离厂（仓库页「厂内」标签可见） */
 export const RES = ["食物", "药材", "木材", "铁矿", "木板", "铁锭", "铁剑", "药水"];
+export const RES_INFO = {
+  "食物": { cat: "basic", icon: "🌾", src: "农田产出（无饥饿，后续绑繁衍）" },
+  "药材": { cat: "basic", icon: "🌿", src: "农田产出，炼药原料" },
+  "木材": { cat: "basic", icon: "🪵", src: "伐木队采自树林" },
+  "铁矿": { cat: "basic", icon: "🪨", src: "采矿队采自矿洞" },
+  "木板": { cat: "mat", icon: "🪚", src: "锯木坊锯解木材" },
+  "铁锭": { cat: "mat", icon: "🔩", src: "外购；后期冶炼坊量产" },
+  "铁剑": { cat: "prod", icon: "🗡️", src: "锻造坊开刃出品" },
+  "药水": { cat: "prod", icon: "🧪", src: "药剂坊熬制" },
+};
+export const RES_CATS = [["basic", "基础资源"], ["mat", "材料"], ["prod", "制品"]];
+export const BASIC_RES = RES.filter(r => RES_INFO[r].cat === "basic");
 
 /* ═════════ 建筑（与组织独立：组织无建筑可基础运转；建筑解锁进阶槽位与设备工序） ═════════ */
 export const BUILDINGS = {
-  "市政厅": { prebuilt: true },
-  "仓库":   { prebuilt: true },
-  "伐木小屋": { shell: { cost: { "木材": 20 }, work: 20 }, interior: [
+  "市政厅": { prebuilt: true, desc: "城市根组织所在" },
+  "仓库":   { prebuilt: true, desc: "资源与制品的集中存放" },
+  "伐木小屋": { desc: "伐木队办公与工具场所（无它也能伐：探测/记录被禁）",
+    shell: { cost: { "木材": 20 }, work: 20 }, interior: [
       { item: "办公桌椅", cost: { "木材": 6 }, work: 6, unlock: "解锁伐木队的探测/记录槽" },
       { item: "工具架",   cost: { "木板": 4 }, work: 6, effect: "伐木速率+25%" },
       { item: "额外椅子", cost: { "木板": 2 }, work: 3, effect: "木材信息联络更快" } ] },
-  "锯木坊": { shell: { cost: { "木材": 15 }, work: 16 }, interior: [
+  "锯木坊": { desc: "木材 → 木板",
+    shell: { cost: { "木材": 15 }, work: 16 }, interior: [
       { item: "锯架", cost: { "木材": 8 }, work: 8, unlock: "锯解工序" } ] },
-  "锻造坊": { shell: { cost: { "木材": 25 }, work: 24 }, interior: [
+  "锻造坊": { desc: "熔炼→锻打→淬火→开刃，出铁剑（半成品不出厂）",
+    shell: { cost: { "木材": 25 }, work: 24 }, interior: [
       { item: "熔炉", cost: { "木材": 10, "木板": 4 }, work: 10, unlock: "熔炼工序（铁矿+木材→铁水）" },
       { item: "铁砧", cost: { "铁矿": 4 }, work: 8, unlock: "锻打工序（铁水/铁锭→毛坯）" },
       { item: "水槽", cost: { "木材": 6 }, work: 5, unlock: "淬火工序（毛坯→淬火件）" },
       { item: "磨石", cost: { "铁矿": 2 }, work: 5, unlock: "开刃工序（淬火件→铁剑）" } ] },
-  "药剂坊": { shell: { cost: { "木材": 12 }, work: 12 }, interior: [
+  "药剂坊": { desc: "药材 → 净药材 → 药水",
+    shell: { cost: { "木材": 12 }, work: 12 }, interior: [
       { item: "切药刀", cost: { "铁矿": 1 }, work: 4, unlock: "炮制工序（药材→净药材）" },
       { item: "药炉",   cost: { "木材": 8 }, work: 6, unlock: "熬制工序（净药材→药水）" } ] },
 };
@@ -69,6 +86,16 @@ export const ORGS = {
 export const HALL_SLOT_KEYS = ["领导", "军事", "行政", "采集", "搬运", "施工", "制造", "科研"];
 export const LATE_COST = { "常备军": { res: { "食物": 50 } }, "训练营": { res: { "木材": 15 } },
                            "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能01" } };
+/* 建组织面板的系统分类（序＝市政厅槽位序；组织类型会越来越多，靠分类+折叠承载） */
+export const ORG_CATS = (() => {
+  const order = ["采集", "搬运", "施工", "制造", "军事", "科研"];
+  const m = new Map(order.map(k => [k, []]));
+  for (const [name, t] of Object.entries(ORGS)) {
+    if (!m.has(t.host)) m.set(t.host, []);
+    m.get(t.host).push(name);
+  }
+  return [...m].map(([cat, names]) => ({ cat, names }));
+})();
 
 /* ═════════ 状态（响应式单例） ═════════ */
 export const S = reactive({
@@ -111,15 +138,13 @@ export const resTotal = () => RES.reduce((a, r) => a + S.res[r], 0);
 export const equipOK = (b, item) => S.buildings[b] && S.buildings[b].shell && S.buildings[b].interior[item];
 export function addPersonRaw(name) {
   S.seq.p += 1;
-  S.people.push({ id: "p" + String(S.seq.p).padStart(2, "0"),
-                  name: name + String(S.seq.p).padStart(2, "0"), org: "" });
+  S.people.push({ id: "p" + String(S.seq.p).padStart(2, "0"), name, org: "" });
 }
 export function addOrgRaw(name, tier, kind) {
   S.seq.o += 1;
   const id = "o" + String(S.seq.o).padStart(2, "0");
   const tpl = ORGS[name] || {};
-  S.orgs[id] = { id, name: kind === "hall" ? name : name + String(S.seq.o).padStart(2, "0"),
-                 tier, kind: kind || "", template: name, slots: {}, steps: tpl.steps || [] };
+  S.orgs[id] = { id, name, tier, kind: kind || "", template: name, slots: {}, steps: tpl.steps || [] };
   if (kind !== "hall")
     for (const def of (tpl.slots || []))
       S.orgs[id].slots[def.fn] = { def, persons: [], institution: "", product: "" };
@@ -132,6 +157,20 @@ export function feed(text, cls) {
 }
 export function membersOf(o) {
   let n = 0; for (const s of Object.values(o.slots)) n += s.persons.length; return n;
+}
+/* 厂内半成品清单（各厂 WIP 汇总，仓库页「厂内」标签用） */
+export function wipList() {
+  const rows = [];
+  for (const o of S.order.map(x => S.orgs[x]).filter(Boolean))
+    for (const [item, qty] of Object.entries(S.wip[o.id] || {}))
+      if (qty > 0.001) rows.push({ org: o.name, item, qty });
+  return rows;
+}
+/* 在岗施工人力（建造队等组织「施工」槽在岗人数） */
+export function buildWorkers() {
+  let w = 0;
+  for (const o of Object.values(S.orgs)) { const s = o.slots["施工"]; if (s) w += s.persons.length; }
+  return w;
 }
 export function wipOf(o) { return S.wip[o.id] || (S.wip[o.id] = {}); }
 export const bufKey = (site, product) => site + "|" + product;
@@ -280,6 +319,8 @@ export function advance(dt) {
       }
     }
   }
+  // rates 语义=每时净流量（本拍增量按 dt 归一），供顶栏/仓库瓦片显示
+  for (const r of RES) flow[r] /= dt;
   S.rates = flow;
 }
 

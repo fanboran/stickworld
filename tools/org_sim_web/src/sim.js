@@ -16,7 +16,7 @@ export const RES_INFO = {
   "木材": { cat: "basic", icon: "🪵", src: "伐木队采自树林" },
   "铁矿": { cat: "basic", icon: "🪨", src: "采矿队采自矿洞" },
   "木板": { cat: "mat", icon: "🪚", src: "锯木坊锯解木材" },
-  "铁锭": { cat: "mat", icon: "🔩", src: "外购；后期冶炼坊量产" },
+  "铁锭": { cat: "mat", icon: "🔩", src: "冶炼坊自炼（后期）；短缺亦可外购补口" },
   "铁剑": { cat: "prod", icon: "🗡️", src: "锻造坊开刃出品" },
   "药水": { cat: "prod", icon: "🧪", src: "药剂坊熬制" },
 };
@@ -47,6 +47,9 @@ export const BUILDINGS = {
     shell: { cost: { "木材": 12 }, work: 12 }, interior: [
       { item: "切药刀", cost: { "铁矿": 1 }, work: 4, unlock: "炮制工序（药材→净药材）" },
       { item: "药炉",   cost: { "木材": 8 }, work: 6, unlock: "熬制工序（净药材→药水）" } ] },
+  "冶炼坊": { late: true, desc: "矿石入炉炼铁，出铁锭——铁锭从外购变自产（后期）",
+    shell: { cost: { "木材": 25 }, work: 24 }, interior: [
+      { item: "冶炼炉", cost: { "铁矿": 6, "木板": 4 }, work: 12, unlock: "冶炼工序（铁矿+木材→铁锭）" } ] },
 };
 
 /* ═════════ 组织模板。host＝可入驻的槽名（选中空槽即弹出该槽可构筑的子组织，可递归）；
@@ -83,9 +86,12 @@ export const ORGS = {
       { fn: "记录", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "记木材出入账" } ] },
   "采矿队": { host: "采矿", slots: [
       { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿" },
+      { fn: "支护", n: 1, pos: "gain", role: "架坑木支撑坑道" },
       { fn: "矿石信息", n: 1, pos: "semi", role: "负责转运通报" } ] },
   "农垦队": { host: "农垦", slots: [
-      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "农田", role: "产物可切换粮/药材" } ] },
+      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "农田", role: "产物可切换粮/药材" },
+      { fn: "采药", n: 2, homog: true, pos: "gain", terrain: "农田", prod: "药材", role: "负责采药" },
+      { fn: "农情信息", n: 1, pos: "semi", role: "田头堆满待运时通报运输队" } ] },
   "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [
       { fn: "锯解", n: 1, pos: "semi", step: 0, role: "木材开成粗板" },
       { fn: "刨光", n: 1, pos: "semi", step: 1, role: "粗板刨成木板" } ],
@@ -108,17 +114,26 @@ export const ORGS = {
       steps: [
         { name: "炮制", equip: "切药刀", inCity: { "药材": 1 }, wip: "净药材" },
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 } } ] },
-  /* 信息槽下辖的专门组织（精细化示例：矿石信息内可继续下辖组织） */
+  /* 职能槽下辖的专门组织（任意槽可下辖；信息/库管槽内的精细化示例，可继续递归） */
   "林务所": { host: "木材信息", slots: [
       { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看林中堆存与路况" },
       { fn: "记档", n: 1, pos: "gain", role: "汇总木材台账" } ] },
   "矿务所": { host: "矿石信息", slots: [
       { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看矿场堆存" },
       { fn: "记档", n: 1, pos: "gain", role: "汇总矿石台账" } ] },
+  "农务所": { host: "农情信息", slots: [
+      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看田场堆存" },
+      { fn: "记档", n: 1, pos: "gain", role: "汇总粮药台账" } ] },
+  "库务所": { host: "库管", slots: [
+      { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账" },
+      { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
   /* 后期 */
-  "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1, pos: "semi", role: "铁矿炼铁锭" } ], steps: [] },
+  "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true,
+      slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭" } ],
+      steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 1, "木材": 1 }, outCity: { "铁锭": 1 } } ] },
   "常备军": { host: "军事", late: true, slots: [
       { fn: "军事", n: 1, pos: "must", role: "在编即可动员" },
+      { fn: "军需", n: 1, pos: "gain", role: "军粮军械领用配发登记" },
       { fn: "训练", n: 1, pos: "gain", role: "放训练营成建制施训" } ] },
   "训练营": { host: "训练", late: true, slots: [
       { fn: "训练管理", n: 1, pos: "gain", role: "排训练计划" },
@@ -143,10 +158,14 @@ export const slotCandidates = fn => {
 export const ORG_PANELS = {
   "常备军": [ { key: "兵役制度", choices: [["动员兵役", "耕战一体：战时集结，动员时产率减半"],
                                             ["常备兵役", "职业兵维持耗粮（后续），动员不减产率"]] } ],
-  "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"], ["手推车", "1.8/人时（需造车，暂直开）"]] } ],
+  "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"], ["手推车", "1.8/人时（需造车，暂直开）"]] },
+              { key: "装卸规则", choices: [["均匀分运", "各场地按堆量比例搬运"],
+                                            ["大宗优先", "先清最大堆——场地少顶格停采，小堆排后"]] } ],
   "锻造坊": [ { key: "锻打原料", choices: [["铁水优先", "自炼为主，外购补口"],
                                             ["铁锭优先", "外购为主，省下燃料"]] } ],
   "农垦队": [ { key: "产物", choices: [["粮", "战粮类增益品原料"], ["药材", "炼药原料"]] } ],
+  "科研院": [ { key: "选题", choices: [["实用优先", "先解当前生产急用（机制后续）"],
+                                        ["底层探究", "先钻基础原理（机制后续）"]] } ],
 };
 /* 建不了的原因（拒止反馈落在按钮态上）：前提→资源，与构筑同序 */
 export function createBlocked(name) {
@@ -205,7 +224,7 @@ export function reset() {
   const staff = (org, fn, n, ids) => {
     for (const pid of ids.slice(0, n)) { org.slots[fn].persons.push(pid); person(pid).org = org.id; }
   };
-  /* 组织树：市政厅 → 生产局（采集中心→伐木/采矿/农垦 · 工程队 · 制造中心→锯木/锻造/药剂）· 运输队 · 常备军（训练=训练营）· 科研院 */
+  /* 组织树：市政厅 → 生产局（采集中心→伐木/采矿/农垦 · 工程队 · 制造中心→锯木/锻造/药剂）· 运输队（库管=库务所入驻）· 常备军（训练=训练营）· 科研院 */
   hall.slots["市长"].persons = ["p01"]; S.people[0].org = hall.id;
   const dept = addOrgRaw("生产局", 2, ""); place(hall, "生产", dept);
   const gather = addOrgRaw("采集中心", 2, ""); place(dept, "采集", gather);
@@ -218,6 +237,7 @@ export function reset() {
   const forge = addOrgRaw("锻造坊", 2, ""); place(works, "锻造", forge);
   const pharmacy = addOrgRaw("药剂坊", 2, ""); place(works, "制药", pharmacy);
   const haul = addOrgRaw("运输队", 2, ""); place(hall, "运输", haul);
+  const store = addOrgRaw("库务所", 2, ""); place(haul, "库管", store);   // 机构入驻库管槽＝库管履职
   const army = addOrgRaw("常备军", 2, ""); place(hall, "军事", army);
   army.slots["军事"].persons = ["p02"]; S.people[1].org = army.id;
   const camp = addOrgRaw("训练营", 2, ""); place(army, "训练", camp);
@@ -226,14 +246,14 @@ export function reset() {
   let q = vill();
   staff(lumber, "伐木", 2, q); staff(mining, "挖矿", 2, q.slice(2));
   staff(farm, "耕作", 2, q.slice(4));
-  staff(haul, "调度", 1, q.slice(6)); staff(haul, "库管", 1, q.slice(7)); staff(haul, "搬运", 3, q.slice(8));
+  staff(haul, "调度", 1, q.slice(6)); staff(store, "收发", 1, q.slice(7)); staff(haul, "搬运", 3, q.slice(8));
   staff(eng, "测量", 1, q.slice(11)); staff(eng, "施工", 2, q.slice(12));
   staff(forge, "风箱", 1, q.slice(14)); staff(forge, "熔炼", 1, q.slice(15)); staff(forge, "锻打", 1, q.slice(16));
   staff(forge, "淬火", 1, q.slice(17)); staff(forge, "开刃", 1, q.slice(18));
   staff(sawmill, "锯解", 1, q.slice(19));
   staff(pharmacy, "炮制", 1, q.slice(20));
   staff(sci, "课题管理", 1, q.slice(21)); staff(sci, "实验", 2, q.slice(22)); staff(sci, "文献记录", 1, q.slice(24));
-  feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
+  feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输队(库务所入驻库管)/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
 }
 
 /* ── 工具 ── */
@@ -308,7 +328,9 @@ export function orgDesc(name) {
 }
 export function slotProduct(slot) {
   const list = TERRAIN[slot.def.terrain].products;
-  return list.includes(slot.product) ? slot.product : list[0];
+  if (list.includes(slot.product)) return slot.product;
+  if (slot.def.prod && list.includes(slot.def.prod)) return slot.def.prod;   // 槽自带默认产物（采药→药材）
+  return list[0];
 }
 
 /* ═════════ 经济推进 ═════════ */
@@ -384,22 +406,28 @@ export function advance(dt) {
     const hp = o.slots["搬运"]; if (hp) haulers += hp.persons.length;
   }
   if (keeper && haulers > 0) {
-    // 调度（运输队·运输计划与派单）在岗：未通报场地的搬运折扣减轻
-    let dispatcher = false;
-    for (const o of Object.values(S.orgs)) { const s = o.slots["调度"]; if (s && s.persons.length) dispatcher = true; }
-    let haulRate = K.haul;
-    for (const o of Object.values(S.orgs))
-      if (o.slots["搬运"] && o.settings["载具"] === "手推车") haulRate = K.haul * 1.5;
+    // 调度（运输队·运输计划与派单）为职能岗：排单与派车的机制后续
+    let haulRate = K.haul, bulkFirst = false;
+    for (const o of Object.values(S.orgs)) if (o.slots["搬运"]) {
+      if (o.settings["载具"] === "手推车") haulRate = K.haul * 1.5;
+      if (o.settings["装卸规则"] === "大宗优先") bulkFirst = true;
+    }
     const cap = haulRate * haulers * mult * dt;
     const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001);
     const totalBuf = keys.reduce((a, key2) => a + S.buf[key2], 0);
     const move = Math.min(cap, totalBuf, Math.max(0, capTotal() - resTotal()));
-    if (move > 0) for (const key2 of keys) {
-      const part = S.buf[key2] / totalBuf;
-      const disc = notified[key2] === false ? K.uninfo : 1;
-      const m = move * part * disc;
-      S.buf[key2] -= m;
-      S.res[key2.split("|")[1]] += m;
+    if (move > 0) {
+      // 装卸规则（物理行为差异，非乘数）：均匀分运=按堆量比例；大宗优先=先清最大堆，场地少顶格停采
+      const order = bulkFirst ? [...keys].sort((a, b) => S.buf[b] - S.buf[a]) : keys;
+      let remaining = move;
+      for (const key2 of order) {
+        const disc = notified[key2] === false ? K.uninfo : 1;
+        const m = bulkFirst ? Math.min(remaining, S.buf[key2]) * disc
+                            : move * (S.buf[key2] / totalBuf) * disc;
+        if (bulkFirst) remaining -= m;
+        S.buf[key2] -= m;
+        S.res[key2.split("|")[1]] += m;
+      }
     }
   }
   // ④ 工厂：每槽一道工序、每工序需设备；工时在可开工工序间均摊——一人厂=独轮回全工序（慢但转）

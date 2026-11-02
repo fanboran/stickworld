@@ -37,7 +37,7 @@ const lack = (r, n) => S.res[r] < n;
         </div>
         <div v-else class="bwrap">
           <div class="brow" :class="{ open: openB === b }" @click="toggle(b)">
-            <span class="bname">{{ b }}</span>
+            <span class="bname">{{ b }}<i v-if="d.late" class="latetag">后期</i></span>
           </div>
           <div v-if="openB === b" class="bexp" @click.stop>
             <div class="bdesc">{{ d.desc }}</div>
@@ -94,6 +94,7 @@ const lack = (r, n) => S.res[r] < n;
 .brow.open { background: #4f8cff1c; }
 .brow.pre { cursor: default; opacity: .55; }
 .brow .bname { font-weight: 600; }
+.brow .latetag { font-style: normal; font-size: 10px; color: var(--warn); margin-left: 4px; }
 .brow .dim { color: var(--faint); font-size: 10.5px; margin-left: auto; }
 .bexp { padding: 2px 6px 8px; border-top: 1px dashed var(--line); margin-top: 1px; }
 .bdesc { color: var(--dim); font-size: 11px; padding: 4px 0 6px; }

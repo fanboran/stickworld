@@ -142,6 +142,10 @@ export const ORGS = {
   "库务所": { host: "库管", slots: [
       { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账" },
       { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
+  "情报局": { host: "情报", slots: [
+      { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览" },
+      { fn: "采编", n: 2, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
+      { fn: "抄送", n: 1, pos: "gain", role: "总览分发到各指令面板（解锁呈报流）" } ] },
   /* 后期 */
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true,
       slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭" } ],
@@ -159,7 +163,7 @@ export const ORGS = {
       { fn: "实验", n: 3, homog: true, pos: "must", role: "产出新技能，长在本人身上" },
       { fn: "文献记录", n: 1, pos: "gain", role: "汇总技能台账并呈递给你" } ] },
 };
-export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研"];
+export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研", "情报"];
 /* 成军＝军械储备（铁剑×2 入库）+ 集结口粮（农作物×50）——制品与原料的实物资费 */
 export const LATE_COST = { "常备军": { res: { "农作物": 50, "铁剑": 2 } }, "训练营": { res: { "木材": 15 } },
                            "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能01" } };
@@ -231,12 +235,12 @@ export function reset() {
   inst("木工房", "木工台", "组装架");
   addPersonRaw("你");
   addPersonRaw("动员官");
-  for (let i = 0; i < 29; i++) addPersonRaw("村民");
+  for (let i = 0; i < 32; i++) addPersonRaw("村民");
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
       role: { "市长": "统辖全城（你）", "军事": "掌军，在编即可动员", "生产": "辖采集/建造/制造三线",
-              "运输": "启用物流系统", "科研": "负责科研" }[key] },
+              "运输": "启用物流系统", "科研": "负责科研", "情报": "生成一站式信息总览" }[key] },
       persons: [], institution: "" };
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
   const place = (container, fn, org) => { container.slots[fn].institution = org.id; };
@@ -263,6 +267,7 @@ export function reset() {
   army.slots["军事"].persons = ["p02"]; S.people[1].org = army.id;
   const camp = addOrgRaw("训练营", 2, ""); place(army, "训练", camp);
   const sci = addOrgRaw("科研院", 2, ""); place(hall, "科研", sci);
+  const intel = addOrgRaw("情报局", 2, ""); place(hall, "情报", intel);
   /* 满员运转 */
   let q = vill();
   staff(lumber, "伐木", 2, q); staff(mining, "挖矿", 2, q.slice(2));
@@ -275,7 +280,8 @@ export function reset() {
   staff(pharmacy, "炮制", 1, q.slice(20));
   staff(cartshop, "备料", 1, q.slice(25));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
   staff(smelter, "冶炼", 1, q.slice(24));
-  staff(sci, "课题管理", 1, q.slice(25)); staff(sci, "实验", 2, q.slice(26)); staff(sci, "文献记录", 1, q.slice(28));
+  staff(intel, "汇总", 1, q.slice(26)); staff(intel, "采编", 2, q.slice(27));
+  staff(sci, "课题管理", 1, q.slice(29)); staff(sci, "实验", 2, q.slice(30)); staff(sci, "文献记录", 1, q.slice(32));
   feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输队(库务所入驻库管)/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
 }
 
@@ -285,6 +291,21 @@ export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
 /* 仓库按座计：每座一份容量（首座开局自带） */
 export const capTotal = () => S.knobs.cap * (S.buildings["仓库"]?.length || 1);
+/* 情报等级：0=无总览（没人汇总）1=基础总览（情报槽有人顶岗）2=+三线运转与堆存（情报局·汇总在编）
+   3=+呈报流（抄送在编）——信息收集组织规模越庞大，获取的信息越多 */
+export function intelLevel() {
+  const hall = S.orgs.o01;
+  if (!hall) return 0;
+  const slot = hall.slots["情报"];
+  if (!slot) return 0;
+  if (slot.persons.length) return 1;
+  const org = slot.institution ? S.orgs[slot.institution] : null;
+  if (!org || !membersOf(org)) return 0;
+  let lv = 1;
+  if (org.slots["汇总"]?.persons.length) lv = 2;
+  if (org.slots["抄送"]?.persons.length) lv = 3;
+  return lv;
+}
 /* 坑位上限随建筑规模：搬运坑位＝5×仓库座数；其余槽用模板定值 */
 export function slotCap(o, slot) {
   if (slot.def.fn === "搬运") return 5 * (S.buildings["仓库"]?.length || 1);

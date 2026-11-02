@@ -4,6 +4,7 @@ import { S, advance } from "./sim.js";
 import TopBar from "./components/TopBar.vue";
 import OrgPage from "./components/OrgPage.vue";
 import Warehouse from "./components/Warehouse.vue";
+import Overview from "./components/Overview.vue";
 
 const page = ref("org");          // org=组织 / wh=仓库（头部页签切换；建造在组织页右侧栏）
 const showKnobs = ref(false);
@@ -31,6 +32,7 @@ onUnmounted(() => clearInterval(timer));
     </div>
     <OrgPage v-if="page === 'org'" />
     <Warehouse v-else-if="page === 'wh'" />
+    <Overview v-else-if="page === 'ov'" />
   </div>
 </template>
 

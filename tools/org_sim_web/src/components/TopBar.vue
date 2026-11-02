@@ -1,12 +1,12 @@
 <script setup>
 import { computed } from "vue";
-import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset, intelLevel } from "../sim.js";
+import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset } from "../sim.js";
 const props = defineProps({ page: String });
 const emit = defineEmits(["go", "knobs"]);
 const tabs = [
   { id: "org", label: "组织" },
   { id: "wh", label: "仓库" },
-  { id: "ov", label: "总览", needIntel: true },
+  { id: "ov", label: "总览" },
 ];
 const speeds = [[0, "⏸"], [1, "1×"], [10, "10×"], [100, "100×"]];
 const day = computed(() => Math.floor(S.hours / 24) + 1);
@@ -41,8 +41,6 @@ function doReset() { reset(); emit("go", "org"); }
   <div id="tabrow">
     <nav id="tabs">
       <button v-for="t in tabs" :key="t.id" :class="{ on: page === t.id }"
-              :disabled="t.needIntel && intelLevel() === 0"
-              :title="t.needIntel && intelLevel() === 0 ? '需市政厅情报槽有人汇总' : ''"
               @click="emit('go', t.id)">{{ t.label }}</button>
     </nav>
   </div>

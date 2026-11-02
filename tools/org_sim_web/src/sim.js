@@ -202,7 +202,7 @@ export const S = reactive({
   people: [], orgs: {}, order: [],
   res: {}, buf: {}, wip: {}, buildings: {}, buildOrders: [],
   mobilized: false, borrows: {},
-  sel: null, selSlot: null, feed: [], rates: {},
+  sel: null, selSlot: null, feed: [], rates: {}, snap: null,
   knobs: { gather: 0.8, deptGather: 0.4, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 250 },
 });
 
@@ -214,7 +214,7 @@ export function reset() {
     res: { "原木": 40, "铁矿": 20, "农作物": 50, "木材": 10, "木板": 5, "铁锭": 4, "铁剑": 2, "药水": 0, "手推车": 0 },
     buf: {}, wip: {}, buildings: {}, buildOrders: [],   // buildings[类型]＝实例数组（存在即硬装完成）
     mobilized: false, borrows: {},
-    sel: null, selSlot: null, feed: [], rates: {},
+    sel: null, selSlot: null, feed: [], rates: {}, snap: null,
   };
   Object.assign(S, fresh);
   for (const b of Object.keys(BUILDINGS))
@@ -283,6 +283,7 @@ export function reset() {
   staff(intel, "汇总", 1, q.slice(26)); staff(intel, "采编", 2, q.slice(27));
   staff(sci, "课题管理", 1, q.slice(29)); staff(sci, "实验", 2, q.slice(30)); staff(sci, "文献记录", 1, q.slice(32));
   feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输队(库务所入驻库管)/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
+  S.snap = collectSnap();   // 开局总览快照（此后按情报链更新周期刷新）
 }
 
 /* ── 工具 ── */
@@ -291,20 +292,34 @@ export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
 /* 仓库按座计：每座一份容量（首座开局自带） */
 export const capTotal = () => S.knobs.cap * (S.buildings["仓库"]?.length || 1);
-/* 情报等级：0=无总览（没人汇总）1=基础总览（情报槽有人顶岗）2=+三线运转与堆存（情报局·汇总在编）
-   3=+呈报流（抄送在编）——信息收集组织规模越庞大，获取的信息越多 */
-export function intelLevel() {
+/* 一站式总览＝把各处文书运回市政厅的汇总快照：信息量不随情报规模 gate——各组织
+   面板的数据由它们自己的信息位收集；情报组织规模只决定更新效率（文书要真的有人拿回来）。
+   汇总在编才有总览更新；采编每人把周期缩短（12时基础，每+1人-3时，下限1时）；无人=停更 */
+export function intelInterval() {
   const hall = S.orgs.o01;
-  if (!hall) return 0;
-  const slot = hall.slots["情报"];
-  if (!slot) return 0;
-  if (slot.persons.length) return 1;
+  const slot = hall?.slots["情报"];
+  if (!slot) return Infinity;
   const org = slot.institution ? S.orgs[slot.institution] : null;
-  if (!org || !membersOf(org)) return 0;
-  let lv = 1;
-  if (org.slots["汇总"]?.persons.length) lv = 2;
-  if (org.slots["抄送"]?.persons.length) lv = 3;
-  return lv;
+  if (!org) return slot.persons.length ? 24 : Infinity;   // 有人顶岗=自己顺路捎，日更
+  if (!org.slots["汇总"]?.persons.length) return Infinity;
+  const ed = org.slots["采编"]?.persons.length || 0;
+  return Math.max(1, 12 - 3 * ed);
+}
+function collectSnap() {
+  const m = o => o ? membersOf(o) : 0;
+  const g = t => m(Object.values(S.orgs).find(x => x.template === t));
+  return {
+    at: S.hours,
+    res: { ...S.res }, rates: { ...S.rates }, buf: { ...S.buf },
+    queue: S.buildOrders.map(o => ({ label: o.kind === "shell" ? o.b + "·新座" : o.b + "·" + o.item,
+      pct: Math.round(100 * o.done / o.work) })),
+    lines: { 伐木队: g("伐木队"), 采矿队: g("采矿队"), 农垦队: g("农垦队"),
+             运输队: g("运输队"), 库务所: g("库务所"), 锯木坊: g("锯木坊"), 锻造坊: g("锻造坊"),
+             药剂坊: g("药剂坊"), 木器坊: g("木器坊"), 冶炼坊: g("冶炼坊"),
+             常备军: g("常备军"), 科研院: g("科研院"), 情报局: g("情报局") },
+    feed: S.feed.slice(-40).map(f => ({ ...f })),
+    popu: { total: S.people.length, idle: S.people.filter(x => !x.org).length },
+  };
 }
 /* 坑位上限随建筑规模：搬运坑位＝5×仓库座数；其余槽用模板定值 */
 export function slotCap(o, slot) {
@@ -563,6 +578,11 @@ export function advance(dt) {
         S.buildOrders.shift();
       }
     }
+  }
+  // 总览快照：按情报链的更新周期刷新（文书回运的物理节奏；停更=快照陈旧不冻结游戏本体）
+  {
+    const iv = intelInterval();
+    if (S.snap === null || (iv !== Infinity && S.hours - S.snap.at >= iv)) S.snap = collectSnap();
   }
   // rates 语义=每时净流量（本拍增量按 dt 归一），供顶栏/仓库瓦片显示
   for (const r of RES) flow[r] /= dt;

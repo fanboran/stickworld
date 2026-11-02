@@ -80,7 +80,7 @@ function candTitle(name) {
   const blocked = createBlocked(name);
   return desc + (blocked ? "｜" + blocked : "");
 }
-const POS_NAME = { run: "必需岗", flex: "借调岗", any: "弹性岗", opt: "增益岗" };
+const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "半必须：需人运行，可移调顶岗", gain: "增益：无人也行，只是未解锁该功能" };
 
 /* ── 嵌套连线：机构入驻槽 → 子组织卡片（SVG 覆盖层，肘形线） ── */
 const svg = ref(null);
@@ -91,36 +91,33 @@ function drawLines() {
   if (!root || !svg.value) return;
   const c = root.getBoundingClientRect();
   const sx = root.scrollLeft, sy = root.scrollTop;
-  const segs = [];
+  const byParent = {};   // 同一父卡的连线一组，组内按槽序＝落点序（单调不交叉）
   for (const o of Object.values(S.orgs))
-    for (const [fn, slot] of Object.entries(o.slots)) {
+    for (const slot of Object.values(o.slots)) {
       if (!slot.institution || !S.orgs[slot.institution]) continue;
-      const from = root.querySelector(`[data-slot="${o.id}|${fn}"]`);
+      const from = root.querySelector(`[data-slot="${o.id}|${slot.def.fn}"]`);
       const to = root.querySelector(`[data-org="${slot.institution}"]`);
       if (!from || !to) continue;
       const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
-      const x1 = a.right - c.left + sx, y1 = a.top - c.top + sy + a.height / 2;
-      const x2 = b.left - c.left + sx, y2 = b.top - c.top + sy + 14;
-      segs.push({ x1, y1, x2, y2, xv: x1 + 10 });
+      (byParent[o.id] ||= []).push({
+        x1: a.right - c.left + sx, y1: a.top - c.top + sy + a.height / 2,
+        x2: b.left - c.left + sx, y2: b.top - c.top + sy + 14,
+      });
     }
-  // 竖段避让：同一竖直带内 y 区间重叠的线，按轨道前后错开（每轨 7px）
-  const bands = {};
-  for (const s of segs) (bands[Math.round(s.xv / 4)] ||= []).push(s);
-  for (const arr of Object.values(bands)) {
-    arr.sort((p, q) => p.y1 - q.y1 || p.y2 - q.y2);
-    const tracks = [];   // tracks[k]＝第 k 轨当前占用到的 y 末端
-    for (const s of arr) {
-      let k = tracks.findIndex(endY => endY <= s.y1 + 2);
-      if (k === -1) { k = tracks.length; tracks.push(-Infinity); }
-      tracks[k] = Math.max(tracks[k], Math.max(s.y1, s.y2));
-      s.xv = s.xv + k * 7;
-    }
-  }
+  // 每组一条居中均布的平行车道总线：竖段间距恒定 9px，无重合、无左右歧义
   svg.value.setAttribute("width", Math.max(root.scrollWidth, c.width));
   svg.value.setAttribute("height", Math.max(root.scrollHeight, c.height));
-  svg.value.innerHTML = segs.map(s =>
-    `<path d="M${s.x1},${s.y1} H${s.xv} V${s.y2} H${s.x2}" fill="none" stroke="#e359c4" stroke-opacity=".55" stroke-width="1.5"/>`
-  ).join("");
+  const d = [];
+  for (const arr of Object.values(byParent)) {
+    const n = arr.length;
+    const busX = (arr[0].x1 + arr[0].x2) / 2 - ((n - 1) * 9) / 2;
+    arr.forEach((s2, k) => {
+      const lane = busX + k * 9;
+      d.push(`M${s2.x1},${s2.y1} H${lane} V${s2.y2} H${s2.x2}`);
+    });
+  }
+  svg.value.innerHTML = d.map(p2 =>
+    `<path d="${p2}" fill="none" stroke="#e359c4" stroke-opacity=".55" stroke-width="1.5"/>`).join("");
 }
 watch(linesKey, () => nextTick(drawLines), { flush: "post" });
 watch(columns, () => nextTick(drawLines), { flush: "post" });
@@ -155,7 +152,7 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
             <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slot.def.n }}</span>
             <template v-if="slot.persons.length || slot.institution">
               <span v-for="c in chipsOf(slot)" :key="c" class="chip">{{ c }}</span>
-              <span v-if="slot.institution" class="chip orgchip">机构·{{ S.orgs[slot.institution]?.name || "?" }}</span>
+              <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>
             </template>
             <span v-else class="chip empty">空槽</span>
             <!-- 借调动效：目标槽半透明人名+慢速圈 -->
@@ -209,7 +206,7 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
            padding: 10px 4px 20px 10px; position: relative; }
 .lines { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
 .ocol { flex: none; width: 262px; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
-.ocol + .ocol { border-left: 1px solid var(--line); padding-left: 12px; margin-left: 10px; }
+.ocol + .ocol { border-left: 1px solid var(--line); padding-left: 20px; margin-left: 28px; }
 .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
         box-shadow: 0 2px 8px #0006; overflow: hidden; flex: none; }
 .card.sel { border-color: var(--acc); }
@@ -227,12 +224,10 @@ onUnmounted(() => window.removeEventListener("resize", drawLines));
 .srow:hover { background: #ffffff08; }
 .srow.sel { background: #4f8cff22; }
 .srow.locked { opacity: .55; }
-/* 岗位标签按用人类型分色：run 必需 · flex 借调 · any 弹性 · opt 增益 */
 .srow .fn { flex: none; border-radius: 5px; padding: 1px 7px; font-size: 11px; }
-.fn.p-run  { background: #59323f; color: #f0c0cd; }
-.fn.p-flex { background: #595032; color: #f0e2bc; }
-.fn.p-any  { background: #324059; color: #bcd0f5; }
-.fn.p-opt  { background: #1f5c3e; color: #b8ecd0; }
+.fn.p-must { background: #59323f; color: #f0c0cd; }
+.fn.p-semi { background: #595032; color: #f0e2bc; }
+.fn.p-gain { background: #1f5c3e; color: #b8ecd0; }
 .srow .cnt { color: var(--dim); }
 .srow .par { color: var(--dim); font-size: 10.5px; margin-left: auto; overflow: hidden;
              text-overflow: ellipsis; }

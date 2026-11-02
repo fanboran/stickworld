@@ -47,37 +47,44 @@ export const BUILDINGS = {
       { item: "药炉",   cost: { "木材": 8 }, work: 6, unlock: "熬制工序（净药材→药水）" } ] },
 };
 
-/* ═════════ 组织模板（同质化槽：一标签多坑位；异质化工序：每槽一道工序各需设备）。
-   host＝入驻的槽名：采集/建造/制造 三槽长在默认一级子节点「生产部」内（01 §2.6），
-   运输/军事/科研入驻市政厅对应槽；bldg＝需进驻的建筑类型（03 §一）═════════ */
+/* ═════════ 组织模板。host＝可入驻的槽名（选中空槽即弹出该槽可构筑的子组织，可递归）；
+   市政厅槽＝市长/军事/生产/运输/科研；生产局（一级子节点）内含采集/建造/制造三槽；
+   bldg＝需进驻的建筑类型（03 §一）═════════ */
 export const ORGS = {
-  /* 默认一级子节点（开局自带，不进建组织面板） */
-  "生产部": { host: "生产", sys: true, slots: [
-      { fn: "采集", n: 1, role: "泛采集兜底：无专门队时 0.4/人时，哪堆有空去哪堆" },
-      { fn: "建造", n: 1, role: "放建造组织或亲自督造" },
-      { fn: "制造", n: 1, role: "制造事务对接：跟单各厂（机制后续）" } ] },
+  "生产局": { host: "生产", slots: [
+      { fn: "采集", n: 1, role: "放采集队或派人兜底（泛采集 0.4/人时，哪堆有空去哪堆）" },
+      { fn: "建造", n: 1, role: "放工程队或派人督造" },
+      { fn: "制造", n: 1, role: "放工坊或派人跟单" } ] },
+  "采集队": { host: "采集", slots: [
+      { fn: "伐木", n: 1, role: "放伐木队" },
+      { fn: "采矿", n: 1, role: "放采矿队" },
+      { fn: "农垦", n: 1, role: "放农垦队" } ] },
+  "工坊": { host: "制造", slots: [
+      { fn: "锯木", n: 1, role: "放锯木坊" },
+      { fn: "锻造", n: 1, role: "放锻造坊" },
+      { fn: "制药", n: 1, role: "放药剂坊" },
+      { fn: "冶炼", n: 1, role: "放冶炼坊（后期）" } ] },
+  "工程队": { host: "建造", slots: [
+      { fn: "测量", n: 1, role: "放线与验收测量——在岗施工效率×1.15（少返工）" },
+      { fn: "施工", n: 4, homog: true, role: "土方/砌筑/木作施工（硬装与软装都干）" },
+      { fn: "质检", n: 1, role: "工序与落成核验（机制后续）" } ] },
   "运输队": { host: "运输", slots: [
       { fn: "调度", n: 1, role: "运输计划与派单——在岗则未通报场地的搬运折扣减轻（×0.5→×0.7）" },
       { fn: "库管", n: 1, role: "仓库进出账目（在岗搬运才运转）" },
       { fn: "搬运", n: 5, homog: true, role: "同质化×5，坑位上限随仓库规模" } ] },
-  "建造组织": { host: "建造", slots: [
-      { fn: "测量", n: 1, role: "放线与验收测量——在岗施工效率×1.15（少返工）" },
-      { fn: "施工", n: 4, homog: true, role: "土方/砌筑/木作施工（硬装与软装都干）" },
-      { fn: "质检", n: 1, role: "工序与落成核验（机制后续）" },
-      { fn: "材料管理", n: 1, role: "建材收发与调度（对接运输队）" } ] },
-  "伐木队": { host: "采集", bldg: "伐木小屋", slots: [
+  "伐木队": { host: "伐木", bldg: "伐木小屋", slots: [
       { fn: "伐木", n: 4, homog: true, terrain: "树林" },
       { fn: "木材信息", n: 1, role: "堆存需转运时通报运输队（人手/地点）——可被本队自动借调" },
       { fn: "探测", n: 1, req: { b: "伐木小屋", item: "办公桌椅" }, role: "木材资源探测" },
       { fn: "记录", n: 1, req: { b: "伐木小屋", item: "办公桌椅" }, role: "木材台账" } ] },
-  "采矿队": { host: "采集", slots: [
+  "采矿队": { host: "采矿", slots: [
       { fn: "挖矿", n: 4, homog: true, terrain: "矿洞" },
       { fn: "矿石信息", n: 1, role: "与运输队联络（可被借调）" } ] },
-  "农垦队": { host: "采集", slots: [
+  "农垦队": { host: "农垦", slots: [
       { fn: "耕作", n: 4, homog: true, terrain: "农田", role: "产物可选：粮/药材" } ] },
-  "锯木坊": { host: "制造", bldg: "锯木坊", slots: [ { fn: "锯解", n: 2, homog: true, step: 0 } ],
+  "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [ { fn: "锯解", n: 2, homog: true, step: 0 } ],
       steps: [ { name: "锯解", equip: "锯架", inCity: { "木材": 1 }, outCity: { "木板": 1 } } ] },
-  "锻造坊": { host: "制造", bldg: "锻造坊", slots: [
+  "锻造坊": { host: "锻造", bldg: "锻造坊", slots: [
       { fn: "熔炼", n: 1, step: 0 }, { fn: "锻打", n: 1, step: 1 },
       { fn: "淬火", n: 1, step: 2 }, { fn: "开刃", n: 1, step: 3 } ],
       steps: [   // 古代冶炼/锻造分工；半成品为厂内物品不可离厂；锻打可吃铁水也可吃外购铁锭
@@ -85,35 +92,32 @@ export const ORGS = {
         { name: "锻打", equip: "铁砧", wipIn: "铁水", altCity: { "铁锭": 1 }, wip: "毛坯" },
         { name: "淬火", equip: "水槽", wipIn: "毛坯", wip: "淬火件" },
         { name: "开刃", equip: "磨石", wipIn: "淬火件", outCity: { "铁剑": 1 } } ] },
-  "药剂坊": { host: "制造", bldg: "药剂坊", slots: [ { fn: "炮制", n: 1, step: 0 }, { fn: "熬制", n: 1, step: 1 } ],
+  "药剂坊": { host: "制药", bldg: "药剂坊", slots: [ { fn: "炮制", n: 1, step: 0 }, { fn: "熬制", n: 1, step: 1 } ],
       steps: [
         { name: "炮制", equip: "切药刀", inCity: { "药材": 1 }, wip: "净药材" },
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 } } ] },
   /* 后期 */
-  "冶炼坊": { host: "制造", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1 } ], steps: [] },
+  "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true, slots: [ { fn: "冶炼", n: 1 } ], steps: [] },
   "常备军": { host: "军事", late: true, slots: [ { fn: "军事", n: 1 }, { fn: "训练", n: 1 } ] },
-  "训练营": { host: "军事", late: true, slots: [ { fn: "训练", n: 1 } ] },
+  "训练营": { host: "训练", late: true, slots: [ { fn: "训练", n: 1 } ] },
   "科研院": { host: "科研", late: true, slots: [
       { fn: "课题管理", n: 1, role: "选题立项与研究资源分配" },
       { fn: "实验", n: 3, homog: true, role: "研究员——产出的新技能长在本人身上，再经训练扩散" },
       { fn: "文献记录", n: 1, role: "台账与资料（技能图谱的呈报源）" } ] },
 };
-export const HALL_SLOT_KEYS = ["领导", "军事", "行政", "生产", "运输", "科研"];
-/* 采集/建造/制造三槽长在生产部里，专业组织入驻生产部对应槽 */
-export const DEPT_SLOT_KEYS = ["采集", "建造", "制造"];
+export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研"];
 export const LATE_COST = { "常备军": { res: { "粮": 50 } }, "训练营": { res: { "木材": 15 } },
                            "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能01" } };
-/* 建组织面板的系统分类（组织类型会越来越多，靠分类+折叠承载；sys 模板不进面板） */
-export const ORG_CATS = (() => {
-  const order = ["采集", "运输", "建造", "制造", "军事", "科研"];
-  const m = new Map(order.map(k => [k, []]));
-  for (const [name, t] of Object.entries(ORGS)) {
-    if (t.sys) continue;
-    if (!m.has(t.host)) m.set(t.host, []);
-    m.get(t.host).push(name);
-  }
-  return [...m].map(([cat, names]) => ({ cat, names }));
-})();
+/* 空槽的可构筑候选（按槽名匹配 host——组织树即构筑树） */
+export const slotCandidates = fn => Object.entries(ORGS).filter(([, t]) => t.host === fn).map(([n]) => n);
+/* 建不了的原因（拒止反馈落在按钮态上）：前提→资源，与构筑同序 */
+export function createBlocked(name) {
+  const cost = LATE_COST[name];
+  if (!cost) return "";
+  if (cost.prereq) return "明面前提未满足：" + cost.prereq;
+  if (!canPay(cost.res)) return "资源不足：" + costStr(cost.res);
+  return "";
+}
 
 /* ═════════ 状态（响应式单例） ═════════ */
 export const S = reactive({
@@ -129,37 +133,66 @@ export function reset() {
   const fresh = {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
-    res: { "粮": 50, "药材": 0, "木材": 40, "铁矿": 10, "木板": 5, "铁锭": 4, "铁剑": 0, "药水": 0 },
+    res: { "粮": 80, "药材": 0, "木材": 60, "铁矿": 20, "木板": 10, "铁锭": 4, "铁剑": 0, "药水": 0 },
     buf: {}, wip: {}, buildings: {}, buildOrders: [],   // buildings[类型]＝实例数组（存在即硬装完成）
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {},
   };
   Object.assign(S, fresh);
   for (const b of Object.keys(BUILDINGS))
-    S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {} }] : [];
+    S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {}, org: "" }] : [];
   for (const [site, t] of Object.entries(TERRAIN))
     for (const p of t.products) S.buf[site + "|" + p] = 0;
+  /* 完全体展示：城市级别能达到的完整构筑（构筑变体之一，全自动设计样板）——
+     建筑先行落成并配齐设备，组织随后组建即自动进驻对应实例 */
+  const inst = (b, ...items) => {
+    const it = {}; for (const x of items) it[x] = true;
+    S.buildings[b].push({ interior: it, org: "" });
+  };
+  inst("伐木小屋", "办公桌椅", "工具架", "额外椅子");
+  inst("锯木坊", "锯架");
+  inst("锻造坊", "熔炉", "铁砧", "水槽", "磨石");
+  inst("药剂坊", "切药刀", "药炉");
+  addPersonRaw("你");
+  addPersonRaw("动员官");
+  for (let i = 0; i < 26; i++) addPersonRaw("村民");
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, role: "" }, persons: [], institution: "", product: "" };
-  addPersonRaw("你"); S.people[0].org = "o01"; hall.slots["领导"].persons = ["p01"];
-  addPersonRaw("动员官"); S.people[1].org = "o01"; hall.slots["军事"].persons = ["p02"];
-  for (let i = 0; i < 12; i++) addPersonRaw("村民");
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
-  /* 默认一级子节点：生产部（采集/建造/制造三槽）——开局城市即最低限度在运转
-     （采集/制造各一人；建造槽放建造组织——编制大而开局仅两人） */
-  const dept = addOrgRaw("生产部", 2, "");
-  hall.slots["生产"].institution = dept.id;
+  const place = (container, fn, org) => { container.slots[fn].institution = org.id; };
+  const staff = (org, fn, n, ids) => {
+    for (const pid of ids.slice(0, n)) { org.slots[fn].persons.push(pid); person(pid).org = org.id; }
+  };
+  /* 组织树：市政厅 → 生产局（采集队→伐木/采矿/农垦 · 工程队 · 工坊→锯木/锻造/药剂）· 运输队 · 常备军（训练=训练营）· 科研院 */
+  hall.slots["市长"].persons = ["p01"]; S.people[0].org = hall.id;
+  const dept = addOrgRaw("生产局", 2, ""); place(hall, "生产", dept);
+  const gather = addOrgRaw("采集队", 2, ""); place(dept, "采集", gather);
+  const works = addOrgRaw("工坊", 2, ""); place(dept, "制造", works);
+  const eng = addOrgRaw("工程队", 2, ""); place(dept, "建造", eng);
+  const lumber = addOrgRaw("伐木队", 2, ""); place(gather, "伐木", lumber);
+  const mining = addOrgRaw("采矿队", 2, ""); place(gather, "采矿", mining);
+  const farm = addOrgRaw("农垦队", 2, ""); place(gather, "农垦", farm);
+  const sawmill = addOrgRaw("锯木坊", 2, ""); place(works, "锯木", sawmill);
+  const forge = addOrgRaw("锻造坊", 2, ""); place(works, "锻造", forge);
+  const pharmacy = addOrgRaw("药剂坊", 2, ""); place(works, "制药", pharmacy);
+  const haul = addOrgRaw("运输队", 2, ""); place(hall, "运输", haul);
+  const army = addOrgRaw("常备军", 2, ""); place(hall, "军事", army);
+  army.slots["军事"].persons = ["p02"]; S.people[1].org = army.id;
+  const camp = addOrgRaw("训练营", 2, ""); place(army, "训练", camp);
+  const sci = addOrgRaw("科研院", 2, ""); place(hall, "科研", sci);
+  /* 满员运转 */
   let q = vill();
-  dept.slots["采集"].persons = [q[0]]; person(q[0]).org = dept.id;
-  dept.slots["制造"].persons = [q[1]]; person(q[1]).org = dept.id;
-  const builder = addOrgRaw("建造组织", 2, "");
-  dept.slots["建造"].institution = builder.id;
-  q = vill();
-  for (const pid of [q[0], q[1]]) {
-    builder.slots["施工"].persons.push(pid); person(pid).org = builder.id;
-  }
-  feed("开局：市政厅+仓库自带；生产部为默认一级子节点（采集/制造各一人，建造槽放建造组织·两人）——城市最低限度在运转。耕战一体：动员官挂军事槽（无饥饿系统）");
+  staff(lumber, "伐木", 2, q); staff(mining, "挖矿", 2, q.slice(2));
+  staff(farm, "耕作", 2, q.slice(4));
+  staff(haul, "调度", 1, q.slice(6)); staff(haul, "库管", 1, q.slice(7)); staff(haul, "搬运", 3, q.slice(8));
+  staff(eng, "测量", 1, q.slice(11)); staff(eng, "施工", 2, q.slice(12));
+  staff(forge, "熔炼", 1, q.slice(14)); staff(forge, "锻打", 1, q.slice(15));
+  staff(forge, "淬火", 1, q.slice(16)); staff(forge, "开刃", 1, q.slice(17));
+  staff(sawmill, "锯解", 1, q.slice(18));
+  staff(pharmacy, "炮制", 1, q.slice(19));
+  staff(sci, "课题管理", 1, q.slice(20)); staff(sci, "实验", 2, q.slice(21)); staff(sci, "文献记录", 1, q.slice(23));
+  feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集队/工程队/工坊逐层递归，运输/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
 }
 
 /* ── 工具 ── */
@@ -282,7 +315,7 @@ export function advance(dt) {
     }
   }
   // ②′ 生产部·采集兜底：无专门队时的泛采集（0.4/人时，均摊到仍有余量的缓冲堆）
-  const dept = Object.values(S.orgs).find(x => x.template === "生产部");
+  const dept = Object.values(S.orgs).find(x => x.template === "生产局");
   const deptGatherers = dept ? (dept.slots["采集"]?.persons.length || 0) : 0;
   if (deptGatherers) {
     const amt = K.deptGather * deptGatherers * mult * dt;
@@ -401,33 +434,23 @@ export function advance(dt) {
 }
 
 /* ═════════ 玩家操作 ═════════ */
-export function createOrg(name) {
+/* 构筑＝选中空槽位后从候选中建子组织（子机构可不断递归）；放一个人顶岗走 putPerson */
+export function createOrgAt(containerId, fn, name) {
+  const container = S.orgs[containerId];
+  if (!container || !container.slots[fn]) return;
+  const slot = container.slots[fn];
+  if (slot.institution || slot.persons.length) { feed(`${container.name}「${fn}」槽已被占用`, "bad"); return; }
   const cost = LATE_COST[name] || {};
-  if (cost.res && !canPay(cost.res)) { feed(`建「${name}」资源不足（${costStr(cost.res)}）`, "bad"); return; }
   if (cost.prereq) { feed(`「${name}」明面前提未满足：${cost.prereq}`, "bad"); return; }
+  if (cost.res && !canPay(cost.res)) { feed(`构筑「${name}」资源不足（${costStr(cost.res)}）`, "bad"); return; }
   if (cost.res) pay(cost.res);
   const o = addOrgRaw(name, 2, "");
-  const hostKey = ORGS[name].host, hall = S.orgs.o01;
-  /* 采集/建造/制造三槽长在生产部；运输/军事/科研在市政厅 */
-  const container = DEPT_SLOT_KEYS.includes(hostKey)
-    ? Object.values(S.orgs).find(x => x.template === "生产部") : hall;
-  let placed = false;
-  if (container && container.slots[hostKey]) {
-    const occ = container.slots[hostKey].institution ? S.orgs[container.slots[hostKey].institution] : null;
-    if (!occ) {
-      for (const pid of container.slots[hostKey].persons) person(pid).org = "";   // 顶岗者让位回待业
-      container.slots[hostKey].persons = [];
-      container.slots[hostKey].institution = o.id; placed = true;
-      feed(`组建 ${o.name}，入驻${container.name}「${hostKey}」槽`, "good"); }
-    else if (name === "训练营" && occ.slots["训练"] && !occ.slots["训练"].institution) {
-      occ.slots["训练"].institution = o.id; placed = true;
-      feed(`组建 ${o.name}，入驻 ${occ.name} 的「训练」槽（军事职能下沉）`, "good"); }
-  }
-  if (!placed) feed(`组建 ${o.name}（${hostKey}槽被占——可经槽面板手动入驻）`, "bad");
-  const site = o.bldgType
-    ? (o.bldg ? `驻${o.bldg.b}${CIRC[o.bldg.idx]}` : `无${o.bldgType}可驻——基础运转受限，先再建一座`)
-    : "";
-  if (site) feed(`${o.name} ${site}`, o.bldg ? "good" : "bad");
+  slot.institution = o.id;
+  feed(`构筑 ${o.name}，入驻 ${container.name}「${fn}」槽`, "good");
+  if (o.bldgType)
+    feed(o.bldg
+      ? `${o.name} 驻${o.bldg.b}${CIRC[o.bldg.idx]}`
+      : `${o.name} 无${o.bldgType}可驻——基础运转受限，先再建一座`, o.bldg ? "good" : "bad");
   S.sel = o.id; S.selSlot = null;
 }
 export function queueBuild(kind, b, item, idx) {

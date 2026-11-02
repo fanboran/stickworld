@@ -21,7 +21,7 @@ const lack = (r, n) => S.res[r] < n;
   <div id="buildside">
     <div class="bshead">
       建造
-      <span class="sub" title="施工人力＝建造组织「施工」槽在岗人数；一单一个工地，可多单并进">人力 {{ workers }}</span>
+      <span class="sub" title="施工人力＝工程队「施工」槽在岗人数；一单一个工地，可多单并进">人力 {{ workers }}</span>
     </div>
     <div class="bq" v-if="cur" title="硬装＝建筑体/窗位 · 软装＝设备/桌椅；组织无建筑可基础运转，建筑解锁进阶">
       <b>{{ orderLabel(cur) }}</b>

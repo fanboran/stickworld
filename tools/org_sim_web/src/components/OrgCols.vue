@@ -80,7 +80,7 @@ function candTitle(name) {
   const blocked = createBlocked(name);
   return desc + (blocked ? "｜" + blocked : "");
 }
-const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "半必须：需人运行，可移调顶岗", gain: "增益：无人也行，只是未解锁该功能" };
+const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "半必须：需人运行，可移调顶岗", gain: "增益：无人也行，只是缺该功能" };
 
 </script>
 
@@ -110,7 +110,7 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
               <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>
             </template>
             <span v-else class="chip empty">空槽</span>
-            <!-- 借调动效：目标槽半透明人名+慢速圈 -->
+            <!-- 移调动效：目标槽半透明人名+慢速圈 -->
             <span v-for="(b, i) in borrowsOf(o.id).filter(x => x.to === fn)" :key="'g' + i" class="ghostbox">
               <span>{{ chipName(o.slots[b.from]?.persons[0]) }}↦</span><span class="spin"></span>
             </span>
@@ -132,7 +132,7 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
           <div v-if="opsOpen(o, fn, slot)" class="sops" @click.stop>
             <template v-if="emptySlot(slot) && slotCandidates(fn).length">
               <span class="ohint b">构筑：</span>
-              <button v-for="name in slotCandidates(fn)" :key="name" class="cbtn"
+              <button v-for="name in slotCandidates(fn).filter(x => x !== o.template)" :key="name" class="cbtn"
                       :class="{ late: ORGS[name].late }" :disabled="!!createBlocked(name)"
                       :title="candTitle(name)"
                       @click="createOrgAt(o.id, fn, name)">＋{{ name }}<i v-if="ORGS[name].late">后期</i></button>

@@ -17,7 +17,7 @@ export const RES_INFO = {
   "农作物": { cat: "basic", icon: "🌾", src: "农田产出——战粮类增益品原料（进食可选增益、无饥饿），亦可炮制入药" },
   "木材":   { cat: "mat", icon: "🪵", src: "锯木坊锯解原木所得（建材/工具/载具用料）" },
   "木板":   { cat: "mat", icon: "🟫", src: "锯木坊刨光木材所得" },
-  "铁锭":   { cat: "mat", icon: "🔩", src: "冶炼坊自炼（后期）；短缺亦可外购补口" },
+  "铁锭":   { cat: "mat", icon: "🔩", src: "冶炼坊自产（或初始库存）" },
   "铁剑":   { cat: "prod", icon: "🗡️", src: "锻造坊开刃出品——成军军械储备" },
   "药水":   { cat: "prod", icon: "🧪", src: "药剂坊熬制" },
   "手推车": { cat: "prod", icon: "🛒", src: "木器坊装配——运输队载具（运力 1.8/人时）" },
@@ -54,7 +54,7 @@ export const BUILDINGS = {
     shell: { cost: { "木材": 15, "铁矿": 2 }, work: 16 }, interior: [
       { item: "木工台", cost: { "木材": 8, "铁矿": 2 }, work: 8, unlock: "备料工序（木板+铁锭→车料）" },
       { item: "组装架", cost: { "木材": 6 }, work: 5, unlock: "装配工序（车料→手推车）" } ] },
-  "冶炼坊": { late: true, desc: "矿石入炉炼铁，出铁锭——铁锭从外购变自产（后期）",
+  "冶炼坊": { late: true, desc: "矿石入炉炼铁，出铁锭（后期）",
     shell: { cost: { "木材": 25 }, work: 24 }, interior: [
       { item: "冶炼炉", cost: { "铁矿": 6, "木板": 4 }, work: 12, unlock: "冶炼工序（铁矿+木材→铁锭，柴火熔炉）" } ] },
 };
@@ -145,7 +145,7 @@ export const ORGS = {
   "情报局": { host: "情报", slots: [
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览" },
       { fn: "采编", n: 2, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
-      { fn: "抄送", n: 1, pos: "gain", role: "总览分发到各指令面板（解锁呈报流）" } ] },
+      { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
   /* 后期 */
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true,
       slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭" } ],
@@ -166,13 +166,14 @@ export const ORGS = {
 export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研", "情报"];
 /* 成军＝军械储备（铁剑×2 入库）+ 集结口粮（农作物×50）——制品与原料的实物资费 */
 export const LATE_COST = { "常备军": { res: { "农作物": 50, "铁剑": 2 } }, "训练营": { res: { "木材": 15 } },
-                           "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能01" } };
+                           "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能（技能机制未实装）" } };
 /* 空槽的可构筑候选（按槽名匹配 host——组织树即构筑树；别名＝放弃统筹层直挂单线的路径偏好） */
 export const SLOT_ALIAS = { "采集": ["伐木队", "采矿队", "农垦队"], "制造": ["锯木坊", "锻造坊", "药剂坊", "木器坊"] };
 export const slotCandidates = fn => {
   const base = Object.entries(ORGS).filter(([, t]) => t.host === fn).map(([n]) => n);
   return [...base, ...(SLOT_ALIAS[fn] || []).filter(n => !base.includes(n))];
 };
+/* 递归允许专门化，但同型自嵌套（伐木队槽里再放伐木队）无意义——由调用侧按宿主模板排除 */
 /* 组织控制面板选项（实际游戏为各组织专属的复杂精美 UI，sim 只模拟基础功能；
    选不同机构＝功能实现路径的偏好，如同计划 or 市场） */
 export const ORG_PANELS = {
@@ -184,8 +185,8 @@ export const ORG_PANELS = {
                                             ["大宗优先", "先清最大堆——场地少顶格停采，小堆排后"]] } ],
   "锯木坊": [ { key: "出材偏好", choices: [["优先木材", "锯解多出力：木材供燃料与建材"],
                                           ["优先木板", "刨光多出力：木板供下游制造"]] } ],
-  "锻造坊": [ { key: "锻打原料", choices: [["铁水优先", "自炼为主，外购补口"],
-                                            ["铁锭优先", "外购为主，省下燃料"]] } ],
+  "锻造坊": [ { key: "锻打原料", choices: [["铁水优先", "以厂内自炼铁水为主"],
+                                            ["铁锭优先", "以库存铁锭为主，省下燃料"]] } ],
   "科研院": [ { key: "选题", choices: [["实用优先", "先解当前生产急用（机制后续）"],
                                         ["底层探究", "先钻基础原理（机制后续）"]] } ],
 };
@@ -237,12 +238,12 @@ export function reset() {
   inst("木工房", "木工台", "组装架");
   addPersonRaw("你");
   addPersonRaw("动员官");
-  for (let i = 0; i < 32; i++) addPersonRaw("村民");
+  for (let i = 0; i < 33; i++) addPersonRaw("村民");
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
       role: { "市长": "统辖全城（你）", "军事": "掌军，在编即可动员", "生产": "辖采集/建造/制造三线",
-              "运输": "启用物流系统", "科研": "负责科研", "情报": "生成一站式信息总览" }[key] },
+              "运输": "启用物流系统", "科研": "主持研究", "情报": "生成一站式信息总览" }[key] },
       persons: [], institution: "" };
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
   const place = (container, fn, org) => { container.slots[fn].institution = org.id; };
@@ -410,7 +411,7 @@ export function advance(dt) {
   }
   const flow = {}; for (const r of RES) flow[r] = 0;
   S.borrows = {};
-  // ① 信息通报与借调（先于采集：被借调者本拍离岗）
+  // ① 信息通报与移调（先于采集：被移调者本拍离岗）
   const notified = {};
   const awayFrom = {};
   for (const o of Object.values(S.orgs)) {
@@ -450,7 +451,7 @@ export function advance(dt) {
       S.buf[key] += got; flow[slotProduct(slot)] += got;
     }
   }
-  // ②′ 生产部·采集兜底：无专门队时的泛采集（0.4/人时，均摊到仍有余量的缓冲堆）
+  // ②′ 生产局·采集兜底：无专门队时的泛采集（0.4/人时，均摊到仍有余量的缓冲堆）
   const dept = Object.values(S.orgs).find(x => x.template === "生产局");
   const deptGatherers = dept ? (dept.slots["采集"]?.persons.length || 0) : 0;
   if (deptGatherers) {
@@ -543,7 +544,7 @@ export function advance(dt) {
       if (st.wipIn) {
         const ingotFirst = o.settings["锻打原料"] === "铁锭优先" && st.altCity;
         let inner = 0, outer = 0;
-        if (ingotFirst) {   // 外购优先：先吃铁锭，不够再吃厂内半成品
+        if (ingotFirst) {   // 铁锭优先：先吃库存铁锭，不够再吃厂内半成品
           const canOut = Math.min(want, ...Object.entries(st.altCity).map(([r, n]) => S.res[r] / n));
           if (canOut > 0) { for (const [r, n] of Object.entries(st.altCity)) { S.res[r] -= n * canOut; flow[r] -= n * canOut; }
             outer = canOut; }

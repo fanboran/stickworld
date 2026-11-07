@@ -199,7 +199,7 @@ export const ORG_PANELS = {
   "常备军": [ { key: "兵役制度", choices: [["动员兵役", "耕战一体：战时集结，动员时产率减半"],
                                             ["常备兵役", "职业兵维持需后勤供给（后续），动员不减产率"]] } ],
   "工程队": [ { key: "自动扩建", choices: [["关", "全部施工手动排队"],
-                                          ["开", "仓库近满且资源足时，自动排队再建一座"]] } ],
+                                          ["开", "仓库近满且无在办建造单时，自动排队再建一座（保底不压主线）"]] } ],
   "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"],
                                         ["手推车", "1.8/人时——库中需有车（木器坊出品）", { need: "手推车" }]] },
               { key: "装卸规则", choices: [["均匀分运", "各场地按堆量比例搬运"],
@@ -240,7 +240,8 @@ export function reset() {
   const fresh = {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
-    res: { "原木": 30, "铁矿": 0, "农作物": 30, "木材": 15, "木板": 4, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0 },
+    res: { "原木": 30, "铁矿": 0, "农作物": 30, "木材": 40, "木板": 4, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0 },
+    // 木材 40＝自举本金：锯木坊壳15+锯架8 是最小开工单元，再留 民居12+床4 的首屋余量——低于此开局锁死（无木材产能）
     buf: {}, wip: {}, buildings: {}, buildOrders: [],
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {}, snap: null,
@@ -290,7 +291,8 @@ export function loadDemo() {
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
-      role: { "市长": "统辖全城（你）", "军事": "掌军，在编即可动员", "生产": "辖采集/建造/制造三线",
+      role: { "市长": "统辖全城（你）", "军事": "掌军，在编即可动员", "行政": "管理人事与组织",
+              "生产": "辖采集/建造/制造三线",
               "运输": "启用物流系统", "科研": "主持研究", "情报": "生成一站式信息总览" }[key] },
       persons: [], institution: "" };
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
@@ -591,7 +593,6 @@ export function advance(dt) {
     });
     const wSum = wts.reduce((a, b, i) => a + (runnable[i] ? b : 0), 0);
     const perStepOf = i => workers * wts[i] / wSum;
-    const perStep = workers / runCount;
     for (let i = 0; i < steps.length; i++) {
       if (!runnable[i]) continue;
       const st = steps[i];
@@ -600,7 +601,7 @@ export function advance(dt) {
         const src = Object.values(o.slots).find(s => s.persons.length);
         if (src) (S.borrows[o.id] ||= []).push({ from: src.def.fn, to: st.name });
       }
-      let want = K.craft * perStep * mult * dt;
+      let want = K.craft * perStepOf(i) * mult * dt;   // 工时按偏好权重分流（无偏好=均摊）
       // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
       if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
       let produced = 0;
@@ -690,7 +691,7 @@ export function advance(dt) {
     const eng = Object.values(S.orgs).find(x => x.template === "工程队");
     if (eng && eng.settings["自动扩建"] === "开" && S.buildings["仓库"]?.length
         && resTotal() >= capTotal() * 0.9
-        && !S.buildOrders.some(o => o.b === "仓库")
+        && !S.buildOrders.length                      // 任何建造单在队时都不自动扩（保底不压主线、一次一座）
         && canPay(BUILDINGS["仓库"].shell.cost)) {
       pay(BUILDINGS["仓库"].shell.cost);
       S.buildOrders.push({ kind: "shell", b: "仓库", item: "", idx: -1,

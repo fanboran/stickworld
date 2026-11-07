@@ -1,10 +1,10 @@
 import { reactive } from "vue";
 
-/* ═════════ 自然地形（城市自带；采集需要对应地形在场）——本城树林/矿洞/农田都有 ═════════ */
+/* ═════════ 自然地形（城市自带；采集需要对应地形在场）——本城树林/矿洞/耕地都有 ═════════ */
 export const TERRAIN = {
   "树林": { products: ["原木"], offmap: true },     // 不可到达——木材如外部直供，无场地环节
   "矿洞": { products: ["铁矿"], satellite: true },  // 卫星城：唯一可在其处建卫星仓的地形
-  "农田": { products: ["农作物"], inCity: true },   // 主城内，无场地堆
+  "耕地": { products: ["农作物"], inCity: true },   // 主城内（改名耕地）
 };
 /* 城市库存品目录（可进仓库）。cat：basic=基础原料 / mat=材料 / prod=制品（顶栏只放 basic，全量在仓库页）。
    原料窄口径（05-经济系统 §四）：基础原料三种——原木/矿物（暂只做铁）/农作物，全部地形直出；
@@ -14,7 +14,7 @@ export const RES = ["原木", "铁矿", "农作物", "木材", "木板", "铁锭
 export const RES_INFO = {
   "原木":   { cat: "basic", icon: "🌲", src: "伐木队采自树林——锯木坊锯解的原料" },
   "铁矿":   { cat: "basic", icon: "🪨", src: "矿物·暂只做铁——采矿队采自矿洞" },
-  "农作物": { cat: "basic", icon: "🌾", src: "农田产出——战粮类增益品原料（进食可选增益、无饥饿），亦可炮制入药" },
+  "农作物": { cat: "basic", icon: "🌾", src: "耕地产出——战粮类增益品原料（进食可选增益、无饥饿），亦可炮制入药" },
   "木材":   { cat: "mat", icon: "🪵", src: "锯木坊锯解原木所得（建材/工具/载具用料）" },
   "木板":   { cat: "mat", icon: "🟫", src: "锯木坊刨光木材所得" },
   "铁锭":   { cat: "mat", icon: "🔩", src: "冶炼坊自产（或初始库存）" },
@@ -114,7 +114,7 @@ export const ORGS = {
       { fn: "提升", n: 1, pos: "gain", role: "坑口吊运，矿石出坑装堆" },
       { fn: "矿石信息", n: 1, pos: "semi", role: "收集矿石线信息呈递给你" } ] },
   "农垦队": { host: "农垦", slots: [
-      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "农田", role: "负责耕作" },
+      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "耕地", role: "负责耕作" },
       { fn: "选种", n: 1, pos: "gain", role: "留优种作来年种籽" },
       { fn: "农情信息", n: 1, pos: "semi", role: "收集农情信息呈递给你" } ] },
   "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [
@@ -252,7 +252,7 @@ export function reset() {
     S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {}, org: "" }] : [];
   S.cityR.push({ b: "仓库", inst: 0 });   // 市政厅居中，仓库落在右侧首块
   for (const [site, t] of Object.entries(TERRAIN))
-    for (const p of t.products) S.buf[site + "|" + p] = 0;   // 三线都有场地堆（树林/农田堆不设上限）
+    for (const p of t.products) S.buf[site + "|" + p] = 0;   // 三线都有场地堆（树林/耕地堆不设上限）
   const hall = addOrgRaw("市政厅", 1, "hall");
   hall.name = "聚落";
   for (const key of HALL_SLOT_KEYS)
@@ -523,7 +523,7 @@ export function advance(dt) {
       if (d.terrain === "树林" && orgEquip(o, "工具架")) rate *= 1.25;
       const amt = rate * w * mult * dt;
       // 三线产出都进场地堆、都要搬运工搬回主仓；差异只在堆容与运距：
-      // 树林/农田＝主城侧产地，堆不设上限（无停采）；矿洞＝卫星城，堆容 40+80×卫星仓
+      // 树林/耕地＝主城侧产地，堆不设上限（无停采）；矿洞＝卫星城，堆容 40+80×卫星仓
       const prod2 = slotProduct(slot);
       const key = bufKey(d.terrain, prod2);
       const cap2 = TERRAIN[d.terrain].satellite ? mineBufCap() : Infinity;

@@ -36,7 +36,7 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
     <div id="whbody">
       <template v-if="tab === 'site'">
         <div class="lbl">三线场地待运堆（都要搬运工搬回主仓）：矿洞＝卫星城（堆容 {{ mineCap }}，满则停采——
-    卫星仓 +80/座，现 {{ satWarehouses() }} 座）；树林/农田＝主城侧（堆不设上限）</div>
+    卫星仓 +80/座，现 {{ satWarehouses() }} 座）；树林/耕地＝主城侧（堆不设上限）</div>
         <div class="sitegrid">
           <div v-for="r in siteRows" :key="r.site + r.p" class="sitecard"
                :class="{ full: r.sat && r.v >= mineCap }">

@@ -50,6 +50,9 @@ export const BUILDINGS = {
     shell: { cost: { "木材": 12 }, work: 12 }, interior: [
       { item: "切药刀", cost: { "铁矿": 1 }, work: 4, unlock: "炮制工序（农作物→净药材）" },
       { item: "药炉",   cost: { "木材": 8 }, work: 6, unlock: "熬制工序（净药材→药水）" } ] },
+  "民居": { desc: "村民居住位（每座6位，装床铺每台+2）；有空位且城中温饱，人口缓增",
+    shell: { cost: { "木材": 12 }, work: 12 }, interior: [
+      { item: "床铺", cost: { "木材": 4 }, work: 4, effect: "居住位+2" } ] },
   "木工房": { desc: "备料→装配，出手推车（车料为厂内物品）",
     shell: { cost: { "木材": 15, "铁矿": 2 }, work: 16 }, interior: [
       { item: "木工台", cost: { "木材": 8, "铁矿": 2 }, work: 8, unlock: "备料工序（木板+铁锭→车料）" },
@@ -142,12 +145,15 @@ export const ORGS = {
   "库务所": { host: "库管", slots: [
       { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账" },
       { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
+  "人事局": { host: "行政", slots: [
+      { fn: "人事", n: 1, pos: "must", role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
+      { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（后期：自适应扩建与改编）" } ] },
   "情报局": { host: "情报", slots: [
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览" },
       { fn: "采编", n: 2, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
       { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
   /* 后期 */
-  "冶炼坊": { host: "冶炼", bldg: "冶炼坊", late: true,
+  "冶炼坊": { host: "冶炼", bldg: "冶炼坊",
       slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭" } ],
       steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 1, "木材": 1 }, outCity: { "铁锭": 1 } } ] },
   "常备军": { host: "军事", late: true, slots: [
@@ -163,7 +169,7 @@ export const ORGS = {
       { fn: "实验", n: 3, homog: true, pos: "must", role: "产出新技能，长在本人身上" },
       { fn: "文献记录", n: 1, pos: "gain", role: "汇总技能台账并呈递给你" } ] },
 };
-export const HALL_SLOT_KEYS = ["市长", "军事", "生产", "运输", "科研", "情报"];
+export const HALL_SLOT_KEYS = ["市长", "军事", "行政", "生产", "运输", "科研", "情报"];
 /* 成军＝军械储备（铁剑×2 入库）+ 集结口粮（农作物×50）——制品与原料的实物资费 */
 export const LATE_COST = { "常备军": { res: { "农作物": 50, "铁剑": 2 } }, "训练营": { res: { "木材": 15 } },
                            "科研院": { res: { "木板": 10 }, prereq: "在编有人会占位组织技能（技能机制未实装）" } };
@@ -179,6 +185,8 @@ export const slotCandidates = fn => {
 export const ORG_PANELS = {
   "常备军": [ { key: "兵役制度", choices: [["动员兵役", "耕战一体：战时集结，动员时产率减半"],
                                             ["常备兵役", "职业兵维持需后勤供给（后续），动员不减产率"]] } ],
+  "工程队": [ { key: "自动扩建", choices: [["关", "全部施工手动排队"],
+                                          ["开", "仓库近满且资源足时，自动排队再建一座"]] } ],
   "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"],
                                         ["手推车", "1.8/人时——库中需有车（木器坊出品）", { need: "手推车" }]] },
               { key: "装卸规则", choices: [["均匀分运", "各场地按堆量比例搬运"],
@@ -192,6 +200,9 @@ export const ORG_PANELS = {
 };
 /* 建不了的原因（拒止反馈落在按钮态上）：前提→资源，与构筑同序 */
 export function createBlocked(name) {
+  const t = ORGS[name];
+  if (t?.bldg && !(S.buildings[t.bldg] || []).some(i => !i.org))
+    return `需先再建一座${t.bldg}（该类组织必须依附建筑）`;
   const cost = LATE_COST[name];
   if (!cost) return "";
   if (cost.prereq) return "明面前提未满足：" + cost.prereq;
@@ -234,11 +245,12 @@ export function reset() {
   inst("锯木坊", "锯架", "刨台");
   inst("锻造坊", "熔炉", "铁砧", "水槽", "磨石", "风箱");
   inst("冶炼坊", "冶炼炉");
+  for (let i = 0; i < 6; i++) inst("民居", "床铺");
   inst("药剂坊", "切药刀", "药炉");
   inst("木工房", "木工台", "组装架");
   addPersonRaw("你");
   addPersonRaw("动员官");
-  for (let i = 0; i < 33; i++) addPersonRaw("村民");
+  for (let i = 0; i < 34; i++) addPersonRaw("村民");
   const hall = addOrgRaw("市政厅", 3, "hall");
   for (const key of HALL_SLOT_KEYS)
     hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
@@ -271,6 +283,7 @@ export function reset() {
   const camp = addOrgRaw("训练营", 2, ""); place(army, "训练", camp);
   const sci = addOrgRaw("科研院", 2, ""); place(hall, "科研", sci);
   const intel = addOrgRaw("情报局", 2, ""); place(hall, "情报", intel);
+  const hr = addOrgRaw("人事局", 2, ""); place(hall, "行政", hr);
   /* 满员运转 */
   let q = vill();
   staff(lumber, "伐木", 2, q); staff(mining, "挖矿", 2, q.slice(2));
@@ -283,8 +296,9 @@ export function reset() {
   staff(pharmacy, "炮制", 1, q.slice(20));
   staff(cartshop, "备料", 1, q.slice(25));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
   staff(smelter, "冶炼", 1, q.slice(24));
-  staff(intel, "汇总", 1, q.slice(26)); staff(intel, "采编", 2, q.slice(27));
-  staff(sci, "课题管理", 1, q.slice(29)); staff(sci, "实验", 2, q.slice(30)); staff(sci, "文献记录", 1, q.slice(32));
+  staff(hr, "人事", 1, q.slice(26));
+  staff(intel, "汇总", 1, q.slice(27)); staff(intel, "采编", 2, q.slice(28));
+  staff(sci, "课题管理", 1, q.slice(30)); staff(sci, "实验", 2, q.slice(31)); staff(sci, "文献记录", 1, q.slice(33));
   feed("完全体展示：城市级完整构筑样板（变体之一）——生产局下辖采集中心/工程队/制造中心逐层递归，运输队(库务所入驻库管)/常备军(训练营)/科研院并列。选中空槽可派人或构筑子组织");
   S.snap = collectSnap();   // 开局总览快照（此后按情报链更新周期刷新）
 }
@@ -293,6 +307,12 @@ export function reset() {
 export const CIRC = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];   // 建筑实例枚举（区分座，非命名）
 export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
+/* 居住位：每座民居 6 位，每台床铺 +2 */
+export function housingCap() {
+  let n = 0;
+  for (const inst of (S.buildings["民居"] || [])) n += 6 + (inst.interior["床铺"] ? 2 : 0);
+  return n;
+}
 /* 仓库按座计：每座一份容量（首座开局自带） */
 export const capTotal = () => S.knobs.cap * (S.buildings["仓库"]?.length || 1);
 /* 一站式总览＝把各处文书运回市政厅的汇总快照：信息量不随情报规模 gate——各组织
@@ -589,6 +609,49 @@ export function advance(dt) {
         const tag = ord.kind === "shell" ? `第${S.buildings[ord.b].length}座硬装落成` : `${CIRC[ord.idx]}·${ord.item}装好`;
         feed(`${ord.b} ${tag}（建造队交付）`, "good");
         S.buildOrders.shift();
+      }
+    }
+  }
+  // ⑥′ 自动化：人事局补员 + 工程队自动扩建 + 人口缓增（组织规模越大自动化越高）
+  {
+    const hr = Object.values(S.orgs).find(x => x.template === "人事局");
+    const nHR = hr ? hr.slots["人事"].persons.length : 0;
+    if (nHR > 0) {
+      S.autoCd = (S.autoCd || 0) + dt;
+      if (S.autoCd >= 8 / nHR) {   // 人事在编越多补得越勤
+        S.autoCd = 0;
+        const idleP = S.people.find(x => !x.org);
+        if (idleP) {
+          let target = null;
+          for (const o of Object.values(S.orgs))
+            for (const [fn, sl] of Object.entries(o.slots))
+              if (sl.def.pos === "must" && !sl.institution && sl.persons.length < slotCap(o, sl)
+                  && (!target || sl.persons.length < target.sl.persons.length))
+                target = { o, sl, fn };
+          if (target) {
+            target.sl.persons.push(idleP.id); idleP.org = target.o.id;
+            feed(`人事局补员：待业者补进 ${target.o.name}「${target.fn}」`, "good");
+          }
+        }
+      }
+    }
+    const eng = Object.values(S.orgs).find(x => x.template === "工程队");
+    if (eng && eng.settings["自动扩建"] === "开" && S.buildings["仓库"]?.length
+        && resTotal() >= capTotal() * 0.9
+        && !S.buildOrders.some(o => o.b === "仓库")
+        && canPay(BUILDINGS["仓库"].shell.cost)) {
+      pay(BUILDINGS["仓库"].shell.cost);
+      S.buildOrders.push({ kind: "shell", b: "仓库", item: "", idx: -1,
+        work: BUILDINGS["仓库"].shell.work, done: 0 });
+      feed("工程队自动扩建：仓库近满，新一座已排队", "good");
+    }
+    S.popCd = (S.popCd || 0) + dt;
+    if (S.popCd >= 24) {
+      S.popCd = 0;
+      if (housingCap() > S.people.length && S.res["农作物"] >= 10) {
+        S.res["农作物"] -= 10;
+        addPersonRaw("村民");
+        feed("新村民入住（耗口粮 农作物10；居住位有空）", "good");
       }
     }
   }

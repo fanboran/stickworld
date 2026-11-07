@@ -60,6 +60,7 @@ const menuSum = computed(() => ({
         </div>
 
         <template v-if="name === '资产'">
+          <div class="rhead2"><span>物品</span><span style="margin-left:auto">库存</span><span style="width:72px;text-align:right">每时净产</span></div>
           <div class="rrow" v-for="row in resRows" :key="row.r">
             <span class="ric">{{ row.icon }}</span><span class="rname">{{ row.r }}</span>
             <span class="rcat">{{ RES_CATS.find(c => c[0] === row.cat)?.[1] }}</span>
@@ -129,6 +130,7 @@ const menuSum = computed(() => ({
 .kpi { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
        padding: 3px 10px; font-size: 12px; }
 .kpi b { font-variant-numeric: tabular-nums; }
+.rhead2 { display: flex; gap: 8px; font-size: 10px; color: var(--faint); padding: 0 0 2px; }
 .rrow { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 12px;
         border-bottom: 1px dashed var(--line); }
 .rrow .ric { width: 18px; text-align: center; }

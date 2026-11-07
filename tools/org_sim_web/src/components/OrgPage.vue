@@ -28,10 +28,10 @@ function toggleMob() {
     <div id="otool">
       <div class="tgroup">
         <div v-for="t in terrainRows" :key="t.site" class="tchip" :class="{ full: t.fill >= 1 }"
-             :title="`场地缓冲堆上限 ${S.knobs.buf}（满则采集停摆，等运输队搬走）`">
+             :title="`采集产出先堆在采集场（待运输队搬回仓库）；堆满 ${S.knobs.buf} 则停采`">
           <span class="nm">{{ t.site }}</span>
           <span class="piles">
-            <span v-for="x in t.parts" :key="x.p" class="pile">{{ x.p }} {{ x.v.toFixed(0) }}</span>
+            <span v-for="x in t.parts" :key="x.p" class="pile">待运 {{ x.v.toFixed(0) }}/{{ S.knobs.buf }}</span>
           </span>
           <div class="bar tb"><i :class="{ mid: t.fill >= .8, full: t.fill >= 1 }"
                :style="{ width: Math.min(100, t.fill * 100) + '%' }"></i></div>

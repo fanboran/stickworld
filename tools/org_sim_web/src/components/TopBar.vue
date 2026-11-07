@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset } from "../sim.js";
+import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset, housingCap } from "../sim.js";
 const props = defineProps({ page: String });
 const emit = defineEmits(["go", "knobs"]);
 const tabs = [
@@ -20,10 +20,14 @@ function doReset() { reset(); emit("go", "org"); }
   <div id="top">
     <div class="brand">组织模拟台</div>
     <!-- 顶栏只放基础原料（原木/铁矿/农作物）；材料/制品全在仓库页，来源说明取 RES_INFO 单一真相源 -->
-    <span class="res" v-for="r in BASIC_RES" :key="r" :title="RES_INFO[r].src">
+    <span class="res" v-for="r in BASIC_RES" :key="r"
+          :title="RES_INFO[r].src + '｜库存 ' + Math.floor(S.res[r]) + '，每时净产 ' + (S.rates[r] > 0 ? '+' : '') + (S.rates[r] || 0).toFixed(1) + '（产量−消耗）'">
       {{ r }}<b>{{ Math.floor(S.res[r]) }}</b>
       <span class="rate" v-if="Math.abs(S.rates[r] || 0) >= 0.005">
-        {{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}</span>
+        净{{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}/时</span>
+    </span>
+    <span class="res link" title="人口与居住位（民居每座6位、床铺每台+2）" @click="emit('go', 'wh')">
+      人口<b>{{ S.people.length }}</b><span class="rate">/居{{ housingCap() }}</span>
     </span>
     <span class="res link" title="点开仓库页" @click="emit('go', 'wh')">
       仓库<b :class="{ lack: resTotal() >= capTotal() }">{{ Math.floor(resTotal()) }}</b>

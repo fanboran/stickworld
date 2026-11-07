@@ -34,11 +34,11 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
     </div>
     <div id="whbody">
       <template v-if="tab === 'site'">
-        <div class="lbl">采集场的场地缓冲堆（产出先进堆，运输队搬到仓库；满堆则采集停摆）</div>
+        <div class="lbl">采集场的待运堆：产出先堆在场（等运输队搬回仓库）；堆满则停采</div>
         <div class="sitegrid">
           <div v-for="r in siteRows" :key="r.site + r.p" class="sitecard"
                :class="{ full: r.v >= S.knobs.buf }">
-            <div class="nm">{{ r.site }} · {{ r.p }}</div>
+            <div class="nm">{{ r.site }} · {{ r.p }}（待运）</div>
             <div class="qty">{{ r.v.toFixed(1) }} <span class="dim">/ 堆上限 {{ S.knobs.buf }}</span></div>
             <div class="bar"><i :class="barCls(r.v / S.knobs.buf)"
                  :style="{ width: Math.min(100, r.v / S.knobs.buf * 100) + '%' }"></i></div>
@@ -61,9 +61,9 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
                  :title="RES_INFO[r].src">
               <div class="tico">{{ RES_INFO[r].icon }}</div>
               <div class="tnm">{{ r }}</div>
-              <div class="tqty">{{ Math.floor(S.res[r]) }}</div>
+              <div class="tqty"><span class="tunit">库存</span>{{ Math.floor(S.res[r]) }}</div>
               <div class="trate" v-if="Math.abs(S.rates[r] || 0) >= 0.005">
-                {{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}/时</div>
+                净{{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}/时</div>
               <div class="trate" v-else>&nbsp;</div>
             </div>
           </div>
@@ -91,6 +91,7 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
 .tile .tico { font-size: 24px; line-height: 1.2; }
 .tile .tnm { font-size: 12px; color: var(--dim); margin-top: 2px; }
 .tile .tqty { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .tunit { font-size: 9px; color: var(--faint); font-weight: 400; margin-right: 3px; }
 .tile .trate { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .sitegrid { display: flex; gap: 8px; flex-wrap: wrap; }
 .sitecard { width: 190px; background: var(--panel2); border: 1px solid var(--line);

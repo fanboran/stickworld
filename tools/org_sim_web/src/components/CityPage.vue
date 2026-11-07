@@ -7,7 +7,7 @@ import { S, BUILDINGS, CITY_W, CIRC, RES_INFO, cityCells, canPay, costStr, queue
    建造管理自组织页 BuildSide 侧栏整体并入本页：两端扩建位就地开建造菜单、
    点建筑块开分座软装详情、顶部施工队列条 */
 
-const CELL = 30;   // 每格像素宽：格多不占屏——宽度固定，层数向上叠
+const CELL = 18;   // 每格像素宽：网页想多窄有多窄——18px 已可读，格多不占屏
 
 /* 一排从左到右＝cityCells()（左翼倒序+市政厅居中+右翼），相邻同座格合并成一块 */
 const blocks = computed(() => {
@@ -236,7 +236,7 @@ const orderLabel = o => o.kind === "shell"
           flex: none; overflow: hidden;
           background-color: var(--panel3);
           background-image: linear-gradient(90deg, #ffffff0e 1px, transparent 1px);
-          background-size: 46px 100%; }   /* 46px＝CELL：每格一道竖线示意占格 */
+          background-size: 18px 100%; }   /* 18px＝CELL：每格一道竖线示意占格 */
 .bblock.built { cursor: pointer; }
 .bblock.built:hover { border-color: var(--acc); }
 .bblock.sel { border-color: var(--acc); background-color: #2b3550; }

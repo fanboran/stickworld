@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, CIRC, RES_INFO, cityCells, canPay, costStr, queueBuild,
-         buildWorkers, resTotal, capTotal } from "../sim.js";
+         buildWorkers, resTotal, capTotal, housingCap } from "../sim.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
    建造管理自组织页 BuildSide 侧栏整体并入本页：两端扩建位就地开建造菜单、
@@ -23,17 +23,21 @@ const blocks = computed(() => {
 /* 施工块＝队列里的硬装单（软装单不入排）。左翼落成的新座渲染在最左（cityL push+倒序），
    故左端待建块按队列倒序预览（先完工的贴着既有街区）；右翼按队列正序向右长 */
 const pendL = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side === "左").reverse());
-const pendR = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side !== "左"));
+const pendR = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side !== "左" && o.side !== "矿卫"));
+const pendSat = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side === "矿卫"));
 const isCur = o => S.buildOrders[0] === o;
 
 /* 扩建流程（03 §七）：点扩建位→就地展开建造菜单→选型开工（side 随扩建位已定） */
 const menuSide = ref("");
 function toggleMenu(side) { menuSide.value = menuSide.value === side ? "" : side; }
-const buildables = computed(() => Object.entries(BUILDINGS).filter(([, d]) => d.shell));
+/* 矿井卫星区菜单只放仓库（分布式仓储——唯一可建卫星区的地形是矿洞） */
+const buildables = computed(() => Object.entries(BUILDINGS).filter(([, d]) => d.shell && (menuSide.value !== "矿卫" || d.prebuilt)));
+const storeys = ref(1);   // 民居可选 1/2 层（03 §二 木质上限2；双层成本工期×1.8、居住位×2）
 function startBuild(b) {
-  queueBuild("shell", b, null, null, menuSide.value);
-  menuSide.value = "";
+  queueBuild("shell", b, null, null, menuSide.value, b === "民居" ? storeys.value : 1);
+  menuSide.value = ""; storeys.value = 1;
 }
+const satBlocks = computed(() => S.citySat || []);
 
 /* 软装详情：点建筑块→下方面板按类型列出各座（原 BuildSide 分座安装/驻组织逻辑整体迁入） */
 const selB = ref("");
@@ -52,7 +56,7 @@ function statusLine(b, instIdx) {
   if (b === "市政厅") return `${rootName.value} · 人口 ${S.people.length}`;
   const inst = (S.buildings[b] || [])[instIdx] || { interior: {} };
   if (b === "仓库") return `库存 ${Math.floor(resTotal())}/${capTotal()}`;
-  if (b === "民居") return `居住位 ${4 + (inst.interior["床铺"] ? 4 : 0)}`;
+  if (b === "民居") return `${inst.storeys === 2 ? "双层" : "单层"} · 位 ${((4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1))}`;
   const m = (BUILDINGS[b].interior || []).length;
   const parts = [];
   if (m) parts.push(`设备 ${installed(b, inst)}/${m}`);
@@ -65,7 +69,7 @@ const cur = computed(() => S.buildOrders[0] || null);
 const pending = computed(() => S.buildOrders.slice(1));
 const workers = computed(() => buildWorkers());
 const orderLabel = o => o.kind === "shell"
-  ? `${o.b}·新座硬装（${o.side === "左" ? "左" : "右"}翼）`
+  ? `${o.b}·新座硬装（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼${o.storeys === 2 ? "·双层" : ""}）`
   : o.b + CIRC[o.idx] + "·" + o.item;
 </script>
 
@@ -120,12 +124,40 @@ const orderLabel = o => o.kind === "shell"
       </div>
     </div>
 
+    <!-- 矿井卫星区：独立小条（矿洞处的分布式仓储） -->
+    <div id="satrow">
+      <span class="satlbl" title="矿洞是唯一可建卫星区的地形；卫星仓+80 矿堆容、集中短驳">矿井卫星区</span>
+      <div class="satstrip">
+        <button class="expand" :class="{ on: menuSide === '矿卫' }"
+                title="卫星区扩建位——建分布式仓库" @click="toggleMenu('矿卫')">＋扩建</button>
+        <div v-for="(p, i) in pendSat" :key="'ps' + i" class="bblock con"
+             :style="{ width: (CITY_W[p.b] || 2) * CELL + 'px' }">
+          <div class="bname">{{ p.b }}</div>
+          <span class="ctag">{{ isCur(p) ? "施工中" : "排队" }}</span>
+          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
+        </div>
+        <div v-for="(e, i) in satBlocks" :key="'sb' + i" class="bblock built sat"
+             :style="{ width: (CITY_W[e.b] || 2) * CELL + 'px' }">
+          <div class="bname">{{ e.b }}<i class="seat">{{ CIRC[e.inst] }}</i></div>
+          <div class="bstat">矿堆容 +80</div>
+        </div>
+      </div>
+    </div>
+
     <!-- 建造菜单（就地展开）：各建筑类型卡＝名/占宽/成本芯片/工期；资源不足禁用并红成本 -->
     <div v-if="menuSide" id="bmenu">
       <div class="bmhead">
-        <b>{{ menuSide }}翼扩建</b>
-        <span class="bmsub">选建筑类型——资源即扣，工程队按队施工；落成后排入{{ menuSide }}翼</span>
+        <b>{{ menuSide === "矿卫" ? "矿井卫星区" : menuSide + "翼扩建" }}</b>
+        <span class="bmsub">{{ menuSide === "矿卫"
+          ? "分布式仓储：卫星仓扩矿场堆容（+80/座），运输从矿口远背改为集中短驳"
+          : "选建筑类型——资源即扣，工程队按队施工；落成后排入" + menuSide + "翼" }}</span>
         <button @click="menuSide = ''">收起</button>
+      </div>
+      <div v-if="menuSide !== '矿卫'" class="storeys">
+        <span>民居层数：</span>
+        <button :class="{ on: storeys === 1 }" @click="storeys = 1">单层</button>
+        <button :class="{ on: storeys === 2 }" @click="storeys = 2"
+                title="木质上限2层（03 §二）；成本工期×1.8、居住位×2">双层</button>
       </div>
       <div class="bmcards">
         <button v-for="[b, d] in buildables" :key="b" class="bmcard"
@@ -252,4 +284,11 @@ const orderLabel = o => o.kind === "shell"
 .irow .dim { margin-left: auto; color: var(--warn); font-size: 10.5px; }
 .cdnone { color: var(--faint); font-size: 10.5px; padding: 4px 0; }
 .cdhint { color: var(--faint); font-size: 11px; padding: 10px 0; }
+#satrow { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.satlbl { font-size: 11px; color: var(--dim); writing-mode: vertical-lr; letter-spacing: 2px; }
+.satstrip { display: flex; gap: 6px; align-items: stretch; padding: 4px 8px;
+            background: #141a26; border: 1px dashed var(--line); border-radius: 9px; }
+.bblock.sat { border-style: dashed; }
+.storeys { display: flex; align-items: center; gap: 5px; margin: 4px 0 2px; font-size: 11.5px; color: var(--dim); }
+.storeys button { padding: 2px 9px; font-size: 11px; }
 </style>

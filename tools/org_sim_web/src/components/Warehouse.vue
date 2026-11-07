@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, RES, RES_INFO, RES_CATS, TERRAIN, resTotal, capTotal, wipList } from "../sim.js";
+import { S, RES, RES_INFO, RES_CATS, TERRAIN, resTotal, capTotal, wipList, mineBufCap, satWarehouses } from "../sim.js";
 const tab = ref("all");
 const tabs = [
   { id: "all", label: "全部" },
@@ -16,8 +16,9 @@ const shownGroups = computed(() => {
   if (tab.value === "all") return all;
   return all.filter(g => g.label === tab.value);
 });
-const siteRows = computed(() => Object.entries(TERRAIN).flatMap(([site, t]) =>
-  t.products.map(p => ({ site, p, v: S.buf[site + "|" + p] || 0 }))));
+const siteRows = computed(() => Object.entries(TERRAIN).filter(([, t]) => t.satellite)
+  .flatMap(([site, t]) => t.products.map(p => ({ site, p, v: S.buf[site + "|" + p] || 0 }))));
+const mineCap = computed(() => mineBufCap());
 const wipRows = computed(() => wipList());
 function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
 </script>
@@ -34,14 +35,15 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
     </div>
     <div id="whbody">
       <template v-if="tab === 'site'">
-        <div class="lbl">采集场的待运堆：产出先堆在场（等运输队搬回仓库）；堆满则停采</div>
+        <div class="lbl">卫星城（矿洞）的矿场待运堆：产出先堆在矿场（等运输队搬回主仓）；堆满则停采——
+    建矿井卫星仓可 +80/座（现 {{ satWarehouses() }} 座）。树林/农田产出直接入仓，无场地环节</div>
         <div class="sitegrid">
           <div v-for="r in siteRows" :key="r.site + r.p" class="sitecard"
-               :class="{ full: r.v >= S.knobs.buf }">
+               :class="{ full: r.v >= mineCap }">
             <div class="nm">{{ r.site }} · {{ r.p }}（待运）</div>
-            <div class="qty">{{ r.v.toFixed(1) }} <span class="dim">/ 堆上限 {{ S.knobs.buf }}</span></div>
-            <div class="bar"><i :class="barCls(r.v / S.knobs.buf)"
-                 :style="{ width: Math.min(100, r.v / S.knobs.buf * 100) + '%' }"></i></div>
+            <div class="qty">{{ r.v.toFixed(1) }} <span class="dim">/ 矿堆容 {{ mineCap }}</span></div>
+            <div class="bar"><i :class="barCls(r.v / mineCap)"
+                 :style="{ width: Math.min(100, r.v / mineCap * 100) + '%' }"></i></div>
           </div>
         </div>
       </template>

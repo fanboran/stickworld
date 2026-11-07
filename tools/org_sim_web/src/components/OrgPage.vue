@@ -1,14 +1,17 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, TERRAIN, idle, feed } from "../sim.js";
+import { S, TERRAIN, idle, feed, mineBufCap } from "../sim.js";
 import OrgCols from "./OrgCols.vue";
 import OrgPanel from "./OrgPanel.vue";
 
 /* 地形条：各采集场的场地堆存（缓冲堆，待运输队搬运） */
 const terrainRows = computed(() => Object.entries(TERRAIN).map(([site, t]) => {
   const parts = t.products.map(p => ({ p, v: S.buf[site + "|" + p] || 0 }));
-  const fill = Math.max(...parts.map(x => x.v / S.knobs.buf));
-  return { site, parts, fill };
+  const sat = t.satellite, off = t.offmap;
+  const cap = sat ? mineBufCap() : 0;
+  const fill = sat ? Math.max(...parts.map(x => x.v / cap)) : 0;
+  const tag = off ? "直供" : sat ? "卫星" : "城内";
+  return { site, parts, fill, sat, off, cap, tag };
 }));
 const staffed = computed(() => S.people.length - idle().length);
 /* 耕战一体：动员官在编才能动员；战备=全体产率减半 */
@@ -27,12 +30,19 @@ function toggleMob() {
     <div id="otool">
       <div class="tgroup">
         <div v-for="t in terrainRows" :key="t.site" class="tchip" :class="{ full: t.fill >= 1 }"
-             :title="`采集产出先堆在采集场（待运输队搬回仓库）；堆满 ${S.knobs.buf} 则停采`">
-          <span class="nm">{{ t.site }}</span>
+             :title="t.off ? '不可到达的产地——产出直接入仓（如外部直供）'
+                    : t.sat ? '卫星城：产出进矿场堆待运（堆满停采）；可在此建分布式卫星仓扩堆容'
+                    : '主城内的农田：产出直接入仓'">
+          <span class="nm">{{ t.site }}·{{ t.tag }}</span>
           <span class="piles">
-            <span v-for="x in t.parts" :key="x.p" class="pile">待运 {{ x.v.toFixed(0) }}/{{ S.knobs.buf }}</span>
+            <template v-if="t.sat">
+              <span v-for="x in t.parts" :key="x.p" class="pile">待运 {{ x.v.toFixed(0) }}/{{ t.cap }}</span>
+            </template>
+            <template v-else>
+              <span v-for="x in t.parts" :key="x.p" class="pile">直入仓</span>
+            </template>
           </span>
-          <div class="bar tb"><i :class="{ mid: t.fill >= .8, full: t.fill >= 1 }"
+          <div v-if="t.sat" class="bar tb"><i :class="{ mid: t.fill >= .8, full: t.fill >= 1 }"
                :style="{ width: Math.min(100, t.fill * 100) + '%' }"></i></div>
         </div>
       </div>

@@ -648,6 +648,8 @@ export function advance(dt) {
         if (ord.kind === "shell") {
           S.buildings[ord.b].push({ interior: {}, org: "" });
           const idx = S.buildings[ord.b].length - 1;
+          // 落成入排：新座进入城市一排（建筑页渲染；单上 side 定翼，未带 side 的单落右翼）
+          (ord.side === "左" ? S.cityL : S.cityR).push({ b: ord.b, inst: idx });
           const waitOrg = Object.values(S.orgs).find(x => x.bldgType === ord.b && !x.bldg);
           if (waitOrg) {   // 组建在建筑之前的空挂组织，落成即自动进驻
             S.buildings[ord.b][idx].org = waitOrg.id;

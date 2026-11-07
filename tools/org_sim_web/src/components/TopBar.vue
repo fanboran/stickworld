@@ -5,6 +5,7 @@ const props = defineProps({ page: String });
 const emit = defineEmits(["go", "knobs"]);
 const tabs = [
   { id: "org", label: "组织" },
+  { id: "city", label: "建筑" },
   { id: "wh", label: "仓库" },
   { id: "ov", label: "总览" },
 ];
@@ -26,7 +27,7 @@ function doReset() { reset(); emit("go", "org"); }
       <span class="rate" v-if="Math.abs(S.rates[r] || 0) >= 0.005">
         净{{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}/时</span>
     </span>
-    <span class="res link" title="人口与居住位（民居每座6位、床铺每台+2）" @click="emit('go', 'wh')">
+    <span class="res link" title="人口与居住位（民居每座基准4位，装床铺翻倍至8）" @click="emit('go', 'wh')">
       人口<b>{{ S.people.length }}</b><span class="rate">/居{{ housingCap() }}</span>
     </span>
     <span class="res link" title="点开仓库页" @click="emit('go', 'wh')">

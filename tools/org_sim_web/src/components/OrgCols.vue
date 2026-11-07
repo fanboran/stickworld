@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, ORGS, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
+import { S, ORGS, BUILDINGS, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
          idle, select, delOrg, feed, slotCandidates, createBlocked, slotCap,
          putPerson, pullPersons, createOrgAt } from "../sim.js";
 
@@ -81,6 +81,14 @@ function candTitle(name) {
   return desc + (blocked ? "｜" + blocked : "");
 }
 const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "半必须：需人运行，可移调顶岗", gain: "增益：无人也行，只是缺该功能" };
+/* 卡头悬停＝所驻建筑与设备明细（如「驻锻造坊①：熔炉/铁砧/水槽/磨石/风箱」）；缺址则示缺 */
+function bldgTitle(o) {
+  if (!o.bldgType) return "";
+  if (!o.bldg) return `缺${o.bldgType}——基础运转受限`;
+  const inst = S.buildings[o.bldg.b]?.[o.bldg.idx];
+  const eq = (BUILDINGS[o.bldg.b]?.interior || []).filter(it => inst?.interior[it.item]).map(it => it.item);
+  return `驻${o.bldg.b}${CIRC[o.bldg.idx]}${eq.length ? "：" + eq.join("/") : ""}`;
+}
 
 </script>
 
@@ -89,7 +97,7 @@ const POS_NAME = { must: "必须：至少一人该组织才能开工", semi: "�
     <div class="ocol" v-for="(col, ci) in columns" :key="ci">
       <div v-for="o in col.orgs" :key="o.id" class="card" :data-org="o.id"
            :class="{ hall: o.kind === 'hall', sel: S.sel === o.id && !S.selSlot }">
-        <div class="hd" @click="select(o.id)">
+        <div class="hd" :title="bldgTitle(o)" @click="select(o.id)">
           <span>{{ o.name }}</span><span class="tier">L{{ o.tier }}</span><span v-if="o.trainLv" class="tier">训{{ ["Ⅰ","Ⅱ","Ⅲ","Ⅳ","Ⅴ","Ⅵ","Ⅶ","Ⅷ"][o.trainLv - 1] }}</span>
           <span class="sub">{{ o.kind === "hall" ? "根节点" :
             (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }}{{ o.bldgType

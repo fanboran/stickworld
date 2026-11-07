@@ -2,7 +2,6 @@
 import { computed, ref } from "vue";
 import { S, TERRAIN, idle, feed } from "../sim.js";
 import OrgCols from "./OrgCols.vue";
-import BuildSide from "./BuildSide.vue";
 import OrgPanel from "./OrgPanel.vue";
 
 /* 地形条：各采集场的场地堆存（缓冲堆，待运输队搬运） */
@@ -53,9 +52,9 @@ function toggleMob() {
     </div>
     <div id="obody">
       <OrgCols />
+      <!-- 右侧栏：组织控制面板（建造管理已并入建筑页） -->
       <div id="rightcol">
         <OrgPanel />
-        <BuildSide />
       </div>
     </div>
   </div>

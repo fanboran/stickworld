@@ -1,12 +1,13 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from "vue";
-import { S, advance } from "./sim.js";
+import { S, advance, loadDemo } from "./sim.js";
 import TopBar from "./components/TopBar.vue";
 import OrgPage from "./components/OrgPage.vue";
+import CityPage from "./components/CityPage.vue";
 import Warehouse from "./components/Warehouse.vue";
 import Overview from "./components/Overview.vue";
 
-const page = ref("org");          // org=组织 / wh=仓库（头部页签切换；建造在组织页右侧栏）
+const page = ref("org");          // org=组织 / city=建筑 / wh=仓库 / ov=总览（页签切换；建造在建筑页）
 const showKnobs = ref(false);
 let timer = null;
 onMounted(() => {
@@ -29,8 +30,10 @@ onUnmounted(() => clearInterval(timer));
         {{ {gather:'采集/人时',deptGather:'兜底采集/人时',haul:'搬运/人时',craft:'工序/人时',uninfo:'未通报折扣',buf:'场地堆上限',cap:'仓库容量'}[key] }}
         <input type="number" step="0.05" v-model.number="S.knobs[key]">
       </span>
+      <button @click="loadDemo()">载入完全体样板</button>
     </div>
     <OrgPage v-if="page === 'org'" />
+    <CityPage v-else-if="page === 'city'" />
     <Warehouse v-else-if="page === 'wh'" />
     <Overview v-else-if="page === 'ov'" />
   </div>

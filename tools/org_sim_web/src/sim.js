@@ -65,7 +65,7 @@ export const BUILDINGS = {
       { item: "实验台", cost: { "铁矿": 2 }, work: 6, unlock: "解锁实验岗" } ] },
   "民居": { desc: "村民居住位（基准4位，装床铺翻倍——能住几人由床位决定）；有空位且温饱，人口缓增",
     shell: { cost: { "木材": 12 }, work: 12 }, interior: [
-      { item: "床铺", cost: { "木材": 4 }, work: 4, effect: "居住位+2" } ] },
+      { item: "床铺", cost: { "木材": 4 }, work: 4, effect: "居住位+4（双层加倍）" } ] },
   "木工房": { desc: "备料→装配，出手推车（车料为厂内物品）",
     shell: { cost: { "木材": 15, "铁矿": 2 }, work: 16 }, interior: [
       { item: "木工台", cost: { "木材": 8, "铁矿": 2 }, work: 8, unlock: "备料工序（木板+铁锭→车料）" },
@@ -362,7 +362,7 @@ export function cityCells() {   // 从左到右的格子内容：{b,inst} 或 nu
   return out;
 }
 
-/* 居住位：每座民居 6 位，每台床铺 +2 */
+/* 居住位：基准 4 位，床铺 +4（翻倍），再按层数倍乘（木质上限 2 层） */
 export function housingCap() {
   // 住房容量由床位决定（建筑总账 6.6 创始人口径）：基准 4 位，装床铺翻倍；楼层×层数（03 §二 木质上限2层）
   let n = 0;
@@ -706,7 +706,7 @@ export function advance(dt) {
     const eng = Object.values(S.orgs).find(x => x.template === "工程队");
     if (eng && eng.settings["自动扩建"] === "开" && S.buildings["仓库"]?.length
         && resTotal() >= capTotal() * 0.9
-        && !S.buildOrders.length                      // 任何建造单在队时都不自动扩（保底不压主线、一次一座）
+        && (!S.buildOrders.length || capTotal() - resTotal() <= 0.05)   // 平时保底不压主线、一次一座；顶格停采＝急救插队（停采余量是渐近小数，须用容差判满）
         && canPay(BUILDINGS["仓库"].shell.cost)) {
       pay(BUILDINGS["仓库"].shell.cost);
       S.buildOrders.push({ kind: "shell", b: "仓库", item: "", idx: -1,
@@ -799,7 +799,7 @@ export function queueBuild(kind, b, item, idx, side = "右", storeys = 1) {
   pay(cost2);
   S.buildOrders.push({ kind, b, item: item || "", idx: idx ?? -1, side, storeys, work: work2, done: 0 });
   const instTag = kind === "interior" ? CIRC[idx] + "·" : "";
-  feed(`开工 ${b}${kind === "shell" ? "·新一座硬装" : "·" + instTag + item}（${costStr(cost)} 已扣）`, "good");
+  feed(`开工 ${b}${kind === "shell" ? "·新一座硬装" : "·" + instTag + item}（${costStr(cost2)} 已扣）`, "good");
 }
 export function delOrg(orgId) {
   const o = S.orgs[orgId]; if (!o) return;

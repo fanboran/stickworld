@@ -252,7 +252,7 @@ export function reset() {
     S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {}, org: "" }] : [];
   S.cityR.push({ b: "仓库", inst: 0 });   // 市政厅居中，仓库落在右侧首块
   for (const [site, t] of Object.entries(TERRAIN))
-    if (t.satellite) for (const p of t.products) S.buf[site + "|" + p] = 0;   // 仅卫星地形有场地堆
+    for (const p of t.products) S.buf[site + "|" + p] = 0;   // 三线都有场地堆（树林/农田堆不设上限）
   const hall = addOrgRaw("市政厅", 1, "hall");
   hall.name = "聚落";
   for (const key of HALL_SLOT_KEYS)
@@ -522,20 +522,13 @@ export function advance(dt) {
       let rate = K.gather;
       if (d.terrain === "树林" && orgEquip(o, "工具架")) rate *= 1.25;
       const amt = rate * w * mult * dt;
+      // 三线产出都进场地堆、都要搬运工搬回主仓；差异只在堆容与运距：
+      // 树林/农田＝主城侧产地，堆不设上限（无停采）；矿洞＝卫星城，堆容 40+80×卫星仓
       const prod2 = slotProduct(slot);
-      const t2 = TERRAIN[d.terrain];
-      if (t2.satellite) {   // 卫星城（矿洞）：产出进矿场堆，等运输队搬回主仓
-        const key = bufKey(d.terrain, prod2);
-        const room = mineBufCap() - S.buf[key];
-        const got = Math.min(amt, Math.max(0, room));
-        S.buf[key] += got; flow[prod2] += got;
-      } else {              // 树林（直供）/农田（主城内）：直接入仓，仓库满则停采（边沿呈报一次）
-        const room = Math.max(0, capTotal() - resTotal());
-        const got = Math.min(amt, room);
-        S.res[prod2] += got; flow[prod2] += got;
-        if (room <= 0.001 && !S._stallFed) { feed("仓库已满，采集停摆——扩容或腾仓", "bad"); S._stallFed = true; }
-        if (room > 1) S._stallFed = false;
-      }
+      const key = bufKey(d.terrain, prod2);
+      const cap2 = TERRAIN[d.terrain].satellite ? mineBufCap() : Infinity;
+      const got = Math.min(amt, Math.max(0, cap2 - S.buf[key]));
+      S.buf[key] += got; flow[prod2] += got;
     }
   }
   // ②′ 生产局·采集兜底：无专门队时的泛采集（0.4/人时，均摊到仍有余量的缓冲堆）
@@ -543,12 +536,14 @@ export function advance(dt) {
   const deptGatherers = dept ? (dept.slots["采集"]?.persons.length || 0) : 0;
   if (deptGatherers) {
     const amt = K.deptGather * deptGatherers * mult * dt;
-    const room = Math.max(0, capTotal() - resTotal());
-    const got = Math.min(amt, room);   // 散工兜底直入仓（无卫星堆逻辑）
-    if (got > 0) {
-      const prods = Object.values(TERRAIN).flatMap(t => t.products);
-      const per = got / prods.length;
-      for (const pr of prods) { S.res[pr] += per; flow[pr] += per; }
+    const keys0 = Object.keys(S.buf);
+    if (keys0.length) {   // 散工兜底：均摊进各线场地堆（矿堆满则该线自然截断）
+      const per = amt / keys0.length;
+      for (const k of keys0) {
+        const cap2 = k.startsWith("矿洞") ? mineBufCap() : Infinity;
+        const got = Math.min(per, Math.max(0, cap2 - S.buf[k]));
+        S.buf[k] += got; flow[k.split("|")[1]] += got;
+      }
     }
   }
   // ③ 搬运（库管在岗才运转；被通报场地全速，未通报打折扣）
@@ -565,19 +560,22 @@ export function advance(dt) {
       if (o.settings["载具"] === "手推车" && S.res["手推车"] >= 1) haulRate = K.haul * 1.5;   // 车在手边才提速（与面板门控同一物理事实）
       if (o.settings["装卸规则"] === "大宗优先") bulkFirst = true;
     }
-    const distFactor = satWarehouses() > 0 ? 1 : 0.6;   // 运距物理折算：卫星仓集中短驳 vs 矿口远背
-    const cap = haulRate * haulers * distFactor * mult * dt;
+    // 运距逐线折算（物理）：矿堆（卫星城）无仓 ×0.6 远背、有卫星仓 ×1 集中短驳；主城侧线 ×1 城内短驳
+    const distOf = k => k.startsWith("矿洞") ? (satWarehouses() > 0 ? 1 : 0.6) : 1;
     const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001);
-    const totalBuf = keys.reduce((a, key2) => a + S.buf[key2], 0);
-    const move = Math.min(cap, totalBuf, Math.max(0, capTotal() - resTotal()));
-    if (move > 0) {
-      // 装卸规则（物理行为差异，非乘数）：均匀分运=按堆量比例；大宗优先=先清最大堆，场地少顶格停采
+    // 运力按堆量加权分配（各线运距已含在自身运力里）；装卸规则保留：
+    // 均匀分运=按堆量比例；大宗优先=先清最大堆
+    const wSum = keys.reduce((a, k) => a + S.buf[k] / distOf(k), 0);
+    let move = Math.min(haulRate * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0),
+                        Math.max(0, capTotal() - resTotal()));
+    if (move > 0 && wSum > 0) {
       const order = bulkFirst ? [...keys].sort((a, b) => S.buf[b] - S.buf[a]) : keys;
       let remaining = move;
       for (const key2 of order) {
         const disc = notified[key2] === false ? K.uninfo : 1;
-        const m = bulkFirst ? Math.min(remaining, S.buf[key2]) * disc
-                            : move * (S.buf[key2] / totalBuf) * disc;
+        const share = bulkFirst ? Math.min(remaining, S.buf[key2])
+                                : move * (S.buf[key2] / distOf(key2)) / wSum;
+        const m = Math.min(share * disc, S.buf[key2]);
         if (bulkFirst) remaining -= m;
         S.buf[key2] -= m;
         S.res[key2.split("|")[1]] += m;

@@ -16,8 +16,8 @@ const shownGroups = computed(() => {
   if (tab.value === "all") return all;
   return all.filter(g => g.label === tab.value);
 });
-const siteRows = computed(() => Object.entries(TERRAIN).filter(([, t]) => t.satellite)
-  .flatMap(([site, t]) => t.products.map(p => ({ site, p, v: S.buf[site + "|" + p] || 0 }))));
+const siteRows = computed(() => Object.entries(TERRAIN)
+  .flatMap(([site, t]) => t.products.map(p => ({ site, p, v: S.buf[site + "|" + p] || 0, sat: !!t.satellite }))));
 const mineCap = computed(() => mineBufCap());
 const wipRows = computed(() => wipList());
 function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
@@ -35,14 +35,14 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
     </div>
     <div id="whbody">
       <template v-if="tab === 'site'">
-        <div class="lbl">卫星城（矿洞）的矿场待运堆：产出先堆在矿场（等运输队搬回主仓）；堆满则停采——
-    建矿井卫星仓可 +80/座（现 {{ satWarehouses() }} 座）。树林/农田产出直接入仓，无场地环节</div>
+        <div class="lbl">三线场地待运堆（都要搬运工搬回主仓）：矿洞＝卫星城（堆容 {{ mineCap }}，满则停采——
+    卫星仓 +80/座，现 {{ satWarehouses() }} 座）；树林/农田＝主城侧（堆不设上限）</div>
         <div class="sitegrid">
           <div v-for="r in siteRows" :key="r.site + r.p" class="sitecard"
-               :class="{ full: r.v >= mineCap }">
-            <div class="nm">{{ r.site }} · {{ r.p }}（待运）</div>
-            <div class="qty">{{ r.v.toFixed(1) }} <span class="dim">/ 矿堆容 {{ mineCap }}</span></div>
-            <div class="bar"><i :class="barCls(r.v / mineCap)"
+               :class="{ full: r.sat && r.v >= mineCap }">
+            <div class="nm">{{ r.site }}{{ r.sat ? "·卫星" : "·城内" }} · {{ r.p }}（待运）</div>
+            <div class="qty">{{ r.v.toFixed(1) }} <span class="dim">{{ r.sat ? "/ 矿堆容 " + mineCap : "（无上限）" }}</span></div>
+            <div class="bar" v-if="r.sat"><i :class="barCls(r.v / mineCap)"
                  :style="{ width: Math.min(100, r.v / mineCap * 100) + '%' }"></i></div>
           </div>
         </div>

@@ -131,10 +131,9 @@ const orderLabel = o => o.kind === "shell"
     <!-- 矿井卫星区：独立小条（矿洞处的分布式仓储） -->
     <div id="satrow">
       <span class="satlbl" title="矿洞是唯一可建卫星区的地形；卫星仓+80 矿堆容、集中短驳">矿井卫星区</span>
-      <span class="satwall" title="山体洞口——不可向山侧扩建，卫星区只能向一侧生长">▍山体</span>
       <div class="satstrip">
         <button class="expand" :class="{ on: menuSide === '矿卫' }"
-                title="卫星区扩建位——建分布式仓库（单向：背靠山体，只向外侧长）" @click="toggleMenu('矿卫')">＋扩建</button>
+                title="卫星区扩建位——建分布式仓库" @click="toggleMenu('矿卫')">＋扩建</button>
         <div v-for="(p, i) in pendSat" :key="'ps' + i" class="bblock con"
              :style="{ width: (CITY_W[p.b] || 2) * CELL + 'px' }">
           <div class="bname">{{ p.b }}</div>
@@ -154,7 +153,7 @@ const orderLabel = o => o.kind === "shell"
       <div class="bmhead">
         <b>{{ menuSide === "矿卫" ? "矿井卫星区" : menuSide + "翼扩建" }}</b>
         <span class="bmsub">{{ menuSide === "矿卫"
-          ? "分布式仓储：卫星仓扩矿场堆容（+80/座）、集中短驳——背靠山体单向扩建"
+          ? "分布式仓储：卫星仓扩矿场堆容（+80/座）、集中短驳"
           : "选建筑类型——资源即扣，工程队按队施工；落成后排入" + menuSide + "翼" }}</span>
         <button @click="menuSide = ''">收起</button>
       </div>
@@ -297,8 +296,6 @@ const orderLabel = o => o.kind === "shell"
 .upper { height: 12px; margin: 1px 3px 0; border: 1px solid var(--line2); border-radius: 4px;
          background: #ffffff12; font-size: 8.5px; color: var(--dim); display: flex;
          align-items: center; justify-content: center; letter-spacing: 2px; }
-.satwall { writing-mode: vertical-lr; font-size: 10px; color: var(--faint);
-           letter-spacing: 3px; border-left: 3px solid #3a3f4d; padding-left: 3px; }
 .storeys { display: flex; align-items: center; gap: 5px; margin: 4px 0 2px; font-size: 11.5px; color: var(--dim); }
 .storeys button { padding: 2px 9px; font-size: 11px; }
 </style>

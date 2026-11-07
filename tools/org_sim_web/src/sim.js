@@ -230,7 +230,7 @@ export const S = reactive({
   res: {}, buf: {}, wip: {}, buildings: {}, buildOrders: [],
   mobilized: false, borrows: {},
   sel: null, selSlot: null, feed: [], rates: {}, snap: null,
-  cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0,
+  cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0,
   knobs: { gather: 0.8, deptGather: 0.4, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 400 },
 });
 
@@ -245,12 +245,15 @@ export function reset() {
     buf: {}, wip: {}, buildings: {}, buildOrders: [],
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {}, snap: null,
-    cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0,
+    cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0,
   };
   Object.assign(S, fresh);
   for (const b of Object.keys(BUILDINGS))
     S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {}, org: "" }] : [];
-  S.cityR.push({ b: "仓库", inst: 0 });   // 市政厅居中，仓库落在右侧首块
+  // 随机初始布局：开局仓库随机落某一翼（每局不同）；seed 留档可复现
+  S.seed = Math.floor(Math.random() * 1e6);
+  const rng = mulberry32(S.seed);
+  (rng() < 0.5 ? S.cityL : S.cityR).push({ b: "仓库", inst: 0 });
   for (const [site, t] of Object.entries(TERRAIN))
     for (const p of t.products) S.buf[site + "|" + p] = 0;   // 三线都有场地堆（树林/耕地堆不设上限）
   const hall = addOrgRaw("市政厅", 1, "hall");
@@ -344,6 +347,14 @@ export function loadDemo() {
 
 
 /* ── 工具 ── */
+function mulberry32(a) {   // 轻量确定性 PRNG：同 seed 同布局（复现用）
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
 export const CIRC = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];   // 建筑实例枚举（区分座，非命名）
 export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);

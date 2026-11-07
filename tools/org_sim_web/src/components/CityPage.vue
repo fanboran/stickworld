@@ -7,7 +7,7 @@ import { S, BUILDINGS, CITY_W, CIRC, RES_INFO, cityCells, canPay, costStr, queue
    建造管理自组织页 BuildSide 侧栏整体并入本页：两端扩建位就地开建造菜单、
    点建筑块开分座软装详情、顶部施工队列条 */
 
-const CELL = 46;   // 每格像素宽（块宽=占格数×CELL；格子底纹 background-size 与之同步）
+const CELL = 30;   // 每格像素宽：格多不占屏——宽度固定，层数向上叠
 
 /* 一排从左到右＝cityCells()（左翼倒序+市政厅居中+右翼），相邻同座格合并成一块 */
 const blocks = computed(() => {
@@ -38,6 +38,7 @@ function startBuild(b) {
   menuSide.value = ""; storeys.value = 1;
 }
 const satBlocks = computed(() => S.citySat || []);
+const storeysOf = e => (S.buildings[e.b] || [])[e.inst]?.storeys || 1;
 
 /* 软装详情：点建筑块→下方面板按类型列出各座（原 BuildSide 分座安装/驻组织逻辑整体迁入） */
 const selB = ref("");
@@ -98,6 +99,7 @@ const orderLabel = o => o.kind === "shell"
         <div v-for="(p, i) in pendL" :key="'pl' + i" class="bblock con"
              :style="{ width: (CITY_W[p.b] || 2) * CELL + 'px' }"
              :title="p.b + (isCur(p) ? ' 施工中' : ' 排队中') + '——落成后进入左翼'">
+          <div v-if="p.storeys === 2" class="upper"><span>2F</span></div>
           <div class="bname">{{ p.b }}</div>
           <span class="ctag">{{ isCur(p) ? "施工中" : "排队" }}</span>
           <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
@@ -108,6 +110,7 @@ const orderLabel = o => o.kind === "shell"
              :style="{ width: e.w * CELL + 'px' }"
              :title="(BUILDINGS[e.b]?.desc || '') + '｜点开下方软装详情'"
              @click="pickBlock(e.b)">
+          <div v-if="storeysOf(e) === 2" class="upper"><span>2F</span></div>
           <div class="bname">{{ e.b }}<i v-if="e.b !== '市政厅'" class="seat">{{ CIRC[e.inst] }}</i></div>
           <div class="bstat">{{ statusLine(e.b, e.inst) }}</div>
         </div>
@@ -115,6 +118,7 @@ const orderLabel = o => o.kind === "shell"
         <div v-for="(p, i) in pendR" :key="'pr' + i" class="bblock con"
              :style="{ width: (CITY_W[p.b] || 2) * CELL + 'px' }"
              :title="p.b + (isCur(p) ? ' 施工中' : ' 排队中') + '——落成后进入右翼'">
+          <div v-if="p.storeys === 2" class="upper"><span>2F</span></div>
           <div class="bname">{{ p.b }}</div>
           <span class="ctag">{{ isCur(p) ? "施工中" : "排队" }}</span>
           <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
@@ -127,9 +131,10 @@ const orderLabel = o => o.kind === "shell"
     <!-- 矿井卫星区：独立小条（矿洞处的分布式仓储） -->
     <div id="satrow">
       <span class="satlbl" title="矿洞是唯一可建卫星区的地形；卫星仓+80 矿堆容、集中短驳">矿井卫星区</span>
+      <span class="satwall" title="山体洞口——不可向山侧扩建，卫星区只能向一侧生长">▍山体</span>
       <div class="satstrip">
         <button class="expand" :class="{ on: menuSide === '矿卫' }"
-                title="卫星区扩建位——建分布式仓库" @click="toggleMenu('矿卫')">＋扩建</button>
+                title="卫星区扩建位——建分布式仓库（单向：背靠山体，只向外侧长）" @click="toggleMenu('矿卫')">＋扩建</button>
         <div v-for="(p, i) in pendSat" :key="'ps' + i" class="bblock con"
              :style="{ width: (CITY_W[p.b] || 2) * CELL + 'px' }">
           <div class="bname">{{ p.b }}</div>
@@ -149,7 +154,7 @@ const orderLabel = o => o.kind === "shell"
       <div class="bmhead">
         <b>{{ menuSide === "矿卫" ? "矿井卫星区" : menuSide + "翼扩建" }}</b>
         <span class="bmsub">{{ menuSide === "矿卫"
-          ? "分布式仓储：卫星仓扩矿场堆容（+80/座），运输从矿口远背改为集中短驳"
+          ? "分布式仓储：卫星仓扩矿场堆容（+80/座）、集中短驳——背靠山体单向扩建"
           : "选建筑类型——资源即扣，工程队按队施工；落成后排入" + menuSide + "翼" }}</span>
         <button @click="menuSide = ''">收起</button>
       </div>
@@ -166,7 +171,7 @@ const orderLabel = o => o.kind === "shell"
                         + ' · 工期 ' + d.shell.work + '人时'"
                 @click="startBuild(b)">
           <span class="bmctop"><b>{{ b }}</b><i v-if="d.late" class="latetag">后期</i>
-            <i class="bmw">占{{ CITY_W[b] }}格</i></span>
+            <i class="bmw">占{{ CITY_W[b] }}格{{ menuSide !== '矿卫' && b === '民居' && storeys === 2 ? '×2层' : '' }}</i></span>
           <span class="bmcdesc">{{ d.desc }}</span>
           <span class="bmcmeta">工期 {{ d.shell.work }} 人时</span>
           <span class="cost" v-for="[r, n] of Object.entries(d.shell.cost)" :key="r"
@@ -289,6 +294,11 @@ const orderLabel = o => o.kind === "shell"
 .satstrip { display: flex; gap: 6px; align-items: stretch; padding: 4px 8px;
             background: #141a26; border: 1px dashed var(--line); border-radius: 9px; }
 .bblock.sat { border-style: dashed; }
+.upper { height: 12px; margin: 1px 3px 0; border: 1px solid var(--line2); border-radius: 4px;
+         background: #ffffff12; font-size: 8.5px; color: var(--dim); display: flex;
+         align-items: center; justify-content: center; letter-spacing: 2px; }
+.satwall { writing-mode: vertical-lr; font-size: 10px; color: var(--faint);
+           letter-spacing: 3px; border-left: 3px solid #3a3f4d; padding-left: 3px; }
 .storeys { display: flex; align-items: center; gap: 5px; margin: 4px 0 2px; font-size: 11.5px; color: var(--dim); }
 .storeys button { padding: 2px 9px; font-size: 11px; }
 </style>

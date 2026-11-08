@@ -110,8 +110,8 @@ export const ORGS = {
       { fn: "记录", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "记录木材出入并呈递给你" } ] },
   "采矿队": { host: "采矿", slots: [
       { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿" },
-      { fn: "支护", n: 1, pos: "gain", role: "架坑木支撑坑道" },
-      { fn: "提升", n: 1, pos: "gain", role: "坑口吊运，矿石出坑装堆" },
+      { fn: "支护", n: 1, pos: "gain", role: "架坑木支撑坑道——矿场堆容 +20/人" },
+      { fn: "提升", n: 1, pos: "gain", role: "坑口吊运——矿石出坑快 1/4（同工具架物理口径）" },
       { fn: "矿石信息", n: 1, pos: "semi", role: "收集矿石线信息呈递给你" } ] },
   "农垦队": { host: "农垦", slots: [
       { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "耕地", role: "负责耕作" },
@@ -400,9 +400,14 @@ export const CIRC = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "�
 export const circ = i => CIRC[i] ?? String(i + 1);   // 第 10 座起退化为数字（实测 30 座民居时 ①~⑨ 溢出显 undefined）
 export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
-/* 矿井卫星区：可在矿洞处建的分布式仓库——矿堆容 +80/座，且集中整批短驳（无仓则从矿口远背主城） */
+/* 矿井卫星区：可在矿洞处建的分布式仓库——矿堆容 +80/座，且集中整批短驳（无仓则从矿口远背主城）；
+   采矿队·支护架坑木拓宽堆场（+20/人） */
 export const satWarehouses = () => (S.citySat || []).filter(e => e.b === "仓库").length;
-export const mineBufCap = () => 40 + 80 * satWarehouses();
+export function mineBufCap() {
+  let sup = 0;
+  for (const o of Object.values(S.orgs)) sup += o.slots["支护"]?.persons.length || 0;
+  return 40 + 80 * satWarehouses() + 20 * sup;
+}
 
 /* 城市布局：一整排，市政厅居中，向左/右两侧扩建；每型建筑占格宽（ CITY_W） */
 export const CITY_W = { "市政厅": 16, "仓库": 8, "民居": 4, "伐木小屋": 4, "锯木坊": 8, "锻造坊": 8,
@@ -509,6 +514,12 @@ export function feed(text, cls) {
 export function membersOf(o) {
   let n = 0; for (const s of Object.values(o.slots)) n += s.persons.length; return n;
 }
+/* 个体属性系数（17 号域，占位带宽 ±20%）：采集/搬运吃 str、工序吃 cft——力大气粗/手巧活细的物理差异 */
+const attrAvg = (pids, key) => {
+  const ps = pids.map(pid => person(pid)).filter(Boolean);
+  return ps.length ? ps.reduce((a, p) => a + (p.attr?.[key] ?? 5), 0) / ps.length : 5;
+};
+const attrMult = (pids, key) => 0.7 + 0.06 * attrAvg(pids, key);   // 均值5=1.0、2=0.82、8=1.18
 /* 厂内半成品清单（各厂 WIP 汇总，仓库页「厂内」标签用） */
 export function wipList() {
   const rows = [];
@@ -732,7 +743,8 @@ export function advance(dt) {
       if (!w) continue;
       let rate = K.gather;
       if (d.terrain === "树林" && orgEquip(o, "工具架")) rate *= 1.25;
-      const amt = rate * w * mult * dt;
+      if (d.terrain === "矿洞" && (o.slots["提升"]?.persons.length || 0) > 0) rate *= 1.25;   // 坑口吊运
+      const amt = rate * attrMult(slot.persons, "str") * w * mult * dt;   // 力气影响采集
       // 三线产出都进场地堆、都要搬运工搬回主仓；差异只在堆容与运距：
       // 树林/耕地＝主城侧产地，堆不设上限（无停采）；矿洞＝卫星城，堆容 40+80×卫星仓
       const prod2 = slotProduct(slot);
@@ -766,12 +778,15 @@ export function advance(dt) {
   }
   if (keeper && haulers > 0) {
     let haulRate = K.haul, bulkFirst = false, plan = "", dispStaffed = false, cartOn = false;
+    const haulPids = [];
     for (const o of Object.values(S.orgs)) if (o.slots["搬运"]) {
       if (o.settings["载具"] === "手推车" && S.res["手推车"] >= 1) { haulRate = K.haul * 1.5; cartOn = true; }   // 车在手边才提速（与面板门控同一物理事实）
       if (o.settings["装卸规则"] === "大宗优先") bulkFirst = true;
       plan = o.settings["运输计划"] || "";
       dispStaffed = (o.slots["调度"]?.persons.length || 0) > 0;   // 排单是调度的活：调度在岗才生效
+      haulPids.push(...o.slots["搬运"].persons);
     }
+    const haulStr = attrMult(haulPids, "str");   // 力气影响搬运
     const wOf = k => dispStaffed && plan.indexOf(k.split("|")[1]) >= 0 ? 2 : 1;   // 运输计划：被偏重线运力×2
     // 运距逐线折算（物理）：矿堆（卫星城）无仓 ×0.6 远背、有卫星仓 ×1 集中短驳；主城侧线 ×1 城内短驳
     const distOf = k => k.startsWith("矿洞") ? (satWarehouses() > 0 ? 1 : 0.6) : 1;
@@ -779,7 +794,7 @@ export function advance(dt) {
     // 运力按堆量加权分配（各线运距已含在自身运力里）；装卸规则保留：
     // 均匀分运=按堆量比例；大宗优先=先清最大堆
     const wSum = keys.reduce((a, k) => a + S.buf[k] * wOf(k) / distOf(k), 0);
-    let move = Math.min(haulRate * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0),
+    let move = Math.min(haulRate * haulStr * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0),
                         Math.max(0, capTotal() - resTotal()));
     if (move > 0 && wSum > 0) {
       const order = bulkFirst ? [...keys].sort((a, b) => S.buf[b] - S.buf[a]) : keys;
@@ -829,6 +844,7 @@ export function advance(dt) {
     });
     const wSum = wts.reduce((a, b, i) => a + (runnable[i] ? b : 0), 0);
     const perStepOf = i => workers * wts[i] / wSum;
+    const cftM = attrMult(Object.values(o.slots).flatMap(s => s.persons), "cft");   // 手巧影响工序
     for (let i = 0; i < steps.length; i++) {
       if (!runnable[i]) continue;
       const st = steps[i];
@@ -837,7 +853,7 @@ export function advance(dt) {
         const src = Object.values(o.slots).find(s => s.persons.length);
         if (src) (S.borrows[o.id] ||= []).push({ from: src.def.fn, to: st.name });
       }
-      let want = K.craft * perStepOf(i) * mult * dt;   // 工时按偏好权重分流（无偏好=均摊）
+      let want = K.craft * cftM * perStepOf(i) * mult * dt;   // 工时按偏好权重分流（无偏好=均摊），手巧加成
       // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
       if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
       let produced = 0;
@@ -909,8 +925,21 @@ export function advance(dt) {
       S.autoCd = (S.autoCd || 0) + dt;
       if (S.autoCd >= 8 / nHR) {   // 人事在编越多补得越勤
         S.autoCd = 0;
-        const idleP = S.people.find(x => !x.org);
-        if (idleP) {
+        let pid = S.people.find(x => !x.org)?.id;
+        if (!pid) {   // 无闲人：从多人非必须岗匀一人（人事局的调剂职责；保留至少一人不动 must 岗）
+          let src = null;
+          for (const o of Object.values(S.orgs))
+            for (const sl of Object.values(o.slots))
+              if (sl.def.pos !== "must" && !sl.institution && sl.persons.length > 1
+                  && (!src || sl.persons.length > src.sl.persons.length))
+                src = { o, sl };
+          if (src) {
+            pid = src.sl.persons.pop();
+            person(pid).org = "";   // 先置待业，补进目标岗时再挂
+            feed(`人事局调剂：${src.o.name}「${src.sl.def.fn}」匀一人补缺`, "good");
+          }
+        }
+        if (pid && !person(pid).org) {
           let target = null;
           const bufSum = () => Object.values(S.buf).reduce((a, b) => a + b, 0);
           for (const o of Object.values(S.orgs))
@@ -920,8 +949,8 @@ export function advance(dt) {
                   && (!target || sl.persons.length < target.sl.persons.length))
                 target = { o, sl, fn };
           if (target) {
-            target.sl.persons.push(idleP.id); idleP.org = target.o.id;
-            feed(`人事局补员：待业者补进 ${target.o.name}「${target.fn}」`, "good");
+            target.sl.persons.push(pid); person(pid).org = target.o.id;
+            feed(`人事局补员：${target.o.name}「${target.fn}」补进 ${person(pid).name}`, "good");
           }
         }
       }

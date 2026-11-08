@@ -128,6 +128,7 @@ function askDel(id) {
             <span class="fn" :class="'p-' + (slot.def.pos || 'run')"
                   :title="POS_NAME[slot.def.pos || 'run'] + '｜' + (slot.def.role || '')">{{ fn }}</span>
             <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slotCap(o, slot) }}</span>
+            <span v-else-if="slot.def.step !== undefined && slot.persons.length" class="cnt">{{ slot.persons.length }}人</span>   <!-- 工序槽一设备多班：n:1 非工位上限 -->
             <template v-if="slot.persons.length || slot.institution">
               <span v-for="c in chipsOf(slot)" :key="c.label" class="chip" :title="c.title">{{ c.label }}</span>
               <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, circ, RES_INFO, cityLayout, buildBlocked, cancelBuild, dismantle,
-         queueBuild, buildWorkers, resTotal, capTotal, housingCap, interiorLayout, interiorUsed, interiorCap } from "../sim.js";
+         queueBuild, buildWorkers, resTotal, capTotal, housingCap, interiorLayout, interiorUsed, interiorCap, shellBill } from "../sim.js";
 import { usePanelSize } from "../panel.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
@@ -63,6 +63,9 @@ const workers = computed(() => buildWorkers());
 const orderLabel = o => o.kind === "shell"
   ? `${o.b}·新座硬装（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼${o.storeys === 2 ? "·双层" : ""}）`
   : o.b + circ(o.idx) + "·" + o.item;
+/* 分部位料单（裁决32）：建造卡与软装详情显示逐部位 BOM */
+const billOf = (b, st = 1) => shellBill(b, st);
+const partStr = bill => Object.entries(bill).map(([r, n]) => RES_INFO[r]?.icon + n + r).join(" ");
 /* 校验单一真相源（sim.js buildBlocked）：按钮禁用态与 queueBuild 同一规则 */
 const shellWhy = b => buildBlocked("shell", b, null, -1, b === "民居" ? storeys.value : 1);
 const itemWhy = (b, item, idx) => buildBlocked("interior", b, item, idx);
@@ -183,9 +186,9 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
           <span class="bmctop"><b>{{ b }}</b><i v-if="d.late" class="latetag">后期</i>
             <i class="bmw">占{{ CITY_W[b] }}格{{ menuSide !== '矿卫' && b === '民居' && storeys === 2 ? '×2层' : '' }}</i></span>
           <span class="bmcdesc">{{ d.desc }}</span>
-          <span class="bmcmeta">工期 {{ d.shell.work }} 人时</span>
-          <span class="cost" v-for="[r, n] of Object.entries(d.shell.cost)" :key="r"
-                :class="{ lack: lack(r, n) }">{{ RES_INFO[r].icon }}{{ n }}</span>
+          <span class="bmcmeta">工期 {{ billOf(b, b === '民居' && storeys === 2 ? 2 : 1).work }} 人时 · 逐部位料单：</span>
+          <span class="bpcost" v-for="[pn, bill] of Object.entries(billOf(b, b === '民居' && storeys === 2 ? 2 : 1).parts)"
+                :key="pn" :title="pn + '：' + partStr(bill)">{{ pn }} {{ partStr(bill) }}</span>
         </button>
       </div>
     </div>
@@ -197,6 +200,13 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
     <div id="cdetail" :style="{ height: detH + 'px' }">
       <template v-if="selB">
         <div class="cdhead"><b>{{ selB }}</b><span class="cddesc">{{ selType?.desc }}</span></div>
+        <!-- 建一座的逐部位料单（分部位 BOM） -->
+        <div class="bomrow" v-if="!selType?.prebuilt">
+          <span class="dim">建一座需：</span>
+          <span class="bpcost" v-for="[pn, bill] of Object.entries(billOf(selB).parts)" :key="pn"
+                :title="pn">{{ pn }} {{ partStr(bill) }}</span>
+          <span class="dim">· {{ billOf(selB).work }} 人时</span>
+        </div>
         <div v-for="(inst, idx) in (S.buildings[selB] || [])" :key="idx" class="inst">
           <div class="ihead">
             <b>{{ circ(idx) }}</b>
@@ -298,6 +308,11 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .bmhead button { margin-left: auto; padding: 2px 10px; font-size: 11px; }
 .bmsub { color: var(--dim); font-size: 11px; }
 .bmcards { display: flex; gap: 8px; flex-wrap: wrap; }
+.bpcost { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+          padding: 1px 7px; font-size: 10.5px; color: var(--dim); margin: 1px 3px 1px 0;
+          display: inline-flex; gap: 3px; }
+.bomrow { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin: 2px 0 6px; font-size: 11px; }
+.bomrow .dim { color: var(--faint); font-size: 10.5px; }
 .bmcard { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 200px;
           text-align: left; padding: 7px 10px; }
 .bmcard:disabled { opacity: .45; }

@@ -10,14 +10,20 @@ export const TERRAIN = {
    原料窄口径（05-经济系统 §四）：基础原料三种——原木/矿物（暂只做铁）/农作物，全部地形直出；
    木材/木板/铁锭都是工序产物（加工品），多样性靠工序不靠原料。
    进食是可选增益、不设「食物」资源；铁水/毛坯/淬火件/净药材/车料是厂内物品，不可离厂（仓库页「厂内」标签可见） */
-export const RES = ["原木", "铁矿", "农作物", "木材", "木板", "铁锭", "铁剑", "药水", "手推车"];
+export const RES = ["原木", "铁矿", "农作物", "木材", "木板", "木梁", "木瓦", "铁锭", "铁钉", "铁板", "绳索",
+                    "铁剑", "药水", "手推车"];
 export const RES_INFO = {
   "原木":   { cat: "basic", icon: "🌲", src: "伐木队采自树林——锯木坊锯解的原料" },
   "铁矿":   { cat: "basic", icon: "🪨", src: "矿物·暂只做铁——采矿队采自矿洞" },
   "农作物": { cat: "basic", icon: "🌾", src: "耕地产出——战粮类增益品原料（进食可选增益、无饥饿），亦可炮制入药" },
   "木材":   { cat: "mat", icon: "🪵", src: "锯木坊锯解原木所得（建材/工具/载具用料）" },
   "木板":   { cat: "mat", icon: "🟫", src: "锯木坊刨光木材所得" },
+  "木梁":   { cat: "mat", icon: "🪓", src: "锯木坊制梁所得——大跨承重构件（设施类建筑骨架）" },
+  "木瓦":   { cat: "mat", icon: "🧱", src: "锯木坊制瓦（木板开片）——屋面覆盖" },
   "铁锭":   { cat: "mat", icon: "🔩", src: "冶炼坊自产（或初始库存）" },
+  "铁钉":   { cat: "mat", icon: "📌", src: "锻造坊制钉（铁锭冲打）——连接紧固件" },
+  "铁板":   { cat: "mat", icon: "⬜", src: "锻造坊轧板（铁锭辗轧）——耐火铺面/器具" },
+  "绳索":   { cat: "mat", icon: "🪢", src: "木器坊搓绳（农作物纤维）——绑扎/索具" },
   "铁剑":   { cat: "prod", icon: "🗡️", src: "锻造坊开刃出品——成军军械储备" },
   "药水":   { cat: "prod", icon: "🧪", src: "药剂坊熬制" },
   "手推车": { cat: "prod", icon: "🛒", src: "木器坊装配——运输队载具（运力 1.8/人时）" },
@@ -26,53 +32,60 @@ export const RES_CATS = [["basic", "基础原料"], ["mat", "材料"], ["prod", 
 export const BASIC_RES = RES.filter(r => RES_INFO[r].cat === "basic");
 
 /* ═════════ 建筑（与组织独立：组织无建筑可基础运转；建筑解锁进阶槽位与设备工序） ═════════ */
+/* BOM 分部位（裁决32）：shell.parts＝墙体/屋顶/地面逐部位精算（格宽×材质系数口径，总量取整十）；
+   前期建筑（民居/仓库/锯木坊等）无铁制品保自举；木梁/木瓦/铁钉/绳索随工序解锁进入设施类建筑 */
 export const BUILDINGS = {
   "市政厅": { prebuilt: true, desc: "城市根组织所在" },
   "仓库":   { prebuilt: true, desc: "资源与制品的集中存放；每座+容量、搬运坑位随座数增长",
-    shell: { cost: { "木材": 20 }, work: 20 } },
+    shell: { parts: { "墙体": { "木材": 6, "木板": 4 }, "屋顶": { "木材": 6, "木板": 2 }, "地面": { "木板": 4 } }, work: 20 } },
   "伐木小屋": { desc: "伐木队办公与工具场所（无它也能伐：探测/记录被禁）",
-    shell: { cost: { "木材": 20 }, work: 20 }, interior: [
-      { item: "办公桌椅", cost: { "木材": 6 }, work: 6, unlock: "解锁伐木队的探测/记录槽" },
-      { item: "工具架",   cost: { "木板": 4 }, work: 6, effect: "伐木速率+25%" },
-      { item: "额外椅子", cost: { "木板": 2 }, work: 3, effect: "木材信息联络更快" } ] },
-  "锯木坊": { desc: "锯解→刨光：原木出木材，木材再出木板",
-    shell: { cost: { "木材": 15 }, work: 16 }, interior: [
-      { item: "锯架", cost: { "木材": 8 }, work: 8, w: 2, unlock: "锯解工序（原木→木材）" },
-      { item: "刨台", cost: { "木板": 2 }, work: 5, w: 2, unlock: "刨光工序（木材→木板）" } ] },
-  "锻造坊": { desc: "熔炼→锻打→淬火→开刃，出铁剑（半成品不出厂）",
-    shell: { cost: { "木材": 25 }, work: 24 }, interior: [
-      { item: "熔炉", cost: { "木材": 10, "木板": 4 }, work: 10, w: 2, unlock: "熔炼工序（铁矿+木材→铁水）" },
-      { item: "铁砧", cost: { "铁矿": 4 }, work: 8, w: 2, unlock: "锻打工序（铁水/铁锭→毛坯）" },
-      { item: "水槽", cost: { "木材": 6 }, work: 5, w: 1, unlock: "淬火工序（毛坯→淬火件）" },
-      { item: "磨石", cost: { "铁矿": 2 }, work: 5, w: 1, unlock: "开刃工序（淬火件→铁剑）" },
-      { item: "风箱", cost: { "木材": 4, "铁矿": 1 }, work: 4, w: 1, unlock: "风箱岗：拉风箱助熔，熔炼提速（鼓风提炉温）" } ] },
+    shell: { parts: { "墙体": { "木材": 10, "木板": 2 }, "屋顶": { "木材": 4, "绳索": 2 }, "地面": { "木板": 2 } }, work: 20 }, interior: [
+      { item: "办公桌椅", cost: { "木材": 6 }, work: 6, w: 2, unlock: "解锁伐木队的探测/记录槽" },
+      { item: "工具架",   cost: { "木板": 4 }, work: 6, w: 1, effect: "伐木速率+25%" },
+      { item: "额外椅子", cost: { "木板": 2 }, work: 3, w: 1, effect: "木材信息联络更快" } ] },
+  "锯木坊": { desc: "锯解→制梁→制瓦→刨光：原木出木材/木梁，木板出木瓦",
+    shell: { parts: { "墙体": { "木材": 8 }, "屋顶": { "木材": 4, "木板": 2 }, "地面": { "木材": 2 } }, work: 16 }, interior: [
+      { item: "锯架",   cost: { "木材": 8 }, work: 8, w: 2, unlock: "锯解工序（原木→木材）" },
+      { item: "制梁台", cost: { "木材": 6 }, work: 6, w: 2, unlock: "制梁工序（原木→木梁）" },
+      { item: "制瓦刀", cost: { "木板": 3 }, work: 5, w: 1, unlock: "制瓦工序（木板→木瓦，需木工）" },
+      { item: "刨台",   cost: { "木板": 2 }, work: 5, w: 2, unlock: "刨光工序（木材→木板，需木工）" } ] },
+  "锻造坊": { desc: "熔炼→锻打→淬火→开刃→制钉→轧板，出铁剑/铁钉/铁板（半成品不出厂）",
+    shell: { parts: { "墙体": { "木板": 6, "木梁": 4 }, "屋顶": { "木梁": 4, "木瓦": 4 }, "地面": { "木板": 4 } }, work: 24 }, interior: [
+      { item: "熔炉",   cost: { "木材": 8, "木板": 4, "铁矿": 2 }, work: 10, w: 2, unlock: "熔炼工序（铁矿+木材→铁水）" },
+      { item: "铁砧",   cost: { "铁矿": 4 }, work: 8, w: 2, unlock: "锻打工序（铁水/铁锭→毛坯）" },
+      { item: "水槽",   cost: { "木材": 6 }, work: 5, w: 1, unlock: "淬火工序（毛坯→淬火件）" },
+      { item: "磨石",   cost: { "铁矿": 2 }, work: 5, w: 1, unlock: "开刃工序（淬火件→铁剑，需锻造）" },
+      { item: "制钉模", cost: { "铁锭": 2, "木材": 2 }, work: 6, w: 1, unlock: "制钉工序（铁锭→铁钉×4，需锻造）" },
+      { item: "轧辊",   cost: { "铁锭": 3 }, work: 6, w: 1, unlock: "轧板工序（铁锭→铁板，需锻造）" },
+      { item: "风箱",   cost: { "木材": 4, "铁矿": 1 }, work: 4, w: 1, unlock: "风箱岗：拉风箱助熔，熔炼提速（鼓风提炉温）" } ] },
   "药剂坊": { desc: "农作物 → 净药材 → 药水",
-    shell: { cost: { "木材": 12 }, work: 12 }, interior: [
+    shell: { parts: { "墙体": { "木材": 8 }, "屋顶": { "木材": 4 }, "地面": { "木板": 4 } }, work: 12 }, interior: [
       { item: "切药刀", cost: { "铁矿": 1 }, work: 4, w: 1, unlock: "炮制工序（农作物→净药材）" },
-      { item: "药炉",   cost: { "木材": 8 }, work: 6, w: 2, unlock: "熬制工序（净药材→药水）" } ] },
+      { item: "药炉",   cost: { "木材": 8 }, work: 6, w: 2, unlock: "熬制工序（净药材→药水，需制药）" } ] },
   "训练场": { desc: "教官与受训编制的训练场地",
-    shell: { cost: { "木材": 18 }, work: 18 }, interior: [
-      { item: "木人桩", cost: { "木材": 6 }, work: 6, unlock: "解锁教官岗" },
-      { item: "靶场",   cost: { "木板": 4 }, work: 5, effect: "演武器材（机制后续）" } ] },
-  "兵营": { desc: "常备军的营房",
-    shell: { cost: { "木材": 20 }, work: 20 }, interior: [] },
+    shell: { parts: { "墙体": { "木材": 10, "木梁": 4 }, "屋顶": { "木瓦": 4 }, "地面": { "木材": 4 }, "索具": { "绳索": 2 } }, work: 18 }, interior: [
+      { item: "木人桩", cost: { "木材": 6 }, work: 6, w: 1, unlock: "解锁教官岗" },
+      { item: "靶场",   cost: { "木板": 2, "绳索": 2 }, work: 5, w: 2, effect: "演武器材（机制后续）" } ] },
+  "兵营": { late: true, desc: "常备军的营房",
+    shell: { parts: { "墙体": { "木板": 8, "木梁": 6 }, "屋顶": { "木瓦": 6 }, "五金": { "铁钉": 2 } }, work: 20 }, interior: [] },
   "办公楼": { desc: "人事与组织的办公场所",
-    shell: { cost: { "木材": 14 }, work: 14 }, interior: [
-      { item: "档案柜", cost: { "木材": 5 }, work: 5, unlock: "人事岗就绪" } ] },
-  "书院": { desc: "研究与实验的场所",
-    shell: { cost: { "木材": 16, "木板": 6 }, work: 18 }, interior: [
-      { item: "书架",   cost: { "木板": 4 }, work: 5, unlock: "解锁课题管理岗" },
-      { item: "实验台", cost: { "铁矿": 2 }, work: 6, unlock: "解锁实验岗" } ] },
-  "民居": { desc: "村民居住位（基准4位，装床铺翻倍——能住几人由床位决定）；有空位且温饱，人口缓增",
-    shell: { cost: { "木材": 12 }, work: 12 }, interior: [
-      { item: "床铺", cost: { "木材": 4 }, work: 4, effect: "居住位+4（双层加倍）" } ] },
-  "木工房": { desc: "备料→装配，出手推车（车料为厂内物品）",
-    shell: { cost: { "木材": 15, "铁矿": 2 }, work: 16 }, interior: [
-      { item: "木工台", cost: { "木材": 8, "铁矿": 2 }, work: 8, unlock: "备料工序（木板+铁锭→车料）" },
-      { item: "组装架", cost: { "木材": 6 }, work: 5, unlock: "装配工序（车料→手推车）" } ] },
+    shell: { parts: { "墙体": { "木板": 8 }, "屋顶": { "木材": 4 }, "地面": { "木板": 4 } }, work: 14 }, interior: [
+      { item: "档案柜", cost: { "木材": 5 }, work: 5, w: 2, unlock: "人事岗就绪" } ] },
+  "书院": { late: true, desc: "研究与实验的场所",
+    shell: { parts: { "墙体": { "木板": 10, "木梁": 4 }, "屋顶": { "木瓦": 6 }, "索具": { "绳索": 2 } }, work: 18 }, interior: [
+      { item: "书架",   cost: { "木板": 4 }, work: 5, w: 2, unlock: "解锁课题管理岗" },
+      { item: "实验台", cost: { "铁矿": 2, "木板": 2 }, work: 6, w: 2, unlock: "解锁实验岗" } ] },
+  "民居": { desc: "村民居住位（基准4位，装床铺翻倍）；有空位且温饱，移民来投",
+    shell: { parts: { "墙体": { "木材": 6, "木板": 2 }, "屋顶": { "木材": 4, "木板": 2 }, "地面": { "木板": 2 } }, work: 12 }, interior: [
+      { item: "床铺", cost: { "木材": 4 }, work: 4, w: 1, effect: "居住位+4（双层加倍）" } ] },
+  "木工房": { desc: "备料→搓绳→装配，出手推车/绳索（车料为厂内物品）",
+    shell: { parts: { "墙体": { "木材": 8, "木梁": 2 }, "屋顶": { "木板": 4 }, "地面": { "木板": 4 }, "五金": { "铁矿": 2 } }, work: 16 }, interior: [
+      { item: "木工台", cost: { "木材": 8, "铁矿": 2 }, work: 8, w: 2, unlock: "备料工序（木板+铁锭→车料）" },
+      { item: "搓绳架", cost: { "木材": 4 }, work: 4, w: 2, unlock: "搓绳工序（农作物×2→绳索）" },
+      { item: "组装架", cost: { "木材": 4, "铁矿": 1 }, work: 5, w: 1, unlock: "装配工序（车料→手推车，需木工）" } ] },
   "冶炼坊": { late: true, desc: "矿石入炉炼铁，出铁锭（后期）",
-    shell: { cost: { "木材": 25 }, work: 24 }, interior: [
-      { item: "冶炼炉", cost: { "铁矿": 6, "木板": 4 }, work: 12, unlock: "冶炼工序（铁矿+木材→铁锭，柴火熔炉）" } ] },
+    shell: { parts: { "墙体": { "木梁": 6, "木板": 8 }, "屋顶": { "木瓦": 8 }, "五金": { "铁矿": 4 } }, work: 24 }, interior: [
+      { item: "冶炼炉", cost: { "铁矿": 6, "木板": 4 }, work: 12, w: 2, unlock: "冶炼工序（铁矿+木材→铁锭，需冶炼）" } ] },
 };
 
 /* ═════════ 组织模板。host＝可入驻的槽名（选中空槽即弹出该槽可构筑的子组织，可递归）；
@@ -119,20 +132,28 @@ export const ORGS = {
       { fn: "农情信息", n: 1, pos: "semi", role: "收集农情信息呈递给你" } ] },
   "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [
       { fn: "锯解", n: 1, pos: "semi", step: 0, role: "原木开成木材" },
-      { fn: "刨光", n: 1, pos: "semi", step: 1, role: "木材刨成木板" } ],
+      { fn: "制梁", n: 1, pos: "semi", step: 1, role: "原木取方成梁" },
+      { fn: "制瓦", n: 1, pos: "semi", step: 2, role: "木板开片成瓦" },
+      { fn: "刨光", n: 1, pos: "semi", step: 3, role: "木材刨成木板" } ],
     steps: [ { name: "锯解", equip: "锯架", inCity: { "原木": 1 }, outCity: { "木材": 1 } },
+             { name: "制梁", equip: "制梁台", inCity: { "原木": 1 }, outCity: { "木梁": 1 } },
+             { name: "制瓦", equip: "制瓦刀", inCity: { "木板": 1 }, outCity: { "木瓦": 1 }, art: "木工" },
              { name: "刨光", equip: "刨台", inCity: { "木材": 1 }, outCity: { "木板": 1 }, art: "木工" } ] },
   "锻造坊": { host: "锻造", bldg: "锻造坊", slots: [
       { fn: "风箱", n: 1, pos: "semi", role: "拉风箱助熔——鼓风提炉温" },
       { fn: "熔炼", n: 1, pos: "semi", step: 0, role: "铁矿+木材化铁水" },
       { fn: "锻打", n: 1, pos: "semi", step: 1, role: "铁水或铁锭锻毛坯" },
       { fn: "淬火", n: 1, pos: "semi", step: 2, role: "毛坯淬火" },
-      { fn: "开刃", n: 1, pos: "semi", step: 3, role: "淬火件开刃成剑" } ],
-      steps: [   // 古代冶炼/锻造分工；半成品为厂内物品不可离厂；锻打原料偏好见组织面板
-        { name: "熔炼", equip: "熔炉", inCity: { "铁矿": 1, "木材": 1 }, wip: "铁水" },
-        { name: "锻打", equip: "铁砧", wipIn: "铁水", altCity: { "铁锭": 1 }, wip: "毛坯" },
-        { name: "淬火", equip: "水槽", wipIn: "毛坯", wip: "淬火件" },
-        { name: "开刃", equip: "磨石", wipIn: "淬火件", outCity: { "铁剑": 1 }, art: "锻造" } ] },
+      { fn: "开刃", n: 1, pos: "semi", step: 3, role: "淬火件开刃成剑" },
+      { fn: "制钉", n: 1, pos: "semi", step: 4, role: "铁锭冲打成钉" },
+      { fn: "轧板", n: 1, pos: "semi", step: 5, role: "铁锭辗轧成板" } ],
+    steps: [   // 古代冶炼/锻造分工；半成品为厂内物品不可离厂；锻打原料偏好见组织面板
+      { name: "熔炼", equip: "熔炉", inCity: { "铁矿": 1, "木材": 1 }, wip: "铁水" },
+      { name: "锻打", equip: "铁砧", wipIn: "铁水", altCity: { "铁锭": 1 }, wip: "毛坯" },
+      { name: "淬火", equip: "水槽", wipIn: "毛坯", wip: "淬火件" },
+      { name: "开刃", equip: "磨石", wipIn: "淬火件", outCity: { "铁剑": 1 }, art: "锻造" },
+      { name: "制钉", equip: "制钉模", inCity: { "铁锭": 1 }, outCity: { "铁钉": 4 }, art: "锻造" },
+      { name: "轧板", equip: "轧辊", inCity: { "铁锭": 1 }, outCity: { "铁板": 1 }, art: "锻造" } ] },
   "药剂坊": { host: "制药", bldg: "药剂坊", slots: [
       { fn: "炮制", n: 1, pos: "semi", step: 0, role: "农作物炮制净药材" },
       { fn: "熬制", n: 1, pos: "semi", step: 1, role: "净药材熬成药水" } ],
@@ -141,10 +162,12 @@ export const ORGS = {
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 }, art: "制药" } ] },
   "木器坊": { host: "木器", bldg: "木工房", slots: [
       { fn: "备料", n: 1, pos: "semi", step: 0, role: "木板铁锭备成车料" },
-      { fn: "装配", n: 1, pos: "semi", step: 1, role: "车料装成手推车" } ],
-      steps: [
-        { name: "备料", equip: "木工台", inCity: { "木板": 2, "铁锭": 1 }, wip: "车料" },
-        { name: "装配", equip: "组装架", wipIn: "车料", outCity: { "手推车": 1 }, art: "木工" } ] },
+      { fn: "搓绳", n: 1, pos: "semi", step: 1, role: "农作物纤维搓成绳索" },
+      { fn: "装配", n: 1, pos: "semi", step: 2, role: "车料装成手推车" } ],
+    steps: [
+      { name: "备料", equip: "木工台", inCity: { "木板": 2, "铁锭": 1 }, wip: "车料" },
+      { name: "搓绳", equip: "搓绳架", inCity: { "农作物": 2 }, outCity: { "绳索": 1 } },
+      { name: "装配", equip: "组装架", wipIn: "车料", outCity: { "手推车": 1 }, art: "木工" } ] },
   /* 职能槽下辖的专门组织（任意槽可下辖；信息/库管槽内的精细化示例，可继续递归） */
   "林务所": { host: "木材信息", slots: [
       { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看林中堆存与路况" },
@@ -271,8 +294,9 @@ export function reset(seed) {
   const fresh = {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
-    res: { "原木": 30, "铁矿": 0, "农作物": 30, "木材": 40, "木板": 4, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0 },
-    // 木材 40＝自举本金：锯木坊壳15+锯架8 是最小开工单元，再留 民居12+床4 的首屋余量——低于此开局锁死（无木材产能）
+    res: { "原木": 30, "铁矿": 0, "农作物": 30, "木材": 42, "木板": 8, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0, "木梁": 0, "木瓦": 0, "铁钉": 0, "铁板": 0, "绳索": 0 },
+    // 木材42+板8＝自举本金（分部位 BOM）：首屋（木10+板6）+床（木4）+锯木坊壳（木14+板2）——板为一次性垫底，
+    // 此后木板/木梁/木瓦全部自产；低于此开局锁死（全城唯一木材产能是装了锯架的锯木坊）
     buf: {}, wip: {}, buildings: {}, buildOrders: [],
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {}, snap: null,
@@ -471,6 +495,8 @@ export const resTotal = () => RES.reduce((a, r) => a + S.res[r], 0);
    出生流按 seed 确定性推导——同 seed 同一批人；fixed 供开局角色/样板点名 ── */
 export const ARTS = ["采伐", "耕作", "采矿", "木工", "锻造", "制药", "冶炼", "识字"];
 const ART_RATE = { "采伐": .5, "耕作": .5, "采矿": .5, "木工": .25, "锻造": .25, "制药": .2, "冶炼": .2, "识字": .15 };
+/* 移民（裁决31：人口增长＝移民吸引，新生儿不做）：外来成年匠人概率更高、属性 3~9 */
+const ART_RATE_MIG = { "采伐": .4, "耕作": .4, "采矿": .4, "木工": .35, "锻造": .35, "制药": .25, "冶炼": .25, "识字": .2 };
 export function addPersonRaw(name, fixed) {
   S.seq.p += 1;
   const r = mulberry32(((S.seed || 1) * 7919 + S.seq.p * 104729) | 0);
@@ -478,6 +504,15 @@ export function addPersonRaw(name, fixed) {
   const attr = fixed?.attr || { str: roll(), int: roll(), agi: roll(), cft: roll(), cmd: roll() };
   const skills = fixed?.skills ?? ARTS.filter(a => r() < (ART_RATE[a] || .2));
   S.people.push({ id: "p" + String(S.seq.p).padStart(2, "0"), name, org: "", attr, skills });
+}
+/* 移民入住：成年档案（属性 3~9、匠艺概率高于本地出生）——城里活多、有床位有口粮才来投 */
+export function addImmigrant() {
+  S.seq.p += 1;
+  const r = mulberry32(((S.seed || 1) * 7919 + S.seq.p * 104729) | 0);
+  const roll = () => 3 + Math.floor(r() * 7);
+  const skills = ARTS.filter(a => r() < (ART_RATE_MIG[a] || .2));
+  S.people.push({ id: "p" + String(S.seq.p).padStart(2, "0"), name: "村民", org: "",
+                  attr: { str: roll(), int: roll(), agi: roll(), cft: roll(), cmd: roll() }, skills });
 }
 export const membersHave = (o, art) => Object.values(o.slots).some(sl =>
   sl.persons.some(pid => person(pid)?.skills.includes(art)));
@@ -593,6 +628,16 @@ export function stallInfo(o) {
       return "卫星堆满·停采";
   return "";
 }
+/* 壳料合并（裁决32：BOM 分部位）：parts 逐部位合成一张料单；双层整体 ×1.8 */
+export function shellBill(b, storeys = 1) {
+  const parts = BUILDINGS[b].shell.parts;
+  const cost = {};
+  let m = storeys === 2 ? 1.8 : 1;
+  for (const bill of Object.values(parts))
+    for (const [r, n] of Object.entries(bill))
+      cost[r] = (cost[r] || 0) + (m === 1 ? n : Math.round(n * m));
+  return { cost, parts, work: Math.round(BUILDINGS[b].shell.work * m) };
+}
 /* 施工前置/资源校验——单一真相源：按钮禁用态与 queueBuild 同一规则（审计：校验双轨会漂移） */
 export function buildBlocked(kind, b, item, idx, storeys = 1) {
   const d = BUILDINGS[b];
@@ -605,19 +650,17 @@ export function buildBlocked(kind, b, item, idx, storeys = 1) {
     if (interiorUsed(b, idx) + w > interiorCap(b, S.buildings[b][idx].storeys || 1))
       return `室内格已满（${interiorCap(b, S.buildings[b][idx].storeys || 1)} 格）——加层或另建一座`;
   }
-  const cost = shellCost(d, item, kind, storeys);
+  const cost = shellCost(b, item, kind, storeys);
   return canPay(cost) ? "" : "资源不足：" + costStr(cost);
 }
-function shellCost(d, item, kind, storeys) {
-  let cost = item ? d.interior.find(x => x.item === item).cost : d.shell.cost;
-  if (kind === "shell" && storeys === 2)   // 双层：成本工期×1.8（03 §二 层数由材质，木上限2）
-    cost = Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, Math.round(v * 1.8)]));
-  return cost;
+function shellCost(b, item, kind, storeys) {
+  if (item) return BUILDINGS[b].interior.find(x => x.item === item).cost;
+  return shellBill(b, storeys).cost;
 }
 /* 撤单：全额返料（sim 简化：拆除返料；已投工时沉没不补） */
 export function cancelBuild(i) {
   const o = S.buildOrders[i]; if (!o) return;
-  const cost = shellCost(BUILDINGS[o.b], o.item || null, o.kind, o.storeys || 1);
+  const cost = shellCost(o.b, o.item || null, o.kind, o.storeys || 1);
   for (const [r, n] of Object.entries(cost)) S.res[r] += n;
   S.buildOrders.splice(i, 1);
   feed(`撤单 ${o.b}${o.item ? "·" + o.item : "·新座"}，材料全额返还（已投工时沉没）`, "warn");
@@ -854,6 +897,11 @@ export function advance(dt) {
         if (src) (S.borrows[o.id] ||= []).push({ from: src.def.fn, to: st.name });
       }
       let want = K.craft * cftM * perStepOf(i) * mult * dt;   // 工时按偏好权重分流（无偏好=均摊），手巧加成
+      if (st.outCity) {   // 库容钳制（实测缺陷：产出曾把仓库塞到 448/400——塞不下就少产，物料不凭空消失）
+        const unit = Object.values(st.outCity).reduce((a, b) => a + b, 0);
+        const room = Math.max(0, capTotal() - resTotal()) / unit;
+        want = Math.min(want, room);
+      }
       // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
       if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
       let produced = 0;
@@ -956,23 +1004,24 @@ export function advance(dt) {
       }
     }
     const eng = Object.values(S.orgs).find(x => x.template === "工程队");
+    const whBill = shellBill("仓库");
     if (eng && eng.settings["自动扩建"] === "开" && S.buildings["仓库"]?.length
         && resTotal() >= capTotal() * 0.9
         && (!S.buildOrders.length || capTotal() - resTotal() <= 0.05)   // 平时保底不压主线、一次一座；顶格停采＝急救插队（停采余量是渐近小数，须用容差判满）
-        && canPay(BUILDINGS["仓库"].shell.cost)) {
-      pay(BUILDINGS["仓库"].shell.cost);
+        && canPay(whBill.cost)) {
+      pay(whBill.cost);
       const emergency = S.buildOrders.length > 0;   // 顶格停采=急救：插队到最前（在办建造单让位），平时排尾不压主线
       S.buildOrders[emergency ? "unshift" : "push"]({ kind: "shell", b: "仓库", item: "", idx: -1,
-        work: BUILDINGS["仓库"].shell.work, done: 0 });
+        work: whBill.work, done: 0 });
       feed(emergency ? "工程队自动扩建·急救插队：仓库顶格，新仓排到最前" : "工程队自动扩建：仓库近满，新一座已排队", "good");
     }
     S.popCd = (S.popCd || 0) + dt;
-    if (S.popCd >= 24) {
+    if (S.popCd >= 24) {   // 移民吸引（裁决31）：有空床+安家口粮 → 外来成年匠人来投（非新生儿）
       S.popCd = 0;
       if (housingCap() > S.people.length && S.res["农作物"] >= 10) {
         S.res["农作物"] -= 10;
-        addPersonRaw("村民");
-        feed("新村民入住（耗口粮 农作物10；居住位有空）", "good");
+        addImmigrant();
+        feed("移民入住：有空床有安家口粮（耗 农作物10）——外来匠人概率更高", "good");
       }
     }
     /* 常备兵操练军械磨损（物理 sink）：每 150 时需换装 1 剑——军需岗在编才办领用（无人/无剑＝登记警告，不叠加惩罚） */
@@ -1060,7 +1109,7 @@ export function queueBuild(kind, b, item, idx, side = "右", storeys = 1) {
   const work = item ? it.work : d.shell.work;
   const why = buildBlocked(kind, b, item, idx, storeys);   // 校验单一真相源（按钮禁用态同源）
   if (why) { feed(`${b}：${why}`, "bad"); return; }
-  const cost2 = shellCost(d, item, kind, storeys);
+  const cost2 = shellCost(b, item, kind, storeys);
   let work2 = work;
   if (kind === "shell" && storeys === 2) work2 = Math.round(work * 1.8);   // 双层：成本工期×1.8（03 §二 层数由材质，木上限2）
   pay(cost2);

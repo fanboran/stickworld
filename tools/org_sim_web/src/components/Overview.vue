@@ -115,12 +115,15 @@ const menuSum = computed(() => ({
 </template>
 
 <style scoped>
-#ov { flex: 1; overflow-y: auto; padding: 12px 16px 20px; }
-.ovhead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;
+#ov { flex: 1; overflow-y: auto; padding: 12px 16px 20px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+      gap: 0 26px; align-content: start; }   /* 宽屏双栏：段落各占一栏，右半不再空置；窄屏自动回落单栏 */
+.ovhead { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;
           color: var(--dim); font-size: 12px; }
 .ovhead .stale { color: var(--bad); font-weight: 700; }
 .dim { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
-.osec { margin-bottom: 14px; }
+.osec { margin-bottom: 14px; min-width: 0; }   /* min-width:0 防grid子项撑破栏宽 */
+.osec.menu { grid-column: 1 / -1; }
 .osec h3 { font-size: 12px; color: var(--dim); font-weight: 600; margin: 0 0 6px;
            display: flex; align-items: center; gap: 8px; }
 .pin { font-size: 10px; padding: 1px 7px; color: var(--dim); }

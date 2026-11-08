@@ -404,6 +404,8 @@ export function loadDemo() {
   /* 样板运行配置：运输队开车（一队一车按队占编，库中备 2 辆周转）、矿井卫星区一座卫星仓
      （矿堆容 +80、集中短驳）——载具与分布式仓储两个机制在完全体里可见 */
   haul.settings["载具"] = "手推车";
+  const engOrg = Object.values(S.orgs).find(x => x.template === "工程队");
+  if (engOrg) engOrg.settings["自动扩建"] = "开";   // 样板展示自动化闭环：仓库近满自动排队新仓
   S.res["手推车"] += 2;
   S.buildings["仓库"].push({ interior: {}, org: "" });
   S.citySat.push({ b: "仓库", inst: S.buildings["仓库"].length - 1 });

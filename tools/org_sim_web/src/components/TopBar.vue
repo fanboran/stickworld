@@ -31,7 +31,7 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
       人口<b>{{ S.people.length }}</b><span class="rate">/居{{ housingCap() }}</span>
     </span>
     <span class="res link" title="点开仓库页" @click="emit('go', 'wh')">
-      仓库<b :class="{ lack: resTotal() >= capTotal() }">{{ Math.floor(resTotal()) }}</b>
+      仓库<b :class="{ lack: resTotal() >= capTotal(), warn90: resTotal() >= capTotal() * 0.9 && resTotal() < capTotal() }">{{ Math.floor(resTotal()) }}</b>
       <span class="rate">/{{ capTotal() }}</span>
     </span>
     <div id="tright">
@@ -66,6 +66,7 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
 .res.link { cursor: pointer; }
 .res.link:hover { border-color: var(--acc); }
 .res b.lack { color: var(--bad); }
+.res b.warn90 { color: var(--warn); }   /* 近满中间档（≥90%）：满为红、近满为琥珀 */
 #tright { margin-left: auto; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 #tright .spd { padding: 3px 8px; font-size: 11.5px; }
 /* 速度＝分段控件（一组里的互斥选择），与参数/重开等单发按钮区隔 */

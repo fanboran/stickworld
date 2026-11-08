@@ -41,6 +41,7 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
       <button v-for="r in INTAKE_RES" :key="r" class="ibtn" :class="{ on: S.intake[r] }"
               @click="S.intake[r] = !S.intake[r]">{{ RES_INFO[r].icon }}{{ r }}{{ S.intake[r] ? "·收" : "·停" }}</button>
       <span class="catcap" v-for="[c, lab] of RES_CATS" :key="c"
+            :class="{ tight: catTotal(c) >= capOfCat(c) }"
             :title="lab + '类容量＝收该类的仓库座数×600（各类独立，满一类不堵别的）——建筑页可逐座设收货类型'">
         {{ lab }} {{ Math.floor(catTotal(c)) }}/{{ capOfCat(c) }}</span>
     </div>
@@ -98,14 +99,15 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
 #intake { display: flex; align-items: center; gap: 8px; padding: 6px 16px; border-bottom: 1px solid var(--line);
           background: #131826; flex-wrap: wrap; }
 #intake .ilbl { color: var(--dim); font-size: 11px; font-weight: 600; }
-#intake .ibtn { font-size: 11px; padding: 2px 9px; }
+#intake .ibtn { font-size: 11px; padding: 4px 10px; }   /* 热区加大：这是拉动制物流的主开关 */
 #intake .catcap { color: var(--faint); font-size: 10.5px; margin-left: 8px; font-variant-numeric: tabular-nums; }
+#intake .catcap.tight { color: var(--warn); font-weight: 600; }   /* 满类警示：数字够一眼看出堵了哪类 */
 #whbody { flex: 1; overflow-y: auto; padding: 12px 16px 20px; }
 .ghead { color: var(--dim); font-size: 12px; font-weight: 600; margin: 8px 0 6px; }
 .tilegrid { display: flex; gap: 8px; flex-wrap: wrap; }
 .tile { width: 96px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
         padding: 9px 6px 7px; text-align: center; }
-.tile.zero { opacity: .35; }
+.tile.zero { opacity: .55; }   /* 零库存仍可读名目（曾 .35 灰得几乎不可读）——缺库存的是数字不是名目 */
 .tile .tico { font-size: 24px; line-height: 1.2; }
 .tile .tnm { font-size: 12px; color: var(--dim); margin-top: 2px; }
 .tile .tqty { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }

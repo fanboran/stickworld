@@ -31,8 +31,9 @@ function startBuild(b) {
 const satBlocks = computed(() => S.citySat || []);
 const storeysOf = e => (S.buildings[e.b] || [])[e.inst]?.storeys || 1;
 
-/* 软装详情：点建筑块→下方面板按类型列出各座（原 BuildSide 分座安装/驻组织逻辑整体迁入） */
-const selB = ref("");
+/* 软装详情：点建筑块→下方面板按类型列出各座（原 BuildSide 分座安装/驻组织逻辑整体迁入）。
+   默认选中市政厅——详情面板进门就有内容，不再空悬一块黑 */
+const selB = ref("市政厅");
 const selType = computed(() => selB.value ? BUILDINGS[selB.value] : null);
 function pickBlock(b) { selB.value = selB.value === b ? "" : b; }
 function instQueued(b, item, idx) {
@@ -44,6 +45,8 @@ const installed = (b, inst) => (BUILDINGS[b].interior || []).filter(it => inst.i
 /* 块面状态行：市政厅=现名与人口；仓库=库存/容量（全城一库，按座叠容）；民居=居住位；
    其余=设备 n/m+驻组织（同型多座逐座独立软装） */
 const rootName = computed(() => S.orgs.o01?.name || "聚落");
+/* 仓库近满（≥90%）状态行示警——顶栏已有 lack 红，块面同口径 */
+const whTight = () => capTotal() > 0 && resTotal() / capTotal() >= 0.9;
 function statusLine(b, instIdx) {
   if (b === "市政厅") return `${rootName.value} · 人口 ${S.people.length}`;
   const inst = (S.buildings[b] || [])[instIdx] || { interior: {} };
@@ -127,7 +130,8 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
              @click="pickBlock(e.b)">
           <div v-if="storeysOf(e) === 2" class="upper"><span>2F</span></div>
           <div class="bname">{{ e.b }}<i v-if="e.b !== '市政厅'" class="seat">{{ circ(e.inst) }}</i></div>
-          <div class="bstat">{{ statusLine(e.b, e.inst) }}</div>
+          <div class="bstat" :class="{ tight: e.b === '仓库' && whTight() }"
+               :title="e.b === '仓库' ? '全城库存总占位 / 分类容量合计（近满示警：工程队自动扩建可解）' : ''">{{ statusLine(e.b, e.inst) }}</div>
         </div>
         <!-- 右翼施工块：按队列正序向右长 -->
         <div v-for="(p, i) in pendR" :key="'pr' + i" class="bblock con"
@@ -283,7 +287,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .qchip i { font-size: 10px; }
 .qwarn { color: var(--warn); font-size: 10.5px; }
 .qsub { color: var(--dim); font-size: 10.5px; margin-left: auto; }
-.qdim { color: var(--faint); font-size: 11px; }
+.qdim { color: var(--dim); font-size: 11px; }   /* 空队列提示与「施工」标签拉开主次（曾同灰度像禁用态） */
 
 /* 城市一排 */
 #cityscroll { overflow-x: auto; flex: none; border-bottom: 1px solid var(--line);
@@ -303,6 +307,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .bname { font-weight: 600; font-size: 12px; white-space: nowrap; }
 .bname .seat { font-style: normal; color: var(--dim); font-size: 11px; margin-left: 2px; }
 .bstat { color: var(--dim); font-size: 10px; line-height: 1.35; margin-top: 2px; overflow: hidden; }
+.bstat.tight { color: var(--warn); font-weight: 600; }   /* 仓库近满：块面同顶栏 lack 口径示警 */
 .ctag { color: var(--warn); font-size: 10px; }
 .cbar { margin-top: 3px; }
 .expand { flex: none; width: 64px; border-style: dashed; color: var(--dim);

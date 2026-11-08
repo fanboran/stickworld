@@ -108,7 +108,7 @@ const menuSum = computed(() => ({
     <section class="osec menu">
       <h3>主菜单（点段落名置顶）</h3>
       <div class="mrow" v-for="name in inMenu" :key="name" @click="togglePin(name)">
-        <span>{{ name }}</span><span class="dim">{{ menuSum[name] }}</span>
+        <span>{{ name }}</span><span class="dim">{{ menuSum[name] }}</span><i class="pin-hint">置顶 ›</i>
       </div>
     </section>
   </div>
@@ -142,7 +142,11 @@ const menuSum = computed(() => ({
 .feedlist { font-size: 11.5px; max-height: 220px; overflow-y: auto; background: var(--panel2);
             border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .feedlist .t { color: #565f72; margin-right: 8px; font-variant-numeric: tabular-nums; }
-.menu .mrow { display: flex; justify-content: space-between; padding: 3px 8px; font-size: 12px;
+.menu .mrow { display: flex; gap: 10px; padding: 3px 8px; font-size: 12px;
               border-radius: 6px; cursor: pointer; }
+.menu .mrow .dim { margin-left: auto; }
+.menu .mrow .pin-hint { font-style: normal; color: var(--faint); font-size: 10px; align-self: center;
+                       opacity: 0; transition: opacity .12s; }
 .menu .mrow:hover { background: #ffffff08; color: var(--acc); }
+.menu .mrow:hover .pin-hint { opacity: 1; }   /* hover 才亮出「置顶 ›」——行可点的 affordance */
 </style>

@@ -57,3 +57,12 @@ select:focus, input:focus, button:focus-visible { outline: 1px solid var(--acc);
 .cost { color: var(--warn); font-size: 11px; font-variant-numeric: tabular-nums; }
 .cost.lack { color: var(--bad); }
 .lbl { color: var(--dim); font-size: 11px; margin: 6px 0 3px; }
+
+/* ── 侧栏拖拽手柄（VSCode 式，panel.js 驱动）── */
+.pz { flex: none; background: transparent; position: relative; z-index: 5;
+      transition: background .12s; }
+.pz.v { width: 5px; cursor: col-resize; }
+.pz.h { height: 5px; cursor: row-resize; }
+.pz:hover { background: var(--acc); }
+body.dragging-panel-x, body.dragging-panel-x * { cursor: col-resize !important; user-select: none; }
+body.dragging-panel-y, body.dragging-panel-y * { cursor: row-resize !important; user-select: none; }

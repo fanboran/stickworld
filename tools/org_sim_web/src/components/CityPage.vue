@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, CIRC, RES_INFO, cityCells, canPay, costStr, queueBuild,
          buildWorkers, resTotal, capTotal, housingCap } from "../sim.js";
+import { usePanelSize } from "../panel.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
    建造管理自组织页 BuildSide 侧栏整体并入本页：两端扩建位就地开建造菜单、
@@ -72,6 +73,9 @@ const workers = computed(() => buildWorkers());
 const orderLabel = o => o.kind === "shell"
   ? `${o.b}·新座硬装（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼${o.storeys === 2 ? "·双层" : ""}）`
   : o.b + CIRC[o.idx] + "·" + o.item;
+
+/* 软装详情面板 VSCode 式拖拽调高：上缘手柄，双击复位（解构见 OrgPage 同注） */
+const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail", "y", 250, 110, 520);
 </script>
 
 <template>
@@ -179,8 +183,11 @@ const orderLabel = o => o.kind === "shell"
       </div>
     </div>
 
-    <!-- 软装详情：类型下实例列表+设备行+安装按钮（同型多座、逐座独立软装） -->
-    <div id="cdetail">
+    <!-- 弹性占位：详情面板钉底、固定高度后由它吸收纵向空隙 -->
+    <div id="cfill"></div>
+    <!-- 软装详情：类型下实例列表+设备行+安装按钮（同型多座、逐座独立软装）；高度可拖拽（panel.js） -->
+    <div class="pz h" title="拖动调高 · 双击复位" @mousedown="detDown" @dblclick="detDbl"></div>
+    <div id="cdetail" :style="{ height: detH + 'px' }">
       <template v-if="selB">
         <div class="cdhead"><b>{{ selB }}</b><span class="cddesc">{{ selType?.desc }}</span></div>
         <div v-for="(inst, idx) in (S.buildings[selB] || [])" :key="idx" class="inst">
@@ -269,7 +276,8 @@ const orderLabel = o => o.kind === "shell"
 .bmcard .cost { margin-right: 6px; }
 
 /* 软装详情 */
-#cdetail { flex: 1; overflow-y: auto; padding: 8px 14px 14px; background: var(--panel); }
+#cfill { flex: 1; min-height: 0; }
+#cdetail { flex: none; overflow-y: auto; padding: 8px 14px 14px; background: var(--panel); }
 .cdhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .cdhead b { font-size: 13px; }
 .cddesc { color: var(--dim); font-size: 11px; }

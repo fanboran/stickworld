@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, TERRAIN, idle, feed, mineBufCap } from "../sim.js";
+import { usePanelSize } from "../panel.js";
 import OrgCols from "./OrgCols.vue";
 import OrgPanel from "./OrgPanel.vue";
 
@@ -22,6 +23,8 @@ function toggleMob() {
   if (S.mobilized) { S.mobilized = false; feed("解除动员，回到生产", "good"); }
   else { S.mobilized = true; feed("动员令下：转入战备，产率减半", "warn"); }
 }
+/* 右侧栏（指令面板）VSCode 式拖拽调宽：左缘手柄，双击复位（解构成顶层 ref——模板自动解包只对顶层生效） */
+const { size: rightW, onDown: rpDown, onDbl: rpDbl } = usePanelSize("orgRight", "x", 248, 200, 560);
 </script>
 
 <template>
@@ -56,8 +59,9 @@ function toggleMob() {
     </div>
     <div id="obody">
       <OrgCols />
-      <!-- 右侧栏：组织控制面板（建造管理已并入建筑页） -->
-      <div id="rightcol">
+      <div class="pz v" title="拖动调宽 · 双击复位" @mousedown="rpDown" @dblclick="rpDbl"></div>
+      <!-- 右侧栏：组织控制面板（建造管理已并入建筑页）；宽度可拖拽（panel.js） -->
+      <div id="rightcol" :style="{ width: rightW + 'px' }">
         <OrgPanel />
       </div>
     </div>
@@ -83,7 +87,7 @@ function toggleMob() {
 .lg.p-semi { background: #8a7640; }
 .lg.p-gain { background: #3a7a5a; }
 .popu { color: var(--dim); font-size: 11.5px; white-space: nowrap; }
-#rightcol { width: 248px; flex: none; display: flex; flex-direction: column;
+#rightcol { flex: none; display: flex; flex-direction: column;
             background: var(--panel); border-left: 1px solid var(--line); min-height: 0; }
 .mob.war { background: #5c441f; border-color: var(--warn); color: var(--warn); }
 #obody { flex: 1; display: flex; min-height: 0; }

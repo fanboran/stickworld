@@ -114,8 +114,9 @@ function askDel(id) {
           <span class="sub">{{ o.kind === "hall" ? "根节点" :
             (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }}{{ o.bldgType
               ? (o.bldg ? " · 驻" + o.bldg.b + circ(o.bldg.idx) : " · 缺" + o.bldgType)
-              : "" }} · 在编 {{ membersOf(o) }}</span>
+              : "" }}</span>
           <span v-if="stallInfo(o)" class="stall" :title="stallInfo(o)">⏸</span>
+          <span class="mem">在编 {{ membersOf(o) }}</span>
           <button v-if="o.kind !== 'hall'" class="del warn"
                   :title="armedDel === o.id ? '再点一次确认解散（人员回待业）' : '解散组织（点两次确认）'"
                   @click.stop="askDel(o.id)">{{ armedDel === o.id ? "确认？" : "×" }}</button>
@@ -176,7 +177,7 @@ function askDel(id) {
 
 <style scoped>
 #orgCols { flex: 1; display: flex; align-items: flex-start; overflow-x: auto; overflow-y: auto;
-           padding: 10px 4px 20px 10px; position: relative; }
+           padding: 10px 16px 20px 10px; position: relative; }   /* 右 16px：给 9px 滚动条让位，末列卡头不再被遮压截断 */
 .ocol { flex: none; width: 262px; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
 .ocol + .ocol { border-left: 1px solid var(--line); padding-left: 12px; margin-left: 10px; }
 .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
@@ -188,7 +189,12 @@ function askDel(id) {
             white-space: nowrap; overflow: hidden; }
 .card .hd:hover { background: #ffffff07; }
 .card .hd .tier { color: var(--dim); font-size: 10.5px; font-weight: 400; }
-.card .hd .sub { color: var(--dim); font-size: 10px; font-weight: 400; margin-left: auto; }
+.card .hd > span:first-child { flex: none; }   /* 卡名不收缩，溢出让给 sub */
+.card .hd .sub { color: #9aa4bb; font-size: 10.5px; font-weight: 400;
+                 margin-left: auto; flex: 1 1 auto; min-width: 0;
+                 text-align: right; overflow: hidden; text-overflow: ellipsis; }   /* 长入驻串优雅省略，不再静默截断 */
+.card .hd .mem { color: var(--fg); font-size: 10.5px; font-weight: 400; opacity: .8;
+                 font-variant-numeric: tabular-nums; flex: none; }
 .card .hd .stall { color: var(--warn); font-size: 11px; cursor: help; }
 .card .hd .del { visibility: hidden; padding: 1px 7px; font-size: 10px; }
 .card .hd:hover .del { visibility: visible; }

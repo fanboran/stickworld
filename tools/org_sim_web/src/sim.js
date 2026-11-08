@@ -401,6 +401,12 @@ export function loadDemo() {
   staff(intel, "汇总", 1, q.slice(27)); staff(intel, "采编", 2, q.slice(28));
   staff(sci, "课题管理", 1, q.slice(30)); staff(sci, "实验", 2, q.slice(31)); staff(sci, "文献记录", 1, q.slice(33));
   hall.name = "市政厅";
+  /* 样板运行配置：运输队开车（一队一车按队占编，库中备 2 辆周转）、矿井卫星区一座卫星仓
+     （矿堆容 +80、集中短驳）——载具与分布式仓储两个机制在完全体里可见 */
+  haul.settings["载具"] = "手推车";
+  S.res["手推车"] += 2;
+  S.buildings["仓库"].push({ interior: {}, org: "" });
+  S.citySat.push({ b: "仓库", inst: S.buildings["仓库"].length - 1 });
   /* 样板点名补艺：随机出生不保证末道手艺岗有人会，补齐让样板满转 */
   for (const [tpl, art] of [["锯木坊", "木工"], ["锻造坊", "锻造"], ["药剂坊", "制药"], ["木器坊", "木工"], ["冶炼坊", "冶炼"], ["科研院", "识字"]]) {
     const o = Object.values(S.orgs).find(x => x.template === tpl);

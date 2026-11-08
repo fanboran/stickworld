@@ -35,8 +35,10 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
       <span class="rate">/{{ capTotal() }}</span>
     </span>
     <div id="tright">
-      <button v-for="[v, label] in speeds" :key="v" :class="{ on: S.speed === v }"
-              class="spd" @click="S.speed = v">{{ label }}</button>
+      <div id="speeds">
+        <button v-for="[v, label] in speeds" :key="v" :class="{ on: S.speed === v }"
+                class="spd" @click="S.speed = v" :title="v === 0 ? '暂停' : v + ' 倍速'">{{ label }}</button>
+      </div>
       <span class="clock">{{ S.hours.toFixed(1) }}时 · 第{{ day }}天（{{ stateText }}）</span>
       <button class="spd" @click="emit('knobs')">参数</button>
       <button class="spd warn" @click="doReset()">重开</button>
@@ -66,6 +68,13 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
 .res b.lack { color: var(--bad); }
 #tright { margin-left: auto; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 #tright .spd { padding: 3px 8px; font-size: 11.5px; }
+/* 速度＝分段控件（一组里的互斥选择），与参数/重开等单发按钮区隔 */
+#speeds { display: flex; background: var(--panel2); border: 1px solid var(--line);
+          border-radius: 8px; overflow: hidden; }
+#speeds .spd { border: 0; border-radius: 0; border-right: 1px solid var(--line);
+               background: transparent; padding: 3px 9px; }
+#speeds .spd:last-child { border-right: 0; }
+#speeds .spd.on { background: #2f8a5c; color: #fff; font-weight: 600; }
 .clock { color: var(--dim); font-size: 12px; margin: 0 4px; font-variant-numeric: tabular-nums; }
 
 #tabrow { display: flex; background: var(--panel); border-bottom: 1px solid var(--line);

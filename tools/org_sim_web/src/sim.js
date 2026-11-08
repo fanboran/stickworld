@@ -752,7 +752,7 @@ export function loadState() {
     const data = JSON.parse(localStorage.getItem("orgsim.save") || "null");
     if (!data || !data.orgs) return false;
     Object.assign(S, data, { sel: null, selSlot: null, feed: [], snap: null, rates: {}, borrows: {}, speed: 0 });
-    if (!S.intake) S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 旧档无收货政策=按旧口径全收，别把老城饿死
+    if (!data.intake) S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 旧档（裁决34 前）无收货政策=按旧口径全收，别把老城饿死——判 data 而非 S（S 被 reset 预填恒真，迁移曾永不触发）
     for (const o of Object.values(S.orgs)) {   // 回链模板定义：存档 def 是旧快照，重指 ORGS 现行定义防版本漂移
       const tpl = ORGS[o.template] || {};
       for (const sl of Object.values(o.slots)) {

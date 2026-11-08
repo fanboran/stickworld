@@ -1104,7 +1104,8 @@ export function advance(dt) {
     const isArt = goal.startsWith("技能·");
     const key = goal.slice(3);
     if (isArt && !camp.slots["教官"].persons.some(pid => person(pid)?.skills.includes(key))) continue;
-    trainee.trainProg += 4 * n * attrMult(camp.slots["教官"].persons, "cmd") * mult * dt;   // 教官组织能力影响带兵速率（17 号修正域）
+    trainee.trainProg += 4 * n * attrMult(camp.slots["教官"].persons, "cmd")
+      * attrMult(Object.values(trainee.slots).flatMap(s => s.persons), "int") * mult * dt;   // 教官 cmd 带兵（17 号修正域）× 受训在编 int（17 §23 学习快慢吃 int——明文消费端）
     if (trainee.trainProg >= 100 - 1e-6) {   // 浮点累加边界
       trainee.trainProg = 0;
       trainee.trainLv += 1;

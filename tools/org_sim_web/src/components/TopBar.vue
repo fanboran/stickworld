@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset, housingCap } from "../sim.js";
+import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset, clearSave, housingCap } from "../sim.js";
 const props = defineProps({ page: String });
 const emit = defineEmits(["go", "knobs"]);
 const tabs = [
@@ -13,7 +13,7 @@ const speeds = [[0, "⏸"], [1, "1×"], [10, "10×"], [100, "100×"]];
 const day = computed(() => Math.floor(S.hours / 24) + 1);
 const stateText = computed(() =>
   (S.speed === 0 ? "暂停" : S.speed + "×") + (S.mobilized ? " · 战备" : ""));
-function doReset() { reset(); emit("go", "org"); }
+function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清档新局（普通刷新走存档恢复）
 </script>
 
 <template>

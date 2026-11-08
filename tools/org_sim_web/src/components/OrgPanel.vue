@@ -1,6 +1,6 @@
 <script setup>
-import { computed } from "vue";
-import { S, ORG_PANELS, CIRC, membersOf, delOrg } from "../sim.js";
+import { computed, ref, watch } from "vue";
+import { S, ORG_PANELS, circ, membersOf, delOrg } from "../sim.js";
 
 /* 指令面板：各组织专属运行操作所在地（结构各异），实际游戏为定制精美 UI，sim 只模拟基础功能 */
 const sel = computed(() => S.sel && !S.selSlot && S.orgs[S.sel] ? S.orgs[S.sel] : null);
@@ -18,6 +18,17 @@ function choose(org, opt, choice) { org.settings[opt.key] = choice; }
 /* 选项可带实物前提 { need: 资源名 }：库中无此物则禁用——载具等耐用品的物理在场门槛 */
 const lacks = c => c[2]?.need && S.res[c[2].need] < 1;
 const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.key])?.[1] || "";
+/* 解散两步确认（同 OrgCols askDel）：首点布防 2.5s，再点执行 */
+const armed = ref("");
+let armTimer = null;
+function askDisband() {
+  if (!sel.value) return;
+  if (armed.value) { clearTimeout(armTimer); armed.value = ""; delOrg(sel.value.id); return; }
+  armed.value = sel.value.id;
+  clearTimeout(armTimer);
+  armTimer = setTimeout(() => armed.value = "", 2500);
+}
+watch(sel, () => armed.value = "");
 </script>
 
 <template>
@@ -25,7 +36,7 @@ const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.ke
     <template v-if="sel">
       <div class="phead">
         {{ sel.name }}<span class="tier">L{{ sel.tier }}</span>
-        <span class="sub">在编 {{ membersOf(sel) }}{{ sel.bldg ? " · 驻" + sel.bldg.b + CIRC[sel.bldg.idx] : (sel.bldgType ? " · 缺" + sel.bldgType : "") }}</span>
+        <span class="sub">在编 {{ membersOf(sel) }}{{ sel.bldg ? " · 驻" + sel.bldg.b + circ(sel.bldg.idx) : (sel.bldgType ? " · 缺" + sel.bldgType : "") }}</span>
       </div>
       <div class="pnote">指令面板——各组织专属（结构各异），此处模拟基础功能</div>
       <!-- 训练营：受训组织选择与训练进度（04 §三 组织对组织） -->
@@ -62,7 +73,7 @@ const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.ke
         <div class="optdesc">{{ curDesc(sel, opt) }}</div>
       </div>
       <div v-if="!panels.length" class="pnote dim">该组织暂无面板选项（随机制补）</div>
-      <button v-if="sel.kind !== 'hall'" class="warn dis" @click="delOrg(sel.id)">解散组织（人员回待业）</button>
+      <button v-if="sel.kind !== 'hall'" class="warn dis" @click="askDisband()">{{ armed === sel.id ? "再点一次——确认解散" : "解散组织（人员回待业）" }}</button>
     </template>
     <div v-else class="pnote dim">点组织卡片头部，打开它的指令面板</div>
   </div>

@@ -2,7 +2,7 @@ import { reactive } from "vue";
 
 /* ═════════ 自然地形（城市自带；采集需要对应地形在场）——本城树林/矿洞/耕地都有 ═════════ */
 export const TERRAIN = {
-  "树林": { products: ["原木"], offmap: true },     // 不可到达——木材如外部直供，无场地环节
+  "树林": { products: ["原木"], offmap: true },     // 不可到达——产出仍进场堆待运（裁决24：三线都得搬运工搬回），只是堆不设上限
   "矿洞": { products: ["铁矿"], satellite: true },  // 卫星城：唯一可在其处建卫星仓的地形
   "耕地": { products: ["农作物"], inCity: true },   // 主城内（改名耕地）
 };
@@ -163,7 +163,7 @@ export const ORGS = {
       { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（后期：自适应扩建与改编）" } ] },
   "情报局": { host: "情报", slots: [
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览" },
-      { fn: "采编", n: 2, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
+      { fn: "采编", n: 4, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
       { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
   /* 后期 */
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊",
@@ -193,6 +193,24 @@ export const slotCandidates = fn => {
   return [...base, ...(SLOT_ALIAS[fn] || []).filter(n => !base.includes(n))];
 };
 /* 递归允许专门化，但同型自嵌套（伐木队槽里再放伐木队）无意义——由调用侧按宿主模板排除 */
+
+/* ── 中间层扩编（创始人裁决：集团化）──母槽除直接放单厂/单队外，可放「总坊/总队」管理层，
+   下辖多株同型厂队扩产能——如国家级科学院下辖省科学院、军下辖营。总管为占位统筹岗（机制后续）；
+   下辖槽放单株组织（各需自驻一座建筑，createBlocked 既有硬前提）；中间层不再嵌套（子槽候选里没有总坊） */
+const MIDDLES = [
+  ["锯木", "锯木总坊", "锯木坊"], ["锻造", "锻造总坊", "锻造坊"], ["制药", "药剂总坊", "药剂坊"],
+  ["木器", "木器总坊", "木器坊"], ["冶炼", "冶炼总坊", "冶炼坊"],
+  ["伐木", "伐木总队", "伐木队"], ["采矿", "采矿总队", "采矿队"], ["农垦", "农垦总队", "农垦队"],
+  ["建造", "工程总队", "工程队"],
+];
+for (const [host, name, leaf] of MIDDLES) {
+  ORGS[name] = { host, middle: true, slots: [
+    { fn: "总管", n: 1, pos: "gain", role: "排产与统筹：下辖厂队的原料计划（机制后续）" },
+    { fn: leaf, n: 1, pos: "gain", role: `下辖${leaf}——放单株组织（各需自驻一座建筑）` },
+    { fn: leaf, n: 1, pos: "gain", role: `下辖${leaf}——放单株组织（各需自驻一座建筑）` },
+    { fn: leaf, n: 1, pos: "gain", role: `下辖${leaf}——放单株组织（各需自驻一座建筑）` } ] };
+  SLOT_ALIAS[leaf] = [leaf]; SLOT_ALIAS[leaf + "2"] = [leaf]; SLOT_ALIAS[leaf + "3"] = [leaf];
+}
 /* 组织控制面板选项（实际游戏为各组织专属的复杂精美 UI，sim 只模拟基础功能；
    选不同机构＝功能实现路径的偏好，如同计划 or 市场） */
 export const ORG_PANELS = {
@@ -203,7 +221,11 @@ export const ORG_PANELS = {
   "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"],
                                         ["手推车", "1.8/人时——库中需有车（木器坊出品）", { need: "手推车" }]] },
               { key: "装卸规则", choices: [["均匀分运", "各场地按堆量比例搬运"],
-                                            ["大宗优先", "先清最大堆——场地少顶格停采，小堆排后"]] } ],
+                                            ["大宗优先", "先清最大堆——场地少顶格停采，小堆排后"]] },
+              { key: "运输计划", choices: [["均匀", "按堆量比例分运（无计划偏好）"],
+                                            ["偏重原木", "原木线运力×2——调度在岗才生效（排单是调度的活）"],
+                                            ["偏重铁矿", "铁矿线运力×2——调度在岗才生效"],
+                                            ["偏重农作物", "农作物线运力×2——调度在岗才生效"]] } ],
   "锯木坊": [ { key: "出材偏好", choices: [["优先木材", "锯解多出力：木材供燃料与建材"],
                                           ["优先木板", "刨光多出力：木板供下游制造"]] } ],
   "锻造坊": [ { key: "锻打原料", choices: [["铁水优先", "以厂内自炼铁水为主"],
@@ -211,6 +233,14 @@ export const ORG_PANELS = {
   "科研院": [ { key: "选题", choices: [["实用优先", "先解当前生产急用（机制后续）"],
                                         ["底层探究", "先钻基础原理（机制后续）"]] } ],
 };
+/* 按需生产（自动化审计：工厂此前有料就跑必堆满）——库存目标：产物达标记线即歇线，降库存自动复工 */
+for (const t of ["锯木坊", "锻造坊", "药剂坊", "木器坊", "冶炼坊"])
+  (ORG_PANELS[t] ||= []).push({ key: "库存目标", choices: [
+    ["不限", "有原料就生产（不设停线）"],
+    ["满20", "产物库存≥20 歇线——满仓歇工、低于自动复工（军需式按需生产）"],
+    ["满40", "产物库存≥40 歇线"],
+    ["满80", "产物库存≥80 歇线"],
+    ["满160", "产物库存≥160 歇线"]] });
 /* 建不了的原因（拒止反馈落在按钮态上）：前提→资源，与构筑同序 */
 export function createBlocked(name) {
   const t = ORGS[name];
@@ -236,7 +266,7 @@ export const S = reactive({
 
 /* 聚落开局：根组织叫「聚落」（人口达 30 升格更名市政厅）；自带市政厅与仓库各一座，
    一切组织与建筑从零搭起。完全体展示样板见 loadDemo()（参数面板可载入） */
-export function reset() {
+export function reset(seed) {
   const fresh = {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
@@ -251,7 +281,7 @@ export function reset() {
   for (const b of Object.keys(BUILDINGS))
     S.buildings[b] = BUILDINGS[b].prebuilt ? [{ interior: {}, org: "" }] : [];
   // 随机初始布局：开局仓库随机落某一翼（每局不同）；seed 留档可复现
-  S.seed = Math.floor(Math.random() * 1e6);
+  S.seed = Number(seed) || Math.floor(Math.random() * 1e6);   // 传入 seed＝按种子复现初始布局（参数面板入口）
   const rng = mulberry32(S.seed);
   (rng() < 0.5 ? S.cityL : S.cityR).push({ b: "仓库", inst: 0 });
   for (const [site, t] of Object.entries(TERRAIN))
@@ -274,6 +304,7 @@ export function reset() {
 /* 完全体样板（原默认展示）：参数面板「载入完全体」可一键载入 */
 export function loadDemo() {
   reset();
+  S.people = []; S.seq.p = 0;   // 满编名单重建（reset 的开局 10 人让位；须在 addPersonRaw 之前）
   const inst = (b, ...items) => {
     const it = {}; for (const x of items) it[x] = true;
     S.buildings[b].push({ interior: it, org: "" });
@@ -291,13 +322,11 @@ export function loadDemo() {
   addPersonRaw("你");
   addPersonRaw("动员官");
   for (let i = 0; i < 34; i++) addPersonRaw("村民");
-  const hall = addOrgRaw("市政厅", 3, "hall");
-  for (const key of HALL_SLOT_KEYS)
-    hall.slots[key] = { def: { fn: key, n: 1, pos: key === "市长" ? "must" : "gain",
-      role: { "市长": "统辖全城（你）", "军事": "掌军，在编即可动员", "行政": "管理人事与组织",
-              "生产": "辖采集/建造/制造三线",
-              "运输": "启用物流系统", "教育": "主办教育与研究", "情报": "生成一站式信息总览" }[key] },
-      persons: [], institution: "" };
+  /* 复用 reset() 已建的根组织 o01（修复：曾另建 o02 致双根并存——情报局挂在 o02 名下，
+     intelInterval 读 o01 → 完全体样板总览永久停更，僵尸聚落还会被升格逻辑二次改名） */
+  const hall = S.orgs.o01;
+  hall.name = "市政厅"; hall.tier = 3;
+  hall.slots["市长"].persons = []; hall.slots["军事"].persons = [];   // 让位给下方满编名单
   const vill = () => S.people.filter(p => !p.org).map(p => p.id);
   const place = (container, fn, org) => { container.slots[fn].institution = org.id; };
   const staff = (org, fn, n, ids) => {
@@ -313,7 +342,8 @@ export function loadDemo() {
   const mining = addOrgRaw("采矿队", 2, ""); place(gather, "采矿", mining);
   const farm = addOrgRaw("农垦队", 2, ""); place(gather, "农垦", farm);
   const sawmill = addOrgRaw("锯木坊", 2, ""); place(works, "锯木", sawmill);
-  const forge = addOrgRaw("锻造坊", 2, ""); place(works, "锻造", forge);
+  const forgeHQ = addOrgRaw("锻造总坊", 2, ""); place(works, "锻造", forgeHQ);   // 中间层示例：制造中心·锻造 → 锻造总坊 → 锻造坊
+  const forge = addOrgRaw("锻造坊", 2, ""); place(forgeHQ, "锻造坊", forge);
   const pharmacy = addOrgRaw("药剂坊", 2, ""); place(works, "制药", pharmacy);
   const smelter = addOrgRaw("冶炼坊", 2, ""); place(works, "冶炼", smelter);
   const cartshop = addOrgRaw("木器坊", 2, ""); place(works, "木器", cartshop);
@@ -356,6 +386,7 @@ function mulberry32(a) {   // 轻量确定性 PRNG：同 seed 同布局（复现
   };
 }
 export const CIRC = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];   // 建筑实例枚举（区分座，非命名）
+export const circ = i => CIRC[i] ?? String(i + 1);   // 第 10 座起退化为数字（实测 30 座民居时 ①~⑨ 溢出显 undefined）
 export const person = pid => S.people.find(p => p.id === pid);
 export const idle = () => S.people.filter(p => !p.org);
 /* 矿井卫星区：可在矿洞处建的分布式仓库——矿堆容 +80/座，且集中整批短驳（无仓则从矿口远背主城） */
@@ -385,7 +416,7 @@ export function housingCap() {
 export const capTotal = () => S.knobs.cap * (S.buildings["仓库"]?.length || 1);
 /* 一站式总览＝把各处文书运回市政厅的汇总快照：信息量不随情报规模 gate——各组织
    面板的数据由它们自己的信息位收集；情报组织规模只决定更新效率（文书要真的有人拿回来）。
-   汇总在编才有总览更新；采编每人把周期缩短（12时基础，每+1人-3时，下限1时）；无人=停更 */
+   汇总在编才有总览更新；采编每人把周期缩短（12时基础，每+1人-3时，采编满编4人=下限1时）；无人=停更 */
 export function intelInterval() {
   const hall = S.orgs.o01;
   const slot = hall?.slots["情报"];
@@ -398,7 +429,7 @@ export function intelInterval() {
 }
 function collectSnap() {
   const m = o => o ? membersOf(o) : 0;
-  const g = t => m(Object.values(S.orgs).find(x => x.template === t));
+  const g = t => Object.values(S.orgs).filter(x => x.template === t).reduce((a, x) => a + m(x), 0);   // 同型多株（总坊下辖）合计在编
   return {
     at: S.hours,
     res: { ...S.res }, rates: { ...S.rates }, buf: { ...S.buf },
@@ -438,8 +469,11 @@ export function addOrgRaw(name, tier, kind) {
   for (const opt of (ORG_PANELS[name] || [])) org.settings[opt.key] = opt.choices[0][0];
   S.orgs[id] = org;
   if (kind !== "hall")
-    for (const def of (tpl.slots || []))
-      org.slots[def.fn] = { def, persons: [], institution: "" };
+    for (const def of (tpl.slots || [])) {   // 同名下辖槽（总坊的 厂坊×3）键去重：首槽原名、后续加序号
+      let k = def.fn, i = 2;
+      while (org.slots[k]) k = def.fn + i++;
+      org.slots[k] = { def, persons: [], institution: "" };
+    }
   if (org.bldgType) {   // 自动进驻一座空置同类建筑；没有则空挂（基础运转受限，工厂工序全停摆）
     const idx = (S.buildings[org.bldgType] || []).findIndex(inst => !inst.org);
     if (idx >= 0) { S.buildings[org.bldgType][idx].org = id; org.bldg = { b: org.bldgType, idx }; }
@@ -486,6 +520,114 @@ export function orgDesc(name) {
 /* 地形槽产物：原料窄口径下各地形单产物，直取 */
 export function slotProduct(slot) {
   return TERRAIN[slot.def.terrain].products[0];
+}
+
+/* ── 库存目标（按需生产）：锯木坊按出材偏好盯主产物，其余坊盯末道产物 ── */
+function targetResOf(o) {
+  if (o.template === "锯木坊") return o.settings["出材偏好"] === "优先木材" ? "木材" : "木板";
+  const st = [...(o.steps || [])].reverse().find(s => s.outCity);
+  return st ? Object.keys(st.outCity)[0] : null;
+}
+export function targetOf(o) {
+  const v = o.settings["库存目标"];
+  return !v || v === "不限" ? Infinity : Number(v.slice(1));
+}
+export function targetHit(o) {
+  const r = targetResOf(o);
+  return !!r && S.res[r] >= targetOf(o);
+}
+/* 停摆原因（自动化审计：停摆不可视）——工厂 缺设备/缺原料/达标歇线/未驻建筑；采集队 卫星堆满停采 */
+export function stallInfo(o) {
+  if (o.steps && o.steps.length) {
+    if (!membersOf(o)) return "";
+    if (!o.bldg) return "未驻建筑——工序停摆";
+    if (targetHit(o)) return "库存达标·歇线";
+    if (o.steps.every(st => !orgEquip(o, st.equip))) return "缺设备——工序停摆";
+    const canRun = o.steps.some(st => orgEquip(o, st.equip) && (st.inCity
+      ? Object.entries(st.inCity).every(([r, n]) => S.res[r] >= 0.001)
+      : ((wipOf(o)[st.wipIn] || 0) > 0.001 || !!st.altCity && Object.entries(st.altCity).every(([r, n]) => S.res[r] >= 0.001))));
+    return canRun ? "" : "缺原料——工序停摆";
+  }
+  for (const slot of Object.values(o.slots))
+    if (slot.def.terrain && TERRAIN[slot.def.terrain].satellite
+        && S.buf[bufKey(slot.def.terrain, slotProduct(slot))] >= mineBufCap())
+      return "卫星堆满·停采";
+  return "";
+}
+/* 施工前置/资源校验——单一真相源：按钮禁用态与 queueBuild 同一规则（审计：校验双轨会漂移） */
+export function buildBlocked(kind, b, item, idx, storeys = 1) {
+  const d = BUILDINGS[b];
+  if (kind === "interior") {
+    const inst = S.buildings[b]?.[idx];
+    if (!inst) return `${b} 第${idx + 1}座尚不存在`;
+    if (inst.interior[item]) return "已装";
+    if (S.buildOrders.some(o => o.b === b && o.item === item && o.idx === idx)) return "已在施工队列";
+  }
+  const cost = shellCost(d, item, kind, storeys);
+  return canPay(cost) ? "" : "资源不足：" + costStr(cost);
+}
+function shellCost(d, item, kind, storeys) {
+  let cost = item ? d.interior.find(x => x.item === item).cost : d.shell.cost;
+  if (kind === "shell" && storeys === 2)   // 双层：成本工期×1.8（03 §二 层数由材质，木上限2）
+    cost = Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, Math.round(v * 1.8)]));
+  return cost;
+}
+/* 撤单：全额返料（sim 简化：拆除返料；已投工时沉没不补） */
+export function cancelBuild(i) {
+  const o = S.buildOrders[i]; if (!o) return;
+  const cost = shellCost(BUILDINGS[o.b], o.item || null, o.kind, o.storeys || 1);
+  for (const [r, n] of Object.entries(cost)) S.res[r] += n;
+  S.buildOrders.splice(i, 1);
+  feed(`撤单 ${o.b}${o.item ? "·" + o.item : "·新座"}，材料全额返还（已投工时沉没）`, "warn");
+}
+/* 拆卸软装：全额返料——库满缺料时的腾挪出口（拆掉设备=所驻厂该工序停摆，物理因果） */
+export function dismantle(b, idx, item) {
+  const inst = S.buildings[b]?.[idx];
+  if (!inst?.interior[item]) return;
+  delete inst.interior[item];
+  const it = BUILDINGS[b].interior.find(x => x.item === item);
+  for (const [r, n] of Object.entries(it.cost)) S.res[r] += n;
+  feed(`拆卸 ${b}${circ(idx)}·${item}，返料 ${costStr(it.cost)}`, "warn");
+}
+/* 含施工中的完整排布（落成块+待建块）——布局真相源单一化，CityPage 纯渲染 */
+export function cityLayout() {
+  const runs = [];
+  for (const c of cityCells()) {
+    const last = runs[runs.length - 1];
+    if (last && last.b === c.b && last.inst === c.inst) last.w += 1;
+    else runs.push({ b: c.b, inst: c.inst, w: 1 });
+  }
+  const sh = o => o.kind === "shell";
+  return { blocks: runs,
+    pendL: S.buildOrders.filter(o => sh(o) && o.side === "左").reverse(),
+    pendR: S.buildOrders.filter(o => sh(o) && o.side !== "左" && o.side !== "矿卫"),
+    pendSat: S.buildOrders.filter(o => sh(o) && o.side === "矿卫") };
+}
+/* ── 存档（localStorage）：一局核心字段——刷新/关页不丢城；重开按钮清档 ── */
+const SAVE_FIELDS = ["hours", "seq", "people", "orgs", "res", "buf", "wip", "buildings",
+                     "buildOrders", "cityL", "cityR", "citySat", "mobilized", "seed", "knobs", "popCd", "autoCd", "order"];
+export function saveState() {
+  const data = {}; for (const k of SAVE_FIELDS) data[k] = S[k];
+  try { localStorage.setItem("orgsim.save", JSON.stringify(data)); } catch {}
+}
+export function hasSave() { try { return !!localStorage.getItem("orgsim.save"); } catch { return false; } }
+export function clearSave() { try { localStorage.removeItem("orgsim.save"); } catch {} }
+export function loadState() {
+  try {
+    const data = JSON.parse(localStorage.getItem("orgsim.save") || "null");
+    if (!data || !data.orgs) return false;
+    Object.assign(S, data, { sel: null, selSlot: null, feed: [], snap: null, rates: {}, borrows: {}, speed: 0 });
+    for (const o of Object.values(S.orgs)) {   // 回链模板定义：存档 def 是旧快照，重指 ORGS 现行定义防版本漂移
+      const tpl = ORGS[o.template] || {};
+      for (const sl of Object.values(o.slots)) {
+        const d = (tpl.slots || []).find(x => x.fn === sl.def.fn);
+        if (d) sl.def = d;
+      }
+      o.steps = tpl.steps || o.steps || [];
+    }
+    S.snap = collectSnap();
+    return true;
+  } catch { return false; }
 }
 
 /* ═════════ 经济推进 ═════════ */
@@ -565,18 +707,20 @@ export function advance(dt) {
     const hp = o.slots["搬运"]; if (hp) haulers += hp.persons.length;
   }
   if (keeper && haulers > 0) {
-    // 调度（运输队·运输计划与派单）为职能岗：排单与派车的机制后续
-    let haulRate = K.haul, bulkFirst = false;
+    let haulRate = K.haul, bulkFirst = false, plan = "", dispStaffed = false;
     for (const o of Object.values(S.orgs)) if (o.slots["搬运"]) {
       if (o.settings["载具"] === "手推车" && S.res["手推车"] >= 1) haulRate = K.haul * 1.5;   // 车在手边才提速（与面板门控同一物理事实）
       if (o.settings["装卸规则"] === "大宗优先") bulkFirst = true;
+      plan = o.settings["运输计划"] || "";
+      dispStaffed = (o.slots["调度"]?.persons.length || 0) > 0;   // 排单是调度的活：调度在岗计划才生效
     }
+    const wOf = k => dispStaffed && plan.indexOf(k.split("|")[1]) >= 0 ? 2 : 1;   // 运输计划：被偏重线运力×2
     // 运距逐线折算（物理）：矿堆（卫星城）无仓 ×0.6 远背、有卫星仓 ×1 集中短驳；主城侧线 ×1 城内短驳
     const distOf = k => k.startsWith("矿洞") ? (satWarehouses() > 0 ? 1 : 0.6) : 1;
     const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001);
     // 运力按堆量加权分配（各线运距已含在自身运力里）；装卸规则保留：
     // 均匀分运=按堆量比例；大宗优先=先清最大堆
-    const wSum = keys.reduce((a, k) => a + S.buf[k] / distOf(k), 0);
+    const wSum = keys.reduce((a, k) => a + S.buf[k] * wOf(k) / distOf(k), 0);
     let move = Math.min(haulRate * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0),
                         Math.max(0, capTotal() - resTotal()));
     if (move > 0 && wSum > 0) {
@@ -585,7 +729,7 @@ export function advance(dt) {
       for (const key2 of order) {
         const disc = notified[key2] === false ? K.uninfo : 1;
         const share = bulkFirst ? Math.min(remaining, S.buf[key2])
-                                : move * (S.buf[key2] / distOf(key2)) / wSum;
+                                : move * (S.buf[key2] * wOf(key2) / distOf(key2)) / wSum;
         const m = Math.min(share * disc, S.buf[key2]);
         if (bulkFirst) remaining -= m;
         S.buf[key2] -= m;
@@ -599,8 +743,10 @@ export function advance(dt) {
     if (!steps.length) continue;
     const workers = membersOf(o);
     if (!workers) continue;
+    if (targetHit(o)) continue;   // 库存目标：产物达标即整坊歇线（降库存后自动复工）
     const runnable = steps.map(st => {
       if (!orgEquip(o, st.equip)) return false;
+      if (st.wip && (wipOf(o)[st.wip] || 0) >= 20) return false;   // 厂内堆位 20：下道堵料/设备断链时本道满料停机（试玩实测断链 WIP 曾堆 231——厂内堆场有限是物理事实）
       if (st.inCity) return Object.entries(st.inCity).every(([r, n]) => S.res[r] >= 0.001);
       if (st.wipIn && (wipOf(o)[st.wipIn] || 0) > 0.001) return true;
       if (st.altCity) return Object.entries(st.altCity).every(([r, n]) => S.res[r] >= 0.001);
@@ -679,11 +825,11 @@ export function advance(dt) {
           if (waitOrg) {   // 组建在建筑之前的空挂组织，落成即自动进驻
             S.buildings[ord.b][idx].org = waitOrg.id;
             waitOrg.bldg = { b: ord.b, idx };
-            feed(`${waitOrg.name} 进驻新落成的${ord.b}${CIRC[idx]}`, "good");
+            feed(`${waitOrg.name} 进驻新落成的${ord.b}${circ(idx)}`, "good");
           }
         }
         else S.buildings[ord.b][ord.idx].interior[ord.item] = true;
-        const tag = ord.kind === "shell" ? `第${S.buildings[ord.b].length}座硬装落成` : `${CIRC[ord.idx]}·${ord.item}装好`;
+        const tag = ord.kind === "shell" ? `第${S.buildings[ord.b].length}座硬装落成` : `${circ(ord.idx)}·${ord.item}装好`;
         feed(`${ord.b} ${tag}（建造队交付）`, "good");
         S.buildOrders.shift();
       }
@@ -700,9 +846,11 @@ export function advance(dt) {
         const idleP = S.people.find(x => !x.org);
         if (idleP) {
           let target = null;
+          const bufSum = () => Object.values(S.buf).reduce((a, b) => a + b, 0);
           for (const o of Object.values(S.orgs))
             for (const [fn, sl] of Object.entries(o.slots))
               if (sl.def.pos === "must" && !sl.institution && sl.persons.length < slotCap(o, sl)
+                  && !(fn === "搬运" && bufSum() < haulers * K.haul * 2)   // 饱和判断：不足两时活不补搬运（审计：HR 曾把过剩人口全灌进空转搬运）
                   && (!target || sl.persons.length < target.sl.persons.length))
                 target = { o, sl, fn };
           if (target) {
@@ -718,9 +866,10 @@ export function advance(dt) {
         && (!S.buildOrders.length || capTotal() - resTotal() <= 0.05)   // 平时保底不压主线、一次一座；顶格停采＝急救插队（停采余量是渐近小数，须用容差判满）
         && canPay(BUILDINGS["仓库"].shell.cost)) {
       pay(BUILDINGS["仓库"].shell.cost);
-      S.buildOrders.push({ kind: "shell", b: "仓库", item: "", idx: -1,
+      const emergency = S.buildOrders.length > 0;   // 顶格停采=急救：插队到最前（在办建造单让位），平时排尾不压主线
+      S.buildOrders[emergency ? "unshift" : "push"]({ kind: "shell", b: "仓库", item: "", idx: -1,
         work: BUILDINGS["仓库"].shell.work, done: 0 });
-      feed("工程队自动扩建：仓库近满，新一座已排队", "good");
+      feed(emergency ? "工程队自动扩建·急救插队：仓库顶格，新仓排到最前" : "工程队自动扩建：仓库近满，新一座已排队", "good");
     }
     S.popCd = (S.popCd || 0) + dt;
     if (S.popCd >= 24) {
@@ -789,25 +938,15 @@ export function createOrgAt(containerId, fn, name) {
 export function queueBuild(kind, b, item, idx, side = "右", storeys = 1) {
   const d = BUILDINGS[b];
   const it = item ? d.interior.find(x => x.item === item) : null;
-  const cost = item ? it.cost : d.shell.cost;
   const work = item ? it.work : d.shell.work;
-  if (kind === "interior") {
-    const inst = S.buildings[b][idx];
-    if (!inst) { feed(`${b} 第${idx + 1}座尚不存在`, "bad"); return; }
-    if (inst.interior[item]) { feed(`${b} 第${idx + 1}座的${item}已装`, "bad"); return; }
-    if (S.buildOrders.some(o => o.b === b && o.item === item && o.idx === idx)) {
-      feed(`${b} 第${idx + 1}座的${item}已在施工队列`, "bad"); return;
-    }
-  }
-  let cost2 = cost, work2 = work;
-  if (kind === "shell" && storeys === 2) {   // 双层：成本工期×1.8（03 §二 层数由材质，木上限2）
-    cost2 = Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, Math.round(v * 1.8)]));
-    work2 = Math.round(work * 1.8);
-  }
-  if (!canPay(cost2)) { feed(`${b} 施工资源不足（${costStr(cost2)}）`, "bad"); return; }
+  const why = buildBlocked(kind, b, item, idx, storeys);   // 校验单一真相源（按钮禁用态同源）
+  if (why) { feed(`${b}：${why}`, "bad"); return; }
+  const cost2 = shellCost(d, item, kind, storeys);
+  let work2 = work;
+  if (kind === "shell" && storeys === 2) work2 = Math.round(work * 1.8);   // 双层：成本工期×1.8（03 §二 层数由材质，木上限2）
   pay(cost2);
   S.buildOrders.push({ kind, b, item: item || "", idx: idx ?? -1, side, storeys, work: work2, done: 0 });
-  const instTag = kind === "interior" ? CIRC[idx] + "·" : "";
+  const instTag = kind === "interior" ? circ(idx) + "·" : "";
   feed(`开工 ${b}${kind === "shell" ? "·新一座硬装" : "·" + instTag + item}（${costStr(cost2)} 已扣）`, "good");
 }
 export function delOrg(orgId) {

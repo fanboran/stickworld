@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, BUILDINGS, CITY_W, CIRC, RES_INFO, cityCells, canPay, costStr, queueBuild,
-         buildWorkers, resTotal, capTotal, housingCap } from "../sim.js";
+import { S, BUILDINGS, CITY_W, circ, RES_INFO, cityLayout, buildBlocked, cancelBuild, dismantle,
+         queueBuild, buildWorkers, resTotal, capTotal, housingCap } from "../sim.js";
 import { usePanelSize } from "../panel.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
@@ -10,22 +10,12 @@ import { usePanelSize } from "../panel.js";
 
 const CELL = 18;   // 每格像素宽：网页想多窄有多窄——18px 已可读，格多不占屏
 
-/* 一排从左到右＝cityCells()（左翼倒序+市政厅居中+右翼），相邻同座格合并成一块 */
-const blocks = computed(() => {
-  const runs = [];
-  for (const c of cityCells()) {
-    const last = runs[runs.length - 1];
-    if (last && last.b === c.b && last.inst === c.inst) last.w += 1;
-    else runs.push({ b: c.b, inst: c.inst, w: 1, key: runs.length });
-  }
-  return runs;
-});
-
-/* 施工块＝队列里的硬装单（软装单不入排）。左翼落成的新座渲染在最左（cityL push+倒序），
-   故左端待建块按队列倒序预览（先完工的贴着既有街区）；右翼按队列正序向右长 */
-const pendL = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side === "左").reverse());
-const pendR = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side !== "左" && o.side !== "矿卫"));
-const pendSat = computed(() => S.buildOrders.filter(o => o.kind === "shell" && o.side === "矿卫"));
+/* 一排从左到右＝cityLayout()（sim.js 单一真相源：落成块+待建块，含左右翼预览次序），本组件纯渲染 */
+const layout = computed(() => cityLayout());
+const blocks = computed(() => layout.value.blocks);
+const pendL = computed(() => layout.value.pendL);
+const pendR = computed(() => layout.value.pendR);
+const pendSat = computed(() => layout.value.pendSat);
 const isCur = o => S.buildOrders[0] === o;
 
 /* 扩建流程（03 §七）：点扩建位→就地展开建造菜单→选型开工（side 随扩建位已定） */
@@ -72,7 +62,10 @@ const pending = computed(() => S.buildOrders.slice(1));
 const workers = computed(() => buildWorkers());
 const orderLabel = o => o.kind === "shell"
   ? `${o.b}·新座硬装（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼${o.storeys === 2 ? "·双层" : ""}）`
-  : o.b + CIRC[o.idx] + "·" + o.item;
+  : o.b + circ(o.idx) + "·" + o.item;
+/* 校验单一真相源（sim.js buildBlocked）：按钮禁用态与 queueBuild 同一规则 */
+const shellWhy = b => buildBlocked("shell", b, null, -1, b === "民居" ? storeys.value : 1);
+const itemWhy = (b, item, idx) => buildBlocked("interior", b, item, idx);
 
 /* 软装详情面板 VSCode 式拖拽调高：上缘手柄，双击复位（解构见 OrgPage 同注） */
 const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail", "y", 250, 110, 520);
@@ -87,7 +80,9 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
         <b>{{ orderLabel(cur) }}</b>
         <div class="bar"><i :style="{ width: (100 * cur.done / cur.work) + '%' }"></i></div>
         <span class="qpct">{{ (100 * cur.done / cur.work).toFixed(0) }}%</span>
-        <span class="qp" v-if="pending.length">+{{ pending.length }}排队</span>
+        <i class="qcancel" title="撤单（全额返料，已投工时沉没）" @click="cancelBuild(0)">✕</i>
+        <span class="qchip" v-for="(p2, i) in pending" :key="'q' + i"
+              :title="orderLabel(p2) + '——点 ✕ 撤单'">{{ orderLabel(p2).slice(0, 12) }}<i @click="cancelBuild(i + 1)">✕</i></span>
         <span class="qwarn" v-if="!workers">无人施工</span>
         <span class="qsub">人力 {{ workers }}</span>
       </template>
@@ -109,13 +104,13 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
           <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
         </div>
         <!-- 已落成建筑块 -->
-        <div v-for="e in blocks" :key="e.key" class="bblock built"
+        <div v-for="e in blocks" :key="e.b + e.inst" class="bblock built"
              :class="{ sel: selB === e.b, hall: e.b === '市政厅' }"
              :style="{ width: e.w * CELL + 'px' }"
              :title="(BUILDINGS[e.b]?.desc || '') + '｜点开下方软装详情'"
              @click="pickBlock(e.b)">
           <div v-if="storeysOf(e) === 2" class="upper"><span>2F</span></div>
-          <div class="bname">{{ e.b }}<i v-if="e.b !== '市政厅'" class="seat">{{ CIRC[e.inst] }}</i></div>
+          <div class="bname">{{ e.b }}<i v-if="e.b !== '市政厅'" class="seat">{{ circ(e.inst) }}</i></div>
           <div class="bstat">{{ statusLine(e.b, e.inst) }}</div>
         </div>
         <!-- 右翼施工块：按队列正序向右长 -->
@@ -146,7 +141,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
         </div>
         <div v-for="(e, i) in satBlocks" :key="'sb' + i" class="bblock built sat"
              :style="{ width: (CITY_W[e.b] || 2) * CELL + 'px' }">
-          <div class="bname">{{ e.b }}<i class="seat">{{ CIRC[e.inst] }}</i></div>
+          <div class="bname">{{ e.b }}<i class="seat">{{ circ(e.inst) }}</i></div>
           <div class="bstat">矿堆容 +80</div>
         </div>
       </div>
@@ -169,9 +164,8 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
       </div>
       <div class="bmcards">
         <button v-for="[b, d] in buildables" :key="b" class="bmcard"
-                :disabled="!canPay(d.shell.cost)"
-                :title="(canPay(d.shell.cost) ? d.desc : '资源不足：' + costStr(d.shell.cost))
-                        + ' · 工期 ' + d.shell.work + '人时'"
+                :disabled="!!shellWhy(b)"
+                :title="(shellWhy(b) ? shellWhy(b) + '｜' : '') + d.desc + ' · 工期 ' + d.shell.work + '人时'"
                 @click="startBuild(b)">
           <span class="bmctop"><b>{{ b }}</b><i v-if="d.late" class="latetag">后期</i>
             <i class="bmw">占{{ CITY_W[b] }}格{{ menuSide !== '矿卫' && b === '民居' && storeys === 2 ? '×2层' : '' }}</i></span>
@@ -192,7 +186,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
         <div class="cdhead"><b>{{ selB }}</b><span class="cddesc">{{ selType?.desc }}</span></div>
         <div v-for="(inst, idx) in (S.buildings[selB] || [])" :key="idx" class="inst">
           <div class="ihead">
-            <b>{{ CIRC[idx] }}</b>
+            <b>{{ circ(idx) }}</b>
             <span class="fx" v-if="inst.org">驻 {{ S.orgs[inst.org]?.name }}</span>
             <span class="fx" v-if="(selType?.interior || []).length">{{ installed(selB, inst) }}/{{ selType.interior.length }} 设备</span>
             <span class="fx" v-if="selB === '民居'">居住位 {{ 4 + (inst.interior["床铺"] ? 4 : 0) }}</span>
@@ -202,10 +196,14 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
               <span class="iname">{{ it.item }}</span>
               <span class="fx">{{ it.unlock || it.effect }}</span>
             </div>
-            <span v-if="inst.interior[it.item]" class="okk">已装</span>
+            <template v-if="inst.interior[it.item]">
+              <span class="okk">已装</span>
+              <button class="dism" title="拆卸返料（全额；拆设备=对应工序停摆）——库满缺料时的腾挪出口"
+                      @click="dismantle(selB, idx, it.item)">拆卸</button>
+            </template>
             <span v-else-if="instQueued(selB, it.item, idx)" class="dim">施工中</span>
-            <button v-else :disabled="!canPay(it.cost)"
-                    :title="canPay(it.cost) ? it.work + '人时' : '资源不足'"
+            <button v-else :disabled="!!itemWhy(selB, it.item, idx)"
+                    :title="itemWhy(selB, it.item, idx) || it.work + '人时'"
                     @click="queueBuild('interior', selB, it.item, idx)">
               安装<span class="cost" v-for="[r, n] of Object.entries(it.cost)" :key="r"
                     :class="{ lack: lack(r, n) }">{{ RES_INFO[r].icon }}{{ n }}</span>
@@ -228,7 +226,12 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .qhead { font-weight: 700; font-size: 12.5px; }
 #ctool .bar { flex: 1; min-width: 60px; max-width: 320px; }
 .qpct { color: var(--dim); font-variant-numeric: tabular-nums; }
-.qp { color: var(--dim); font-size: 10.5px; }
+.qcancel, .qchip i { cursor: pointer; color: var(--dim); font-style: normal; font-size: 11px; }
+.qcancel:hover, .qchip i:hover { color: var(--bad); }
+.qchip { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+         padding: 1px 7px; font-size: 10.5px; display: inline-flex; gap: 4px; align-items: center;
+         color: var(--dim); }
+.qchip i { font-size: 10px; }
 .qwarn { color: var(--warn); font-size: 10.5px; }
 .qsub { color: var(--dim); font-size: 10.5px; margin-left: auto; }
 .qdim { color: var(--faint); font-size: 11px; }
@@ -293,6 +296,8 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
                font-size: 11px; padding: 2px 7px; }
 .okk { margin-left: auto; color: #b8ecd0; font-size: 10.5px; background: #1f5c3e;
        border-radius: 8px; padding: 1px 7px; }
+.irow .dism { flex: none; font-size: 10px; padding: 1px 7px; color: var(--dim); }
+.irow .dism:hover { color: var(--bad); border-color: var(--bad); }
 .irow .dim { margin-left: auto; color: var(--warn); font-size: 10.5px; }
 .cdnone { color: var(--faint); font-size: 10.5px; padding: 4px 0; }
 .cdhint { color: var(--faint); font-size: 11px; padding: 10px 0; }

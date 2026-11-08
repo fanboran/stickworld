@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, ORGS, BUILDINGS, CIRC, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
-         idle, select, delOrg, feed, slotCandidates, createBlocked, slotCap,
+import { S, ORGS, BUILDINGS, circ, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
+         idle, select, delOrg, feed, slotCandidates, createBlocked, slotCap, stallInfo,
          putPerson, pullPersons, createOrgAt } from "../sim.js";
 
 const host = computed(() => {
@@ -87,7 +87,16 @@ function bldgTitle(o) {
   if (!o.bldg) return `缺${o.bldgType}——基础运转受限`;
   const inst = S.buildings[o.bldg.b]?.[o.bldg.idx];
   const eq = (BUILDINGS[o.bldg.b]?.interior || []).filter(it => inst?.interior[it.item]).map(it => it.item);
-  return `驻${o.bldg.b}${CIRC[o.bldg.idx]}${eq.length ? "：" + eq.join("/") : ""}`;
+  return `驻${o.bldg.b}${circ(o.bldg.idx)}${eq.length ? "：" + eq.join("/") : ""}`;
+}
+/* 解散两步确认：首点布防 2.5s，再点执行（审计：误点毁树无确认） */
+const armedDel = ref("");
+let delTimer = null;
+function askDel(id) {
+  if (armedDel.value === id) { clearTimeout(delTimer); armedDel.value = ""; delOrg(id); return; }
+  armedDel.value = id;
+  clearTimeout(delTimer);
+  delTimer = setTimeout(() => armedDel.value = "", 2500);
 }
 
 </script>
@@ -101,10 +110,12 @@ function bldgTitle(o) {
           <span>{{ o.name }}</span><span class="tier">L{{ o.tier }}</span><span v-if="o.trainLv" class="tier">训{{ ["Ⅰ","Ⅱ","Ⅲ","Ⅳ","Ⅴ","Ⅵ","Ⅶ","Ⅷ"][o.trainLv - 1] }}</span>
           <span class="sub">{{ o.kind === "hall" ? "根节点" :
             (host[o.id] ? "入驻·" + host[o.id].fn + "槽" : "未入驻") }}{{ o.bldgType
-              ? (o.bldg ? " · 驻" + o.bldg.b + CIRC[o.bldg.idx] : " · 缺" + o.bldgType)
+              ? (o.bldg ? " · 驻" + o.bldg.b + circ(o.bldg.idx) : " · 缺" + o.bldgType)
               : "" }} · 在编 {{ membersOf(o) }}</span>
-          <button v-if="o.kind !== 'hall'" class="del warn" title="解散组织（人员回待业）"
-                  @click.stop="delOrg(o.id)">×</button>
+          <span v-if="stallInfo(o)" class="stall" :title="stallInfo(o)">⏸</span>
+          <button v-if="o.kind !== 'hall'" class="del warn"
+                  :title="armedDel === o.id ? '再点一次确认解散（人员回待业）' : '解散组织（点两次确认）'"
+                  @click.stop="askDel(o.id)">{{ armedDel === o.id ? "确认？" : "×" }}</button>
         </div>
         <div v-for="(slot, fn) in o.slots" :key="fn" class="slotwrap">
           <div class="srow"
@@ -174,6 +185,7 @@ function bldgTitle(o) {
 .card .hd:hover { background: #ffffff07; }
 .card .hd .tier { color: var(--dim); font-size: 10.5px; font-weight: 400; }
 .card .hd .sub { color: var(--dim); font-size: 10px; font-weight: 400; margin-left: auto; }
+.card .hd .stall { color: var(--warn); font-size: 11px; cursor: help; }
 .card .hd .del { visibility: hidden; padding: 1px 7px; font-size: 10px; }
 .card .hd:hover .del { visibility: visible; }
 .srow { display: flex; align-items: center; gap: 5px; padding: 0 9px; height: 24px; border-radius: 5px;
@@ -191,7 +203,8 @@ function bldgTitle(o) {
 .srow .need { color: var(--bad); font-size: 10.5px; }
 .srow .wip { color: var(--flow); font-size: 10.5px; }
 .sops { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding: 4px 9px 6px;
-        border-top: 1px dashed var(--line); background: #1a2030; font-size: 11px; }
+        border-top: 1px dashed var(--line); background: #1a2030; font-size: 11px;
+        max-height: 132px; overflow-y: auto; }   /* 候选多时内滚，不撑高整列推走下方卡片 */
 .sops select { max-width: 108px; font-size: 11px; padding: 2px 4px; }
 .sops button { padding: 2px 8px; font-size: 11px; }
 .sops .cbtn.late { color: var(--dim); }

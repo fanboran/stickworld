@@ -1007,10 +1007,19 @@ export function advance(dt) {
         if (pid && !person(pid).org) {
           let target = null;
           const bufSum = () => Object.values(S.buf).reduce((a, b) => a + b, 0);
+          /* 采集线饱和（物理判据，非抽象阈值）：卫星堆满＝采了也停；收货没开＝城中无消费入口，
+             场地堆已压单人两时产能再加人纯属堆高——两条都不补（搬运饱和见下，同一审计） */
+          const gatherSaturated = sl => {
+            if (!sl.def.terrain) return false;
+            const prod = slotProduct(sl), key = bufKey(sl.def.terrain, prod);
+            if (TERRAIN[sl.def.terrain].satellite && (S.buf[key] || 0) >= mineBufCap()) return true;
+            return S.intake[prod] === false && (S.buf[key] || 0) >= 2 * K.gather;
+          };
           for (const o of Object.values(S.orgs))
             for (const [fn, sl] of Object.entries(o.slots))
               if (sl.def.pos === "must" && !sl.institution && sl.persons.length < slotCap(o, sl)
                   && !(fn === "搬运" && bufSum() < haulers * K.haul * 2)   // 饱和判断：不足两时活不补搬运（审计：HR 曾把过剩人口全灌进空转搬运）
+                  && !gatherSaturated(sl)
                   && (!target || sl.persons.length < target.sl.persons.length))
                 target = { o, sl, fn };
           if (target) {

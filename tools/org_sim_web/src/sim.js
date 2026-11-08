@@ -242,7 +242,7 @@ export const ORG_PANELS = {
   "工程队": [ { key: "自动扩建", choices: [["关", "全部施工手动排队"],
                                           ["开", "仓库近满且无在办建造单时，自动排队再建一座（保底不压主线）"]] } ],
   "运输队": [ { key: "载具", choices: [["人力搬运", "1.2/人时"],
-                                        ["手推车", "1.8/人时——库中需有车（木器坊出品）", { need: "手推车" }]] },
+                                        ["手推车", "1.8/人时——一队一车按队占编、库中需有车（木器坊出品）", { need: "手推车" }]] },
               { key: "装卸规则", choices: [["均匀分运", "各场地按堆量比例搬运"],
                                             ["大宗优先", "先清最大堆——场地少顶格停采，小堆排后"]] },
               { key: "运输计划", choices: [["均匀", "按堆量比例分运（无计划偏好）"],
@@ -837,10 +837,14 @@ export function advance(dt) {
     const hp = o.slots["搬运"]; if (hp) haulers += hp.persons.length;
   }
   if (keeper && haulers > 0) {
-    let haulRate = K.haul, bulkFirst = false, plan = "", dispStaffed = false, cartOn = false;
+    let bulkFirst = false, plan = "", dispStaffed = false;
     const haulPids = [];
+    /* 载具按队占编（README 挂账：多队可同登一辆）：一队一车、队级独占，库里车不够则后队仍人力；
+       曾是任一队开车即给全部队 1.5×——车的提速只落在占到编的队身上 */
+    let boosted = 0, cartsLeft = Math.floor(S.res["手推车"] || 0);
     for (const o of Object.values(S.orgs)) if (o.slots["搬运"]) {
-      if (o.settings["载具"] === "手推车" && S.res["手推车"] >= 1) { haulRate = K.haul * 1.5; cartOn = true; }   // 车在手边才提速（与面板门控同一物理事实）
+      const n = o.slots["搬运"].persons.length;
+      if (o.settings["载具"] === "手推车" && n > 0 && cartsLeft >= 1) { cartsLeft -= 1; boosted += n; }
       if (o.settings["装卸规则"] === "大宗优先") bulkFirst = true;
       plan = o.settings["运输计划"] || "";
       dispStaffed = (o.slots["调度"]?.persons.length || 0) > 0;   // 排单是调度的活：调度在岗才生效
@@ -854,7 +858,7 @@ export function advance(dt) {
     // 运力按堆量加权分配（各线运距已含在自身运力里）；装卸规则保留：
     // 均匀分运=按堆量比例；大宗优先=先清最大堆
     const wSum = keys.reduce((a, k) => a + S.buf[k] * wOf(k) / distOf(k), 0);
-    let move = Math.min(haulRate * haulStr * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0));
+    let move = Math.min(K.haul * haulStr * (boosted * 1.5 + haulers - boosted) * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0));
     if (move > 0 && wSum > 0) {
       const order = bulkFirst ? [...keys].sort((a, b) => S.buf[b] - S.buf[a]) : keys;
       let remaining = move;
@@ -869,8 +873,8 @@ export function advance(dt) {
         S.res[key2.split("|")[1]] += m;
       }
     }
-    if (cartOn && move > 0) {   // 载具磨损（物理 sink：车是会用坏的）——每 240 搬运人时折损一辆，木器坊从此有持续需求
-      S.wear.cart += dt * haulers;
+    if (boosted > 0 && move > 0) {   // 载具磨损（物理 sink：车是会用坏的）——每 240 搬运人时折损一辆，木器坊从此有持续需求（只计占编到车的搬运工）
+      S.wear.cart += dt * boosted;
       while (S.wear.cart >= 240) {
         S.wear.cart -= 240;
         if (S.res["手推车"] >= 1) { S.res["手推车"] -= 1; flow["手推车"] -= 1; feed("一辆手推车损耗报废（木器坊可再产）", "warn"); }
@@ -1047,6 +1051,16 @@ export function advance(dt) {
       if (housingCap() > S.people.length) {
         addImmigrant();
         feed("移民入住：城里有余房，外来匠人来投（耕产物不作口粮——只做增益/纤维/药材）", "good");
+      }
+    }
+    /* 流失侧（「有活干有人留」的另一半）：村民闲置满 72 时（三天）离乡谋生——
+       在编者闲置钟清零；开局角色（你/动员官）不离。进城门是空床，离城门是没活干 */
+    for (const p of [...S.people]) {
+      if (p.org) { p.idleT = 0; continue; }
+      p.idleT = (p.idleT || 0) + dt;
+      if (p.name === "村民" && p.idleT >= 72) {
+        S.people.splice(S.people.indexOf(p), 1);
+        feed(`离乡谋生：闲置三天没活干，一名村民出城去了（有活干有人留）`, "warn");
       }
     }
     /* 常备兵操练军械磨损（物理 sink）：每 150 时需换装 1 剑——军需岗在编才办领用（无人/无剑＝登记警告，不叠加惩罚） */

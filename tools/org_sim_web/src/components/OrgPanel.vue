@@ -113,7 +113,7 @@ watch(sel, () => armed.value = "");
     </template>
     <div v-else class="roster">
       <div class="pnote">点组织卡片头部打开它的指令面板；下面是待业名册——派工与构筑前先看谁会什么</div>
-      <div v-for="p in roster" :key="p.id" class="rrow" :title="attrStr(p) + (p.skills.length ? '｜会 ' + p.skills.join('、') : '｜无技艺')">
+      <div v-for="p in roster" :key="p.id" class="rrow" :title="attrStr(p) + (p.skills.length ? '｜会 ' + p.skills.join('、') : '｜无技艺') + '｜已闲置 ' + Math.floor(p.idleT || 0) + ' 时（村民闲置满 72 时离乡）'">
         <div class="rline1"><b>{{ p.name }}</b><span class="rattr">{{ attrStr(p) }}</span></div>
         <div class="rart" v-if="p.skills.length">会{{ p.skills.join("/") }}</div>
       </div>

@@ -49,14 +49,18 @@ const columns = computed(() => {
 
 function borrowsOf(orgId) { return S.borrows[orgId] || []; }
 function chipName(pid) { return person(pid)?.name || "?"; }
-/* 同名在编聚合显示：同质化槽一颗「村民×3」芯片 */
+/* 同名在编聚合显示：同质化槽一颗「村民×3」芯片；悬停见个体档（属性/技能） */
 function chipsOf(slot) {
   const m = new Map();
   for (const pid of slot.persons) {
-    const n = person(pid)?.name || "?";
-    m.set(n, (m.get(n) || 0) + 1);
+    const p = person(pid);
+    const n = p?.name || "?";
+    const prev = m.get(n) || { c: 0, det: [] };
+    prev.c += 1;
+    prev.det.push(`${p?.name} 力${p?.attr.str} 智${p?.attr.int} 敏${p?.attr.agi} 巧${p?.attr.cft} 组${p?.attr.cmd}${p?.skills.length ? "｜会" + p.skills.join("/") : ""}`);
+    m.set(n, prev);
   }
-  return [...m].map(([n, c]) => c > 1 ? `${n}×${c}` : n);
+  return [...m].map(([n, v]) => ({ label: v.c > 1 ? `${n}×${v.c}` : n, title: v.det.join("\n") }));
 }
 /* 槽位解锁看本组织所驻建筑实例（03 §一），不看全城 */
 const isLocked = (o, slot) => !!(slot.def.req && !orgEquip(o, slot.def.req.item));
@@ -125,7 +129,7 @@ function askDel(id) {
                   :title="POS_NAME[slot.def.pos || 'run'] + '｜' + (slot.def.role || '')">{{ fn }}</span>
             <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slotCap(o, slot) }}</span>
             <template v-if="slot.persons.length || slot.institution">
-              <span v-for="c in chipsOf(slot)" :key="c" class="chip">{{ c }}</span>
+              <span v-for="c in chipsOf(slot)" :key="c.label" class="chip" :title="c.title">{{ c.label }}</span>
               <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>
             </template>
             <span v-else class="chip empty">空槽</span>
@@ -158,7 +162,7 @@ function askDel(id) {
             </template>
             <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slotCap(o, slot)">
               <option value="">{{ slot.def.homog && slot.persons.length >= slotCap(o, slot) ? "坑位已满" : "待业人员…" }}</option>
-              <option v-for="p in idle()" :key="p.id" :value="p.id">{{ p.name }}</option>
+              <option v-for="p in idle()" :key="p.id" :value="p.id">{{ p.name }}{{ p.skills.length ? "·会" + p.skills.join("/") : "" }}</option>
             </select>
             <button :disabled="!pickPerson" @click="putPerson(o.id, fn, pickPerson); pickPerson = ''">派入</button>
             <button v-if="slot.persons.length" @click="pullPersons(o.id, fn)">撤出全部</button>

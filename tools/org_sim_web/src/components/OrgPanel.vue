@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { S, ORG_PANELS, circ, membersOf, delOrg } from "../sim.js";
+import { S, ORG_PANELS, ARTS, circ, membersOf, delOrg, idle, feed } from "../sim.js";
 
 /* 指令面板：各组织专属运行操作所在地（结构各异），实际游戏为定制精美 UI，sim 只模拟基础功能 */
 const sel = computed(() => S.sel && !S.selSlot && S.orgs[S.sel] ? S.orgs[S.sel] : null);
@@ -18,6 +18,21 @@ function choose(org, opt, choice) { org.settings[opt.key] = choice; }
 /* 选项可带实物前提 { need: 资源名 }：库中无此物则禁用——载具等耐用品的物理在场门槛 */
 const lacks = c => c[2]?.need && S.res[c[2].need] < 1;
 const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.key])?.[1] || "";
+/* 训练目标（17 §二 落到个体）：属性+1 或 全员习得技能；目标技能教官须会 */
+const ATTRS = [["str", "力量"], ["int", "智力"], ["agi", "敏捷"], ["cft", "灵巧"], ["cmd", "组织"]];
+const goal = computed({
+  get: () => sel.value?.settings["训练目标"] || "属性·cft",
+  set: v => { if (sel.value) { sel.value.settings["训练目标"] = v; sel.value.trainProg = 0; feed(`${sel.value.name} 改训练目标：${v.replace("属性·", "").replace("技能·", "")}（进度重置）`, "warn"); } },
+});
+const goalOk = computed(() => {
+  const g = goal.value;
+  if (!g.startsWith("技能·")) return true;
+  const camp = sel.value;
+  return (camp?.slots["教官"].persons || []).some(pid => S.people.find(p => p.id === pid)?.skills.includes(g.slice(3)));
+});
+/* 待业名册（右侧栏空态）：一眼看清谁会什么——派工/构筑的前提情报 */
+const roster = computed(() => idle().slice(0, 12));
+const attrStr = p => ATTRS.map(([k, n]) => n + p.attr[k]).join(" ");
 /* 解散两步确认（同 OrgCols askDel）：首点布防 2.5s，再点执行 */
 const armed = ref("");
 let armTimer = null;
@@ -49,7 +64,19 @@ watch(sel, () => armed.value = "");
         </select>
         <div class="optdesc">
           教官 {{ sel.slots["教官"].persons.length }} 人在编 · 速率 {{ 4 * sel.slots["教官"].persons.length }} 点/时
-          （100 点升 1 级；无教官停摆进度不丢）
+          （100 点一结业；无教官停摆进度不丢）
+        </div>
+        <div class="optkey">训练目标（结业落到每名在编身上）</div>
+        <select v-model="goal">
+          <optgroup label="属性 +1（钳 0~10）">
+            <option v-for="[k, n] of ATTRS" :key="k" :value="'属性·' + k">{{ n }} +1</option>
+          </optgroup>
+          <optgroup label="技能（全员习得；教官须会）">
+            <option v-for="a of ARTS" :key="a" :value="'技能·' + a">{{ a }}</option>
+          </optgroup>
+        </select>
+        <div class="optdesc" :class="{ bad: !goalOk }">
+          {{ goalOk ? "目标可行" : "教官无人会该技能——不会的教不了，先换教官或改目标" }}
         </div>
         <template v-if="traineeOrg">
           <div class="trainrow">
@@ -75,7 +102,15 @@ watch(sel, () => armed.value = "");
       <div v-if="!panels.length" class="pnote dim">该组织暂无面板选项（随机制补）</div>
       <button v-if="sel.kind !== 'hall'" class="warn dis" @click="askDisband()">{{ armed === sel.id ? "再点一次——确认解散" : "解散组织（人员回待业）" }}</button>
     </template>
-    <div v-else class="pnote dim">点组织卡片头部，打开它的指令面板</div>
+    <div v-else class="roster">
+      <div class="pnote">点组织卡片头部打开它的指令面板；下面是待业名册——派工与构筑前先看谁会什么</div>
+      <div v-for="p in roster" :key="p.id" class="rrow" :title="attrStr(p) + (p.skills.length ? '｜会 ' + p.skills.join('、') : '｜无技艺')">
+        <b>{{ p.name }}</b><span class="rattr">{{ attrStr(p) }}</span>
+        <span class="rart" v-if="p.skills.length">会{{ p.skills.join("/") }}</span>
+      </div>
+      <div v-if="!roster.length" class="pnote dim">无待业者</div>
+      <div v-if="idle().length > roster.length" class="pnote dim">…另有 {{ idle().length - roster.length }} 人</div>
+    </div>
   </div>
 </template>
 
@@ -97,5 +132,11 @@ watch(sel, () => armed.value = "");
 .trainrow { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 11.5px; }
 .trainrow .bar { flex: 1; }
 .dim { color: var(--dim); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.optdesc.bad { color: var(--bad); }
+.roster .rrow { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; font-size: 11px;
+                border-bottom: 1px dashed var(--line); }
+.roster .rrow b { flex: none; }
+.roster .rattr { color: var(--faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+.roster .rart { margin-left: auto; color: var(--flow); font-size: 10px; }
 .dis { width: 100%; margin-top: 8px; }
 </style>

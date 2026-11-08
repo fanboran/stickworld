@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, circ, RES_INFO, cityLayout, buildBlocked, cancelBuild, dismantle,
-         queueBuild, buildWorkers, resTotal, capTotal, housingCap } from "../sim.js";
+         queueBuild, buildWorkers, resTotal, capTotal, housingCap, interiorLayout, interiorUsed, interiorCap } from "../sim.js";
 import { usePanelSize } from "../panel.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
@@ -66,6 +66,19 @@ const orderLabel = o => o.kind === "shell"
 /* 校验单一真相源（sim.js buildBlocked）：按钮禁用态与 queueBuild 同一规则 */
 const shellWhy = b => buildBlocked("shell", b, null, -1, b === "民居" ? storeys.value : 1);
 const itemWhy = (b, item, idx) => buildBlocked("interior", b, item, idx);
+/* 剖视图（参考建筑管线的内景口径）：逐层内构格 + 在编工位——工序槽的人落在他那台设备的格上，
+   非工序岗散在层内（世界内可观察行为的最小呈现，13 §三） */
+function personsAt(b, idx) {
+  const inst = S.buildings[b]?.[idx];
+  const org = inst?.org ? S.orgs[inst.org] : null;
+  const map = {}; let roam = 0;
+  if (org) for (const sl of Object.values(org.slots)) {
+    const n = sl.persons.length; if (!n) continue;
+    const st = sl.def.step !== undefined ? org.steps[sl.def.step] : null;
+    if (st) map[st.equip] = (map[st.equip] || 0) + n; else roam += n;
+  }
+  return { map, roam, org: org?.name || "" };
+}
 
 /* 软装详情面板 VSCode 式拖拽调高：上缘手柄，双击复位（解构见 OrgPage 同注） */
 const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail", "y", 250, 110, 520);
@@ -188,8 +201,26 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
           <div class="ihead">
             <b>{{ circ(idx) }}</b>
             <span class="fx" v-if="inst.org">驻 {{ S.orgs[inst.org]?.name }}</span>
-            <span class="fx" v-if="(selType?.interior || []).length">{{ installed(selB, inst) }}/{{ selType.interior.length }} 设备</span>
-            <span class="fx" v-if="selB === '民居'">居住位 {{ 4 + (inst.interior["床铺"] ? 4 : 0) }}</span>
+            <span class="fx" v-if="(selType?.interior || []).length">内构 {{ interiorUsed(selB, idx) }}/{{ interiorCap(selB, inst.storeys || 1) }} 格 · 设备 {{ installed(selB, inst) }}/{{ selType.interior.length }}</span>
+            <span class="fx" v-if="selB === '民居'">居住位 {{ (4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1) }}</span>
+          </div>
+          <!-- 剖视图：逐层内构格（自动布局：从左到右贪心），工序岗的人点在他的设备格上 -->
+          <div v-if="(selType?.interior || []).length" class="floor">
+            <div v-for="(layer, li) in interiorLayout(selB, idx)" :key="'l' + li" class="flayer">
+              <span class="ftag">{{ (inst.storeys || 1) > 1 ? (li + 1) + "F" : "内构" }}</span>
+              <div class="fcells">
+                <div v-for="p in layer" :key="p.item" class="fcell" :style="{ flexGrow: p.w }"
+                     :title="p.item + (personsAt(selB, idx).map[p.item] ? `：${personsAt(selB, idx).map[p.item]} 人在岗` : '：在装待岗')">
+                  <span>{{ p.item.slice(0, 2) }}</span>
+                  <i v-if="personsAt(selB, idx).map[p.item]">{{ "●".repeat(Math.min(5, personsAt(selB, idx).map[p.item])) }}</i>
+                </div>
+                <div v-if="personsAt(selB, idx).roam" class="fcell roam" :style="{ flexGrow: 2 }"
+                     :title="'非工序岗在编 ' + personsAt(selB, idx).roam + ' 人（管理/信息/值守）'">
+                  {{ "◦".repeat(Math.min(6, personsAt(selB, idx).roam)) }}
+                </div>
+              </div>
+            </div>
+            <div v-if="!interiorLayout(selB, idx).some(l => l.length)" class="fempty">空内构——软装从下方逐项安装（自动布局：逐层从左到右）</div>
           </div>
           <div class="irow" v-for="it in (selType?.interior || [])" :key="it.item">
             <div class="ileft">
@@ -298,6 +329,18 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
        border-radius: 8px; padding: 1px 7px; }
 .irow .dism { flex: none; font-size: 10px; padding: 1px 7px; color: var(--dim); }
 .irow .dism:hover { color: var(--bad); border-color: var(--bad); }
+/* 剖视图 */
+.floor { margin: 4px 0 6px; }
+.flayer { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.ftag { font-size: 9.5px; color: var(--faint); width: 26px; flex: none; text-align: right; }
+.fcells { display: flex; gap: 2px; flex: 1; min-width: 0; }
+.fcell { border: 1px solid var(--line2); border-radius: 4px; background: #1a2233;
+         min-width: 0; padding: 2px 5px; font-size: 10px; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; line-height: 1.25; }
+.fcell span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fcell i { font-style: normal; color: var(--ok); font-size: 9px; letter-spacing: 1px; }
+.fcell.roam { border-style: dashed; color: var(--dim); flex-direction: row; letter-spacing: 2px; }
+.fempty { color: var(--faint); font-size: 10.5px; padding: 2px 0 4px 32px; }
 .irow .dim { margin-left: auto; color: var(--warn); font-size: 10.5px; }
 .cdnone { color: var(--faint); font-size: 10.5px; padding: 4px 0; }
 .cdhint { color: var(--faint); font-size: 11px; padding: 10px 0; }

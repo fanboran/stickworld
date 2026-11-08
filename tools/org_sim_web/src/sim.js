@@ -509,7 +509,7 @@ export function addOrgRaw(name, tier, kind) {
 }
 export function feed(text, cls) {
   S.feed.push({ t: S.hours, text, cls: cls || "" });
-  if (S.feed.length > 160) S.feed.shift();
+  if (S.feed.length > 400) S.feed.shift();   // 环形缓冲（160 时长跑试玩的计数器会失明）
 }
 export function membersOf(o) {
   let n = 0; for (const s of Object.values(o.slots)) n += s.persons.length; return n;
@@ -1008,7 +1008,7 @@ export function advance(dt) {
     const isArt = goal.startsWith("技能·");
     const key = goal.slice(3);
     if (isArt && !camp.slots["教官"].persons.some(pid => person(pid)?.skills.includes(key))) continue;
-    trainee.trainProg += 4 * n * mult * dt;
+    trainee.trainProg += 4 * n * attrMult(camp.slots["教官"].persons, "cmd") * mult * dt;   // 教官组织能力影响带兵速率（17 号修正域）
     if (trainee.trainProg >= 100 - 1e-6) {   // 浮点累加边界
       trainee.trainProg = 0;
       trainee.trainLv += 1;

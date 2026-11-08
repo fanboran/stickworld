@@ -285,7 +285,8 @@ export const S = reactive({
   mobilized: false, borrows: {},
   sel: null, selSlot: null, feed: [], rates: {}, snap: null,
   cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0, wear: { cart: 0, sword: 0 },
-  knobs: { gather: 0.8, deptGather: 0.4, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 400 },
+  knobs: { gather: 0.8, deptGather: 0.4, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 600 },
+  intake: { "原木": false, "铁矿": false, "农作物": false },
 });
 
 /* 聚落开局：根组织叫「聚落」（人口达 30 升格更名市政厅）；自带市政厅与仓库各一座，
@@ -301,6 +302,7 @@ export function reset(seed) {
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {}, snap: null,
     cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0, wear: { cart: 0, sword: 0 },
+    intake: { "原木": false, "铁矿": false, "农作物": false },   // 收货政策默认全关（裁决34）：产出先堆产地空地
   };
   Object.assign(S, fresh);
   for (const b of Object.keys(BUILDINGS))
@@ -452,8 +454,20 @@ export function housingCap() {
     n += (4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1);
   return n;
 }
-/* 仓库按座计：每座一份容量（首座开局自带） */
-export const capTotal = () => S.knobs.cap * (S.buildings["仓库"]?.length || 1);
+/* ── 拉动制物流（裁决34）：产出默认堆产地空地，搬运工只按「仓库收货政策」回运——
+   收货开关 S.intake（三种基础原料，默认全关：要什么自己开）；仓库分类：每座可限定收货类型，
+   某类容量＝收该类的仓库座数 × 单座容量（各类独立，不再一满全堵） ── */
+export const catLabel = c => RES_CATS.find(x => x[0] === c)?.[1] || c;
+export function capOfCat(c) {
+  const lab = catLabel(c);
+  let n = 0;
+  for (const inst of S.buildings["仓库"] || [])
+    if (!inst.accepts || inst.accepts === "全部" || inst.accepts === lab) n++;
+  return S.knobs.cap * Math.max(n, 1);
+}
+export const catTotal = c => RES.filter(r => RES_INFO[r].cat === c).reduce((a, r) => a + (S.res[r] || 0), 0);
+export const catRoom = c => Math.max(0, capOfCat(c) - catTotal(c));
+export const capTotal = () => ["basic", "mat", "prod"].reduce((a, c) => a + capOfCat(c), 0);
 /* 一站式总览＝把各处文书运回市政厅的汇总快照：信息量不随情报规模 gate——各组织
    面板的数据由它们自己的信息位收集；情报组织规模只决定更新效率（文书要真的有人拿回来）。
    汇总在编才有总览更新；采编每人把周期缩短（12时基础，每+1人-3时，采编满编4人=下限1时）；无人=停更 */
@@ -717,7 +731,7 @@ export function cityLayout() {
 }
 /* ── 存档（localStorage）：一局核心字段——刷新/关页不丢城；重开按钮清档 ── */
 const SAVE_FIELDS = ["hours", "seq", "people", "orgs", "res", "buf", "wip", "buildings",
-                     "buildOrders", "cityL", "cityR", "citySat", "mobilized", "seed", "knobs", "popCd", "autoCd", "order", "wear"];
+                     "buildOrders", "cityL", "cityR", "citySat", "mobilized", "seed", "knobs", "popCd", "autoCd", "order", "wear", "intake"];
 export function saveState() {
   const data = {}; for (const k of SAVE_FIELDS) data[k] = S[k];
   try { localStorage.setItem("orgsim.save", JSON.stringify(data)); } catch {}
@@ -729,6 +743,7 @@ export function loadState() {
     const data = JSON.parse(localStorage.getItem("orgsim.save") || "null");
     if (!data || !data.orgs) return false;
     Object.assign(S, data, { sel: null, selSlot: null, feed: [], snap: null, rates: {}, borrows: {}, speed: 0 });
+    if (!S.intake) S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 旧档无收货政策=按旧口径全收，别把老城饿死
     for (const o of Object.values(S.orgs)) {   // 回链模板定义：存档 def 是旧快照，重指 ORGS 现行定义防版本漂移
       const tpl = ORGS[o.template] || {};
       for (const sl of Object.values(o.slots)) {
@@ -833,12 +848,11 @@ export function advance(dt) {
     const wOf = k => dispStaffed && plan.indexOf(k.split("|")[1]) >= 0 ? 2 : 1;   // 运输计划：被偏重线运力×2
     // 运距逐线折算（物理）：矿堆（卫星城）无仓 ×0.6 远背、有卫星仓 ×1 集中短驳；主城侧线 ×1 城内短驳
     const distOf = k => k.startsWith("矿洞") ? (satWarehouses() > 0 ? 1 : 0.6) : 1;
-    const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001);
+    const keys = Object.keys(S.buf).filter(key2 => S.buf[key2] > 0.001 && S.intake[key2.split("|")[1]] !== false);   // 拉动制：收货政策没开的线不回运，继续堆产地空地
     // 运力按堆量加权分配（各线运距已含在自身运力里）；装卸规则保留：
     // 均匀分运=按堆量比例；大宗优先=先清最大堆
     const wSum = keys.reduce((a, k) => a + S.buf[k] * wOf(k) / distOf(k), 0);
-    let move = Math.min(haulRate * haulStr * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0),
-                        Math.max(0, capTotal() - resTotal()));
+    let move = Math.min(haulRate * haulStr * haulers * mult * dt, keys.reduce((a, k) => a + S.buf[k], 0));
     if (move > 0 && wSum > 0) {
       const order = bulkFirst ? [...keys].sort((a, b) => S.buf[b] - S.buf[a]) : keys;
       let remaining = move;
@@ -846,7 +860,8 @@ export function advance(dt) {
         const disc = notified[key2] === false ? K.uninfo : 1;
         const share = bulkFirst ? Math.min(remaining, S.buf[key2])
                                 : move * (S.buf[key2] * wOf(key2) / distOf(key2)) / wSum;
-        const m = Math.min(share * disc, S.buf[key2]);
+        const room = catRoom(RES_INFO[key2.split("|")[1]].cat);   // 分类容量独立：基础原料类满只停该类，不堵别的
+        const m = Math.min(share * disc, S.buf[key2], room);
         if (bulkFirst) remaining -= m;
         S.buf[key2] -= m;
         S.res[key2.split("|")[1]] += m;
@@ -897,10 +912,10 @@ export function advance(dt) {
         if (src) (S.borrows[o.id] ||= []).push({ from: src.def.fn, to: st.name });
       }
       let want = K.craft * cftM * perStepOf(i) * mult * dt;   // 工时按偏好权重分流（无偏好=均摊），手巧加成
-      if (st.outCity) {   // 库容钳制（实测缺陷：产出曾把仓库塞到 448/400——塞不下就少产，物料不凭空消失）
+      if (st.outCity) {   // 分类库容钳制（实测缺陷：产出曾把仓库塞爆——塞不下就少产，物料不凭空消失）
         const unit = Object.values(st.outCity).reduce((a, b) => a + b, 0);
-        const room = Math.max(0, capTotal() - resTotal()) / unit;
-        want = Math.min(want, room);
+        const cat = RES_INFO[Object.keys(st.outCity)[0]].cat;
+        want = Math.min(want, catRoom(cat) / unit);
       }
       // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
       if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
@@ -1016,12 +1031,11 @@ export function advance(dt) {
       feed(emergency ? "工程队自动扩建·急救插队：仓库顶格，新仓排到最前" : "工程队自动扩建：仓库近满，新一座已排队", "good");
     }
     S.popCd = (S.popCd || 0) + dt;
-    if (S.popCd >= 24) {   // 移民吸引（裁决31）：有空床+安家口粮 → 外来成年匠人来投（非新生儿）
+    if (S.popCd >= 24) {   // 移民吸引（裁决31/33）：有空床即来投——耕地产出只做增益/纤维/药材原料，不作口粮
       S.popCd = 0;
-      if (housingCap() > S.people.length && S.res["农作物"] >= 10) {
-        S.res["农作物"] -= 10;
+      if (housingCap() > S.people.length) {
         addImmigrant();
-        feed("移民入住：有空床有安家口粮（耗 农作物10）——外来匠人概率更高", "good");
+        feed("移民入住：城里有余房，外来匠人来投（耕产物不作口粮——只做增益/纤维/药材）", "good");
       }
     }
     /* 常备兵操练军械磨损（物理 sink）：每 150 时需换装 1 剑——军需岗在编才办领用（无人/无剑＝登记警告，不叠加惩罚） */

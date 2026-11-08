@@ -214,6 +214,14 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
             <span class="fx" v-if="(selType?.interior || []).length">内构 {{ interiorUsed(selB, idx) }}/{{ interiorCap(selB, inst.storeys || 1) }} 格 · 设备 {{ installed(selB, inst) }}/{{ selType.interior.length }}</span>
             <span class="fx" v-if="selB === '民居'">居住位 {{ (4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1) }}</span>
           </div>
+          <!-- 仓库分类：逐座限定收货类型（裁决34）——某类容量＝收该类的座数×单座容量，分布式仓地基 -->
+          <div v-if="selB === '仓库'" class="wacc">
+            <span class="fx">收货类型：</span>
+            <select :value="inst.accepts || '全部'" @change="inst.accepts = $event.target.value">
+              <option v-for="opt in ['全部', '基础原料', '材料', '制品']" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+            <span class="fx">该类容量＝收该类的仓库座数 ×{{ S.knobs.cap }}（各类独立）</span>
+          </div>
           <!-- 剖视图：逐层内构格（自动布局：从左到右贪心），工序岗的人点在他的设备格上 -->
           <div v-if="(selType?.interior || []).length" class="floor">
             <div v-for="(layer, li) in interiorLayout(selB, idx)" :key="'l' + li" class="flayer">
@@ -342,6 +350,8 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
                font-size: 11px; padding: 2px 7px; }
 .okk { margin-left: auto; color: #b8ecd0; font-size: 10.5px; background: #1f5c3e;
        border-radius: 8px; padding: 1px 7px; }
+.wacc { display: flex; align-items: center; gap: 6px; padding: 2px 0 4px; }
+.wacc select { font-size: 11px; }
 .irow .dism { flex: none; font-size: 10px; padding: 1px 7px; color: var(--dim); }
 .irow .dism:hover { color: var(--bad); border-color: var(--bad); }
 /* 剖视图 */

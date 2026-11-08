@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
-import { S, RES, RES_INFO, RES_CATS, TERRAIN, resTotal, capTotal, wipList, mineBufCap, satWarehouses } from "../sim.js";
+import { S, RES, RES_INFO, RES_CATS, TERRAIN, resTotal, capTotal, catTotal, capOfCat,
+         wipList, mineBufCap, satWarehouses } from "../sim.js";
 const tab = ref("all");
 const tabs = [
   { id: "all", label: "全部" },
@@ -20,6 +21,7 @@ const siteRows = computed(() => Object.entries(TERRAIN)
   .flatMap(([site, t]) => t.products.map(p => ({ site, p, v: S.buf[site + "|" + p] || 0, sat: !!t.satellite }))));
 const mineCap = computed(() => mineBufCap());
 const wipRows = computed(() => wipList());
+const INTAKE_RES = ["原木", "铁矿", "农作物"];
 function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
 </script>
 
@@ -28,19 +30,28 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
     <div id="whtabs">
       <button v-for="t in tabs" :key="t.id" :class="{ on: tab === t.id }"
               @click="tab = t.id">{{ t.label }}</button>
-      <div class="capbox" title="仓库容量：全城库存品总占位">
+      <div class="capbox" title="全城库存总占位 / 分类容量合计">
         <span class="caplbl">{{ Math.floor(resTotal()) }} / {{ capTotal() }}</span>
         <div class="bar cap"><i :class="barCls(capRatio)" :style="{ width: capRatio * 100 + '%' }"></i></div>
       </div>
     </div>
+    <!-- 收货政策（拉动制物流，裁决34）：默认全关——产出先堆产地空地，开哪条线搬运工才回运哪条 -->
+    <div id="intake">
+      <span class="ilbl" title="产出默认堆在产地空地（树林/耕地无上限、矿洞有堆容）；开收的线才回运入库">收货政策</span>
+      <button v-for="r in INTAKE_RES" :key="r" class="ibtn" :class="{ on: S.intake[r] }"
+              @click="S.intake[r] = !S.intake[r]">{{ RES_INFO[r].icon }}{{ r }}{{ S.intake[r] ? "·收" : "·停" }}</button>
+      <span class="catcap" v-for="[c, lab] of RES_CATS" :key="c"
+            :title="lab + '类容量＝收该类的仓库座数×600（各类独立，满一类不堵别的）——建筑页可逐座设收货类型'">
+        {{ lab }} {{ Math.floor(catTotal(c)) }}/{{ capOfCat(c) }}</span>
+    </div>
     <div id="whbody">
       <template v-if="tab === 'site'">
-        <div class="lbl">三线场地待运堆（都要搬运工搬回主仓）：矿洞＝卫星城（堆容 {{ mineCap }}，满则停采——
-    卫星仓 +80/座，现 {{ satWarehouses() }} 座）；树林/耕地＝主城侧（堆不设上限）</div>
+        <div class="lbl">三线场地堆＝产地空地（默认就在这堆着，收货政策开了才回运）：矿洞＝卫星城
+    （堆容 {{ mineCap }}，满则停采——卫星仓 +80/座，现 {{ satWarehouses() }} 座）；树林/耕地＝主城侧（堆不设上限）</div>
         <div class="sitegrid">
           <div v-for="r in siteRows" :key="r.site + r.p" class="sitecard"
                :class="{ full: r.sat && r.v >= mineCap }">
-            <div class="nm">{{ r.site }}{{ r.sat ? "·卫星" : "·城内" }} · {{ r.p }}（待运）</div>
+            <div class="nm">{{ r.site }}{{ r.sat ? "·卫星" : "·城内" }} · {{ r.p }}{{ S.intake[r.p] ? "（待运）" : "（停收·堆场）" }}</div>
             <div class="qty">{{ r.v.toFixed(1) }} <span class="dim">{{ r.sat ? "/ 矿堆容 " + mineCap : "（无上限）" }}</span></div>
             <div class="bar" v-if="r.sat"><i :class="barCls(r.v / mineCap)"
                  :style="{ width: Math.min(100, r.v / mineCap * 100) + '%' }"></i></div>
@@ -84,6 +95,11 @@ function barCls(r) { return r >= 1 ? "full" : r >= .8 ? "mid" : ""; }
 .capbox { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
 .caplbl { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .capbox .bar { width: 130px; }
+#intake { display: flex; align-items: center; gap: 8px; padding: 6px 16px; border-bottom: 1px solid var(--line);
+          background: #131826; flex-wrap: wrap; }
+#intake .ilbl { color: var(--dim); font-size: 11px; font-weight: 600; }
+#intake .ibtn { font-size: 11px; padding: 2px 9px; }
+#intake .catcap { color: var(--faint); font-size: 10.5px; margin-left: 8px; font-variant-numeric: tabular-nums; }
 #whbody { flex: 1; overflow-y: auto; padding: 12px 16px 20px; }
 .ghead { color: var(--dim); font-size: 12px; font-weight: 600; margin: 8px 0 6px; }
 .tilegrid { display: flex; gap: 8px; flex-wrap: wrap; }

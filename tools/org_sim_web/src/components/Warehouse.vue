@@ -12,10 +12,10 @@ const tabs = [
 const capRatio = computed(() => Math.min(1, resTotal() / capTotal()));
 const shownGroups = computed(() => {
   const all = RES_CATS.map(([cat, label]) => ({
-    label, items: RES.filter(r => RES_INFO[r].cat === cat),
+    cat, label, items: RES.filter(r => RES_INFO[r].cat === cat),
   }));
   if (tab.value === "all") return all;
-  return all.filter(g => g.label === tab.value);
+  return all.filter(g => g.cat === tab.value);   // 按 cat id 比对（曾误用 label 比 id——分类标签点了全空）
 });
 const siteRows = computed(() => Object.entries(TERRAIN)
   .flatMap(([site, t]) => t.products.map(p => ({ site, p, v: S.buf[site + "|" + p] || 0, sat: !!t.satellite }))));

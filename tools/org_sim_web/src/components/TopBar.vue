@@ -27,7 +27,7 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
       <span class="rate" v-if="Math.abs(S.rates[r] || 0) >= 0.005">
         净{{ (S.rates[r] > 0 ? "+" : "") + S.rates[r].toFixed(1) }}/时</span>
     </span>
-    <span class="res link" title="人口与居住位（民居每座基准4位，装床铺翻倍至8）" @click="emit('go', 'wh')">
+    <span class="res link" title="人口与居住位（点开组织页看在编/待业；民居每座基准4位，装床铺翻倍）" @click="emit('go', 'org')">
       人口<b>{{ S.people.length }}</b><span class="rate">/居{{ housingCap() }}</span>
     </span>
     <span class="res link" title="点开仓库页" @click="emit('go', 'wh')">

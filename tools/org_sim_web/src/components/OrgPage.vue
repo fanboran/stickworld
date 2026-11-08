@@ -73,8 +73,8 @@ const { size: rightW, onDown: rpDown, onDbl: rpDbl } = usePanelSize("orgRight", 
 #otool { display: flex; align-items: center; gap: 14px; padding: 7px 14px; flex-wrap: wrap;
          border-bottom: 1px solid var(--line); background: #131826; flex: none; }
 .tgroup { display: flex; gap: 7px; }
-.tchip { width: 136px; background: var(--panel2); border: 1px solid var(--line);
-         border-radius: 8px; padding: 4px 8px; font-size: 11px; }
+.tchip { width: 136px; min-height: 36px; background: var(--panel2); border: 1px solid var(--line);
+         border-radius: 8px; padding: 4px 8px; font-size: 11px; }   /* min-height：卫星有进度条、城内没有，统一高度不参差 */
 .tchip .nm { color: var(--dim); margin-right: 4px; }
 .tchip .pile { color: var(--fg); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .tchip .tb { margin-top: 3px; }

@@ -15,11 +15,7 @@ const seedIn = ref("");   // 按种子重开：留档 seed 可复现初始布局
 let timer = null, saveTimer = null;
 onMounted(() => {
   timer = setInterval(() => {
-    if (S.speed > 0) {
-      const dt = 0.1 * S.speed;
-      advance(dt);
-      S.hours += dt;
-    }
+    if (S.speed > 0) advance(0.1 * S.speed);   // 时钟在 advance 内自增（与 __sim.advance 直驱同一口径）
   }, 100);
   saveTimer = setInterval(() => { if (S.hours > 0) saveState(); }, 30000);   // 自动存档
   window.addEventListener("beforeunload", saveState);

@@ -333,6 +333,7 @@ export function reset(seed) {
 /* 完全体样板（原默认展示）：参数面板「载入完全体」可一键载入 */
 export function loadDemo() {
   reset();
+  S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 样板开三线收货——满员运转的完全体得真搬运（开局默认全关是另一回事，裁决34）
   S.people = []; S.seq.p = 0;   // 满编名单重建（reset 的开局 10 人让位；须在 addPersonRaw 之前）
   const inst = (b, ...items) => {
     const it = {}; for (const x of items) it[x] = true;
@@ -759,6 +760,7 @@ export function loadState() {
 
 /* ═════════ 经济推进 ═════════ */
 export function advance(dt) {
+  S.hours += dt;   // 时钟随推进走（曾只由 App 节拍累加——__sim.advance 直驱时快照停更/时间戳全 0，两口径必须同一真相）
   const K = S.knobs;
   // 动员产率：耕战（无军或动员兵役）集结减半；常备兵役的职业兵打仗、生产照转
   let mult = 1;
@@ -1103,13 +1105,21 @@ export function createOrgAt(containerId, fn, name) {
   const container = S.orgs[containerId];
   if (!container || !container.slots[fn]) return;
   const slot = container.slots[fn];
-  if (slot.institution || slot.persons.length) { feed(`${container.name}「${fn}」槽已被占用`, "bad"); return; }
+  /* 常备军自动流转（01 §2.6）：军事槽有人时构筑常备军，人随军走——不再两步手动撤/驻 */
+  let movers = [];
+  if (name === "常备军" && slot.persons.length && !slot.institution) movers = slot.persons;
+  if (slot.institution || (slot.persons.length && !movers.length)) { feed(`${container.name}「${fn}」槽已被占用`, "bad"); return; }
   const cost = LATE_COST[name] || {};
   if (cost.prereqSkill) { const why = createBlocked(name); if (why) { feed(why, "bad"); return; } }   // 前提通过则放行（曾无条件 return——科研院永远建不成）
   if (cost.res && !canPay(cost.res)) { feed(`构筑「${name}」资源不足（${costStr(cost.res)}）`, "bad"); return; }
   if (cost.res) pay(cost.res);
   const o = addOrgRaw(name, 2, "");
+  slot.persons = [];   // 动员官已随军转编（movers 暂存），槽让给机构
   slot.institution = o.id;
+  if (movers.length && o.slots["军事"]) {
+    for (const pid of movers) { o.slots["军事"].persons.push(pid); person(pid).org = o.id; }
+    feed(`动员官随军转编：${movers.map(pid => person(pid)?.name).join("、")} 转入 ${o.name}「军事」槽`, "good");
+  }
   feed(`构筑 ${o.name}，入驻 ${container.name}「${fn}」槽`, "good");
   if (o.bldgType)
     feed(o.bldg

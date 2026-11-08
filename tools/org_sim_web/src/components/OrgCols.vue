@@ -76,7 +76,6 @@ function clickSlot(o, fn, slot) {
 }
 const opsOpen = (o, fn, slot) => S.sel === o.id && S.selSlot === fn && !isLocked(o, slot);
 const pickPerson = ref("");
-const emptySlot = slot => !slot.persons.length && !slot.institution;
 function candTitle(name) {
   const t = ORGS[name];
   const desc = t.steps && t.steps.length ? t.steps.map(stepDesc).join("→")
@@ -152,9 +151,9 @@ function askDel(id) {
               <template v-else-if="slot.def.role">{{ slot.def.role.slice(0, 14) }}</template>
             </span>
           </div>
-          <!-- 槽位操作内联：构筑子组织（递归）/ 派人 -->
+          <!-- 槽位操作内联：构筑子组织（递归）/ 派人。有人占的槽仍示构筑候选：常备军可从带动员官的军事槽直接构筑（人随军自动转编） -->
           <div v-if="opsOpen(o, fn, slot)" class="sops" @click.stop>
-            <template v-if="emptySlot(slot) && slotCandidates(fn).length">
+            <template v-if="!slot.institution && slotCandidates(fn).length">
               <span class="ohint b">构筑：</span>
               <button v-for="name in slotCandidates(fn).filter(x => x !== o.template)" :key="name" class="cbtn"
                       :class="{ late: ORGS[name].late }" :disabled="!!createBlocked(name)"

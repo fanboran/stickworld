@@ -14,10 +14,19 @@ const traineeOrg = computed(() => {
   return id && S.orgs[id] ? S.orgs[id] : null;
 });
 const panels = computed(() => sel.value ? (ORG_PANELS[sel.value.template] || []) : []);
+/* 库存目标档位随仓库座数放大（基数 20/40/80/160 × 座数，仍取整十）——大库容下档位不再形同虚设；
+   档值是绝对数：旧档存的「满40」在任何座数下含义不变 */
+function choicesOf(org, opt) {
+  if (opt.key !== "库存目标") return opt.choices;
+  const k = S.buildings["仓库"]?.length || 1;
+  return [["不限", opt.choices[0][1]],
+    ...[20, 40, 80, 160].map(n => [`满${n * k}`,
+      `产物库存≥${n * k} 歇线——满仓歇工、低于自动复工（军需式按需生产）`])];
+}
 function choose(org, opt, choice) { org.settings[opt.key] = choice; }
 /* 选项可带实物前提 { need: 资源名 }：库中无此物则禁用——载具等耐用品的物理在场门槛 */
 const lacks = c => c[2]?.need && S.res[c[2].need] < 1;
-const curDesc = (org, opt) => opt.choices.find(c => c[0] === org.settings[opt.key])?.[1] || "";
+const curDesc = (org, opt) => choicesOf(org, opt).find(c => c[0] === org.settings[opt.key])?.[1] || "";
 /* 训练目标（17 §二 落到个体）：属性+1 或 全员习得技能；目标技能教官须会 */
 const ATTRS = [["str", "力量"], ["int", "智力"], ["agi", "敏捷"], ["cft", "灵巧"], ["cmd", "组织"]];
 const goal = computed({
@@ -91,7 +100,7 @@ watch(sel, () => armed.value = "");
       <div v-for="opt in panels" :key="opt.key" class="opt">
         <div class="optkey">{{ opt.key }}</div>
         <div class="optbtns">
-          <button v-for="c in opt.choices" :key="c[0]"
+          <button v-for="c in choicesOf(sel, opt)" :key="c[0]"
                   :class="{ on: sel.settings[opt.key] === c[0] }"
                   :disabled="lacks(c)"
                   :title="c[1] + (lacks(c) ? '｜库中无' + c[2].need + '，先让木器坊出一辆' : '')"
@@ -105,8 +114,8 @@ watch(sel, () => armed.value = "");
     <div v-else class="roster">
       <div class="pnote">点组织卡片头部打开它的指令面板；下面是待业名册——派工与构筑前先看谁会什么</div>
       <div v-for="p in roster" :key="p.id" class="rrow" :title="attrStr(p) + (p.skills.length ? '｜会 ' + p.skills.join('、') : '｜无技艺')">
-        <b>{{ p.name }}</b><span class="rattr">{{ attrStr(p) }}</span>
-        <span class="rart" v-if="p.skills.length">会{{ p.skills.join("/") }}</span>
+        <div class="rline1"><b>{{ p.name }}</b><span class="rattr">{{ attrStr(p) }}</span></div>
+        <div class="rart" v-if="p.skills.length">会{{ p.skills.join("/") }}</div>
       </div>
       <div v-if="!roster.length" class="pnote dim">无待业者</div>
       <div v-if="idle().length > roster.length" class="pnote dim">…另有 {{ idle().length - roster.length }} 人</div>
@@ -133,10 +142,10 @@ watch(sel, () => armed.value = "");
 .trainrow .bar { flex: 1; }
 .dim { color: var(--dim); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .optdesc.bad { color: var(--bad); }
-.roster .rrow { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; font-size: 11px;
-                border-bottom: 1px dashed var(--line); }
+.roster .rrow { padding: 4px 0 3px; font-size: 11px; border-bottom: 1px dashed var(--line); }
+.roster .rline1 { display: flex; align-items: baseline; gap: 6px; }
 .roster .rrow b { flex: none; }
 .roster .rattr { color: var(--faint); font-size: 10px; font-variant-numeric: tabular-nums; }
-.roster .rart { margin-left: auto; color: var(--flow); font-size: 10px; }
+.roster .rart { color: var(--flow); font-size: 10px; margin-top: 1px; }
 .dis { width: 100%; margin-top: 8px; }
 </style>

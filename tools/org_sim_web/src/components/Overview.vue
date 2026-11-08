@@ -55,7 +55,6 @@ const menuSum = computed(() => ({
 
         <div v-if="name === '城市'" class="crow">
           <span class="kpi">在编 {{ d.popu.total - d.popu.idle }} · 待业 {{ d.popu.idle }}</span>
-          <span class="kpi" v-for="(v, k) in {伐木队:1} " :key="k" v-show="false" />
           <span class="kpi" v-for="(v, k) in d.lines" :key="k" v-show="['运输队','常备军','情报局'].includes(k)">{{ k }} <b>{{ v }}</b></span>
         </div>
 

@@ -157,8 +157,8 @@ function askDel(id) {
             <template v-if="!slot.institution && slotCandidates(fn).length">
               <span class="ohint b">构筑：</span>
               <button v-for="name in slotCandidates(fn).filter(x => x !== o.template)" :key="name" class="cbtn"
-                      :disabled="!!createBlocked(name)"
-                      :title="candTitle(name)"
+                      :disabled="!!createBlocked(name) || !slot.persons.length"
+                      :title="candTitle(name) + (slot.persons.length ? '' : '｜槽需先放人——在编者构筑后转任主管（裁决47）')"
                       @click="createOrgAt(o.id, fn, name)">＋{{ name }}</button>
             </template>
             <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slotCap(o, slot)">

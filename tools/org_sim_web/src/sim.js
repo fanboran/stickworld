@@ -563,10 +563,10 @@ export const resTotal = () => RES.reduce((a, r) => a + S.res[r], 0);
    组织所在的建筑需具备它需要的设施；换址留待后续设计）——设备/解锁按**本组织所驻那座**算 */
 /* ── 个体层（17 号五属性 0~10 + 04 号会/不会技能）：出生分布为 sim 占位（17 号[待定]口径），
    出生流按 seed 确定性推导——同 seed 同一批人；fixed 供开局角色/样板点名 ── */
-export const ARTS = ["采伐", "耕作", "采矿", "木工", "锻造", "制药", "冶炼", "识字"];
-const ART_RATE = { "采伐": .5, "耕作": .5, "采矿": .5, "木工": .25, "锻造": .25, "制药": .2, "冶炼": .2, "识字": .15 };
+export const ARTS = ["木工", "锻造", "制药", "冶炼", "识字"];   // 技能＝手艺与识字；采集三线/搬运/施工是基础行为人人可为（裁决46），个体差异走属性
+const ART_RATE = { "木工": .25, "锻造": .25, "制药": .2, "冶炼": .2, "识字": .15 };
 /* 移民（裁决31：人口增长＝移民吸引，新生儿不做）：外来成年匠人概率更高、属性 3~9 */
-const ART_RATE_MIG = { "采伐": .4, "耕作": .4, "采矿": .4, "木工": .35, "锻造": .35, "制药": .25, "冶炼": .25, "识字": .2 };
+const ART_RATE_MIG = { "木工": .35, "锻造": .35, "制药": .25, "冶炼": .25, "识字": .2 };
 export function addPersonRaw(name, fixed) {
   S.seq.p += 1;
   const r = mulberry32(((S.seed || 1) * 7919 + S.seq.p * 104729) | 0);
@@ -599,12 +599,15 @@ export function addOrgRaw(name, tier, kind) {
                 trainLv: 0, trainProg: 0 };   // 受训等级与内部进度（0~100 点，04 §三）
   for (const opt of (ORG_PANELS[name] || [])) org.settings[opt.key] = opt.choices[0][0];
   S.orgs[id] = org;
-  if (kind !== "hall")
+  if (kind !== "hall") {
+    org.slots["主管"] = { def: { fn: "主管", n: 1, pos: "gain",
+      role: "主持本组织事务（构筑时由槽内在编者转任，裁决47）" }, persons: [], institution: "" };
     for (const def of (tpl.slots || [])) {   // 同名下辖槽（总坊的 厂坊×3）键去重：首槽原名、后续加序号
       let k = def.fn, i = 2;
       while (org.slots[k]) k = def.fn + i++;
       org.slots[k] = { def, persons: [], institution: "" };
     }
+  }
   if (org.bldgType) {   // 自动进驻一座空置同类建筑；没有则空挂（基础运转受限，工厂工序全停摆）
     const idx = (S.buildings[org.bldgType] || []).findIndex(inst => !inst.org);
     if (idx >= 0) { S.buildings[org.bldgType][idx].org = id; org.bldg = { b: org.bldgType, idx }; }
@@ -639,7 +642,13 @@ export function tabUnlocked(id) {
   if (id === "org") return true;
   const hall = S.orgs.o01;
   if (!hall) return true;
-  const key = { city: "生产", wh: "运输", ov: "情报" }[id];
+  if (id === "city") {   // 建筑页＝建造线：任一「建造」槽在编（生产局·建造槽放人或放工程队——裁决43修正）
+    return Object.values(S.orgs).some(o => {
+      const sl = o.slots["建造"];
+      return sl && (sl.persons.length > 0 || !!sl.institution);
+    });
+  }
+  const key = { wh: "运输", ov: "情报" }[id];
   if (!key) return true;
   const sl = hall.slots[key];
   return !!sl && (sl.persons.length > 0 || !!sl.institution);   // 有人或机构入驻都算（裁决10：机构入驻即算在岗）
@@ -1283,21 +1292,23 @@ export function createOrgAt(containerId, fn, name) {
   const container = S.orgs[containerId];
   if (!container || !container.slots[fn]) return;
   const slot = container.slots[fn];
-  /* 常备军自动流转（01 §2.6）：军事槽有人时构筑常备军，人随军走——不再两步手动撤/驻 */
-  let movers = [];
-  if (name === "常备军" && slot.persons.length && !slot.institution) movers = slot.persons;
-  if (slot.institution || (slot.persons.length && !movers.length)) { feed(`${container.name}「${fn}」槽已被占用`, "bad"); return; }
+  /* 先放人后构筑（裁决47）：槽得先有人在编——首位在编者构筑后自动转任新组织主管，余者回待业 */
+  if (slot.institution) { feed(`${container.name}「${fn}」槽已有机构`, "bad"); return; }
+  if (!slot.persons.length) { feed(`「${fn}」槽需先放人——放完人才可以构筑组织（在编者将转任主管）`, "bad"); return; }
+  const movers = slot.persons;
   const cost = LATE_COST[name] || {};
   if (cost.prereqSkill) { const why = createBlocked(name); if (why) { feed(why, "bad"); return; } }   // 前提通过则放行（曾无条件 return——科研院永远建不成）
   if (cost.res && !canPay(cost.res)) { feed(`构筑「${name}」资源不足（${costStr(cost.res)}）`, "bad"); return; }
   if (cost.res) pay(cost.res);
   const o = addOrgRaw(name, 2, "");
-  slot.persons = [];   // 动员官已随军转编（movers 暂存），槽让给机构
+  slot.persons = [];
   slot.institution = o.id;
-  if (movers.length && o.slots["军事"]) {
-    for (const pid of movers) { o.slots["军事"].persons.push(pid); person(pid).org = o.id; }
-    feed(`动员官随军转编：${movers.map(pid => person(pid)?.name).join("、")} 转入 ${o.name}「军事」槽`, "good");
+  const head = movers.shift();
+  if (head && o.slots["主管"]) {
+    o.slots["主管"].persons.push(head); person(head).org = o.id;
+    feed(`${person(head)?.name} 转任 ${o.name} 主管（发起构筑的槽内在编者）`, "good");
   }
+  for (const pid of movers) person(pid).org = "";   // 槽内其余人回待业（主管只取首位）
   feed(`构筑 ${o.name}，入驻 ${container.name}「${fn}」槽`, "good");
   if (o.bldgType)
     feed(o.bldg

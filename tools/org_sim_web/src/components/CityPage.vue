@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, circ, RES_INFO, cityLayout, buildBlocked, cancelBuild, dismantle,
-         queueBuild, buildWorkers, resTotal, capTotal, housingCap, interiorLayout, interiorUsed, interiorCap, shellBill } from "../sim.js";
+         queueBuild, buildWorkers, resTotal, capTotal, interiorLayout, interiorUsed, interiorCap,
+         planOf, planTotal } from "../sim.js";
 import { usePanelSize } from "../panel.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
@@ -22,12 +23,8 @@ const isCur = o => S.buildOrders[0] === o;
 const menuSide = ref("");
 function toggleMenu(side) { menuSide.value = menuSide.value === side ? "" : side; }
 /* 矿井卫星区菜单只放仓库（分布式仓储——唯一可建卫星区的地形是矿洞） */
-const buildables = computed(() => Object.entries(BUILDINGS).filter(([, d]) => d.shell && (menuSide.value !== "矿卫" || d.prebuilt)));
-const storeys = ref(1);   // 民居可选 1/2 层（03 §二 木质上限2；双层成本工期×1.8、居住位×2）
-function startBuild(b) {
-  queueBuild("shell", b, null, null, menuSide.value, b === "民居" ? storeys.value : 1);
-  menuSide.value = ""; storeys.value = 1;
-}
+const buildables = computed(() => Object.entries(BUILDINGS).filter(([, d]) => d.grade && (menuSide.value !== "矿卫" || d.prebuilt)));
+function startBuild(b) { queueBuild("shell", b, null, null, menuSide.value); menuSide.value = ""; }
 const satBlocks = computed(() => S.citySat || []);
 const storeysOf = e => (S.buildings[e.b] || [])[e.inst]?.storeys || 1;
 
@@ -51,7 +48,7 @@ function statusLine(b, instIdx) {
   if (b === "市政厅") return `${rootName.value} · 人口 ${S.people.length}`;
   const inst = (S.buildings[b] || [])[instIdx] || { interior: {} };
   if (b === "仓库") return `库存 ${Math.floor(resTotal())}/${capTotal()}`;
-  if (b === "民居") return `${inst.storeys === 2 ? "双层" : "单层"} · 位 ${((4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1))}`;
+  if (b === "民居") return `${(inst.storeys || 1) === 2 ? "双层" : "单层"} · 位 ${((4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1))}`;
   const m = (BUILDINGS[b].interior || []).length;
   const parts = [];
   if (m) parts.push(`设备 ${installed(b, inst)}/${m}`);
@@ -59,19 +56,28 @@ function statusLine(b, instIdx) {
   return parts.join(" · ") || "空置";
 }
 
-/* 施工队列条（自 BuildSide 迁移）：当前单+进度+排队数+施工人力 */
+/* 施工队列条：当前单+在跑环节+进度+排队数+施工人力（工序链口径） */
 const cur = computed(() => S.buildOrders[0] || null);
 const pending = computed(() => S.buildOrders.slice(1));
 const workers = computed(() => buildWorkers());
 const orderLabel = o => o.kind === "shell"
-  ? `${o.b}·新座硬装（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼${o.storeys === 2 ? "·双层" : ""}）`
-  : o.b + circ(o.idx) + "·" + o.item;
-/* 分部位料单（裁决32）：建造卡与软装详情显示逐部位 BOM */
-const billOf = (b, st = 1) => shellBill(b, st);
-const partStr = bill => Object.entries(bill).map(([r, n]) => RES_INFO[r]?.icon + n + r).join(" ");
+  ? `${o.b}·新座（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼）`
+  : o.kind === "floor" ? `${o.b}${circ(o.idx)}·加层` : o.b + circ(o.idx) + "·" + o.item;
+/* 在跑环节（依赖已满足且未完）：队列条点名展示；等料环节标 ⚠ */
+const activePhases = o => {
+  const doneOf = id => { const p = o.phases.find(x => x.id === id); return !p || p.done >= p.work; };
+  return o.phases.filter(p => p.done < p.work && p.deps.every(doneOf));
+};
+/* 工序链（建造卡/详情显示）：环节名+料+工时；并行组内以 ∥ 相连 */
+const phasesOf = b => planOf("shell", b);
+const phaseStr = p => (Object.keys(p.cost).length
+  ? Object.entries(p.cost).map(([r, n]) => RES_INFO[r]?.icon + n + r).join(" ") : "免料")
+  + ` · ${p.work}工`;
+const planCost = b => planTotal(planOf("shell", b));
 /* 校验单一真相源（sim.js buildBlocked）：按钮禁用态与 queueBuild 同一规则 */
-const shellWhy = b => buildBlocked("shell", b, null, -1, b === "民居" ? storeys.value : 1);
+const shellWhy = b => buildBlocked("shell", b, null, -1);
 const itemWhy = (b, item, idx) => buildBlocked("interior", b, item, idx);
+const floorWhy = idx => buildBlocked("floor", "民居", "", idx);
 /* 剖视图（参考建筑管线的内景口径）：逐层内构格 + 在编工位——工序槽的人落在他那台设备的格上，
    非工序岗散在层内（世界内可观察行为的最小呈现，13 §三） */
 function personsAt(b, idx) {
@@ -97,9 +103,12 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
       <span class="qhead" title="硬装＝建筑体/窗位 · 软装＝设备/桌椅；施工人力＝工程队「施工」槽在编人数">施工</span>
       <template v-if="cur">
         <b>{{ orderLabel(cur) }}</b>
+        <span class="qph" v-for="ph in activePhases(cur)" :key="ph.id"
+              :class="{ wait: ph.waiting }"
+              :title="ph.waiting ? '等料：' + phaseStr(ph) : '在跑：' + phaseStr(ph)">{{ ph.waiting ? "⚠" : "" }}{{ ph.name }}</span>
         <div class="bar"><i :style="{ width: (100 * cur.done / cur.work) + '%' }"></i></div>
         <span class="qpct">{{ (100 * cur.done / cur.work).toFixed(0) }}%</span>
-        <i class="qcancel" title="撤单（全额返料，已投工时沉没）" @click="cancelBuild(0)">✕</i>
+        <i class="qcancel" title="撤单（未开工环节返料，已开工的料已砌进结构、工时沉没）" @click="cancelBuild(0)">✕</i>
         <span class="qchip" v-for="(p2, i) in pending" :key="'q' + i"
               :title="orderLabel(p2) + '——点 ✕ 撤单'">{{ orderLabel(p2).slice(0, 12) }}<i @click="cancelBuild(i + 1)">✕</i></span>
         <span class="qwarn" v-if="!workers">无人施工</span>
@@ -167,32 +176,27 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
       </div>
     </div>
 
-    <!-- 建造菜单（就地展开）：各建筑类型卡＝名/占宽/成本芯片/工期；资源不足禁用并红成本 -->
+    <!-- 建造菜单（就地展开）：各建筑类型卡＝名/占宽/构法/工序链（环节定额×体量涌现）；资源不足禁用并示因 -->
     <div v-if="menuSide" id="bmenu">
       <div class="bmhead">
         <b>{{ menuSide === "矿卫" ? "矿井卫星区" : menuSide + "翼扩建" }}</b>
         <span class="bmsub">{{ menuSide === "矿卫"
           ? "分布式仓储：卫星仓扩矿场堆容（+80/座）、集中短驳"
-          : "选建筑类型——资源即扣，工程队按队施工；落成后排入" + menuSide + "翼" }}</span>
+          : "选建筑类型——逐环节扣料按工序推进（备料∥场址→柱础→立架→椽望→盖顶∥砌墙∥地面→门窗∥油饰）" }}</span>
         <button @click="menuSide = ''">收起</button>
-      </div>
-      <div v-if="menuSide !== '矿卫'" class="storeys">
-        <span>民居层数：</span>
-        <button :class="{ on: storeys === 1 }" @click="storeys = 1">单层</button>
-        <button :class="{ on: storeys === 2 }" @click="storeys = 2"
-                title="木质上限2层（03 §二）；成本工期×1.8、居住位×2">双层</button>
       </div>
       <div class="bmcards">
         <button v-for="[b, d] in buildables" :key="b" class="bmcard"
                 :disabled="!!shellWhy(b)"
-                :title="(shellWhy(b) ? shellWhy(b) + '｜' : '') + d.desc + ' · 工期 ' + d.shell.work + '人时'"
+                :title="(shellWhy(b) ? shellWhy(b) + '｜' : '') + d.desc + ' · 共 ' + planCost(b).work + ' 工时'"
                 @click="startBuild(b)">
-          <span class="bmctop"><b>{{ b }}</b>
-            <i class="bmw">占{{ CITY_W[b] }}格{{ menuSide !== '矿卫' && b === '民居' && storeys === 2 ? '×2层' : '' }}</i></span>
+          <span class="bmctop"><b>{{ b }}</b><i class="bmgrade">{{ d.grade }}构</i>
+            <i class="bmw">占{{ CITY_W[b] }}格</i></span>
           <span class="bmcdesc">{{ d.desc }}</span>
-          <span class="bmcmeta">工期 {{ billOf(b, b === '民居' && storeys === 2 ? 2 : 1).work }} 人时 · 逐部位料单：</span>
-          <span class="bpcost" v-for="[pn, bill] of Object.entries(billOf(b, b === '民居' && storeys === 2 ? 2 : 1).parts)"
-                :key="pn" :title="pn + '：' + partStr(bill)">{{ pn }} {{ partStr(bill) }}</span>
+          <span class="bmcmeta">工序链 {{ planCost(b).work }} 工时：</span>
+          <span class="bpcost ph" v-for="ph in phasesOf(b)" :key="ph.id"
+                :title="ph.name + '（' + ph.trade + '·' + ph.work + '工）：' + phaseStr(ph)">
+            {{ ph.name }}{{ Object.keys(ph.cost).length ? " " + Object.entries(ph.cost).map(([r, n]) => RES_INFO[r]?.icon + n).join("") : "" }}</span>
         </button>
       </div>
     </div>
@@ -204,12 +208,11 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
     <div id="cdetail" :style="{ height: detH + 'px' }">
       <template v-if="selB">
         <div class="cdhead"><b>{{ selB }}</b><span class="cddesc">{{ selType?.desc }}</span></div>
-        <!-- 建一座的逐部位料单（分部位 BOM） -->
-        <div class="bomrow" v-if="!selType?.prebuilt">
-          <span class="dim">建一座需：</span>
-          <span class="bpcost" v-for="[pn, bill] of Object.entries(billOf(selB).parts)" :key="pn"
-                :title="pn">{{ pn }} {{ partStr(bill) }}</span>
-          <span class="dim">· {{ billOf(selB).work }} 人时</span>
+        <!-- 建一座的工序链（环节定额×体量涌现；∥＝依赖关系可并行） -->
+        <div class="bomrow" v-if="selType?.grade">
+          <span class="dim">建一座＝{{ planCost(selB).work }} 工时：</span>
+          <span class="bpcost ph" v-for="ph in phasesOf(selB)" :key="ph.id"
+                :title="ph.name + '（' + ph.trade + '·' + ph.work + '工）：' + phaseStr(ph)">{{ ph.name }}</span>
         </div>
         <div v-for="(inst, idx) in (S.buildings[selB] || [])" :key="idx" class="inst">
           <div class="ihead">
@@ -217,6 +220,10 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
             <span class="fx" v-if="inst.org">驻 {{ S.orgs[inst.org]?.name }}</span>
             <span class="fx" v-if="(selType?.interior || []).length">内构 {{ interiorUsed(selB, idx) }}/{{ interiorCap(selB, inst.storeys || 1) }} 格 · 设备 {{ installed(selB, inst) }}/{{ selType.interior.length }}</span>
             <span class="fx" v-if="selB === '民居'">居住位 {{ (4 + (inst.interior["床铺"] ? 4 : 0)) * (inst.storeys || 1) }}</span>
+            <!-- 加层：对既有民居的加建施工单（木质上限2层由 buildBlocked 钳；层＝结构行为非开工选项） -->
+            <button v-if="selB === '民居' && (inst.storeys || 1) < 2" class="floorup"
+                    :disabled="!!floorWhy(idx)" :title="floorWhy(idx) || '接层立架→上层墙顶 两道工序，逐环节扣料'"
+                    @click="queueBuild('floor', '民居', '', idx)">＋加层</button>
           </div>
           <!-- 仓库分类：逐座限定收货类型（裁决34）——某类容量＝收该类的座数×单座容量，分布式仓地基 -->
           <div v-if="selB === '仓库'" class="wacc">
@@ -279,6 +286,9 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .qhead { font-weight: 700; font-size: 12.5px; }
 #ctool .bar { flex: 1; min-width: 60px; max-width: 320px; }
 .qpct { color: var(--dim); font-variant-numeric: tabular-nums; }
+.qph { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+       padding: 1px 7px; font-size: 10.5px; color: var(--dim); white-space: nowrap; }
+.qph.wait { color: var(--warn); border-color: var(--warn); }   /* 等料停摆的环节 */
 .qcancel, .qchip i { cursor: pointer; color: var(--dim); font-style: normal; font-size: 11px; }
 .qcancel:hover, .qchip i:hover { color: var(--bad); }
 .qchip { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
@@ -332,6 +342,11 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .bmctop { display: flex; align-items: center; gap: 6px; width: 100%; }
 .bmctop b { font-size: 12.5px; }
 .bmctop .bmw { font-style: normal; color: var(--dim); font-size: 10px; margin-left: auto; }
+.bmgrade { font-style: normal; font-size: 10px; color: var(--acc); border: 1px solid var(--acc);
+           border-radius: 6px; padding: 0 4px; }   /* 构法标：粗构圆木直用 / 精构梁瓦钉齐 */
+.bpcost.ph { color: var(--fg); }
+.bpcost.ph + .bpcost.ph::before { content: "→"; color: var(--faint); margin-right: 3px; }
+.floorup { margin-left: auto; font-size: 10.5px; padding: 1px 8px; flex: none; }
 .bmcdesc { color: var(--dim); font-size: 10.5px; line-height: 1.35; }
 .bmcmeta { color: var(--dim); font-size: 10.5px; }
 .bmcard .cost { margin-right: 6px; }
@@ -381,6 +396,4 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .upper { height: 12px; margin: 1px 3px 0; border: 1px solid var(--line2); border-radius: 4px;
          background: #ffffff12; font-size: 8.5px; color: var(--dim); display: flex;
          align-items: center; justify-content: center; letter-spacing: 2px; }
-.storeys { display: flex; align-items: center; gap: 5px; margin: 4px 0 2px; font-size: 11.5px; color: var(--dim); }
-.storeys button { padding: 2px 9px; font-size: 11px; }
 </style>

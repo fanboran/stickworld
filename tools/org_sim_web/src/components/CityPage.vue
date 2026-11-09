@@ -106,15 +106,15 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
         <b>{{ orderLabel(cur) }}</b>
         <span class="qph" v-for="ph in activePhases(cur)" :key="ph.id"
               :class="{ wait: ph.waiting, lack: ph.nostaff }"
-              :title="ph.nostaff ? '缺人：' + ph.trade + '作队无人——工程队下放' + ph.trade + '队或直派'
+              :title="ph.nostaff ? '缺人：' + ph.trade + '无人——工程队·对应工种槽直派或放匠班'
                       : ph.waiting ? '等料：' + phaseStr(ph) : '在跑：' + phaseStr(ph)">{{ ph.nostaff ? "⛔" : ph.waiting ? "⚠" : "" }}{{ ph.name }}</span>
         <div class="bar"><i :style="{ width: (100 * cur.done / (cur.vol || cur.work || 1)) + '%' }"></i></div>
         <span class="qpct">{{ (100 * cur.done / (cur.vol || cur.work || 1)).toFixed(0) }}%</span>
         <i class="qcancel" title="撤单（未开工环节返料，已开工的料已砌进结构、工时沉没）" @click="cancelBuild(0)">✕</i>
         <span class="qchip" v-for="(p2, i) in pending" :key="'q' + i"
               :title="orderLabel(p2) + '——点 ✕ 撤单'">{{ orderLabel(p2).slice(0, 12) }}<i @click="cancelBuild(i + 1)">✕</i></span>
-        <span class="qwarn" v-if="!crews.木匠 && !crews.小工">无作队——工程队下放木匠队/小工队或直派</span>
-        <span class="qsub" title="作队出力＝在编×属性系数（木匠茅匠吃灵巧/小工吃力量）——时长是工作量÷出力的涌现值">木匠{{ crews.木匠 }}·茅匠{{ crews.茅匠 }}·小工{{ crews.小工 }}</span>
+        <span class="qwarn" v-if="!crews.木匠 && !crews.小工">无匠班——工程队·木作/泥瓦/小工槽放人或放班</span>
+        <span class="qsub" title="匠班出力＝在编×属性系数（木匠瓦匠吃灵巧/小工吃力量；班组长与匠人计本工种、配属小工计小工）——时长是工作量÷出力的涌现值">木匠{{ crews.木匠 }}·瓦匠{{ crews.瓦匠 }}·小工{{ crews.小工 }}</span>
       </template>
       <span v-else class="qdim">无施工单——点一排两端的扩建位开工</span>
     </div>
@@ -243,7 +243,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
           </div>
           <!-- 剖视图：逐层内构格（自动布局：从左到右贪心），工序岗的人点在他的设备格上；
                设计岗在编才可见（裁决43——内部结构预览是设计师的产出） -->
-          <div v-if="!hasDesigner()" class="fempty">内部结构预览需设计岗在编（工程队·设计）——图纸是设计师画的</div>
+          <div v-if="!hasDesigner()" class="fempty">内部结构预览需大匠在编（工程队·大匠——掌墨师即设计师，墨线即图纸）</div>
           <div v-else-if="(selType?.interior || []).length" class="floor">
             <div v-for="(layer, li) in interiorLayout(selB, idx)" :key="'l' + li" class="flayer">
               <span class="ftag">{{ (inst.storeys || 1) > 1 ? (li + 1) + "F" : "内构" }}</span>

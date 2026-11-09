@@ -49,10 +49,10 @@ const PHASE_LIB = {
   地基: { trade: "木匠", vol: 4, cost: { "原木": 2 } },         // 圆木地梁
   立架: { trade: "木匠", vol: 8, cost: { "原木": 6 } },         // 立柱架梁（架级换锯材梁）
   铺椽: { trade: "木匠", vol: 6, cost: { "原木": 2 } },         // 圆木椽（架级换木梁椽）
-  铺顶: { trade: "茅匠", vol: 5, cost: { "茅草": 4 } },         // 茅草顶（梳束铺苫——茅匠的活；架级换木瓦归木匠）
-  筑墙: { trade: "木匠", vol: 6, cost: { "原木": 4 } },         // 圆木垒墙（架级换板墙）
+  铺顶: { trade: "瓦匠", vol: 5, cost: { "茅草": 4 } },         // 屋面归瓦匠线（茅草/木瓦都是屋面匠铺——现实口径）
+  筑墙: { trade: "瓦匠", vol: 6, cost: { "原木": 4 } },         // 砌墙归瓦匠线（现实：砌筑是泥水匠的活；架级换板墙）
   门窗: { trade: "木匠", vol: 4, cost: { "木板": 2 } },         // 现制门窗（架级厂制到场安装）
-  粉刷: { trade: "小工", vol: 3, cost: {} },                    // 抹泥刷白（就地取土）
+  粉刷: { trade: "瓦匠", vol: 3, cost: {} },                    // 抹灰归瓦匠线（现实：抹灰是泥水匠的活，小工只和灰）
   夯地: { trade: "小工", vol: 2, cost: {} },                    // 夯土地面（就地取土；架级换木地板）
 };
 const PHASE_DEPS = { 备料: [], 场地: [], 地基: ["场地"], 立架: ["地基", "备料"], 铺椽: ["立架"],
@@ -133,15 +133,25 @@ export const ORGS = {
       { fn: "制药", n: 1, pos: "gain", role: "农作物→药水" },
       { fn: "木器", n: 1, pos: "gain", role: "木板+铁锭→手推车（载具）" },
       { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭" } ] },
-  /* 工程队＝工种齐全的施工组织（裁决40/51）：木匠/茅匠/小工＝多坑位工种槽直挂队内——
-     纯同质化劳动力池不设子组织（有内部分工才成组织：测量/设计/三工种/质检） */
+  /* 工程队＝施工项目部（裁决52，按现实双层结构）：
+     管理层＝大匠（掌墨师式：项目经理+总工+施工员+测量+设计一身——墨线即图纸）＋监工（材料/质检/账目）；
+     劳务层＝木作班/泥瓦班入驻 木作/泥瓦 槽（每班：班组长带班+匠人+配属小工），小规模可直派匠人；
+     机动小工直属队内（跨班调度）。石作班待石料经济开 */
   "工程队": { host: "建造", slots: [
-      { fn: "测量", n: 1, pos: "gain", role: "放线与验收", lead: true },
-      { fn: "设计", n: 1, pos: "gain", role: "建筑设计——在编才解锁建筑页各座的内部结构预览（剖视图）" },
-      { fn: "木匠", n: 6, homog: true, pos: "must", role: "立架/铺椽/铺顶/筑墙/门窗（吃灵巧）" },
-      { fn: "茅匠", n: 3, homog: true, pos: "must", role: "梳束挂条逐层铺苫——茅草顶（吃灵巧）" },
-      { fn: "小工", n: 6, homog: true, pos: "must", role: "备料/场地/粉刷/夯地（吃力气）" },
-      { fn: "质检", n: 1, pos: "gain", role: "工序与落成核验" } ] },
+      { fn: "大匠", n: 1, pos: "must", lead: true, role: "掌墨带班：放线派工验活一身兼——在编才解锁内部结构预览（墨线即图纸）" },
+      { fn: "监工", n: 1, pos: "gain", role: "材料收发、工序核验、工账" },
+      { fn: "木作", n: 4, homog: true, pos: "gain", role: "木匠活——直派匠人或放木作班整班入驻（构架/铺椽/门窗）" },
+      { fn: "泥瓦", n: 4, homog: true, pos: "gain", role: "瓦匠活——直派匠人或放泥瓦班整班入驻（砌墙/屋面/抹灰）" },
+      { fn: "小工", n: 2, homog: true, pos: "gain", role: "机动小工——跨班调度（备料/场地/夯地；各班另有配属小工）" } ] },
+  /* 匠班（裁决51/52：班组长带班+匠人+配属小工＝有真分工的班组，非纯劳动力池） */
+  "木作班": { host: "木作", slots: [
+      { fn: "班组长", n: 1, pos: "must", lead: true, role: "木匠带班——自己也上构架" },
+      { fn: "木匠", n: 3, homog: true, pos: "must", role: "构架/铺椽/门窗" },
+      { fn: "小工", n: 2, homog: true, pos: "must", role: "配属小工——供料扶料" } ] },
+  "泥瓦班": { host: "泥瓦", slots: [
+      { fn: "班组长", n: 1, pos: "must", lead: true, role: "瓦匠带班——自己也砌墙" },
+      { fn: "瓦匠", n: 3, homog: true, pos: "must", role: "砌墙/屋面/抹灰" },
+      { fn: "小工", n: 2, homog: true, pos: "must", role: "配属小工——和灰供砖" } ] },
   "运输队": { host: "运输", slots: [
       { fn: "调度", n: 1, pos: "gain", role: "减轻未通报场地的搬运损耗", lead: true },
       { fn: "库管", n: 1, pos: "must", role: "在岗搬运才运转" },
@@ -431,11 +441,12 @@ export function loadDemo() {
   staff(mining, "挖矿队长", 1, take(1)); staff(mining, "挖矿", 2, take(2));
   staff(farm, "耕作队长", 1, take(1)); staff(farm, "耕作", 2, take(2));
   staff(haul, "调度", 1, take(1)); staff(store, "收发", 1, take(1)); staff(haul, "搬运", 3, take(3));
-  staff(eng, "测量", 1, take(1));
-  staff(eng, "木匠", 3, take(3));   // 工种槽直挂（裁决51：作队解散，纯劳动力池不设子组织）
-  staff(eng, "茅匠", 2, take(2));
-  staff(eng, "小工", 3, take(3));
-  staff(eng, "设计", 1, take(1));
+  staff(eng, "大匠", 1, take(1)); staff(eng, "监工", 1, take(1));
+  const woody = addOrgRaw("木作班", 2, ""); place(eng, "木作", woody);   // 匠班入驻（裁决52：班组长带班+匠人+配属小工）
+  const mason = addOrgRaw("泥瓦班", 2, ""); place(eng, "泥瓦", mason);
+  staff(woody, "班组长", 1, take(1)); staff(woody, "木匠", 2, take(2)); staff(woody, "小工", 1, take(1));
+  staff(mason, "班组长", 1, take(1)); staff(mason, "瓦匠", 2, take(2)); staff(mason, "小工", 1, take(1));
+  staff(eng, "小工", 1, take(1));   // 机动小工直属大匠
   staff(forge, "风箱", 1, take(1)); staff(forge, "熔炼", 1, take(1)); staff(forge, "锻打", 1, take(1));
   staff(forge, "淬火", 1, take(1)); staff(forge, "开刃", 1, take(1));
   staff(sawmill, "锯解", 2, take(2));   // 两名锯工：样板实测原木堆积木材断供的瓶颈针（锯解1人转不过熔炼耗木）
@@ -659,19 +670,25 @@ export function tabUnlocked(id) {
   return !!sl && (sl.persons.length > 0 || (sl.institution && subTreeHas(sl.institution)));
 }
 /* 设计岗在编（裁决43）：工程队·设计——在编才能看各建筑内部结构预览 */
-export const hasDesigner = () => Object.values(S.orgs).some(o => (o.slots["设计"]?.persons.length || 0) > 0);
+export const hasDesigner = () => Object.values(S.orgs).some(o => (o.slots["大匠"]?.persons.length || 0) > 0);   // 掌墨师即设计师（裁决52）
 
 /* 在岗施工人力＝各工种作队（工程队·木匠/茅匠/小工槽直派+入驻作队全员；库务所同款口径） */
-export function crewCounts() {
-  const crews = { 木匠: [], 茅匠: [], 小工: [] };
+export function crewCounts() { const c = collectCrews(); return { 木匠: c.木匠.length, 瓦匠: c.瓦匠.length, 小工: c.小工.length }; }
+/* 工种采集（裁决52）：工程队·木作/泥瓦/小工 槽——直派人员计该工种；匠班入驻则班组长与匠人计本工种、
+   配属小工计小工（放人=放机构同一效果，效果由人提供） */
+const TRADE_OF_SLOT = { 木作: "木匠", 泥瓦: "瓦匠", 小工: "小工" };
+function collectCrews() {
+  const crews = { 木匠: [], 瓦匠: [], 小工: [] };
   for (const o of Object.values(S.orgs))
     for (const [fn, sl] of Object.entries(o.slots)) {
-      if (fn !== "木匠" && fn !== "茅匠" && fn !== "小工") continue;
-      crews[fn].push(...sl.persons);
-      if (sl.institution && S.orgs[sl.institution])
-        for (const s2 of Object.values(S.orgs[sl.institution].slots)) crews[fn].push(...s2.persons);
+      const trade = TRADE_OF_SLOT[fn];
+      if (!trade) continue;
+      crews[trade].push(...sl.persons);
+      const sub = sl.institution && S.orgs[sl.institution];
+      if (sub) for (const [sfn, s2] of Object.entries(sub.slots))
+        (sfn === "小工" ? crews.小工 : crews[trade]).push(...s2.persons);
     }
-  return { 木匠: crews.木匠.length, 茅匠: crews.茅匠.length, 小工: crews.小工.length };
+  return crews;
 }
 export function wipOf(o) { return S.wip[o.id] || (S.wip[o.id] = {}); }
 export const bufKey = (site, product) => site + "|" + product;
@@ -877,6 +894,18 @@ export function loadState() {
     Object.assign(S, data, { sel: null, selSlot: null, feed: [], snap: null, rates: {}, borrows: {}, speed: 0 });
     if (!data.intake) S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 旧档（裁决34 前）无收货政策=按旧口径全收，别把老城饿死——判 data 而非 S（S 被 reset 预填恒真，迁移曾永不触发）
     for (const r of RES) if (S.res[r] === undefined) S.res[r] = 0;   // 目录扩容（门扇/窗扇等）：旧档补零键
+    for (const o of Object.values(S.orgs).filter(x => x.template === "工程队")) {   // 工程队双层化迁移（裁决52）：旧槽人员归位
+      const moveTo = { 测量: "大匠", 设计: "大匠", 质检: "监工", 木匠: "木作", 茅匠: "泥瓦" };
+      for (const [ofn, nfn] of Object.entries(moveTo)) {
+        const sl = o.slots[ofn];
+        if (!sl) continue;
+        if (sl.persons.length) {
+          if (!o.slots[nfn]) o.slots[nfn] = { def: { fn: nfn, n: 4, homog: true, pos: "gain", role: "迁移归位" }, persons: [], institution: "" };
+          o.slots[nfn].persons.push(...sl.persons);
+        }
+        delete o.slots[ofn];
+      }
+    }
     for (const crew of ["木匠队", "茅匠队", "小工队"]) {   // 作队解散迁移（裁决51）：人员并入宿主工程队工种槽
       for (const o of Object.values(S.orgs).filter(x => x.template === crew)) {
         const hostSlot = Object.values(S.orgs).flatMap(h => Object.values(h.slots))
@@ -1121,19 +1150,15 @@ export function advance(dt) {
   //    木匠活归木匠（吃 cft）、小工活归小工（吃 str），两队各出各力互不抢人（真并行）；
   //    环节开工即扣料（料不齐＝该环节等料⚠，别环节照跑）；对应作队无人＝该环节停摆（缺人）
   if (S.buildOrders.length) {
-    const crews = { 木匠: [], 茅匠: [], 小工: [] };   // 工程队·木匠/茅匠/小工槽：直派人员或作队整队入驻（库务所同款）
+    const crews = collectCrews();   // 工种＝人提供：直派匠人/班组入驻皆计（裁决49/52）
     for (const o of Object.values(S.orgs))
       for (const [fn, sl] of Object.entries(o.slots)) {
-        if (fn !== "木匠" && fn !== "茅匠" && fn !== "小工") continue;
-        crews[fn].push(...sl.persons);
-        if (sl.institution && S.orgs[sl.institution])
-          for (const s2 of Object.values(S.orgs[sl.institution].slots)) crews[fn].push(...s2.persons);
       }
-    if (crews.木匠.length || crews.小工.length) {
+    if (crews.木匠.length || crews.瓦匠.length || crews.小工.length) {
       const ord = S.buildOrders[0];
       const doneOf = id => { const p = ord.phases.find(x => x.id === id); return !p || p.done >= p.vol; };
       const act = ord.phases.filter(p => p.done < p.vol && p.deps.every(doneOf));
-      const byTrade = { 木匠: [], 茅匠: [], 小工: [] };
+      const byTrade = { 木匠: [], 瓦匠: [], 小工: [] };
       for (const ph of act) {
         if (!ph.paid) {
           if (!canPay(ph.cost)) { ph.waiting = true; continue; }   // 等料停摆：工地常态，别的一切照跑
@@ -1141,11 +1166,11 @@ export function advance(dt) {
         }
         byTrade[ph.trade].push(ph);
       }
-      for (const trade of ["木匠", "茅匠", "小工"]) {
+      for (const trade of ["木匠", "瓦匠", "小工"]) {
         const list = byTrade[trade];
         for (const ph of list) ph.nostaff = !crews[trade].length;   // 作队无人：环节干瞪眼
         if (!list.length || !crews[trade].length) continue;
-        const out = crews[trade].length * attrMult(crews[trade], trade === "木匠" ? "cft" : "str")
+        const out = crews[trade].length * attrMult(crews[trade], trade === "小工" ? "str" : "cft")
                     * mult * dt / list.length;   // 该作队出力均分给它名下的在跑环节
         for (const ph of list) ph.done += out;
       }

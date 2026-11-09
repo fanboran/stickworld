@@ -129,12 +129,11 @@ function askDel(id) {
                :class="{ locked: isLocked(o, slot), sel: S.sel === o.id && S.selSlot === fn }"
                @click="clickSlot(o, fn, slot)">
             <span class="fn" :class="'p-' + (slot.def.pos || 'run')"
-                  :title="POS_NAME[slot.def.pos || 'run'] + '｜' + (slot.def.role || '')">{{ fn }}</span>
+                  :title="POS_NAME[slot.def.pos || 'run'] + (slot.def.lead ? '｜★士官长——本组织主管岗（在此岗的人兼任主管，自己也干活，裁决50）' : '') + '｜' + (slot.def.role || '')">{{ slot.def.lead ? "★" : "" }}{{ fn }}</span>
             <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slotCap(o, slot) }}</span>
             <span v-else-if="slot.def.step !== undefined && slot.persons.length" class="cnt">{{ slot.persons.length }}人</span>   <!-- 工序槽一设备多班：n:1 非工位上限 -->
             <template v-if="slot.persons.length || slot.institution">
-              <span v-for="(c, ci) in chipsOf(slot)" :key="c.label" class="chip"
-                    :title="c.title + (slot.def.lead && ci === 0 ? '｜★士官长——本组织主管，自己也干活（裁决50）' : '')">{{ slot.def.lead && ci === 0 ? "★" : "" }}{{ c.label }}</span>
+              <span v-for="c in chipsOf(slot)" :key="c.label" class="chip" :title="c.title">{{ c.label }}</span>
               <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>
             </template>
             <span v-else class="chip empty">空槽</span>

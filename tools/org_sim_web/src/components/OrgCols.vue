@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { S, ORGS, BUILDINGS, circ, person, membersOf, wipOf, orgEquip, stepDesc, slotProduct,
          idle, select, delOrg, feed, slotCandidates, createBlocked, slotCap, stallInfo,
-         putPerson, pullPersons, createOrgAt } from "../sim.js";
+         putPerson, pullPersons, putBest } from "../sim.js";
 
 const host = computed(() => {
   const h = {};
@@ -70,10 +70,13 @@ function clickSlot(o, fn, slot) {
     feed(`${fn} 槽被禁：需 ${d.req.b}${d.req.item ? " 并装 " + d.req.item : ""}（组织无建筑仍可基础运转）`, "bad");
     return;
   }
+  /* 空槽默认放人（裁决48）：自动选最合适的待业者直接入岗；有人的槽再点＝展开操作 */
+  if (!slot.persons.length && !slot.institution && idle().length) { putBest(o.id, fn); return; }
   if (S.sel === o.id && S.selSlot === fn) { select(o.id, null); return; }   // 再点收起
   pickPerson.value = "";
   select(o.id, fn);
 }
+const taskOf = (oid, fn) => S.orgTasks.find(t => t.c === oid && t.fn === fn);
 const opsOpen = (o, fn, slot) => S.sel === o.id && S.selSlot === fn && !isLocked(o, slot);
 const pickPerson = ref("");
 function candTitle(name) {
@@ -130,7 +133,8 @@ function askDel(id) {
             <span v-if="slot.def.homog" class="cnt">{{ slot.persons.length }}/{{ slotCap(o, slot) }}</span>
             <span v-else-if="slot.def.step !== undefined && slot.persons.length" class="cnt">{{ slot.persons.length }}人</span>   <!-- 工序槽一设备多班：n:1 非工位上限 -->
             <template v-if="slot.persons.length || slot.institution">
-              <span v-for="c in chipsOf(slot)" :key="c.label" class="chip" :title="c.title">{{ c.label }}</span>
+              <span v-for="(c, ci) in chipsOf(slot)" :key="c.label" class="chip"
+                    :title="c.title + (slot.def.lead && ci === 0 ? '｜★士官长——本组织主管，自己也干活（裁决50）' : '')">{{ slot.def.lead && ci === 0 ? "★" : "" }}{{ c.label }}</span>
               <span v-if="slot.institution" class="chip orgchip">{{ S.orgs[slot.institution]?.name || "?" }}</span>
             </template>
             <span v-else class="chip empty">空槽</span>
@@ -143,6 +147,8 @@ function askDel(id) {
             </span>
             <span v-if="slot.persons.length" class="spin"
                   :class="{ paused: borrowsOf(o.id).filter(x => x.from === fn).length >= slot.persons.length }"></span>
+            <span v-if="taskOf(o.id, fn)" class="wip" :title="'筹建中——经办人读条，完成转任主管（裁决47/48）'">
+              筹建{{ taskOf(o.id, fn).name }} {{ Math.floor(100 * taskOf(o.id, fn).prog / taskOf(o.id, fn).need) }}%</span>
             <span v-if="isLocked(o, slot)" class="need">
               需{{ slot.def.req.b }}{{ slot.def.req.item ? "·" + slot.def.req.item : "" }}
             </span>
@@ -152,15 +158,8 @@ function askDel(id) {
               <template v-else-if="slot.def.role">{{ slot.def.role.slice(0, 14) }}</template>
             </span>
           </div>
-          <!-- 槽位操作内联：构筑子组织（递归）/ 派人。有人占的槽仍示构筑候选：常备军可从带动员官的军事槽直接构筑（人随军自动转编） -->
+          <!-- 槽位操作内联：手动派人/撤出（构筑走父组织面板的筹建任务，裁决48；点空槽已自动放人） -->
           <div v-if="opsOpen(o, fn, slot)" class="sops" @click.stop>
-            <template v-if="!slot.institution && slotCandidates(fn).length">
-              <span class="ohint b">构筑：</span>
-              <button v-for="name in slotCandidates(fn).filter(x => x !== o.template)" :key="name" class="cbtn"
-                      :disabled="!!createBlocked(name) || !slot.persons.length"
-                      :title="candTitle(name) + (slot.persons.length ? '' : '｜槽需先放人——在编者构筑后转任主管（裁决47）')"
-                      @click="createOrgAt(o.id, fn, name)">＋{{ name }}</button>
-            </template>
             <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slotCap(o, slot)">
               <option value="">{{ slot.def.homog && slot.persons.length >= slotCap(o, slot) ? "坑位已满" : "待业人员…" }}</option>
               <option v-for="p in idle()" :key="p.id" :value="p.id">{{ p.name }}{{ p.skills.length ? "·会" + p.skills.join("/") : "" }}</option>

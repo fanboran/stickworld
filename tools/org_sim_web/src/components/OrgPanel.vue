@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { S, ORG_PANELS, ARTS, circ, membersOf, delOrg, idle, feed } from "../sim.js";
+import { S, ORG_PANELS, ARTS, circ, membersOf, delOrg, idle, feed, slotCandidates, createBlocked, startOrgTask } from "../sim.js";
 
 /* 指令面板：各组织专属运行操作所在地（结构各异），实际游戏为定制精美 UI，sim 只模拟基础功能 */
 const sel = computed(() => S.sel && !S.selSlot && S.orgs[S.sel] ? S.orgs[S.sel] : null);
@@ -14,6 +14,17 @@ const traineeOrg = computed(() => {
   return id && S.orgs[id] ? S.orgs[id] : null;
 });
 const panels = computed(() => sel.value ? (ORG_PANELS[sel.value.template] || []) : []);
+/* 筹建任务行：本组织各槽的可构筑候选（槽有人=可下达；读条中=示进度） */
+const foundRows = computed(() => {
+  if (!sel.value) return [];
+  const rows = [];
+  for (const [fn, sl] of Object.entries(sel.value.slots)) {
+    const cands = slotCandidates(fn).filter(nm => nm !== sel.value.template);
+    if (sl.institution || !cands.length) continue;
+    rows.push({ fn, cands, staffed: sl.persons.length > 0, task: S.orgTasks.find(t => t.c === sel.value.id && t.fn === fn) });
+  }
+  return rows;
+});
 /* 库存目标档位随仓库座数放大（基数 20/40/80/160 × 座数，仍取整十）——大库容下档位不再形同虚设；
    档值是绝对数：旧档存的「满40」在任何座数下含义不变 */
 function choicesOf(org, opt) {
@@ -63,6 +74,23 @@ watch(sel, () => armed.value = "");
         <span class="sub">在编 {{ membersOf(sel) }}{{ sel.bldg ? " · 驻" + sel.bldg.b + circ(sel.bldg.idx) : (sel.bldgType ? " · 缺" + sel.bldgType : "") }}</span>
       </div>
       <div class="pnote">指令面板——各组织专属（结构各异），此处模拟基础功能</div>
+      <!-- 筹建任务（裁决48）：命令槽内在编者读条建组织（完成转任主管，裁决47）；门槛＝槽内先有人 -->
+      <div v-if="foundRows.length" class="opt">
+        <div class="optkey">筹建任务（槽内在编者读条 3 时成编制）</div>
+        <div v-for="row in foundRows" :key="row.fn" class="trow">
+          <span class="tf">{{ row.fn }}：</span>
+          <template v-if="row.task">
+            <span class="tprog">筹建{{ row.task.name }} {{ Math.floor(100 * row.task.prog / row.task.need) }}%</span>
+          </template>
+          <template v-else>
+            <button v-for="nm in row.cands" :key="nm"
+                    :disabled="!row.staffed || !!createBlocked(nm)"
+                    :title="(createBlocked(nm) || (row.staffed ? nm + '——读条 3 时建成，经办人转任主管' : '槽内先放人（点击槽自动派最合适的待业者）'))"
+                    @click="startOrgTask(sel.id, row.fn, nm)">＋{{ nm }}</button>
+            <span v-if="!row.staffed" class="ohint">槽内先放人</span>
+          </template>
+        </div>
+      </div>
       <!-- 训练营：受训组织选择与训练进度（04 §三 组织对组织） -->
       <div v-if="sel.template === '训练营'" class="opt">
         <div class="optkey">受训组织（整只编制开过来受训）</div>
@@ -148,4 +176,8 @@ watch(sel, () => armed.value = "");
 .roster .rattr { color: var(--faint); font-size: 10px; font-variant-numeric: tabular-nums; }
 .roster .rart { color: var(--flow); font-size: 10px; margin-top: 1px; }
 .dis { width: 100%; margin-top: 8px; }
+.trow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 3px 0; }
+.trow .tf { font-size: 11px; color: var(--dim); min-width: 52px; }
+.trow .tprog { font-size: 11px; color: var(--acc); font-variant-numeric: tabular-nums; }
+.trow .ohint { font-size: 10px; color: var(--faint); }
 </style>

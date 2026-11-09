@@ -117,12 +117,12 @@ export const BUILDINGS = {
    pos＝岗位用人类型（标签色）：must=必须（至少一人该组织才能开工，人数可弹性）
    · semi=半必须（需人运行但不必时刻有人，可从本队别岗移调）
    · gain=增益（无人也行，只是未解锁/缺失该功能——解锁类）；
-   role＝「放人/放组织解锁什么」的能力标注；bldg＝需进驻的建筑类型（03 §一）═════════ */
+   role＝该岗职能标注（放人=放机构同一效果，效果由在编的人提供——裁决49）；bldg＝需进驻的建筑类型（03 §一）═════════ */
 export const ORGS = {
   "生产局": { host: "生产", slots: [
-      { fn: "采集", n: 1, pos: "gain", role: "放人泛采集（0.4/人时），放采集中心统筹三线" },
-      { fn: "建造", n: 1, pos: "gain", role: "放人督造，放工程队成建制施工" },
-      { fn: "制造", n: 1, pos: "gain", role: "放人跟单，放制造中心统筹各坊" } ] },
+      { fn: "采集", n: 1, pos: "gain", role: "泛采集兜底 0.4/人时；采集中心可入驻下辖三线" },
+      { fn: "建造", n: 1, pos: "gain", role: "督造；工程队可入驻成建制施工" },
+      { fn: "制造", n: 1, pos: "gain", role: "跟单；制造中心可入驻统筹各坊" } ] },
   "采集中心": { host: "采集", slots: [
       { fn: "伐木", n: 1, pos: "gain", role: "原木产出线" },
       { fn: "采矿", n: 1, pos: "gain", role: "铁矿产出线" },
@@ -134,40 +134,40 @@ export const ORGS = {
       { fn: "木器", n: 1, pos: "gain", role: "木板+铁锭→手推车（载具）" },
       { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭" } ] },
   "工程队": { host: "建造", slots: [
-      { fn: "测量", n: 1, pos: "gain", role: "放线与验收" },
+      { fn: "测量", n: 1, pos: "gain", role: "放线与验收", lead: true },
       { fn: "设计", n: 1, pos: "gain", role: "建筑设计——在编才解锁建筑页各座的内部结构预览（剖视图）" },
-      { fn: "木匠", n: 1, pos: "gain", role: "直派木匠，或放木匠队整队入驻（工序链的木匠活归它）" },
-      { fn: "茅匠", n: 1, pos: "gain", role: "直派茅匠，或放茅匠队整队入驻（茅草顶铺苫归它）" },
-      { fn: "小工", n: 1, pos: "gain", role: "直派小工，或放小工队整队入驻（备料/场地/粉刷/夯地归它）" },
+      { fn: "木匠", n: 1, pos: "gain", role: "木匠活位——木匠队可入驻（在编匠人即计入本岗）" },
+      { fn: "茅匠", n: 1, pos: "gain", role: "茅匠活位——茅匠队可入驻（在编铺苫匠即计入本岗）" },
+      { fn: "小工", n: 1, pos: "gain", role: "小工活位——小工队可入驻（在编杂工即计入本岗）" },
       { fn: "质检", n: 1, pos: "gain", role: "工序与落成核验" } ] },
   /* 作队（裁决40）：工种＝专门组织——木匠队吃 cft、小工队吃 str，两队各出各力真并行 */
   "木匠队": { host: "木匠", slots: [
-      { fn: "大匠", n: 1, pos: "must", role: "主墨放线主持立架" },
+      { fn: "大匠", n: 1, pos: "must", role: "主墨放线主持立架", lead: true },
       { fn: "匠作", n: 4, homog: true, pos: "must", role: "立架/铺椽/铺顶/筑墙/门窗" } ] },
   "茅匠队": { host: "茅匠", slots: [
-      { fn: "铺苫", n: 3, homog: true, pos: "must", role: "梳束挂条逐层铺苫——茅草顶（屋面阶段进场）" } ] },
+      { fn: "铺苫", n: 3, homog: true, pos: "must", role: "梳束挂条逐层铺苫——茅草顶（屋面阶段进场）", lead: true } ] },
   "小工队": { host: "小工", slots: [
-      { fn: "杂活", n: 4, homog: true, pos: "must", role: "备料/场地/粉刷/夯地" } ] },
+      { fn: "杂活", n: 4, homog: true, pos: "must", role: "备料/场地/粉刷/夯地", lead: true } ] },
   "运输队": { host: "运输", slots: [
-      { fn: "调度", n: 1, pos: "gain", role: "减轻未通报场地的搬运损耗" },
+      { fn: "调度", n: 1, pos: "gain", role: "减轻未通报场地的搬运损耗", lead: true },
       { fn: "库管", n: 1, pos: "must", role: "在岗搬运才运转" },
       { fn: "搬运", n: 5, homog: true, pos: "must", role: "负责搬运" } ] },
   "伐木队": { host: "伐木", bldg: "伐木小屋", slots: [
-      { fn: "伐木", n: 4, homog: true, pos: "must", terrain: "树林", role: "负责伐木" },
+      { fn: "伐木", n: 4, homog: true, pos: "must", terrain: "树林", role: "负责伐木", lead: true },
       { fn: "木材信息", n: 1, pos: "semi", role: "收集木材线信息呈递给你" },
       { fn: "探测", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "收集林木资源情报呈递给你" },
       { fn: "记录", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "记录木材出入并呈递给你" } ] },
   "采矿队": { host: "采矿", slots: [
-      { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿" },
+      { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿", lead: true },
       { fn: "支护", n: 1, pos: "gain", role: "架坑木支撑坑道——矿场堆容 +20/人" },
       { fn: "提升", n: 1, pos: "gain", role: "坑口吊运——矿石出坑快 1/4（同工具架物理口径）" },
       { fn: "矿石信息", n: 1, pos: "semi", role: "收集矿石线信息呈递给你" } ] },
   "农垦队": { host: "农垦", slots: [
-      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "耕地", role: "负责耕作" },
+      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "耕地", role: "负责耕作", lead: true },
       { fn: "选种", n: 1, pos: "gain", role: "留优种作来年种籽" },
       { fn: "农情信息", n: 1, pos: "semi", role: "收集农情信息呈递给你" } ] },
   "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [
-      { fn: "锯解", n: 1, pos: "semi", step: 0, role: "原木开成木材" },
+      { fn: "锯解", n: 1, pos: "semi", step: 0, role: "原木开成木材", lead: true },
       { fn: "制梁", n: 1, pos: "semi", step: 1, role: "原木取方成梁" },
       { fn: "制瓦", n: 1, pos: "semi", step: 2, role: "木板开片成瓦" },
       { fn: "刨光", n: 1, pos: "semi", step: 3, role: "木材刨成木板" },
@@ -180,7 +180,7 @@ export const ORGS = {
              { name: "制门", equip: "制门台", inCity: { "木板": 2 }, outCity: { "门扇": 1 }, art: "木工" },
              { name: "制窗", equip: "制窗台", inCity: { "木板": 1 }, outCity: { "窗扇": 1 }, art: "木工" } ] },
   "锻造坊": { host: "锻造", bldg: "锻造坊", slots: [
-      { fn: "风箱", n: 1, pos: "semi", role: "拉风箱助熔——鼓风提炉温" },
+      { fn: "风箱", n: 1, pos: "semi", role: "拉风箱助熔——鼓风提炉温", lead: true },
       { fn: "熔炼", n: 1, pos: "semi", step: 0, role: "铁矿+木材化铁水" },
       { fn: "锻打", n: 1, pos: "semi", step: 1, role: "铁水或铁锭锻毛坯" },
       { fn: "淬火", n: 1, pos: "semi", step: 2, role: "毛坯淬火" },
@@ -195,13 +195,13 @@ export const ORGS = {
       { name: "制钉", equip: "制钉模", inCity: { "铁锭": 1 }, outCity: { "铁钉": 4 }, art: "锻造" },
       { name: "轧板", equip: "轧辊", inCity: { "铁锭": 1 }, outCity: { "铁板": 1 }, art: "锻造" } ] },
   "药剂坊": { host: "制药", bldg: "药剂坊", slots: [
-      { fn: "炮制", n: 1, pos: "semi", step: 0, role: "农作物炮制净药材" },
+      { fn: "炮制", n: 1, pos: "semi", step: 0, role: "农作物炮制净药材", lead: true },
       { fn: "熬制", n: 1, pos: "semi", step: 1, role: "净药材熬成药水" } ],
       steps: [
         { name: "炮制", equip: "切药刀", inCity: { "农作物": 1 }, wip: "净药材" },
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 }, art: "制药" } ] },
   "木器坊": { host: "木器", bldg: "木工房", slots: [
-      { fn: "备料", n: 1, pos: "semi", step: 0, role: "木板铁锭备成车料" },
+      { fn: "备料", n: 1, pos: "semi", step: 0, role: "木板铁锭备成车料", lead: true },
       { fn: "搓绳", n: 1, pos: "semi", step: 1, role: "农作物纤维搓成绳索" },
       { fn: "装配", n: 1, pos: "semi", step: 2, role: "车料装成手推车" } ],
     steps: [
@@ -210,37 +210,37 @@ export const ORGS = {
       { name: "装配", equip: "组装架", wipIn: "车料", outCity: { "手推车": 1 }, art: "木工" } ] },
   /* 职能槽下辖的专门组织（任意槽可下辖；信息/库管槽内的精细化示例，可继续递归） */
   "林务所": { host: "木材信息", slots: [
-      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看林中堆存与路况" },
+      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看林中堆存与路况", lead: true },
       { fn: "记档", n: 1, pos: "gain", role: "汇总木材台账" } ] },
   "矿务所": { host: "矿石信息", slots: [
-      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看矿场堆存" },
+      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看矿场堆存", lead: true },
       { fn: "记档", n: 1, pos: "gain", role: "汇总矿石台账" } ] },
   "农务所": { host: "农情信息", slots: [
-      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看田场堆存" },
+      { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看田场堆存", lead: true },
       { fn: "记档", n: 1, pos: "gain", role: "汇总农情台账" } ] },
   "库务所": { host: "库管", slots: [
-      { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账" },
+      { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账", lead: true },
       { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
   "人事局": { host: "行政", bldg: "办公楼", slots: [
-      { fn: "人事", n: 1, pos: "must", req: { b: "办公楼", item: "档案柜" }, role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
+      { fn: "人事", n: 1, pos: "must", req: { b: "办公楼", item: "档案柜", lead: true }, role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
       { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（自适应扩建与改编，01 §4.6）" } ] },
   "情报局": { host: "情报", slots: [
-      { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览" },
+      { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览", lead: true },
       { fn: "采编", n: 4, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
       { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊",
-      slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭" } ],
+      slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭", lead: true } ],
       steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 1, "木材": 1 }, outCity: { "铁锭": 1 }, art: "冶炼" } ] },
   "常备军": { host: "军事", bldg: "兵营", slots: [
-      { fn: "军事", n: 1, pos: "must", role: "在编即可动员" },
+      { fn: "军事", n: 1, pos: "must", role: "在编即可动员", lead: true },
       { fn: "军需", n: 1, pos: "gain", role: "军械领用配发登记" },
       { fn: "训练", n: 1, pos: "gain", role: "放训练营成建制施训" } ] },
   "训练营": { host: "训练", bldg: "训练场", slots: [
-      { fn: "训练管理", n: 1, pos: "gain", role: "排训练计划" },
+      { fn: "训练管理", n: 1, pos: "gain", role: "排训练计划", lead: true },
       { fn: "教官", n: 4, homog: true, pos: "must", req: { b: "训练场", item: "木人桩" }, role: "施训教官" },
       { fn: "器材管理", n: 1, pos: "gain", role: "维护训练器材" } ] },
   "科研院": { host: "教育", bldg: "书院", slots: [
-      { fn: "课题管理", n: 1, pos: "gain", req: { b: "书院", item: "书架" }, role: "选题与立项" },
+      { fn: "课题管理", n: 1, pos: "gain", req: { b: "书院", item: "书架", lead: true }, role: "选题与立项" },
       { fn: "实验", n: 3, homog: true, pos: "must", req: { b: "书院", item: "实验台" }, role: "产出新技能，长在本人身上" },
       { fn: "文献记录", n: 1, pos: "gain", role: "汇总技能台账并呈递给你" } ] },
 };
@@ -323,6 +323,7 @@ export const S = reactive({
   res: {}, buf: {}, wip: {}, buildings: {}, buildOrders: [],
   mobilized: false, borrows: {},
   sel: null, selSlot: null, feed: [], rates: {}, snap: null,
+  orgTasks: [],
   cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0, wear: { cart: 0, sword: 0 },
   knobs: { gather: 0.8, deptGather: 0.4, haul: 1.2, craft: 0.6, uninfo: 0.5, buf: 40, cap: 600 },
   intake: { "原木": false, "铁矿": false, "农作物": false },
@@ -340,7 +341,7 @@ export function reset(seed) {
     buf: {}, wip: {}, buildings: {}, buildOrders: [],
     mobilized: false, borrows: {},
     sel: null, selSlot: null, feed: [], rates: {}, snap: null,
-    cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0, wear: { cart: 0, sword: 0 },
+    orgTasks: [], cityL: [], cityR: [], citySat: [], autoCd: 0, popCd: 0, seed: 0, wear: { cart: 0, sword: 0 },
     intake: { "原木": false, "铁矿": false, "农作物": false },   // 收货政策默认全关（裁决34）：产出先堆产地空地
   };
   Object.assign(S, fresh);
@@ -365,7 +366,8 @@ export function reset(seed) {
   hall.slots["市长"].persons = ["p01"]; S.people[0].org = hall.id;
   addPersonRaw("动员官", { attr: { str: 6, int: 4, agi: 5, cft: 4, cmd: 6 }, skills: [] });
   hall.slots["军事"].persons = ["p02"]; S.people[1].org = hall.id;
-  for (let i = 0; i < 8; i++) addPersonRaw("村民");
+  for (let i = 0; i < 8; i++) { addPersonRaw("村民");   // 创始班底基本技能全有（裁决48）；技能稀缺随移民进场
+    S.people[S.people.length - 1].skills = [...ARTS]; }
   feed("聚落开局：根组织「聚落」+市政厅/仓库各一座。选空槽派人或构筑组织，从零搭起一切");
   S.snap = collectSnap();
 }
@@ -600,12 +602,14 @@ export function addOrgRaw(name, tier, kind) {
   for (const opt of (ORG_PANELS[name] || [])) org.settings[opt.key] = opt.choices[0][0];
   S.orgs[id] = org;
   if (kind !== "hall") {
-    org.slots["主管"] = { def: { fn: "主管", n: 1, pos: "gain",
-      role: "主持本组织事务（构筑时由槽内在编者转任，裁决47）" }, persons: [], institution: "" };
     for (const def of (tpl.slots || [])) {   // 同名下辖槽（总坊的 厂坊×3）键去重：首槽原名、后续加序号
       let k = def.fn, i = 2;
       while (org.slots[k]) k = def.fn + i++;
       org.slots[k] = { def, persons: [], institution: "" };
+    }
+    if (!tpl.lead && !org.slots["总管"]) {   // 无显式 lead 岗的模板：首槽即士官长（裁决50）
+      const first = Object.keys(org.slots)[0];
+      if (first) org.slots[first].def = { ...org.slots[first].def, lead: true };
     }
   }
   if (org.bldgType) {   // 自动进驻一座空置同类建筑；没有则空挂（基础运转受限，工厂工序全停摆）
@@ -642,16 +646,21 @@ export function tabUnlocked(id) {
   if (id === "org") return true;
   const hall = S.orgs.o01;
   if (!hall) return true;
-  if (id === "city") {   // 建筑页＝建造线：任一「建造」槽在编（生产局·建造槽放人或放工程队——裁决43修正）
+  const subTreeHas = orgId => {   // 整棵子树任一在编（放机构＝放人：效果由人提供，空机构不算——裁决49）
+    const o = S.orgs[orgId];
+    if (!o) return false;
+    if (Object.values(o.slots).some(sl => sl.persons.length)) return true;
+    return Object.values(o.slots).some(sl => sl.institution && subTreeHas(sl.institution));
+  };
+  if (id === "city")   // 建筑页＝建造线：任一「建造」槽在编（裁决43修正）
     return Object.values(S.orgs).some(o => {
       const sl = o.slots["建造"];
-      return sl && (sl.persons.length > 0 || !!sl.institution);
+      return sl && (sl.persons.length > 0 || (sl.institution && subTreeHas(sl.institution)));
     });
-  }
   const key = { wh: "运输", ov: "情报" }[id];
   if (!key) return true;
   const sl = hall.slots[key];
-  return !!sl && (sl.persons.length > 0 || !!sl.institution);   // 有人或机构入驻都算（裁决10：机构入驻即算在岗）
+  return !!sl && (sl.persons.length > 0 || (sl.institution && subTreeHas(sl.institution)));
 }
 /* 设计岗在编（裁决43）：工程队·设计——在编才能看各建筑内部结构预览 */
 export const hasDesigner = () => Object.values(S.orgs).some(o => (o.slots["设计"]?.persons.length || 0) > 0);
@@ -858,7 +867,7 @@ export function cityLayout() {
 }
 /* ── 存档（localStorage）：一局核心字段——刷新/关页不丢城；重开按钮清档 ── */
 const SAVE_FIELDS = ["hours", "seq", "people", "orgs", "res", "buf", "wip", "buildings",
-                     "buildOrders", "cityL", "cityR", "citySat", "mobilized", "seed", "knobs", "popCd", "autoCd", "order", "wear", "intake"];
+                     "buildOrders", "orgTasks", "cityL", "cityR", "citySat", "mobilized", "seed", "knobs", "popCd", "autoCd", "order", "wear", "intake"];
 export function saveState() {
   const data = {}; for (const k of SAVE_FIELDS) data[k] = S[k];
   try { localStorage.setItem("orgsim.save", JSON.stringify(data)); } catch {}
@@ -872,6 +881,14 @@ export function loadState() {
     Object.assign(S, data, { sel: null, selSlot: null, feed: [], snap: null, rates: {}, borrows: {}, speed: 0 });
     if (!data.intake) S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 旧档（裁决34 前）无收货政策=按旧口径全收，别把老城饿死——判 data 而非 S（S 被 reset 预填恒真，迁移曾永不触发）
     for (const r of RES) if (S.res[r] === undefined) S.res[r] = 0;   // 目录扩容（门扇/窗扇等）：旧档补零键
+    for (const o of Object.values(S.orgs)) {   // 士官式主管迁移（裁决50）：旧档独立主管槽的人员并入 lead 岗
+      const sup = o.slots["主管"];
+      if (sup && sup.persons.length) {
+        const lead = Object.values(o.slots).find(sl => sl.def.lead) || Object.values(o.slots)[0];
+        if (lead && lead !== sup) lead.persons.push(...sup.persons);
+      }
+      if (sup) delete o.slots["主管"];
+    }
     for (const ord of S.buildOrders || [])   // 旧档施工单（工序链模型前）迁移：余量折成已付费单环节（旧模型整单预付过）
       if (!ord.phases) ord.phases = [{ id: "余量", name: "余量施工", trade: "木工",
         vol: Math.max(1, (ord.vol || ord.work) - ord.done), done: 0, paid: true, cost: {}, deps: [], waiting: false }];
@@ -964,7 +981,7 @@ export function advance(dt) {
   let haulers = 0, keeper = false;
   for (const o of Object.values(S.orgs)) {
     const kp = o.slots["库管"];
-    if (kp && (kp.persons.length || (kp.institution && S.orgs[kp.institution] && membersOf(S.orgs[kp.institution]) > 0))) keeper = true;
+    if (kp && (kp.persons.length || (kp.institution && S.orgs[kp.institution] && membersOf(S.orgs[kp.institution]) > 0))) keeper = true;   // 机构在编＝其有人在（裁决49：效果由人提供）
     const hp = o.slots["搬运"]; if (hp) haulers += hp.persons.length;
   }
   if (keeper && haulers > 0) {
@@ -1149,6 +1166,7 @@ export function advance(dt) {
       }
     }
   }
+  tickOrgTasks(dt);   // 筹建任务读条（裁决48）
   // ⑥′ 自动化：人事局补员 + 工程队自动扩建 + 人口缓增（组织规模越大自动化越高）
   {
     const hr = Object.values(S.orgs).find(x => x.template === "人事局");
@@ -1288,7 +1306,7 @@ export function advance(dt) {
 
 /* ═════════ 玩家操作 ═════════ */
 /* 构筑＝选中空槽位后从候选中建子组织（子机构可不断递归）；放一个人顶岗走 putPerson */
-export function createOrgAt(containerId, fn, name) {
+export function createOrgAt(containerId, fn, name) {   // 即时构筑（程序路径）；玩家路径＝startOrgTask 筹建读条（裁决48）
   const container = S.orgs[containerId];
   if (!container || !container.slots[fn]) return;
   const slot = container.slots[fn];
@@ -1298,15 +1316,16 @@ export function createOrgAt(containerId, fn, name) {
   const movers = slot.persons;
   const cost = LATE_COST[name] || {};
   if (cost.prereqSkill) { const why = createBlocked(name); if (why) { feed(why, "bad"); return; } }   // 前提通过则放行（曾无条件 return——科研院永远建不成）
-  if (cost.res && !canPay(cost.res)) { feed(`构筑「${name}」资源不足（${costStr(cost.res)}）`, "bad"); return; }
+  if (cost.res && !canPay(cost.res)) { feed(`构筑「${name}」资源不足（${costStr(cost.cost || cost.res)}）`, "bad"); return; }
   if (cost.res) pay(cost.res);
   const o = addOrgRaw(name, 2, "");
   slot.persons = [];
   slot.institution = o.id;
   const head = movers.shift();
-  if (head && o.slots["主管"]) {
-    o.slots["主管"].persons.push(head); person(head).org = o.id;
-    feed(`${person(head)?.name} 转任 ${o.name} 主管（发起构筑的槽内在编者）`, "good");
+  const leadSlot = Object.values(o.slots).find(sl => sl.def.lead) || Object.values(o.slots)[0];
+  if (head && leadSlot) {
+    leadSlot.persons.push(head); person(head).org = o.id;
+    feed(`${person(head)?.name} 转任 ${o.name}${leadSlot.def.fn}${o.template.endsWith("队") ? "长" : ""}（士官式主管：自己也干活，裁决50）`, "good");
   }
   for (const pid of movers) person(pid).org = "";   // 槽内其余人回待业（主管只取首位）
   feed(`构筑 ${o.name}，入驻 ${container.name}「${fn}」槽`, "good");
@@ -1335,6 +1354,45 @@ export function delOrg(orgId) {
     for (const slot of Object.values(other.slots)) if (slot.institution === orgId) slot.institution = "";
   feed(`解散 ${o.name}（人员回待业）`);
   if (S.sel === orgId) { S.sel = null; S.selSlot = null; }
+}
+/* 筹建任务（裁决48）：在父组织面板下达——槽内在编者读条 3 时建出新组织（完成时经 createOrgAt 转任主管）
+   撤走读条人＝任务作废（草台班子散伙） */
+export function startOrgTask(containerId, fn, name) {
+  const slot = S.orgs[containerId]?.slots[fn];
+  if (!slot || slot.institution || !slot.persons.length) return;
+  if (S.orgTasks.some(t => t.c === containerId && t.fn === fn)) { feed(`「${fn}」槽已有筹建任务在办`, "bad"); return; }
+  const cost = LATE_COST[name] || {};
+  if (cost.prereqSkill) { const why = createBlocked(name); if (why) { feed(why, "bad"); return; } }
+  S.orgTasks.push({ c: containerId, fn, name, pid: slot.persons[0], prog: 0, need: 3 });
+  feed(`筹建任务下达：${person(slot.persons[0])?.name} 着手筹建 ${name}（3 时成编制）`, "good");
+}
+function tickOrgTasks(dt) {
+  for (const t of [...S.orgTasks]) {
+    const slot = S.orgs[t.c]?.slots[t.fn];
+    if (!slot || !slot.persons.includes(t.pid)) {   // 读条人被撤走——作废
+      S.orgTasks.splice(S.orgTasks.indexOf(t), 1);
+      feed(`筹建作废：${t.name}（经办人离岗）`, "warn");
+      continue;
+    }
+    t.prog += dt;
+    if (t.prog >= t.need) {
+      S.orgTasks.splice(S.orgTasks.indexOf(t), 1);
+      createOrgAt(t.c, t.fn, t.name);   // 完成＝即时落编（人转任主管，裁决47）
+    }
+  }
+}
+/* 点空槽自动放人（裁决48）：从待业里选最合适的——会本组织所需手艺优先、对应属性次之 */
+export function putBest(orgId, fn) {
+  const o = S.orgs[orgId]; const slot = o?.slots[fn];
+  if (!slot || slot.institution || slot.persons.length) return false;
+  const idles = idle();
+  if (!idles.length) { feed("无待业者可派", "bad"); return false; }
+  const orgArts = [...new Set((o.steps || []).map(st => st.art).filter(Boolean))];
+  const attrKey = slot.def.terrain ? "str" : "cft";
+  const best = idles.map(p => ({ p, sc: p.skills.filter(a => orgArts.includes(a)).length * 2 + (p.attr[attrKey] || 5) / 10 }))
+    .sort((a, b) => b.sc - a.sc)[0].p;
+  putPerson(orgId, fn, best.id);
+  return true;
 }
 export function putPerson(orgId, fn, pid) {
   const o = S.orgs[orgId]; if (!o || !o.slots[fn] || !pid) return;

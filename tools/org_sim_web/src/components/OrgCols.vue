@@ -157,9 +157,9 @@ function askDel(id) {
             <template v-if="!slot.institution && slotCandidates(fn).length">
               <span class="ohint b">构筑：</span>
               <button v-for="name in slotCandidates(fn).filter(x => x !== o.template)" :key="name" class="cbtn"
-                      :class="{ late: ORGS[name].late }" :disabled="!!createBlocked(name)"
+                      :disabled="!!createBlocked(name)"
                       :title="candTitle(name)"
-                      @click="createOrgAt(o.id, fn, name)">＋{{ name }}<i v-if="ORGS[name].late">后期</i></button>
+                      @click="createOrgAt(o.id, fn, name)">＋{{ name }}</button>
             </template>
             <select v-model="pickPerson" :disabled="slot.def.homog && slot.persons.length >= slotCap(o, slot)">
               <option value="">{{ slot.def.homog && slot.persons.length >= slotCap(o, slot) ? "坑位已满" : "待业人员…" }}</option>
@@ -217,8 +217,6 @@ function askDel(id) {
         max-height: 132px; overflow-y: auto; }   /* 候选多时内滚，不撑高整列推走下方卡片 */
 .sops select { max-width: 108px; font-size: 11px; padding: 2px 4px; }
 .sops button { padding: 2px 8px; font-size: 11px; }
-.sops .cbtn.late { color: var(--dim); }
-.sops .cbtn.late i { font-style: normal; font-size: 10px; color: var(--warn); margin-left: 3px; }
 .sops .ohint { color: var(--faint); font-size: 10px; }
 .sops .ohint.b { color: var(--acc); }
 </style>

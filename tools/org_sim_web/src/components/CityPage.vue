@@ -187,7 +187,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
                 :disabled="!!shellWhy(b)"
                 :title="(shellWhy(b) ? shellWhy(b) + '｜' : '') + d.desc + ' · 工期 ' + d.shell.work + '人时'"
                 @click="startBuild(b)">
-          <span class="bmctop"><b>{{ b }}</b><i v-if="d.late" class="latetag">后期</i>
+          <span class="bmctop"><b>{{ b }}</b>
             <i class="bmw">占{{ CITY_W[b] }}格{{ menuSide !== '矿卫' && b === '民居' && storeys === 2 ? '×2层' : '' }}</i></span>
           <span class="bmcdesc">{{ d.desc }}</span>
           <span class="bmcmeta">工期 {{ billOf(b, b === '民居' && storeys === 2 ? 2 : 1).work }} 人时 · 逐部位料单：</span>
@@ -332,7 +332,6 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .bmctop { display: flex; align-items: center; gap: 6px; width: 100%; }
 .bmctop b { font-size: 12.5px; }
 .bmctop .bmw { font-style: normal; color: var(--dim); font-size: 10px; margin-left: auto; }
-.latetag { font-style: normal; font-size: 10px; color: var(--warn); }
 .bmcdesc { color: var(--dim); font-size: 10.5px; line-height: 1.35; }
 .bmcmeta { color: var(--dim); font-size: 10.5px; }
 .bmcard .cost { margin-right: 6px; }

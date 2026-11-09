@@ -15,7 +15,7 @@ export const RES = ["原木", "铁矿", "农作物", "木材", "木板", "木梁
 export const RES_INFO = {
   "原木":   { cat: "basic", icon: "🌲", src: "伐木队采自树林——锯木坊锯解的原料" },
   "铁矿":   { cat: "basic", icon: "🪨", src: "矿物·暂只做铁——采矿队采自矿洞" },
-  "农作物": { cat: "basic", icon: "🌾", src: "耕地产出——战粮类增益品原料（进食可选增益、无饥饿），亦可炮制入药" },
+  "农作物": { cat: "basic", icon: "🌾", src: "耕地产出——入药与纤维（搓绳）原料；进食可选增益、无饥饿（机制后续）" },
   "木材":   { cat: "mat", icon: "🪵", src: "锯木坊锯解原木所得（建材/工具/载具用料）" },
   "木板":   { cat: "mat", icon: "🟫", src: "锯木坊刨光木材所得" },
   "木梁":   { cat: "mat", icon: "🪓", src: "锯木坊制梁所得——大跨承重构件（设施类建筑骨架）" },
@@ -66,12 +66,12 @@ export const BUILDINGS = {
     shell: { parts: { "墙体": { "木材": 10, "木梁": 4 }, "屋顶": { "木瓦": 4 }, "地面": { "木材": 4 }, "索具": { "绳索": 2 } }, work: 18 }, interior: [
       { item: "木人桩", cost: { "木材": 6 }, work: 6, w: 1, unlock: "解锁教官岗" },
       { item: "靶场",   cost: { "木板": 2, "绳索": 2 }, work: 5, w: 2, effect: "演武器材（机制后续）" } ] },
-  "兵营": { late: true, desc: "常备军的营房",
+  "兵营": { desc: "常备军的营房",
     shell: { parts: { "墙体": { "木板": 8, "木梁": 6 }, "屋顶": { "木瓦": 6 }, "五金": { "铁钉": 2 } }, work: 20 }, interior: [] },
   "办公楼": { desc: "人事与组织的办公场所",
     shell: { parts: { "墙体": { "木板": 8 }, "屋顶": { "木材": 4 }, "地面": { "木板": 4 } }, work: 14 }, interior: [
       { item: "档案柜", cost: { "木材": 5 }, work: 5, w: 2, unlock: "人事岗就绪" } ] },
-  "书院": { late: true, desc: "研究与实验的场所",
+  "书院": { desc: "研究与实验的场所",
     shell: { parts: { "墙体": { "木板": 10, "木梁": 4 }, "屋顶": { "木瓦": 6 }, "索具": { "绳索": 2 } }, work: 18 }, interior: [
       { item: "书架",   cost: { "木板": 4 }, work: 5, w: 2, unlock: "解锁课题管理岗" },
       { item: "实验台", cost: { "铁矿": 2, "木板": 2 }, work: 6, w: 2, unlock: "解锁实验岗" } ] },
@@ -83,7 +83,7 @@ export const BUILDINGS = {
       { item: "木工台", cost: { "木材": 8, "铁矿": 2 }, work: 8, w: 2, unlock: "备料工序（木板+铁锭→车料）" },
       { item: "搓绳架", cost: { "木材": 4 }, work: 4, w: 2, unlock: "搓绳工序（农作物×2→绳索）" },
       { item: "组装架", cost: { "木材": 4, "铁矿": 1 }, work: 5, w: 1, unlock: "装配工序（车料→手推车，需木工）" } ] },
-  "冶炼坊": { late: true, desc: "矿石入炉炼铁，出铁锭（后期）",
+  "冶炼坊": { desc: "矿石入炉炼铁，出铁锭",
     shell: { parts: { "墙体": { "木梁": 6, "木板": 8 }, "屋顶": { "木瓦": 8 }, "五金": { "铁矿": 4 } }, work: 24 }, interior: [
       { item: "冶炼炉", cost: { "铁矿": 6, "木板": 4 }, work: 12, w: 2, unlock: "冶炼工序（铁矿+木材→铁锭，需冶炼）" } ] },
 };
@@ -107,7 +107,7 @@ export const ORGS = {
       { fn: "锻造", n: 1, pos: "gain", role: "铁矿→铁剑" },
       { fn: "制药", n: 1, pos: "gain", role: "农作物→药水" },
       { fn: "木器", n: 1, pos: "gain", role: "木板+铁锭→手推车（载具）" },
-      { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭（后期）" } ] },
+      { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭" } ] },
   "工程队": { host: "建造", slots: [
       { fn: "测量", n: 1, pos: "gain", role: "放线与验收" },
       { fn: "施工", n: 4, homog: true, pos: "must", role: "硬装软装都干" },
@@ -183,24 +183,23 @@ export const ORGS = {
       { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
   "人事局": { host: "行政", bldg: "办公楼", slots: [
       { fn: "人事", n: 1, pos: "must", req: { b: "办公楼", item: "档案柜" }, role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
-      { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（后期：自适应扩建与改编）" } ] },
+      { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（自适应扩建与改编，01 §4.6）" } ] },
   "情报局": { host: "情报", slots: [
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览" },
       { fn: "采编", n: 4, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
       { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
-  /* 后期 */
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊",
       slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭" } ],
       steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 1, "木材": 1 }, outCity: { "铁锭": 1 }, art: "冶炼" } ] },
-  "常备军": { host: "军事", bldg: "兵营", late: true, slots: [
+  "常备军": { host: "军事", bldg: "兵营",, slots: [
       { fn: "军事", n: 1, pos: "must", role: "在编即可动员" },
-      { fn: "军需", n: 1, pos: "gain", role: "战粮军械领用配发登记" },
+      { fn: "军需", n: 1, pos: "gain", role: "军械领用配发登记" },
       { fn: "训练", n: 1, pos: "gain", role: "放训练营成建制施训" } ] },
-  "训练营": { host: "训练", bldg: "训练场", late: true, slots: [
+  "训练营": { host: "训练", bldg: "训练场",, slots: [
       { fn: "训练管理", n: 1, pos: "gain", role: "排训练计划" },
       { fn: "教官", n: 4, homog: true, pos: "must", req: { b: "训练场", item: "木人桩" }, role: "施训教官" },
       { fn: "器材管理", n: 1, pos: "gain", role: "维护训练器材" } ] },
-  "科研院": { host: "教育", bldg: "书院", late: true, slots: [
+  "科研院": { host: "教育", bldg: "书院",, slots: [
       { fn: "课题管理", n: 1, pos: "gain", req: { b: "书院", item: "书架" }, role: "选题与立项" },
       { fn: "实验", n: 3, homog: true, pos: "must", req: { b: "书院", item: "实验台" }, role: "产出新技能，长在本人身上" },
       { fn: "文献记录", n: 1, pos: "gain", role: "汇总技能台账并呈递给你" } ] },

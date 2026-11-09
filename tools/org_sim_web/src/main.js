@@ -4,7 +4,7 @@ import "./style.css";
 import { S, advance, reset, createOrgAt, putPerson, queueBuild, delOrg, loadDemo, housingCap, cityCells,
          capTotal, resTotal, pullPersons, mineBufCap, satWarehouses, cancelBuild, dismantle,
          buildBlocked, cityLayout, stallInfo, saveState, hasSave, loadState, clearSave,
-         planOf, planTotal, tabUnlocked, hasDesigner, startOrgTask, putBest } from "./sim.js";
+         planOf, planTotal, tabUnlocked, hasDesigner, startOrgTask, putBest, crewCounts } from "./sim.js";
 
 // 存档恢复先于挂载：刷新/重开浏览器不丢城（重开按钮才清档）
 if (hasSave()) loadState();
@@ -14,6 +14,6 @@ if (import.meta.env.DEV)
   window.__sim = { S, advance, reset, loadDemo, housingCap, cityCells, capTotal, resTotal,
                   mineBufCap, satWarehouses, createOrgAt, putPerson, pullPersons, queueBuild, delOrg,
                   cancelBuild, dismantle, buildBlocked, cityLayout, stallInfo, saveState, loadState, clearSave,
-                  planOf, planTotal, tabUnlocked, hasDesigner, startOrgTask, putBest };
+                  planOf, planTotal, tabUnlocked, hasDesigner, startOrgTask, putBest, crewCounts };
 
 createApp(App).mount("#app");

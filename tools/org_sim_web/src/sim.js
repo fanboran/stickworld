@@ -133,37 +133,34 @@ export const ORGS = {
       { fn: "制药", n: 1, pos: "gain", role: "农作物→药水" },
       { fn: "木器", n: 1, pos: "gain", role: "木板+铁锭→手推车（载具）" },
       { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭" } ] },
+  /* 工程队＝工种齐全的施工组织（裁决40/51）：木匠/茅匠/小工＝多坑位工种槽直挂队内——
+     纯同质化劳动力池不设子组织（有内部分工才成组织：测量/设计/三工种/质检） */
   "工程队": { host: "建造", slots: [
       { fn: "测量", n: 1, pos: "gain", role: "放线与验收", lead: true },
       { fn: "设计", n: 1, pos: "gain", role: "建筑设计——在编才解锁建筑页各座的内部结构预览（剖视图）" },
-      { fn: "木匠", n: 1, pos: "gain", role: "木匠活位——木匠队可入驻（在编匠人即计入本岗）" },
-      { fn: "茅匠", n: 1, pos: "gain", role: "茅匠活位——茅匠队可入驻（在编铺苫匠即计入本岗）" },
-      { fn: "小工", n: 1, pos: "gain", role: "小工活位——小工队可入驻（在编杂工即计入本岗）" },
+      { fn: "木匠", n: 6, homog: true, pos: "must", role: "立架/铺椽/铺顶/筑墙/门窗（吃灵巧）" },
+      { fn: "茅匠", n: 3, homog: true, pos: "must", role: "梳束挂条逐层铺苫——茅草顶（吃灵巧）" },
+      { fn: "小工", n: 6, homog: true, pos: "must", role: "备料/场地/粉刷/夯地（吃力气）" },
       { fn: "质检", n: 1, pos: "gain", role: "工序与落成核验" } ] },
-  /* 作队（裁决40）：工种＝专门组织——木匠队吃 cft、小工队吃 str，两队各出各力真并行 */
-  "木匠队": { host: "木匠", slots: [
-      { fn: "大匠", n: 1, pos: "must", role: "主墨放线主持立架", lead: true },
-      { fn: "匠作", n: 4, homog: true, pos: "must", role: "立架/铺椽/铺顶/筑墙/门窗" } ] },
-  "茅匠队": { host: "茅匠", slots: [
-      { fn: "铺苫", n: 3, homog: true, pos: "must", role: "梳束挂条逐层铺苫——茅草顶（屋面阶段进场）", lead: true } ] },
-  "小工队": { host: "小工", slots: [
-      { fn: "杂活", n: 4, homog: true, pos: "must", role: "备料/场地/粉刷/夯地", lead: true } ] },
   "运输队": { host: "运输", slots: [
       { fn: "调度", n: 1, pos: "gain", role: "减轻未通报场地的搬运损耗", lead: true },
       { fn: "库管", n: 1, pos: "must", role: "在岗搬运才运转" },
       { fn: "搬运", n: 5, homog: true, pos: "must", role: "负责搬运" } ] },
   "伐木队": { host: "伐木", bldg: "伐木小屋", slots: [
-      { fn: "伐木", n: 4, homog: true, pos: "must", terrain: "树林", role: "负责伐木", lead: true },
+      { fn: "伐木队长", n: 1, pos: "must", terrain: "树林", lead: true, role: "带班伐木——自己也伐木" },
+      { fn: "伐木", n: 4, homog: true, pos: "must", terrain: "树林", role: "负责伐木" },
       { fn: "木材信息", n: 1, pos: "semi", role: "收集木材线信息呈递给你" },
       { fn: "探测", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "收集林木资源情报呈递给你" },
       { fn: "记录", n: 1, pos: "gain", req: { b: "伐木小屋", item: "办公桌椅" }, role: "记录木材出入并呈递给你" } ] },
   "采矿队": { host: "采矿", slots: [
-      { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿", lead: true },
+      { fn: "挖矿队长", n: 1, pos: "must", terrain: "矿洞", lead: true, role: "带班挖矿——自己也下矿" },
+      { fn: "挖矿", n: 4, homog: true, pos: "must", terrain: "矿洞", role: "负责挖矿" },
       { fn: "支护", n: 1, pos: "gain", role: "架坑木支撑坑道——矿场堆容 +20/人" },
       { fn: "提升", n: 1, pos: "gain", role: "坑口吊运——矿石出坑快 1/4（同工具架物理口径）" },
       { fn: "矿石信息", n: 1, pos: "semi", role: "收集矿石线信息呈递给你" } ] },
   "农垦队": { host: "农垦", slots: [
-      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "耕地", role: "负责耕作", lead: true },
+      { fn: "耕作队长", n: 1, pos: "must", terrain: "耕地", lead: true, role: "带班耕作——自己也下地" },
+      { fn: "耕作", n: 4, homog: true, pos: "must", terrain: "耕地", role: "负责耕作" },
       { fn: "选种", n: 1, pos: "gain", role: "留优种作来年种籽" },
       { fn: "农情信息", n: 1, pos: "semi", role: "收集农情信息呈递给你" } ] },
   "锯木坊": { host: "锯木", bldg: "锯木坊", slots: [
@@ -427,28 +424,27 @@ export function loadDemo() {
   const sci = addOrgRaw("科研院", 2, ""); place(hall, "教育", sci);
   const intel = addOrgRaw("情报局", 2, ""); place(hall, "情报", intel);
   const hr = addOrgRaw("人事局", 2, ""); place(hall, "行政", hr);
-  /* 满员运转 */
-  let q = vill();
-  staff(lumber, "伐木", 2, q); staff(mining, "挖矿", 2, q.slice(2));
-  staff(farm, "耕作", 2, q.slice(4));
-  staff(haul, "调度", 1, q.slice(6)); staff(store, "收发", 1, q.slice(7)); staff(haul, "搬运", 3, q.slice(8));
-  staff(eng, "测量", 1, q.slice(11));
-  const carps = addOrgRaw("木匠队", 2, ""); place(eng, "木匠", carps);   // 作队制（裁决40）：工程队下辖木匠队/小工队
-  const labs = addOrgRaw("小工队", 2, ""); place(eng, "小工", labs);
-  const thatc = addOrgRaw("茅匠队", 2, ""); place(eng, "茅匠", thatc);
-  staff(carps, "大匠", 1, q.slice(12)); staff(carps, "匠作", 2, q.slice(13));
-  staff(labs, "杂活", 2, q.slice(15));
-  staff(thatc, "铺苫", 2, q.slice(38));
-  staff(eng, "设计", 1, q.slice(40));
-  staff(forge, "风箱", 1, q.slice(17)); staff(forge, "熔炼", 1, q.slice(18)); staff(forge, "锻打", 1, q.slice(19));
-  staff(forge, "淬火", 1, q.slice(20)); staff(forge, "开刃", 1, q.slice(21));
-  staff(sawmill, "锯解", 1, q.slice(22));
-  staff(pharmacy, "炮制", 1, q.slice(23));
-  staff(cartshop, "备料", 1, q.slice(28));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
-  staff(smelter, "冶炼", 1, q.slice(27));
-  staff(hr, "人事", 1, q.slice(29));
-  staff(intel, "汇总", 1, q.slice(30)); staff(intel, "采编", 2, q.slice(31));
-  staff(sci, "课题管理", 1, q.slice(33)); staff(sci, "实验", 2, q.slice(34)); staff(sci, "文献记录", 1, q.slice(36));
+  /* 满员运转（游标式分配：take(n) 依序领待业者，加减编制不再手工数格子） */
+  const pool = vill(); let cur = 0;   // 快照池：曾误在收缩中的待业列表上推进游标，越取越跳、二十人后干涸
+  const take = n => { const ids = pool.slice(cur, cur + n); cur += n; return ids; };
+  staff(lumber, "伐木队长", 1, take(1)); staff(lumber, "伐木", 2, take(2));
+  staff(mining, "挖矿队长", 1, take(1)); staff(mining, "挖矿", 2, take(2));
+  staff(farm, "耕作队长", 1, take(1)); staff(farm, "耕作", 2, take(2));
+  staff(haul, "调度", 1, take(1)); staff(store, "收发", 1, take(1)); staff(haul, "搬运", 3, take(3));
+  staff(eng, "测量", 1, take(1));
+  staff(eng, "木匠", 3, take(3));   // 工种槽直挂（裁决51：作队解散，纯劳动力池不设子组织）
+  staff(eng, "茅匠", 2, take(2));
+  staff(eng, "小工", 3, take(3));
+  staff(eng, "设计", 1, take(1));
+  staff(forge, "风箱", 1, take(1)); staff(forge, "熔炼", 1, take(1)); staff(forge, "锻打", 1, take(1));
+  staff(forge, "淬火", 1, take(1)); staff(forge, "开刃", 1, take(1));
+  staff(sawmill, "锯解", 2, take(2));   // 两名锯工：样板实测原木堆积木材断供的瓶颈针（锯解1人转不过熔炼耗木）
+  staff(pharmacy, "炮制", 1, take(1));
+  staff(cartshop, "备料", 1, take(1));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
+  staff(smelter, "冶炼", 1, take(1));
+  staff(hr, "人事", 1, take(1));
+  staff(intel, "汇总", 1, take(1)); staff(intel, "采编", 2, take(2));
+  staff(sci, "课题管理", 1, take(1)); staff(sci, "实验", 2, take(2)); staff(sci, "文献记录", 1, take(1));
   hall.name = "市政厅";
   /* 样板运行配置：运输队开车（一队一车按队占编，库中备 2 辆周转）、矿井卫星区一座卫星仓
      （矿堆容 +80、集中短驳）——载具与分布式仓储两个机制在完全体里可见 */
@@ -881,6 +877,20 @@ export function loadState() {
     Object.assign(S, data, { sel: null, selSlot: null, feed: [], snap: null, rates: {}, borrows: {}, speed: 0 });
     if (!data.intake) S.intake = { "原木": true, "铁矿": true, "农作物": true };   // 旧档（裁决34 前）无收货政策=按旧口径全收，别把老城饿死——判 data 而非 S（S 被 reset 预填恒真，迁移曾永不触发）
     for (const r of RES) if (S.res[r] === undefined) S.res[r] = 0;   // 目录扩容（门扇/窗扇等）：旧档补零键
+    for (const crew of ["木匠队", "茅匠队", "小工队"]) {   // 作队解散迁移（裁决51）：人员并入宿主工程队工种槽
+      for (const o of Object.values(S.orgs).filter(x => x.template === crew)) {
+        const hostSlot = Object.values(S.orgs).flatMap(h => Object.values(h.slots))
+          .find(sl => sl.institution === o.id);
+        if (hostSlot) {
+          const trade = crew === "木匠队" ? "木匠" : crew === "茅匠队" ? "茅匠" : "小工";
+          const host = Object.values(S.orgs).find(h => h.slots[trade] && Object.values(h.slots).some(sl => sl.institution === o.id));
+          if (host) for (const sl of Object.values(o.slots))
+            for (const pid of sl.persons) { host.slots[trade].persons.push(pid); person(pid).org = host.id; }
+          hostSlot.institution = "";
+        }
+        delOrg(o.id);
+      }
+    }
     for (const o of Object.values(S.orgs)) {   // 士官式主管迁移（裁决50）：旧档独立主管槽的人员并入 lead 岗
       const sup = o.slots["主管"];
       if (sup && sup.persons.length) {

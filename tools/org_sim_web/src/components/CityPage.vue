@@ -113,7 +113,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
         <span class="qchip" v-for="(p2, i) in pending" :key="'q' + i"
               :title="orderLabel(p2) + '——点 ✕ 撤单'">{{ orderLabel(p2).slice(0, 12) }}<i @click="cancelBuild(i + 1)">✕</i></span>
         <span class="qwarn" v-if="!crews.木匠 && !crews.小工">无作队——工程队下放木匠队/小工队或直派</span>
-        <span class="qsub" title="作队出力＝在编×属性系数（木匠吃灵巧/小工吃力量）——时长是工作量÷出力的涌现值">木匠{{ crews.木匠 }}·小工{{ crews.小工 }}</span>
+        <span class="qsub" title="作队出力＝在编×属性系数（木匠茅匠吃灵巧/小工吃力量）——时长是工作量÷出力的涌现值">木匠{{ crews.木匠 }}·茅匠{{ crews.茅匠 }}·小工{{ crews.小工 }}</span>
       </template>
       <span v-else class="qdim">无施工单——点一排两端的扩建位开工</span>
     </div>

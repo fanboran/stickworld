@@ -10,12 +10,13 @@ export const TERRAIN = {
    原料窄口径（05-经济系统 §四）：基础原料三种——原木/矿物（暂只做铁）/农作物，全部地形直出；
    木材/木板/铁锭都是工序产物（加工品），多样性靠工序不靠原料。
    进食是可选增益、不设「食物」资源；铁水/毛坯/淬火件/净药材/车料是厂内物品，不可离厂（仓库页「厂内」标签可见） */
-export const RES = ["原木", "铁矿", "农作物", "木材", "木板", "木梁", "木瓦", "门扇", "窗扇", "铁锭", "铁钉", "铁板", "绳索",
+export const RES = ["原木", "铁矿", "农作物", "茅草", "木材", "木板", "木梁", "木瓦", "门扇", "窗扇", "铁锭", "铁钉", "铁板", "绳索",
                     "铁剑", "药水", "手推车"];
 export const RES_INFO = {
   "原木":   { cat: "basic", icon: "🌲", src: "伐木队采自树林——柱/椽/梁的毛料与锯解原料" },
   "铁矿":   { cat: "basic", icon: "🪨", src: "矿物·暂只做铁——采矿队采自矿洞" },
   "农作物": { cat: "basic", icon: "🌾", src: "耕地产出——入药与纤维（搓绳）原料；进食可选增益、无饥饿（机制后续）" },
+  "茅草":   { cat: "mat", icon: "🌿", src: "收割副产（麦秆梳束成捆）——茅草顶铺苫料（正片 thatch 材质）" },
   "木材":   { cat: "mat", icon: "🪵", src: "锯木坊锯解原木所得（锯材通用料）" },
   "木板":   { cat: "mat", icon: "🟫", src: "锯木坊刨光木材所得——板墙/地板/门窗料" },
   "木梁":   { cat: "mat", icon: "🪓", src: "锯木坊制梁所得——梁柱构建筑的承重梁与椽" },
@@ -48,14 +49,14 @@ const PHASE_LIB = {
   地基: { trade: "木匠", vol: 4, cost: { "原木": 2 } },         // 圆木地梁
   立架: { trade: "木匠", vol: 8, cost: { "原木": 6 } },         // 立柱架梁（架级换锯材梁）
   铺椽: { trade: "木匠", vol: 6, cost: { "原木": 2 } },         // 圆木椽（架级换木梁椽）
-  铺顶: { trade: "木匠", vol: 5, cost: { "木板": 2 } },         // 板皮屋面（架级换木瓦）
+  铺顶: { trade: "茅匠", vol: 5, cost: { "茅草": 4 } },         // 茅草顶（梳束铺苫——茅匠的活；架级换木瓦归木匠）
   筑墙: { trade: "木匠", vol: 6, cost: { "原木": 4 } },         // 圆木垒墙（架级换板墙）
   门窗: { trade: "木匠", vol: 4, cost: { "木板": 2 } },         // 现制门窗（架级厂制到场安装）
   粉刷: { trade: "小工", vol: 3, cost: {} },                    // 抹泥刷白（就地取土）
   夯地: { trade: "小工", vol: 2, cost: {} },                    // 夯土地面（就地取土；架级换木地板）
 };
 const PHASE_DEPS = { 备料: [], 场地: [], 地基: ["场地"], 立架: ["地基", "备料"], 铺椽: ["立架"],
-  铺顶: ["铺椽"], 筑墙: ["立架"], 夯地: ["立架"], 门窗: ["筑墙"], 粉刷: ["筑墙"] };
+  铺顶: ["铺椽"], 筑墙: ["铺顶"], 夯地: ["立架"], 门窗: ["筑墙"], 粉刷: ["筑墙"] };   // 先顶后墙（营造实证）
 /* 架级环节换料（梁柱/板墙/瓦顶/厂制门窗） */
 const PHASE_LIB_FRAMED = {
   立架: { cost: { "原木": 2, "木梁": 4 } },
@@ -135,12 +136,15 @@ export const ORGS = {
   "工程队": { host: "建造", slots: [
       { fn: "测量", n: 1, pos: "gain", role: "放线与验收" },
       { fn: "木匠", n: 1, pos: "gain", role: "直派木匠，或放木匠队整队入驻（工序链的木匠活归它）" },
+      { fn: "茅匠", n: 1, pos: "gain", role: "直派茅匠，或放茅匠队整队入驻（茅草顶铺苫归它）" },
       { fn: "小工", n: 1, pos: "gain", role: "直派小工，或放小工队整队入驻（备料/场地/粉刷/夯地归它）" },
       { fn: "质检", n: 1, pos: "gain", role: "工序与落成核验" } ] },
   /* 作队（裁决40）：工种＝专门组织——木匠队吃 cft、小工队吃 str，两队各出各力真并行 */
   "木匠队": { host: "木匠", slots: [
       { fn: "大匠", n: 1, pos: "must", role: "主墨放线主持立架" },
       { fn: "匠作", n: 4, homog: true, pos: "must", role: "立架/铺椽/铺顶/筑墙/门窗" } ] },
+  "茅匠队": { host: "茅匠", slots: [
+      { fn: "铺苫", n: 3, homog: true, pos: "must", role: "梳束挂条逐层铺苫——茅草顶（屋面阶段进场）" } ] },
   "小工队": { host: "小工", slots: [
       { fn: "杂活", n: 4, homog: true, pos: "must", role: "备料/场地/粉刷/夯地" } ] },
   "运输队": { host: "运输", slots: [
@@ -329,7 +333,7 @@ export function reset(seed) {
   const fresh = {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
-    res: { "原木": 30, "铁矿": 0, "农作物": 30, "木材": 20, "木板": 10, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0, "木梁": 0, "木椽": 0, "木瓦": 0, "门扇": 0, "窗扇": 0, "铁钉": 0, "铁板": 0, "绳索": 0 },
+    res: { "原木": 30, "铁矿": 0, "农作物": 30, "茅草": 10, "木材": 20, "木板": 10, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0, "木梁": 0, "木椽": 0, "木瓦": 0, "门扇": 0, "窗扇": 0, "铁钉": 0, "铁板": 0, "绳索": 0 },
     // 自举本金（工作量制口径）：首屋（民居·屋 原7板3）+锯木坊（开敞棚 原10板2）+锯架（木8）+床（木4）——
     // 板为一次性垫底，此后板/梁/椽/瓦/门窗全自产；低于此开局锁死（全城唯一木材产能是装了锯架的锯木坊）
     buf: {}, wip: {}, buildings: {}, buildOrders: [],
@@ -347,6 +351,7 @@ export function reset(seed) {
   (rng() < 0.5 ? S.cityL : S.cityR).push({ b: "仓库", inst: 0 });
   for (const [site, t] of Object.entries(TERRAIN))
     for (const p of t.products) S.buf[site + "|" + p] = 0;   // 三线都有场地堆（树林/耕地堆不设上限）
+    S.buf["耕地|茅草"] = 0;   // 收割副产线（与农作物同堆同运）
   const hall = addOrgRaw("市政厅", 1, "hall");
   hall.name = "聚落";
   for (const key of HALL_SLOT_KEYS)
@@ -427,8 +432,10 @@ export function loadDemo() {
   staff(eng, "测量", 1, q.slice(11));
   const carps = addOrgRaw("木匠队", 2, ""); place(eng, "木匠", carps);   // 作队制（裁决40）：工程队下辖木匠队/小工队
   const labs = addOrgRaw("小工队", 2, ""); place(eng, "小工", labs);
+  const thatc = addOrgRaw("茅匠队", 2, ""); place(eng, "茅匠", thatc);
   staff(carps, "大匠", 1, q.slice(12)); staff(carps, "匠作", 2, q.slice(13));
   staff(labs, "杂活", 2, q.slice(15));
+  staff(thatc, "铺苫", 2, q.slice(38));
   staff(forge, "风箱", 1, q.slice(17)); staff(forge, "熔炼", 1, q.slice(18)); staff(forge, "锻打", 1, q.slice(19));
   staff(forge, "淬火", 1, q.slice(20)); staff(forge, "开刃", 1, q.slice(21));
   staff(sawmill, "锯解", 1, q.slice(22));
@@ -626,15 +633,15 @@ export function wipList() {
 }
 /* 在岗施工人力＝各工种作队（工程队·木匠/小工槽直派+入驻作队全员；库务所同款口径） */
 export function crewCounts() {
-  const crews = { 木匠: [], 小工: [] };
+  const crews = { 木匠: [], 茅匠: [], 小工: [] };
   for (const o of Object.values(S.orgs))
     for (const [fn, sl] of Object.entries(o.slots)) {
-      if (fn !== "木匠" && fn !== "小工") continue;
+      if (fn !== "木匠" && fn !== "茅匠" && fn !== "小工") continue;
       crews[fn].push(...sl.persons);
       if (sl.institution && S.orgs[sl.institution])
         for (const s2 of Object.values(S.orgs[sl.institution].slots)) crews[fn].push(...s2.persons);
     }
-  return { 木匠: crews.木匠.length, 小工: crews.小工.length };
+  return { 木匠: crews.木匠.length, 茅匠: crews.茅匠.length, 小工: crews.小工.length };
 }
 export function wipOf(o) { return S.wip[o.id] || (S.wip[o.id] = {}); }
 export const bufKey = (site, product) => site + "|" + product;
@@ -896,6 +903,7 @@ export function advance(dt) {
       if (d.terrain === "树林" && orgEquip(o, "工具架")) rate *= 1.25;
       if (d.terrain === "矿洞" && (o.slots["提升"]?.persons.length || 0) > 0) rate *= 1.25;   // 坑口吊运
       const amt = rate * attrMult(slot.persons, "str") * w * mult * dt;   // 力气影响采集
+      if (d.terrain === "耕地") S.buf[bufKey("耕地", "茅草")] = (S.buf[bufKey("耕地", "茅草")] || 0) + amt * 0.5;   // 收割副产：麦秆同堆待运
       // 三线产出都进场地堆、都要搬运工搬回主仓；差异只在堆容与运距：
       // 树林/耕地＝主城侧产地，堆不设上限（无停采）；矿洞＝卫星城，堆容 40+80×卫星仓
       const prod2 = slotProduct(slot);
@@ -1054,10 +1062,10 @@ export function advance(dt) {
   //    木匠活归木匠（吃 cft）、小工活归小工（吃 str），两队各出各力互不抢人（真并行）；
   //    环节开工即扣料（料不齐＝该环节等料⚠，别环节照跑）；对应作队无人＝该环节停摆（缺人）
   if (S.buildOrders.length) {
-    const crews = { 木匠: [], 小工: [] };   // 工程队·木匠/小工槽：直派人员或作队整队入驻（库务所同款）
+    const crews = { 木匠: [], 茅匠: [], 小工: [] };   // 工程队·木匠/茅匠/小工槽：直派人员或作队整队入驻（库务所同款）
     for (const o of Object.values(S.orgs))
       for (const [fn, sl] of Object.entries(o.slots)) {
-        if (fn !== "木匠" && fn !== "小工") continue;
+        if (fn !== "木匠" && fn !== "茅匠" && fn !== "小工") continue;
         crews[fn].push(...sl.persons);
         if (sl.institution && S.orgs[sl.institution])
           for (const s2 of Object.values(S.orgs[sl.institution].slots)) crews[fn].push(...s2.persons);
@@ -1066,7 +1074,7 @@ export function advance(dt) {
       const ord = S.buildOrders[0];
       const doneOf = id => { const p = ord.phases.find(x => x.id === id); return !p || p.done >= p.vol; };
       const act = ord.phases.filter(p => p.done < p.vol && p.deps.every(doneOf));
-      const byTrade = { 木匠: [], 小工: [] };
+      const byTrade = { 木匠: [], 茅匠: [], 小工: [] };
       for (const ph of act) {
         if (!ph.paid) {
           if (!canPay(ph.cost)) { ph.waiting = true; continue; }   // 等料停摆：工地常态，别的一切照跑
@@ -1074,7 +1082,7 @@ export function advance(dt) {
         }
         byTrade[ph.trade].push(ph);
       }
-      for (const trade of ["木匠", "小工"]) {
+      for (const trade of ["木匠", "茅匠", "小工"]) {
         const list = byTrade[trade];
         for (const ph of list) ph.nostaff = !crews[trade].length;   // 作队无人：环节干瞪眼
         if (!list.length || !crews[trade].length) continue;

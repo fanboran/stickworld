@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, circ, RES_INFO, cityLayout, buildBlocked, cancelBuild, dismantle,
-         queueBuild, buildWorkers, resTotal, capTotal, interiorLayout, interiorUsed, interiorCap,
+         queueBuild, crewCounts, resTotal, capTotal, interiorLayout, interiorUsed, interiorCap,
          planOf, planTotal } from "../sim.js";
 import { usePanelSize } from "../panel.js";
 
@@ -59,20 +59,20 @@ function statusLine(b, instIdx) {
 /* 施工队列条：当前单+在跑环节+进度+排队数+施工人力（工序链口径） */
 const cur = computed(() => S.buildOrders[0] || null);
 const pending = computed(() => S.buildOrders.slice(1));
-const workers = computed(() => buildWorkers());
+const crews = computed(() => crewCounts());
 const orderLabel = o => o.kind === "shell"
   ? `${o.b}·新座（${o.side === "矿卫" ? "矿井卫星区" : o.side === "左" ? "左" : "右"}翼）`
   : o.kind === "floor" ? `${o.b}${circ(o.idx)}·加层` : o.b + circ(o.idx) + "·" + o.item;
 /* 在跑环节（依赖已满足且未完）：队列条点名展示；等料环节标 ⚠ */
 const activePhases = o => {
-  const doneOf = id => { const p = o.phases.find(x => x.id === id); return !p || p.done >= p.work; };
-  return o.phases.filter(p => p.done < p.work && p.deps.every(doneOf));
+  const doneOf = id => { const p = o.phases.find(x => x.id === id); return !p || p.done >= p.vol; };
+  return o.phases.filter(p => p.done < p.vol && p.deps.every(doneOf));
 };
-/* 工序链（建造卡/详情显示）：环节名+料+工时；并行组内以 ∥ 相连 */
+/* 工序链（建造卡/详情显示）：环节名+料+工作量——时长是工作量÷作队出力的涌现值，不标时间 */
 const phasesOf = b => planOf("shell", b);
 const phaseStr = p => (Object.keys(p.cost).length
   ? Object.entries(p.cost).map(([r, n]) => RES_INFO[r]?.icon + n + r).join(" ") : "免料")
-  + ` · ${p.work}工`;
+  + ` · 工作量${p.vol}`;
 const planCost = b => planTotal(planOf("shell", b));
 /* 校验单一真相源（sim.js buildBlocked）：按钮禁用态与 queueBuild 同一规则 */
 const shellWhy = b => buildBlocked("shell", b, null, -1);
@@ -104,15 +104,16 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
       <template v-if="cur">
         <b>{{ orderLabel(cur) }}</b>
         <span class="qph" v-for="ph in activePhases(cur)" :key="ph.id"
-              :class="{ wait: ph.waiting }"
-              :title="ph.waiting ? '等料：' + phaseStr(ph) : '在跑：' + phaseStr(ph)">{{ ph.waiting ? "⚠" : "" }}{{ ph.name }}</span>
-        <div class="bar"><i :style="{ width: (100 * cur.done / cur.work) + '%' }"></i></div>
-        <span class="qpct">{{ (100 * cur.done / cur.work).toFixed(0) }}%</span>
+              :class="{ wait: ph.waiting, lack: ph.nostaff }"
+              :title="ph.nostaff ? '缺人：' + ph.trade + '作队无人——工程队下放' + ph.trade + '队或直派'
+                      : ph.waiting ? '等料：' + phaseStr(ph) : '在跑：' + phaseStr(ph)">{{ ph.nostaff ? "⛔" : ph.waiting ? "⚠" : "" }}{{ ph.name }}</span>
+        <div class="bar"><i :style="{ width: (100 * cur.done / (cur.vol || cur.work || 1)) + '%' }"></i></div>
+        <span class="qpct">{{ (100 * cur.done / (cur.vol || cur.work || 1)).toFixed(0) }}%</span>
         <i class="qcancel" title="撤单（未开工环节返料，已开工的料已砌进结构、工时沉没）" @click="cancelBuild(0)">✕</i>
         <span class="qchip" v-for="(p2, i) in pending" :key="'q' + i"
               :title="orderLabel(p2) + '——点 ✕ 撤单'">{{ orderLabel(p2).slice(0, 12) }}<i @click="cancelBuild(i + 1)">✕</i></span>
-        <span class="qwarn" v-if="!workers">无人施工</span>
-        <span class="qsub">人力 {{ workers }}</span>
+        <span class="qwarn" v-if="!crews.木匠 && !crews.小工">无作队——工程队下放木匠队/小工队或直派</span>
+        <span class="qsub" title="作队出力＝在编×属性系数（木匠吃灵巧/小工吃力量）——时长是工作量÷出力的涌现值">木匠{{ crews.木匠 }}·小工{{ crews.小工 }}</span>
       </template>
       <span v-else class="qdim">无施工单——点一排两端的扩建位开工</span>
     </div>
@@ -129,7 +130,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
           <div v-if="p.storeys === 2" class="upper"><span>2F</span></div>
           <div class="bname">{{ p.b }}</div>
           <span class="ctag">{{ isCur(p) ? "施工中" : "排队" }}</span>
-          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
+          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / (p.vol || p.work || 1) : 0) + '%' }"></i></div>
         </div>
         <!-- 已落成建筑块 -->
         <div v-for="e in blocks" :key="e.b + e.inst" class="bblock built"
@@ -149,7 +150,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
           <div v-if="p.storeys === 2" class="upper"><span>2F</span></div>
           <div class="bname">{{ p.b }}</div>
           <span class="ctag">{{ isCur(p) ? "施工中" : "排队" }}</span>
-          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
+          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / (p.vol || p.work || 1) : 0) + '%' }"></i></div>
         </div>
         <button class="expand" :class="{ on: menuSide === '右' }"
                 title="右翼扩建位——就地展开建造菜单" @click="toggleMenu('右')">＋扩建</button>
@@ -166,7 +167,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
              :style="{ width: (CITY_W[p.b] || 2) * CELL + 'px' }">
           <div class="bname">{{ p.b }}</div>
           <span class="ctag">{{ isCur(p) ? "施工中" : "排队" }}</span>
-          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / p.work : 0) + '%' }"></i></div>
+          <div class="bar cbar"><i :style="{ width: (isCur(p) ? 100 * p.done / (p.vol || p.work || 1) : 0) + '%' }"></i></div>
         </div>
         <div v-for="(e, i) in satBlocks" :key="'sb' + i" class="bblock built sat"
              :style="{ width: (CITY_W[e.b] || 2) * CELL + 'px' }">
@@ -188,14 +189,14 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
       <div class="bmcards">
         <button v-for="[b, d] in buildables" :key="b" class="bmcard"
                 :disabled="!!shellWhy(b)"
-                :title="(shellWhy(b) ? shellWhy(b) + '｜' : '') + d.desc + ' · 共 ' + planCost(b).work + ' 工时'"
+                :title="(shellWhy(b) ? shellWhy(b) + '｜' : '') + d.desc + ' · 总工作量 ' + planCost(b).vol"
                 @click="startBuild(b)">
-          <span class="bmctop"><b>{{ b }}</b><i class="bmgrade">{{ d.grade }}构</i>
+          <span class="bmctop"><b>{{ b }}</b><i class="bmgrade">{{ d.form }}</i>
             <i class="bmw">占{{ CITY_W[b] }}格</i></span>
           <span class="bmcdesc">{{ d.desc }}</span>
-          <span class="bmcmeta">工序链 {{ planCost(b).work }} 工时：</span>
+          <span class="bmcmeta">工序链 · 总工作量 {{ planCost(b).vol }}：</span>
           <span class="bpcost ph" v-for="ph in phasesOf(b)" :key="ph.id"
-                :title="ph.name + '（' + ph.trade + '·' + ph.work + '工）：' + phaseStr(ph)">
+                :title="ph.name + '（' + ph.trade + '·工作量' + ph.vol + '）：' + phaseStr(ph)">
             {{ ph.name }}{{ Object.keys(ph.cost).length ? " " + Object.entries(ph.cost).map(([r, n]) => RES_INFO[r]?.icon + n).join("") : "" }}</span>
         </button>
       </div>
@@ -210,9 +211,9 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
         <div class="cdhead"><b>{{ selB }}</b><span class="cddesc">{{ selType?.desc }}</span></div>
         <!-- 建一座的工序链（环节定额×体量涌现；∥＝依赖关系可并行） -->
         <div class="bomrow" v-if="selType?.grade">
-          <span class="dim">建一座＝{{ planCost(selB).work }} 工时：</span>
+          <span class="dim">建一座＝总工作量 {{ planCost(selB).vol }}：</span>
           <span class="bpcost ph" v-for="ph in phasesOf(selB)" :key="ph.id"
-                :title="ph.name + '（' + ph.trade + '·' + ph.work + '工）：' + phaseStr(ph)">{{ ph.name }}</span>
+                :title="ph.name + '（' + ph.trade + '·工作量' + ph.vol + '）：' + phaseStr(ph)">{{ ph.name }}</span>
         </div>
         <div v-for="(inst, idx) in (S.buildings[selB] || [])" :key="idx" class="inst">
           <div class="ihead">
@@ -289,6 +290,7 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .qph { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
        padding: 1px 7px; font-size: 10.5px; color: var(--dim); white-space: nowrap; }
 .qph.wait { color: var(--warn); border-color: var(--warn); }   /* 等料停摆的环节 */
+.qph.lack { color: var(--bad); border-color: var(--bad); }     /* 作队缺人的环节 */
 .qcancel, .qchip i { cursor: pointer; color: var(--dim); font-style: normal; font-size: 11px; }
 .qcancel:hover, .qchip i:hover { color: var(--bad); }
 .qchip { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;

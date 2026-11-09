@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch } from "vue";
-import { S, advance, loadDemo, reset, saveState } from "./sim.js";
+import { S, advance, loadDemo, reset, saveState, tabUnlocked } from "./sim.js";
 import TopBar from "./components/TopBar.vue";
 import OrgPage from "./components/OrgPage.vue";
 import CityPage from "./components/CityPage.vue";
@@ -8,6 +8,8 @@ import Warehouse from "./components/Warehouse.vue";
 import Overview from "./components/Overview.vue";
 
 const page = ref(localStorage.getItem("orgsim.tab") || "org");   // org=组织 / city=建筑 / wh=仓库 / ov=总览（页签记忆）
+if (!tabUnlocked(page.value)) page.value = "org";   // 记忆的页签已锁（新局/重开）→ 回组织页
+watch(() => tabUnlocked(page.value), ok => { if (!ok) page.value = "org"; });   // 在编撤空时锁页即回退
 watch(page, p => localStorage.setItem("orgsim.tab", p));
 const showKnobs = ref(false);
 const seedIn = ref("");   // 按种子重开：留档 seed 可复现初始布局

@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { S, BUILDINGS, CITY_W, circ, RES_INFO, cityLayout, buildBlocked, cancelBuild, dismantle,
          queueBuild, crewCounts, resTotal, capTotal, interiorLayout, interiorUsed, interiorCap,
-         planOf, planTotal } from "../sim.js";
+         planOf, planTotal, hasDesigner } from "../sim.js";
 import { usePanelSize } from "../panel.js";
 
 /* 建筑页＝城市一排视图（03 §八：聚落沿街一字排开、市政厅居中、向两翼扩建）。
@@ -78,6 +78,7 @@ const planCost = b => planTotal(planOf("shell", b));
 const shellWhy = b => buildBlocked("shell", b, null, -1);
 const itemWhy = (b, item, idx) => buildBlocked("interior", b, item, idx);
 const floorWhy = idx => buildBlocked("floor", "民居", "", idx);
+const floorPending = idx => S.buildOrders.some(o => o.kind === "floor" && o.b === "民居" && o.idx === idx);
 /* 剖视图（参考建筑管线的内景口径）：逐层内构格 + 在编工位——工序槽的人落在他那台设备的格上，
    非工序岗散在层内（世界内可观察行为的最小呈现，13 §三） */
 function personsAt(b, idx) {
@@ -139,9 +140,15 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
              :title="(BUILDINGS[e.b]?.desc || '') + '｜点开下方软装详情'"
              @click="pickBlock(e.b)">
           <div v-if="storeysOf(e) === 2" class="upper"><span>2F</span></div>
+          <div v-if="floorPending(e.inst)" class="upper con2"><span>+2F…</span></div>   <!-- 加层施工中：块顶虚线层 -->
           <div class="bname">{{ e.b }}<i v-if="e.b !== '市政厅'" class="seat">{{ circ(e.inst) }}</i></div>
           <div class="bstat" :class="{ tight: e.b === '仓库' && whTight() }"
                :title="e.b === '仓库' ? '全城库存总占位 / 分类容量合计（近满示警：工程队自动扩建可解）' : ''">{{ statusLine(e.b, e.inst) }}</div>
+          <!-- 二层＝各一层块上的加号（裁决44）：一横排只表示一层，加层把一层当地基在上面加建 -->
+          <button v-if="e.b === '民居' && storeysOf(e) < 2 && !floorPending(e.inst)"
+                  class="plus2f" :disabled="!!floorWhy(e.inst)"
+                  :title="floorWhy(e.inst) || '在此座上加建二层（接层立架→上层墙顶）'"
+                  @click.stop="queueBuild('floor', '民居', '', e.inst)">＋</button>
         </div>
         <!-- 右翼施工块：按队列正序向右长 -->
         <div v-for="(p, i) in pendR" :key="'pr' + i" class="bblock con"
@@ -234,8 +241,10 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
             </select>
             <span class="fx">该类容量＝收该类的仓库座数 ×{{ S.knobs.cap }}（各类独立）</span>
           </div>
-          <!-- 剖视图：逐层内构格（自动布局：从左到右贪心），工序岗的人点在他的设备格上 -->
-          <div v-if="(selType?.interior || []).length" class="floor">
+          <!-- 剖视图：逐层内构格（自动布局：从左到右贪心），工序岗的人点在他的设备格上；
+               设计岗在编才可见（裁决43——内部结构预览是设计师的产出） -->
+          <div v-if="!hasDesigner()" class="fempty">内部结构预览需设计岗在编（工程队·设计）——图纸是设计师画的</div>
+          <div v-else-if="(selType?.interior || []).length" class="floor">
             <div v-for="(layer, li) in interiorLayout(selB, idx)" :key="'l' + li" class="flayer">
               <span class="ftag">{{ (inst.storeys || 1) > 1 ? (li + 1) + "F" : "内构" }}</span>
               <div class="fcells">
@@ -395,6 +404,10 @@ const { size: detH, onDown: detDown, onDbl: detDbl } = usePanelSize("cityDetail"
 .satstrip { display: flex; gap: 6px; align-items: stretch; padding: 4px 8px;
             background: #141a26; border: 1px dashed var(--line); border-radius: 9px; }
 .bblock.sat { border-style: dashed; }
+.bblock { position: relative; }
+.plus2f { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0;
+          border-radius: 50%; font-size: 11px; line-height: 1; z-index: 2; }
+.upper.con2 { border-style: dashed; color: var(--acc); }
 .upper { height: 12px; margin: 1px 3px 0; border: 1px solid var(--line2); border-radius: 4px;
          background: #ffffff12; font-size: 8.5px; color: var(--dim); display: flex;
          align-items: center; justify-content: center; letter-spacing: 2px; }

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset, clearSave, housingCap } from "../sim.js";
+import { S, BASIC_RES, RES_INFO, resTotal, capTotal, reset, clearSave, housingCap, tabUnlocked } from "../sim.js";
 const props = defineProps({ page: String });
 const emit = defineEmits(["go", "knobs"]);
 const tabs = [
@@ -10,6 +10,11 @@ const tabs = [
   { id: "ov", label: "总览" },
 ];
 const speeds = [[0, "⏸"], [1, "1×"], [10, "10×"], [100, "100×"]];
+const LOCK_HINT = {
+  city: "需「生产」槽在编（放人或放生产局——建造线归生产辖）",
+  wh: "需「运输」槽在编（放人或放运输队）",
+  ov: "需「情报」槽起码有一人（总览＝把各处文书运回的汇总，得有人捎）",
+};
 const day = computed(() => Math.floor(S.hours / 24) + 1);
 const stateText = computed(() =>
   (S.speed === 0 ? "暂停" : S.speed + "×") + (S.mobilized ? " · 战备" : ""));
@@ -47,8 +52,11 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
   <!-- 横排：页签独占一排（后续还有更多东西要放这排） -->
   <div id="tabrow">
     <nav id="tabs">
-      <button v-for="t in tabs" :key="t.id" :class="{ on: page === t.id }"
-              @click="emit('go', t.id)">{{ t.label }}</button>
+      <!-- 页签解锁（裁决43）：后三页要对应槽位在编——信息有主人；锁页签示因 -->
+      <button v-for="t in tabs" :key="t.id" :class="{ on: page === t.id, lock: !tabUnlocked(t.id) }"
+              :disabled="!tabUnlocked(t.id)"
+              :title="tabUnlocked(t.id) ? '' : LOCK_HINT[t.id]"
+              @click="emit('go', t.id)">{{ tabUnlocked(t.id) ? t.label : "🔒 " + t.label }}</button>
     </nav>
   </div>
 </template>
@@ -88,4 +96,5 @@ function doReset() { clearSave(); reset(); emit("go", "org"); }   // 重开=清�
 #tabs button:last-child { border-right: 0; }
 #tabs button:hover:not(.on) { color: var(--fg); background: #ffffff07; }
 #tabs button.on { background: #2c4d8f; color: #fff; }
+#tabs button.lock { color: var(--faint); }
 </style>

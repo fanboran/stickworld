@@ -110,7 +110,7 @@ godot --headless --path <项目根> res://tests/smoke/test_xxx.tscn -- --fresh-s
 | T0-8 | **单元覆盖补齐（2026-08 审计）**：organization_manager（15 用例，含 insert_tier 修复回归 + WorldState 容器同步 + 序列化 round-trip）、entity_states（7 用例，WorldState 状态类序列化）、resources_api（6 用例，信号转发层）——补测过程揪出并修复 2 个真实 bug：`get_child_orgs` 返回类型崩溃、`from_dict` typed Array 赋值崩溃 | ✅ 3 文件 28 用例 |
 
 **当前结构（unit 批量 + integration + smoke 三层，`run_all.sh` 编排；套件数与结果以 Test Runner 实跑为准，integration 套件清单唯一真相源 = `run_all.sh` 的 `INTEGRATION_SUITES`；4 个集成校准待办见 [世界模型整合 §五](../../docs/项目/交接/世界模型整合.md)）**：
-- `tests/unit/`：单进程批量跑（`batch_runner.tscn`），套件清单 = `batch_runner.gd` 的 `UNIT_SCRIPTS`。**unit 层以 `.gd` 为套件**：运行器直接 `load(.gd)` 并实例化，`.tscn` 壳不参与批跑；`_check_manifest()` 双向自检——盘上 `.gd` 未登记进清单判失败，盘上出现 `.tscn` 且不在 `TSCN_ALLOWLIST`（默认空，登记须写理由）同样判失败（世界模型：test_world_contract 政权/城装载+聚合+存档兼容、test_political_data 政权档案/LUT/ID mask 校验）
+- `tests/unit/`：单进程批量跑（`batch_runner.tscn`），套件清单 = `batch_runner.gd` 的 `UNIT_SCRIPTS`。**unit 层以 `.gd` 为套件**：运行器直接 `load(.gd)` 并实例化，`.tscn` 壳不参与批跑；`_check_manifest()` 双向自检——盘上 `.gd` 未登记进清单判失败，盘上出现 `.tscn` 且不在 `TSCN_ALLOWLIST`（默认空，登记须写理由）同样判失败（世界模型：test_world_contract 政权/城装载+聚合+存档兼容、test_political_data 政权档案/LUT/ID mask 校验、test_world_ledger 离屏账面日推进/确定性/真源 365 日集成）
 - `tests/integration/`（可跑 + 6 悬置，悬置名单见下方「悬置套件」）：battle_lifecycle、recruit_flow*、town_life_harvest*、town_life_worksite*、save_roundtrip*、construction_cycle*、village_map*（* = 悬置）以及 org 系五套（org_panel/org_command_chain/org_e2e/org_report_narrator/org_panel_badges）、squad_card、music_director、sfx_policy、modal_stack、esc_key_input、ui_layout、settings_apply、notification_feed、debug_api、anim_finished、fx_damage_text 等
 - `tests/smoke/`：new_game_smoke、cross_map_travel
 - `tests/dev/`（不进 CI）：dev_playtest、battle_arena、各类 verify_*/探针场景

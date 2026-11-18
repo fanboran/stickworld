@@ -93,6 +93,15 @@ const GARRISON_JITTER := 0.25
 const GARRISON_MIN := 2
 const GARRISON_MAX := 12
 
+## 人口容量头寸抖动域（M2 账面 tick 消费：headroom ∈ [LO, HI] 均匀确定性取值；
+## 量级设计——村 62×3.6=223 刚过镇下沿 222（村→镇为少数事件）、顶级城
+## 1596×3.6=5746 越帝都下沿 5002（4/5 档涌现且稀缺））
+const POP_CAP_HEADROOM_LO := 1.4
+const POP_CAP_HEADROOM_HI := 3.6
+
+## 账面财富初值系数（人口 × 系数；饱和 pop×10 由 WorldLedger 口径持有）
+const WEALTH_SEED_PER_POP := 2.0
+
 ## 兵种档案 id（config/units/stickmen.tres 实存行 id，勿造不存在的 id）
 const PROFILE_SPEAR := "stm_spear_001"
 const PROFILE_SWORD := "stm_sword_001"
@@ -145,6 +154,8 @@ static func build_initial_contract(run_seed: int) -> Dictionary:
 		c.owner_state_id = str(owners[settlement_id])
 		c.level = level_from_score(base_ps)
 		c.population = derive_population(base_ps, sid, run_seed, sid == spawn_id)
+		c.pop_capacity = derive_pop_capacity(c.population, sid, run_seed)
+		c.wealth = maxi(1, roundi(float(c.population) * WEALTH_SEED_PER_POP))
 		c.garrison = derive_garrison(c.level, c.population, sid, run_seed)
 		cities_out[sid] = c
 	return {"cities": cities_out, "factions": factions_out}
@@ -185,6 +196,16 @@ static func derive_population(base_ps: float, settlement_id: String, run_seed: i
 	var ps_hi := float(band[1])
 	var t := clampf((ps - ps_lo) / maxf(ps_hi - ps_lo, 0.0001), 0.0, 1.0)
 	return roundi(lerpf(float(band[2]), float(band[3]), t))
+
+
+## 由初始人口推人口容量头寸（确定性抖动；盐值与人口/守军两序列区分，
+## 同城三路抖动互不相关）。头寸语义与量级设计见 POP_CAP_HEADROOM 注释。
+static func derive_pop_capacity(population: int, settlement_id: String, run_seed: int) -> int:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(settlement_id) * 17 + run_seed + 0x27D4EB2F
+	var headroom: float = rng.randf_range(POP_CAP_HEADROOM_LO, POP_CAP_HEADROOM_HI)
+	# 上界 = POP_BANDS 5 档带人口上沿（与档带表同源防漂移）；下界至少 +1 保可成长
+	return clampi(roundi(float(population) * headroom), population + 1, int(POP_BANDS[5][3]))
 
 
 ## 由档位 + 人口推导弹药账面守军初值 {profile_id: int}（规则全文见头注；

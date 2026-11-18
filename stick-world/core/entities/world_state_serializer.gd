@@ -296,6 +296,8 @@ static func city_to_dict(c: CityState) -> Dictionary:
 		"owner_state_id": c.owner_state_id,
 		"level": c.level,
 		"population": c.population,
+		"pop_capacity": c.pop_capacity,
+		"wealth": c.wealth,
 		"garrison": c.garrison.duplicate(),
 		"buildings": c.buildings.duplicate(),
 		"sim_tier": c.sim_tier,
@@ -310,6 +312,9 @@ static func city_from_dict(d: Dictionary) -> CityState:
 	# int 字段经 int() 还原：JSON 往返把 int 变 float，String 混入取 0（不崩）
 	c.level = int(d.get("level", 1))
 	c.population = int(d.get("population", 0))
+	# M2 账面字段：旧档缺键回退 0（无头寸静止 / 零财富起步，不崩）
+	c.pop_capacity = int(d.get("pop_capacity", 0))
+	c.wealth = int(d.get("wealth", 0))
 	c.sim_tier = int(d.get("sim_tier", CityState.SimTier.LEDGER))
 	# 军队账面 {profile_id: int}：值为 int 计数须逐值还原（JSON 往返 int→float）
 	var g: Variant = d.get("garrison", {})

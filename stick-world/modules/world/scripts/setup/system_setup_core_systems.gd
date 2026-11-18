@@ -386,6 +386,8 @@ func _setup_recruit_system() -> void:
 ## 门控后的可见集）与 EventBus.commander_assigned，经 EventBus.ui_notification 落既有通知 feed。
 ## 归 organization/ui（消费组织域数据、组织域 UI），不建跨模块面板。
 func _setup_org_report_narrator() -> void:
+	# 世界账面日脉冲接线（M2）：置于早退守卫前——组织 api 缺位时接线不得静默失效
+	EventBus.world_day_advanced.connect(func() -> void: WorldLedger.advance_day(WorldState))
 	if _host._root._organization_api == null:
 		return
 	var n := Node.new()

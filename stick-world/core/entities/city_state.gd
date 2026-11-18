@@ -35,6 +35,14 @@ var level: int = 1
 ## 账面人口（初值由初始化器从 population_score 推导；档位成长由人口自然驱动）
 var population: int = 0
 
+## 人口容量头寸（M2 账面 tick：离屏成长上限，初始化器按初始人口 × 确定性
+## headroom 推导；0 = 无头寸（旧档城市静止不成长）——WorldLedger 日推进消费）
+var pop_capacity: int = 0
+
+## 账面财富存量（M2 账面 tick：繁荣度口径，日入趋 pop×10 饱和；
+## 消耗端归 M3 战争损耗/占领掠夺）
+var wealth: int = 0
+
 ## 军队账面 {profile_id: int}——兵种档案 id → 数量（键为 String，JSON 口径；
 ## 值为 int 计数）。征服线落地时可还原为编成 row
 var garrison: Dictionary = {}

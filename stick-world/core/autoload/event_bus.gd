@@ -30,6 +30,11 @@ extends Node
 @warning_ignore("unused_signal") signal game_paused
 @warning_ignore("unused_signal") signal game_resumed
 
+# ─────────────────────────────── 世界演化（M2 账面层）───────────────────────
+# 日脉冲（无参纯节拍）：EnvironmentSystem 昼夜钟跨 24 回绕发射；
+# 消费方 SystemSetup 核心域接线 → WorldLedger.advance_day（离屏城账面推进）
+@warning_ignore("unused_signal") signal world_day_advanced
+
 # ─────────────────────────────── 资源 / 经济 ────────────────────────────────
 # 资源变化/不足信号：由 resources/api.gd 自建信号承担（4 参），EventBus 不重复声明
 

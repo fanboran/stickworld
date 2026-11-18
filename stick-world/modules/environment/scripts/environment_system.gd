@@ -86,9 +86,15 @@ func _process(delta: float) -> void:
 	# 步长经 sim_delta 携带速度档——修复「倍速不作用于昼夜」的节律脱钩
 	if TimeManager:
 		var hours_per_second: float = 24.0 / seconds_per_day
+		var prev_time := time_of_day
 		time_of_day += hours_per_second * TimeManager.sim_delta(delta)
 		if WorldState:
 			WorldState.game_time = time_of_day
+		# 跨 24 回绕 = 新的一天：发日脉冲（M2 世界账面 tick 锚，无参纯节拍；
+		# 严格小于判定——零推进量不误报，单帧步长远小于 24h 无多重回绕）
+		if time_of_day < prev_time:
+			if EventBus and EventBus.has_signal("world_day_advanced"):
+				EventBus.world_day_advanced.emit()
 	# 更新光照
 	_update_lighting()
 	_update_camp_light()

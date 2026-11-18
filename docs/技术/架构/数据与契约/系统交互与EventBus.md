@@ -56,7 +56,7 @@
 | `game_saved` | slot_index: int | SaveManager | UI | 存档完成 |
 | `game_paused` | - | 玩家/系统 | 所有系统 | 暂停 |
 | `game_resumed` | - | 玩家/系统 | 所有系统 | 恢复 |
-| `world_day_advanced` | - | EnvironmentSystem（昼夜钟跨 24 回绕） | SystemSetup 核心域接线 → `WorldLedger.advance_day` | 世界账面日脉冲（无参纯节拍；离屏城人口/财富/守军推进，暂停/倍速经 sim_delta 总闸自动继承） |
+| `world_day_advanced` | - | EnvironmentSystem（昼夜钟跨 24 回绕） | `WorldLedgerSetup` 桥节点（GameRoot 子树生灭自动断连，防重建叠连）→ `WorldLedger.advance_day` | 世界账面日脉冲（无参纯节拍；离屏城人口/财富/守军推进，暂停/倍速经 sim_delta 总闸自动继承） |
 
 ### 2.2 资源/经济/建筑/组织事件（模块 api.gd 自建，不经 EventBus）
 

@@ -6,8 +6,10 @@ extends Node
 ## 守军每日补员至目标（只增不减）/ FOCUS 城跳过（模拟分档）/
 ## cap=0 旧档兼容（静止）/ 零随机确定性（同构世界同轨迹）/
 ## 真源集成（193 政权 1036 城推进 365 日：账面变化可查 + 全域不变量，
-## = M2 迭代 1 验收门的测试化）/ 存档往返续算（推进→存→读→再推进等价）。
-## 纯数据层测试：preload 脚本 new() 即用，不依赖 autoload 单例。
+## = M2 迭代 1 验收门的测试化）/ 存档往返续算（推进→存→读→再推进等价）/
+## 日脉冲桥生命周期（审计回归：装配幂等/宿主释放自动断连不叠连）。
+## 纯数据层测试：preload 脚本 new() 即用，不依赖 autoload 单例——唯一例外
+## 是桥生命周期用例（需真实 EventBus autoload 的连接表，批跑环境恒在）。
 
 signal test_done(code: int)
 
@@ -16,6 +18,7 @@ const ScriptWS := preload("res://core/autoload/world_state.gd")
 const ScriptInit := preload("res://core/entities/world_contract_initializer.gd")
 const ScriptLedger := preload("res://core/entities/world_ledger.gd")
 const ScriptCity := preload("res://core/entities/city_state.gd")
+const ScriptLedgerSetup := preload("res://modules/world/scripts/setup/world_ledger_setup.gd")
 
 const RUN_SEED := 20261118
 const N_STATES := 193
@@ -34,7 +37,8 @@ func _ready() -> void:
 	_runner.add_test("world_ledger: 零随机确定性（同构同轨迹）", _test_determinism)
 	_runner.add_test("world_ledger: 存档往返续算等价", _test_save_resume)
 	_runner.add_test("world_ledger: 真源集成 365 日（M2 验收门测试化）", _test_real_world_365d)
-	_runner.run()
+	_runner.add_test("world_ledger: 日脉冲桥生命周期（审计回归）", _test_pulse_bridge_lifecycle, true)
+	await _runner.run_async()
 	print(_runner.summary())
 	TestRunner.finish_process(self, 0 if _runner.all_passed() else 1)
 
@@ -255,3 +259,37 @@ func _test_real_world_365d() -> void:
 		pop_before, pop_after, pop_after - pop_before, grew, N_CITIES, level4_plus,
 		Time.get_ticks_msec() - t0])
 	ws.free()
+
+
+# ─────────────────────── 日脉冲桥生命周期（审计回归，异步）────────────────────────
+
+## 统计 EventBus 日脉冲上绑定到桥节点的连接数（按桥节点名识别）
+func _count_pulse_bridges() -> int:
+	var n := 0
+	for c in EventBus.world_day_advanced.get_connections():
+		var obj: Variant = c["callable"].get_object()
+		if obj is Node and (obj as Node).name == &"WorldDayPulseBridge":
+			n += 1
+	return n
+
+
+func _test_pulse_bridge_lifecycle() -> void:
+	# 审计回归（F1）：连接必须绑定桥节点——菜单往返重建 GameRoot（change_scene_to_file）
+	# 后重跑装配，旧 lambda/静态连接残留会叠连多倍日 tick；节点绑定随宿主释放自动断开
+	var root1 := Node.new()
+	root1.name = "PulseHost1"
+	add_child(root1)
+	ScriptLedgerSetup.assemble(root1)
+	ScriptLedgerSetup.assemble(root1)
+	_runner.assert_equal(_count_pulse_bridges(), 1, "同 root 重复装配幂等（恰一条连接）")
+	root1.queue_free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_runner.assert_equal(_count_pulse_bridges(), 0, "宿主释放后连接自动断开（无残留）")
+	var root2 := Node.new()
+	root2.name = "PulseHost2"
+	add_child(root2)
+	ScriptLedgerSetup.assemble(root2)
+	_runner.assert_equal(_count_pulse_bridges(), 1, "重建装配后恰一条新连接（模拟菜单往返再开局）")
+	root2.queue_free()
+	await get_tree().process_frame

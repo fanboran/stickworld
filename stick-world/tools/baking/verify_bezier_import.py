@@ -4,7 +4,7 @@
 import json
 import math
 
-SPINE = r"F:/VSCode/game-2/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
+SPINE = r"F:/VSCode/stickworld/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
 TSV = "temp/bezier_samples.tsv"
 AM = {'attack': 'Swordwrath-Attack1', 'walk': 'Swordwrath-Walk',
       'attack_bow': 'Archidon-Draw', 'run': 'Swordwrath-Run', 'dead': 'Death1',

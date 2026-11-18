@@ -11,7 +11,7 @@ extends SceneTree
 ## 图四 thatch_corner_negative  笔触圆心落在负坐标区、越左上缘（旧 int() 截断致 1px 错位，
 ##                              现 floori；×4 最近邻放大便于看边缘覆盖）
 
-const OUT_DIR := "F:/VSCode/game-2/.temp/wf-static/temp"
+const OUT_DIR := "F:/VSCode/stickworld/.temp/wf-static/temp"
 
 
 func _initialize() -> void:

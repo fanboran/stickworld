@@ -11,15 +11,15 @@
 ## 1. 建 release worktree
 
 ```bash
-cd F:/VSCode/game-2
+cd F:/VSCode/stickworld
 git worktree add .temp/release-<版本> HEAD        # 干净检出，detached 即可
 cd .temp/release-<版本>
 # submodule（战略图数据，约 541M 本地拷贝）
-git config submodule.stick-world/config/strategic_map.url "F:/VSCode/game-2/stick-world/config/strategic_map"
+git config submodule.stick-world/config/strategic_map.url "F:/VSCode/stickworld/stick-world/config/strategic_map"
 git -c protocol.file.allow=always submodule update --init -- stick-world/config/strategic_map
 # rl_core 加载点：不补 DLL 导入必段崩（拷 debug 版即可，发布包已排除该扩展）
 mkdir -p stick-world/addons/rl_core/bin
-cp "F:/VSCode/game-2/stick-world/addons/rl_core/bin/librl_core.windows.template_debug.x86_64.dll" stick-world/addons/rl_core/bin/
+cp "F:/VSCode/stickworld/stick-world/addons/rl_core/bin/librl_core.windows.template_debug.x86_64.dll" stick-world/addons/rl_core/bin/
 ```
 
 要点：rl_core（RL 训练 C++ 扩展）**未实装进玩法**，export_presets.cfg 已把它排除在发布包外（`addons/rl_core/*`）——不需要编 template_release DLL；debug DLL 仅为让 headless 导入不报段崩。
@@ -44,7 +44,7 @@ rm -rf .godot/imported .godot/exported            # 陈旧 ctex 会原样打进 
 ## 3. 打 tag 与 zip
 
 ```bash
-cd F:/VSCode/game-2
+cd F:/VSCode/stickworld
 git tag -a v<版本> -m "v<版本>——<主题>"
 git push origin main v<版本>
 # zip（exe + pck 同目录压一个 zip，命名 stick-world-v<版本>-win64.zip）

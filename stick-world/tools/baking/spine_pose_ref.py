@@ -14,7 +14,7 @@ import math
 import os
 import sys
 
-SPINE_FILE = r"F:/VSCode/game-2/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
+SPINE_FILE = r"F:/VSCode/stickworld/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
 OUT_DIR = os.path.join("temp", "spine_pose_ref")
 SCALE = 0.55          # Spine 单位 → 像素
 LINE_W = 5

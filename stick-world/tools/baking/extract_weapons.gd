@@ -11,7 +11,7 @@ extends Node
 ##
 ## 运行：godot --headless --path stick-world res://tools/baking/extract_weapons.tscn
 
-const REPO_ROOT := "F:/VSCode/game-2"
+const REPO_ROOT := "F:/VSCode/stickworld"
 
 ## 图集源清单：atlas 文本 + 页 png + 该源要裁的 region。
 ## 新增图集时照抄一条（png 位置以 atlas 页名为线索在 external/ 下找）。

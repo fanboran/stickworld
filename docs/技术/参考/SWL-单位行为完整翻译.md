@@ -8,9 +8,9 @@
 
 | 资料 | 路径 | 说明 |
 | --- | --- | --- |
-| il2cpp dump | `F:\VSCode\game-2\external\il2cppdumper\out_legacy\dump.cs`（279050 行） | 字段+签名，无方法体 |
+| il2cpp dump | `F:\VSCode\stickworld\external\il2cppdumper\out_legacy\dump.cs`（279050 行） | 字段+签名，无方法体 |
 | 字符串字面量 | 同目录 `stringliteral.json`（8337 条） | 动画名/事件名/音效名/教学串真值 |
-| Spine 骨架 | `F:\VSCode\game-2\external\decompiled\legacy\spine_raw\核心单位骨架\[skeleton].txt`（93 动画 22 皮肤）+ `meric.txt`（5 动画） | 含每动画事件帧实测 |
+| Spine 骨架 | `F:\VSCode\stickworld\external\decompiled\legacy\spine_raw\核心单位骨架\[skeleton].txt`（93 动画 22 皮肤）+ `meric.txt`（5 动画） | 含每动画事件帧实测 |
 
 dump.cs 行号索引（便于回查）：ArrowVolley 270054 / HealSpell 270080 / LightningStorm 270256 / SpawnUnit 270439 / SpeartonMadness 270460 / Spell 270482 / SummonElite·Giant·GoldenSpearton 270522-270567 / SwordwrathRage 270567 / Arrow 270636 / Personality 270742 / Level 272619（嵌套类 272876-272983）/ Archer 273368 / CastleArchers 273565 / ConversionChannel 273588 / Giant 273623 / HealthBar 273773 / King 273811 / Magikill 273823 / Meric 274032 / Miner 274140 / Minion 274249 / Spearton 274261 / Statue 274349 / Swordwrath 274441 / Team 274518 / Unit 274795（Type 枚举 275667 / DAMAGE_TYPE 275705 / DamageParameters 275716）/ Zombie 275775 / Ai 276050 / ArcherAi 276254 / Formation 276343 / GiantAi 276399 / MagikillAi 276432 / MericAi 276456 / MinerAi 276474 / SpeartonAi 276507 / SwordwrathAi 276547 / TeamAi 276562 / ZombieAi 276660 / ArrowEffect 276720 / DirectionalBlood 276796 / HealthTick 266586 / GameController 269037。
 
@@ -567,9 +567,9 @@ y 轴是假纵深（`PsuedoZAxisFixedUpdate` + `z/dz` 字段）：跳跃/击飞�
 ### 7.1.1 序列化数值真值【事实】（2026-10-14 prefab 直读）
 
 > 来源：APK 内 Unity 序列化资源直读（il2cpp stripped build，字段布局由 Il2CppDumper
-> DummyDll 重建）。工具：`F:/VSCode/game-2/external/assetripper/SwlDumper`（AssetsTools.NET
+> DummyDll 重建）。工具：`F:/VSCode/stickworld/external/assetripper/SwlDumper`（AssetsTools.NET
 > + Mono.Cecil 自建模板；本仓外置资产，不入库）。原始 JSON：
-> `F:/VSCode/game-2/external/assetripper/out/`。数值 = prefab 序列化值（= SWL 实机口径），
+> `F:/VSCode/stickworld/external/assetripper/out/`。数值 = prefab 序列化值（= SWL 实机口径），
 > 单位 = SWL 世界单位（一条火柴人立绘高约 2.5~3 世界单位）。
 
 | 单位 | attackRange | attackRangeSecondLine | range(弓) | health | attackDamage | cost | population |

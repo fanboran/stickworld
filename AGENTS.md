@@ -128,7 +128,7 @@
 - `stick-world/config/strategic_map` 是独立 git 仓库的 submodule（`git@github.com:fanboran/stickworld-mapdata.git`），主仓只记录指针 commit。战略图 png/json/bin 及其 `.import` 的改动**属于 submodule 仓库**：在 submodule 内开分支提交，主仓收线时同步 bump 指针——两仓都要提交，只动一边会丢改动。
 - 新 clone / 新 worktree 里该目录默认是空的，先初始化：`git submodule update --init -- stick-world/config/strategic_map`。本地想免 SSH/网络拉取（约 541M），先把 url 指到主工作区已有检出，再单次放行 file 协议初始化（新版 git 默认禁止本地路径 clone，不要全局放开）：
   ```
-  git config submodule.stick-world/config/strategic_map.url "F:/VSCode/game-2/stick-world/config/strategic_map"
+  git config submodule.stick-world/config/strategic_map.url "F:/VSCode/stickworld/stick-world/config/strategic_map"
   git -c protocol.file.allow=always submodule update --init -- stick-world/config/strategic_map
   ```
 - 背景（瘦身动机/历史去向）见 `docs/技术/仓库瘦身与历史去向.md`。

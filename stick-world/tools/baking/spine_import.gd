@@ -6,7 +6,7 @@ extends Node
 ##   （Stick War: Legacy 解包出的主骨架，含 Swordwrath/Spearton/Archidon/Miner 等 100 个动画）
 ##
 ## 运行方式：
-##   godot --headless --path "F:/VSCode/game-2-aux/stick-world" res://tools/baking/spine_import.tscn
+##   godot --headless --path "F:/VSCode/stickworld-aux/stick-world" res://tools/baking/spine_import.tscn
 ##
 ## 用户参数（`--` 之后）：
 ##   --only=a,b,c     只转换指定动画（增量，避免整份重建冲掉洗稿成果）
@@ -41,7 +41,7 @@ extends Node
 ##   生成结果即解包数据本身。
 
 const OUTPUT_DIR := "res://modules/stick_rig/animations/"
-const SPINE_FILE := "F:/VSCode/game-2/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
+const SPINE_FILE := "F:/VSCode/stickworld/external/decompiled/legacy/spine_raw/核心单位骨架/[skeleton].txt"
 
 ## 实际输出目录（--out-dir 覆盖；缺省 = OUTPUT_DIR，保持现行为不动）
 var _out_dir: String = OUTPUT_DIR

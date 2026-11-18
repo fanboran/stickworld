@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 DEFAULT_GODOT = r"F:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
-DEFAULT_PROJECT = r"F:\VSCode\game-2\.temp\观察场AI\stick-world"
+DEFAULT_PROJECT = r"F:\VSCode\stickworld\.temp\观察场AI\stick-world"
 WIN_LINE = 0.65
 
 

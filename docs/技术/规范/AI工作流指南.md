@@ -30,7 +30,7 @@
 ## 二、文件目录速查
 
 ```
-F:\VSCode\game-2\
+F:\VSCode\stickworld\
 ├── .trae/
 │   ├── rules/rule.md         # ⭐ 核心 AI 规则（架构 + Git 工作流 + 提交规范）
 │   └── memory/               # AI 工作日志
@@ -91,7 +91,7 @@ F:\VSCode\game-2\
 ### 初始化（首次使用）
 
 ```bash
-cd F:\VSCode\game-2
+cd F:\VSCode\stickworld
 pip install -r tools/vector_db/requirements.txt
 python tools/vector_db/manage.py rebuild
 ```

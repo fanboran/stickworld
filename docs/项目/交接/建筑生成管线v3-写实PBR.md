@@ -83,7 +83,7 @@
 
 ### 7.2 布局器八档重建（**已完成并入库 `9c988f6a`**）
 
-`city_layout.py`/`probe_city_scene.py`/`validate.py` 重写完毕：TIER_SPECS 八档显式参数表（hamlet 80格/10-12栋/围栏140 … capital 256格/40-48栋/砖墙520/总督府882 … metropolis 384格/60-72栋/砖墙640/宫殿1068）；**旧四档×5 seed 零漂移实测（lots/props/walls 逐字节一致）**；行政槽 `admin_slots` 全档写入（town/city 由 guildhall 充当、新四档实装 role="admin"）；批 2 八装配器接线进新四档池（town/city 仅 DEFS 登记、接线待后续——窗口与漂移预算冲突，见 agent 遗留点②）；belfry 走 specials 只增通道（为保"教堂守最高点"只声明 4 格档）；validate 6/6 绿（44 def 0 缺口、78 装配对 0 新 FAIL）。**遗留四点**：①法师塔登记 560 但实测含水晶尖顶约 1030px 仍压过教堂（既有限象，capital/metropolis 靠宫殿压住）；②批 2 "town 起/city 起"窗口与既有档接线未完成；③6 格砖钟楼变体（656px 越位）进不了布局；④八档验收图在 `F:\VSCode\game-2\temp\city8tier\final\`（`pbr_city_<八档>.png` + capital/metropolis 34° 总览 `_top`，大图 23~31MB 需压缩预览，`prev_*.png` 为缩版）。
+`city_layout.py`/`probe_city_scene.py`/`validate.py` 重写完毕：TIER_SPECS 八档显式参数表（hamlet 80格/10-12栋/围栏140 … capital 256格/40-48栋/砖墙520/总督府882 … metropolis 384格/60-72栋/砖墙640/宫殿1068）；**旧四档×5 seed 零漂移实测（lots/props/walls 逐字节一致）**；行政槽 `admin_slots` 全档写入（town/city 由 guildhall 充当、新四档实装 role="admin"）；批 2 八装配器接线进新四档池（town/city 仅 DEFS 登记、接线待后续——窗口与漂移预算冲突，见 agent 遗留点②）；belfry 走 specials 只增通道（为保"教堂守最高点"只声明 4 格档）；validate 6/6 绿（44 def 0 缺口、78 装配对 0 新 FAIL）。**遗留四点**：①法师塔登记 560 但实测含水晶尖顶约 1030px 仍压过教堂（既有限象，capital/metropolis 靠宫殿压住）；②批 2 "town 起/city 起"窗口与既有档接线未完成；③6 格砖钟楼变体（656px 越位）进不了布局；④八档验收图在 `F:\VSCode\stickworld\temp\city8tier\final\`（`pbr_city_<八档>.png` + capital/metropolis 34° 总览 `_top`，大图 23~31MB 需压缩预览，`prev_*.png` 为缩版）。
 
 ### 7.3 下一步（按序）
 
@@ -103,7 +103,7 @@
 
 ### 7.5 本轮验收图（完整绝对路径）
 
-`F:\VSCode\game-2\stick-world\temp\` 根：`pbr_props5_street.png`（40 格街道家具节奏实景）、`pbr_props5_strip.png`；`pbr_admin_ladder.png`（行政阶梯四件同框）、`pbr_admin_<def>.png`×6、`pbr_admin_edge.png`（棱线门禁）；`pbr_int_layers.png`（王座厅前/后分层）、`pbr_int_sheet2x.png`（34 套总览）；`pbr_b2x_family_post.png`（驿站族）、`pbr_b2x_<def>_w<N>.png`×11、`pbr_b2x_edge.png`。
+`F:\VSCode\stickworld\stick-world\temp\` 根：`pbr_props5_street.png`（40 格街道家具节奏实景）、`pbr_props5_strip.png`；`pbr_admin_ladder.png`（行政阶梯四件同框）、`pbr_admin_<def>.png`×6、`pbr_admin_edge.png`（棱线门禁）；`pbr_int_layers.png`（王座厅前/后分层）、`pbr_int_sheet2x.png`（34 套总览）；`pbr_b2x_family_post.png`（驿站族）、`pbr_b2x_<def>_w<N>.png`×11、`pbr_b2x_edge.png`。
 
 ### 7.7 主街街具四连修（2026-09-15，代码已提交、文档行随共享未提交批）
 
@@ -276,7 +276,7 @@
 
 ```bash
 BLENDER="/f/SteamLibrary/steamapps/common/Blender/blender.exe"
-cd "F:/VSCode/game-2/.temp/building-pipeline-v2/tools/blender_buildings"
+cd "F:/VSCode/stickworld/.temp/building-pipeline-v2/tools/blender_buildings"
 "$BLENDER" -b --factory-startup -P probe_materials.py     # 材质样片
 "$BLENDER" -b --factory-startup -P probe_buildings.py     # 建筑单体规范自检图
 "$BLENDER" -b --factory-startup -P probe_props.py         # 道具层
@@ -356,8 +356,8 @@ python probe_city_plan.py                                  # 城市平面图（�
 - 贴图副本进 `res://modules/hd2d/assets/tex/ground_tiles/`（`_tex_abs` 优先 res:// 加载，场景外链不内嵌）——待办①的贴图侧已就位。
 
 **验收产物（二选一对照看）**
-- `F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\hd2d_f2_dof.png`——DOF 正常观感版
-- `F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\hd2d_f2_flat.png`——无糊辅助线核对版（橙线=1/3 线、绿线=末层基线）
+- `F:\VSCode\stickworld\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\hd2d_f2_dof.png`——DOF 正常观感版
+- `F:\VSCode\stickworld\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\hd2d_f2_flat.png`——无糊辅助线核对版（橙线=1/3 线、绿线=末层基线）
 
 **第二轮（2026-09-14 上午，创始人十条新指令）**
 - **全卡库重烘 26°**：`blender_proto.py`/`bake_props.py` 的烘焙俯角 20°→26°（与场景 TILT_DEG 同步），13 张建筑卡（**新增 shelter_w6 柱撑草棚**）+28 张道具卡全部重烘——建筑/角色/相机三者取向首次完全一致（此前角色 billboard 硬编码 20° 与相机差 6°，即"火柴人身高/角度不对"的根源）。
@@ -367,7 +367,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 - **门前短径**：guildhall 与落地建筑门口贴夯土径（台面段+路面段两截，dc_door_path decal 贴图未烘前先程序化代替）。
 - **辅助线收进调试模式**：`--debug=1` 才显示网格/紫线/1-3 线/末层基线（默认干净的成图）。
 - **纹理全部落 `res://modules/hd2d/assets/tex/`**（建筑/道具/gtx 过渡，张数以目录为准）——`--save-scene` 外链化前提就位（待办①完成贴图侧）。
-- 验收产物：`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\` 下 `hd2d_g3_dof.png`（正常观感）/`hd2d_g3_flat.png`（无糊细节）/`hd2d_g3_debug.png`（辅助线）。
+- 验收产物：`F:\VSCode\stickworld\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\` 下 `hd2d_g3_dof.png`（正常观感）/`hd2d_g3_flat.png`（无糊细节）/`hd2d_g3_debug.png`（辅助线）。
 
 **第三轮（2026-09-14，道具复刻 + 游戏接入）**
 - **道具摆位复刻 `1bb80d47` 示例口径**：前排改 gap 推进（0~1.5 格为主、偶有 2~5 格空当），道具按**空当槽位**摆放（slot+dx 引用，不再手撒坐标）。踩过的坑：推进宽度用「卡画面宽」会把街撑到 200+ 格（2/3 在画外）、用「建筑格宽」会让卡互相重叠——**正解 = 画面宽推进 + 生成循环铺满可视范围**（"城市爱多大多大"，不压缩间距）。
@@ -410,7 +410,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 **遗留/豁免（显式登记）**：①村民 NPC 在主街暂不开（无工作场所，待 HD-2D 化立工位卡后开）；②ResourceNode 枯竭隐藏时 PBR 卡不跟着藏（视觉与数据二态不同步，小事）；③针叶树冠层叠感、矿露头矿色偏淡（v3 已知落差）；④`proto_hd2d_ground.tscn`（探索产物 9.9MB）仍未入库。
 
 **验收产物**（白天四机位巡览 + 实机直连开局 + 夜档）：
-`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\` 下
+`F:\VSCode\stickworld\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\` 下
 `hd2d_s_street_x-40.png`（西村口森林带+矿组）/ `hd2d_s_street_x-12.png`（仓库+市集）/ `hd2d_s_street_x20.png`（宅邸+东民居）/ `hd2d_s_street_x50.png`（谷仓+酒馆+城门+水晶簇）/ `verify_hd2d_map.png`（**实机开局**：启动直连主街+玩家白四角框+完整 HUD）/ `hd2d_e_night.png`（夜档窗火）。
 
 **大项登记（下一阶段）**
@@ -448,7 +448,7 @@ python probe_city_plan.py                                  # 城市平面图（�
 2. **战场/道路/守城图 HD-2D 化立项**（battlefield 仍 2D）；战斗类测试随迁。
 3. 村B 工作场所（铁匠 NPC 站 smithy2 前等）随设施 HD-2D 化一并搬入（原大项 1 的后半）。
 
-**第七轮验收产物**：`F:\VSCode\game-2\stick-world\temp\proto_hd2d\hd2d_c_final.png`（算法村 village_b 成图）；主街巡览四机位与实机开局图沿用第六轮（`F:\VSCode\game-2\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\`，主工作区重出：`F:\VSCode\game-2\stick-world\temp\proto_hd2d\`）。
+**第七轮验收产物**：`F:\VSCode\stickworld\stick-world\temp\proto_hd2d\hd2d_c_final.png`（算法村 village_b 成图）；主街巡览四机位与实机开局图沿用第六轮（`F:\VSCode\stickworld\.temp\building-pipeline-v2\stick-world\temp\proto_hd2d\`，主工作区重出：`F:\VSCode\stickworld\stick-world\temp\proto_hd2d\`）。
 
 **遗留/待反馈**
 - 「屏幕下 1/3 线作为第一排上限」按「第一排(+地面)屏幕区的上边界」执行（前排楼根在下 1/3 区、楼身自然伸入中区）；若创始人本意是「前排楼顶不得过线」需回炉（前排须全改 1 层，与闹市 2~3 层冲突，提请再裁）。

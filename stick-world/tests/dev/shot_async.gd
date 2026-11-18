@@ -10,7 +10,7 @@ extends Node
 func _ready() -> void:
 	for i in 14:
 		await get_tree().create_timer(0.25).timeout
-		get_viewport().get_texture().get_image().save_png("F:/VSCode/game-2/temp/async_%02d.png" % i)
+		get_viewport().get_texture().get_image().save_png("F:/VSCode/stickworld/temp/async_%02d.png" % i)
 	get_tree().quit()
 """
 	script.reload()

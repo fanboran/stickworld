@@ -105,6 +105,9 @@ SIZE_BASELINE = {
     "modules/world/scripts/map/hd2d_map_base.gd": 951,
     "modules/world/scripts/setup/save_handler.gd": 515,
     "modules/world/scripts/setup/system_setup.gd": 474,
+    # 入册理由：装配助手域合并承重（战斗/资源/组织/编队/战术/指挥/征伏/上报九域 +
+    # 指挥传输辅助），长期贴 400 线运行——入册冻结现值，后续增行须显式拆子域
+    "modules/world/scripts/setup/system_setup_core_systems.gd": 397,
     "modules/world/scripts/setup/system_setup_strategic_map.gd": 402,
     "modules/world_map/api.gd": 628,
     "modules/world_map/data/l2_world_data.gd": 412,

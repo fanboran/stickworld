@@ -17,11 +17,13 @@ class_name WorldLedger extends RefCounted
 ##   FOCUS 城（真实实体模拟，现有母城形态）跳过，不按 owner 区分。
 ##
 ## ── 推进公式（数值全占位可调，语义锚蓝图 §3.4：涌现优先于配置）──
-##   人口：logistic 日成长 dp = max(1, round(0.005 × pop × (1 − pop/cap)))
-##     （未达容量每日至少 +1——保小村庄在战略时间尺度上可见地活着；
-##      达容量 dp=0 停滞）。pop_capacity 由初始化器定（头寸 1.4~3.6 抖动，
-##      使村→镇为少数事件、顶级城可达 4/5 档＝涌现且稀缺）；cap=0（旧档）
-##     视为无头寸静止。
+##   人口：logistic × 活力 dp = round(0.02 × vigor × pop × (1 − pop/cap))，
+##     vigor = clamp((cap/pop − 1) × 0.9, 0.2, 2.2)——活力由 headroom（容量/
+##     人口）派生：沃土之城长得快、薄土停滞。**无全局最小步进保底**（审计
+##     F4：匀速 floor 淹没分化——低活力小城取整后 0 增量即停滞，村与村兴衰
+##     分化；停滞城等待 M3 战争/移民搅动）。pop_capacity 由初始化器定（头寸
+##     1.4~3.6 抖动，使村→镇为少数事件、顶级城可达 4/5 档＝涌现且稀缺）；
+##     cap=0（旧档）视为无头寸静止。
 ##   档位：population 跨 POP_BANDS 档带人口下沿即升档（222/652/2002/5002，
 ##     与初始化器 level_from_score 的档带同源——只升不降；降档归 M3 战争
 ##     域人口损耗时再议）。
@@ -31,8 +33,14 @@ class_name WorldLedger extends RefCounted
 ##     GARRISON_POP_DIVISOR 同除数、无抖动＝稳态口径）；每日 +1 长枪补员、
 ##     只增不减（减员归战争域）；编成细节 M4 接 GarrisonSpawner 重定。
 
-## 日成长率（logistic 系数；0.5%/日 → 村庄数月、顶级城年余才见档位跨越）
-const POP_GROWTH_RATE_DAY := 0.005
+## 日成长率（logistic 系数；2%/日 × 活力 0.2~2.2 → 沃土城月余可跨档、薄土村停滞）
+const POP_GROWTH_RATE_DAY := 0.02
+
+## 活力系数：vigor = clamp((cap/pop − 1) × GAIN, MIN, MAX)——headroom 派生
+## （语义见头注「人口」段；GAIN 调斜率、MIN 保战后残城极慢回血、MAX 封顶防爆长）
+const VIGOR_GAIN := 0.9
+const VIGOR_MIN := 0.2
+const VIGOR_MAX := 2.2
 
 ## 补员兵种（与初始化器 PROFILE_SPEAR 同字面量；core 内不跨文件取常量，
 ## 语义一致由本注释与本文件测试共同守护）
@@ -53,11 +61,14 @@ static func advance_day(ws) -> void:
 static func _advance_city(c: CityState) -> void:
 	if c.population <= 0:
 		return
-	# 人口：logistic 成长，未达容量每日至少 +1（村庄可见性），达容量停滞
+	# 人口：logistic × 活力（沃土快/薄土停滞），无全局保底——分化即质感
 	if c.pop_capacity > c.population:
-		var growth := POP_GROWTH_RATE_DAY * float(c.population) \
-				* (1.0 - float(c.population) / float(c.pop_capacity))
-		c.population = mini(c.population + maxi(1, roundi(growth)), c.pop_capacity)
+		var pop_f := float(c.population)
+		var cap_f := float(c.pop_capacity)
+		var vigor := clampf((cap_f / pop_f - 1.0) * VIGOR_GAIN, VIGOR_MIN, VIGOR_MAX)
+		var growth := POP_GROWTH_RATE_DAY * vigor * pop_f * (1.0 - pop_f / cap_f)
+		var dp := clampi(roundi(growth), 0, c.pop_capacity - c.population)
+		c.population += dp
 	# 档位：人口跨档带下沿即升档（阈值与初始化器 POP_BANDS 同源）
 	c.level = maxi(c.level, level_from_population(c.population))
 	# 财富：日入趋饱和（繁荣度存量，自限不通胀）

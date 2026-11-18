@@ -1,7 +1,7 @@
 extends Node
 ## 单元测试：世界账本（世界模型整合 M2 迭代 1——离屏城账面日推进）。
 ##
-## 覆盖：人口 logistic 成长（最小步进/容量收敛/单调不减/容量上限不破）/
+## 覆盖：人口 logistic × 活力成长（兴旺村步进/薄土村停滞分化/容量收敛/单调不减）/
 ## 档位自然跨越（人口过阈值升档，只升不降）/ 财富趋饱和自限 /
 ## 守军每日补员至目标（只增不减）/ FOCUS 城跳过（模拟分档）/
 ## cap=0 旧档兼容（静止）/ 零随机确定性（同构世界同轨迹）/
@@ -74,12 +74,19 @@ func _free_worlds(worlds: Array) -> void:
 # ─────────────────────────────── 用例 ───────────────────────────────
 
 func _test_population_growth() -> void:
-	# 最小步进：小村 62 / 容量 150，logistic 项 < 1 → 每日至少 +1
+	# 兴旺村（headroom 2.4 → 活力 1.28）：62 / 容量 150，首日 +1
 	var village := _make_city("settlement_city_001", 62, 150, 1)
 	var ws := _make_world([village])
 	ScriptLedger.advance_day(ws)
-	_runner.assert_equal(village.population, 63, "小村庄每日至少 +1（可见性保底）")
-	# 收敛：长跑后恰达容量、单调不减、永不出界
+	_runner.assert_equal(village.population, 63, "兴旺村首日 +1（活力 × logistic）")
+	# 停滞村（headroom 1.29 → 活力 0.26）：取整后 0 增量——薄土村分化停滞（审计 F4）
+	var stagnant := _make_city("settlement_city_008", 62, 80, 1)
+	var ws3 := _make_world([stagnant])
+	for i in range(50):
+		ScriptLedger.advance_day(ws3)
+	_runner.assert_equal(stagnant.population, 62, "薄土村长跑停滞（无全局保底，兴衰分化）")
+	# 收敛：长跑后停滞——容量是渐近上限，停滞点由活力×取整涌现（村停在容量
+	# 五至七成处），单调不减、停滞后不再动
 	var monotone := true
 	for i in range(600):
 		var before := village.population
@@ -87,17 +94,19 @@ func _test_population_growth() -> void:
 		if village.population < before:
 			monotone = false
 	_runner.assert_true(monotone, "人口单调不减")
-	_runner.assert_equal(village.population, 150, "长跑后恰达容量")
+	_runner.assert_gt(village.population, 62, "兴旺村确实成长")
+	_runner.assert_true(village.population < 150, "停滞点在容量内（渐近上限不硬达）")
+	var stall := village.population
 	ScriptLedger.advance_day(ws)
 	ScriptLedger.advance_day(ws)
-	_runner.assert_equal(village.population, 150, "达容量后停滞")
-	# logistic 速率可见：城 652 / 容量 3800，30 日应明显快于 +1/日
+	_runner.assert_equal(village.population, stall, "停滞后不再变动")
+	# logistic × 活力速率可见：城 652 / 容量 3800（活力封顶 2.2），30 日快速增长
 	var city := _make_city("settlement_city_002", 652, 3800, 3)
 	var ws2 := _make_world([city])
 	for i in range(30):
 		ScriptLedger.advance_day(ws2)
-	_runner.assert_gt(city.population, 652 + 45, "logistic 速率生效（30 日 > 最小步进）")
-	_free_worlds([ws, ws2])
+	_runner.assert_gt(city.population, 652 + 300, "沃土城活力 × logistic 快速成长（30 日 +300 以上）")
+	_free_worlds([ws, ws2, ws3])
 
 
 func _test_level_progression() -> void:
@@ -117,18 +126,18 @@ func _test_level_progression() -> void:
 
 
 func _test_wealth_saturation() -> void:
-	# pop 会同期向容量成长（200→400），饱和线随之抬升——财富应恰收敛到终态 pop×10
+	# 人口先停到停滞点（活力×取整涌现），饱和线随之定档——财富应恰收敛到终态 pop×10
 	var c := _make_city("settlement_city_004", 200, 400, 2)
 	var ws := _make_world([c])
 	c.wealth = 0
 	for i in range(400):
 		ScriptLedger.advance_day(ws)
-	_runner.assert_equal(c.population, 400, "人口先达容量（测试前提自证）")
-	_runner.assert_equal(c.wealth, 4000, "财富收敛至终态 pop×10 饱和（饱和线随人口抬升）")
+	var final_pop := c.population
+	_runner.assert_true(final_pop > 200 and final_pop < 400, "人口停到停滞点（容量渐近）")
+	_runner.assert_equal(c.wealth, final_pop * 10, "财富收敛至终态 pop×10 饱和（饱和线随人口定档）")
 	ScriptLedger.advance_day(ws)
 	ScriptLedger.advance_day(ws)
-	_runner.assert_equal(c.wealth, 4000, "饱和后不再增长（自限不通胀）")
-	# 人口停滞（达容量）后财富线也停在对应水位
+	_runner.assert_equal(c.wealth, final_pop * 10, "饱和后不再增长（自限不通胀）")
 	ws.free()
 
 

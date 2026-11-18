@@ -175,13 +175,13 @@ func finish_setup() -> void:
 	# L1 不自行遍历场景树找 GameRoot，这里注入 GameRoot 既有玩家实体查询；
 	# 测试裸树不跑装配，EnvironmentSystem 无注入时返回 null（营火光静止）。
 	_inject_environment_player_query()
-	# 武器动画音效桥：树级自动发现 WeaponMount，把弓射/镐击的动画 Hit 命中帧
-	# 接到 SFX_EVENTS（Spine 源尚无这两条动画的 Sound 数据，见桥文件头）。
+	# 武器动画音效桥：树级发现 WeaponMount，弓射/镐击 Hit 帧接 SFX_EVENTS（见桥文件头）。
 	# 放收尾不进步骤表——加载屏副进度条步骤数是契约，不得增减。
 	var bridge := Node.new()
 	bridge.set_script(_WeaponAnimSfxBridgeScript)
 	bridge.name = "WeaponAnimSfxBridge"
 	_root.add_child(bridge)
+	WorldLedgerSetup.assemble(_root)  # 世界账面日脉冲桥（M2）——同上放收尾不进步骤表
 	call_deferred("_setup_battle_banner_deferred")
 
 

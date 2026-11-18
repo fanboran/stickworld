@@ -386,7 +386,6 @@ func _setup_recruit_system() -> void:
 ## 门控后的可见集）与 EventBus.commander_assigned，经 EventBus.ui_notification 落既有通知 feed。
 ## 归 organization/ui（消费组织域数据、组织域 UI），不建跨模块面板。
 func _setup_org_report_narrator() -> void:
-	WorldLedgerSetup.assemble(_host._root)  # M2 世界账面日脉冲接线（装配下沉，桥节点自断连）
 	if _host._root._organization_api == null:
 		return
 	var n := Node.new()

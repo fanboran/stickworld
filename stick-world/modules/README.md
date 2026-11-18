@@ -154,7 +154,7 @@ GameRoot
 | `INDOOR`        | 室内（铁匠铺等）  | 墙面透明化（INDOOR 模式）                    |
 | `MEGA_INTERIOR` | 大建筑内部（宫殿） | 独立完整场景 + TELEPORT 旅行                |
 
-**子模块**：[`placement_grid/`](file:///f:/VSCode/game-2/stick-world/modules/world/placement_grid/api.gd) — 32px 竖向条带占地网格（`occupy` / `release` / `is_occupied` / `is_blocked` / `can_place`）
+**子模块**：[`placement_grid/`](file:///f:/VSCode/stickworld/stick-world/modules/world/placement_grid/api.gd) — 32px 竖向条带占地网格（`occupy` / `release` / `is_occupied` / `is_blocked` / `can_place`）
 
 **核心方法**：
 
@@ -896,6 +896,10 @@ Technology  (1) ──unlocks───→ (N) Building/Equipment/Ability
     运输系统（资源不瞬移，从产地流向消费地）
        ↓
     扩张系统（战斗结果 → 地块控制度变化）
+
+世界演化（无玩家输入的自转腿，M2 世界模型整合）
+  昼夜钟回绕 → world_day_advanced 日脉冲 → WorldLedger 离屏城账面 tick
+  （人口/财富/守军/档位，core/entities）→ CityState 演化 →〔M3〕战略图消费
 ```
 
 **命令下发流**：
@@ -944,7 +948,7 @@ L1 排长 AI 检测到前方有大量敌军
 | **运行时状态** | WorldState（⚠️ 冻结预留：仅 game_time 生产使用，实体容器零调用） | RefCounted/Resource | 内存              |
 | **存档**    | 游戏进度（建筑实例/组织/单位/资源）               | SQLite `save_<slot>.db` | SaveManager 持久化 |
 
-存档带 schema 版本（`PRAGMA user_version` 门禁 + registry 式迁移链 + fixture 回归库），口径见 [`docs/技术/架构/数据与契约/存储架构设计.md` §版本迁移链](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/存储架构设计.md)。
+存档带 schema 版本（`PRAGMA user_version` 门禁 + registry 式迁移链 + fixture 回归库），口径见 [`docs/技术/架构/数据与契约/存储架构设计.md` §版本迁移链](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/存储架构设计.md)。
 
 **配置目录**：
 
@@ -1057,25 +1061,25 @@ config/
 
 | 主题                 | 文档                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------- |
-| 整体设计（GDD，唯一真相源）    | [`docs/设计/游戏设计文档.md`](file:///f:/VSCode/game-2/docs/设计/游戏设计文档.md)                     |
-| 核心循环               | [`docs/设计/核心循环.md`](file:///f:/VSCode/game-2/docs/设计/核心循环.md)                         |
-| 场景与战斗架构（P0 工程基线）   | [`docs/技术/架构/场景与战斗/场景与战斗架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/场景与战斗架构.md)             |
-| 战略图架构              | [`docs/技术/架构/世界与战略图/战略图架构.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界与战略图/战略图架构.md)                 |
-| 战略图数据流             | [`docs/技术/架构/世界与战略图/世界地图数据流.md`](file:///f:/VSCode/game-2/docs/技术/架构/世界与战略图/世界地图数据流.md)             |
-| 模块 API 契约（签名+前置后置） | [`docs/技术/架构/数据与契约/模块API契约.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/模块API契约.md)             |
-| EventBus 信号完整清单    | [`docs/技术/架构/数据与契约/系统交互与EventBus.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/系统交互与EventBus.md) |
-| Autoload 依赖图       | [`docs/技术/架构/数据与契约/自动加载依赖.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/自动加载依赖.md)               |
-| 核心实体/状态机（完整版）      | [`docs/技术/架构/数据与契约/核心实体与状态机.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/核心实体与状态机.md)           |
-| 建筑模块化设计            | [`docs/技术/架构/场景与战斗/建筑模块化设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/场景与战斗/建筑模块化设计.md)             |
-| 数据流与存储             | [`docs/技术/架构/数据与契约/数据流全景.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/数据流全景.md)                 |
-| 存储架构               | [`docs/技术/架构/数据与契约/存储架构设计.md`](file:///f:/VSCode/game-2/docs/技术/架构/数据与契约/存储架构设计.md)               |
-| 开发规范               | [`docs/技术/规范/开发指南.md`](file:///f:/VSCode/game-2/docs/技术/规范/开发指南.md)                   |
-| 建筑系统教程             | [`docs/技术/教程/建筑系统教程.md`](file:///f:/VSCode/game-2/docs/技术/教程/建筑系统教程.md)               |
-| 项目进度               | [`docs/项目/归档/项目进度-2026-09.md`](file:///f:/VSCode/game-2/docs/项目/归档/项目进度-2026-09.md)                         |
-| GDD vs 实现差异        | [`docs/项目/审计/专项/GDD与实现差异分析.md`](file:///f:/VSCode/game-2/docs/项目/审计/专项/GDD与实现差异分析.md)         |
-| 全项目审计快照           | [`docs/项目/归档/审计快照-2026-08-30.md`](file:///f:/VSCode/game-2/docs/项目/归档/审计快照-2026-08-30.md) |
-| 贡献指南               | [`docs/CONTRIBUTING.md`](file:///f:/VSCode/game-2/docs/CONTRIBUTING.md)               |
-| 文档总索引              | [`docs/README.md`](file:///f:/VSCode/game-2/docs/README.md)                           |
+| 整体设计（GDD，唯一真相源）    | [`docs/设计/游戏设计文档.md`](file:///f:/VSCode/stickworld/docs/设计/游戏设计文档.md)                     |
+| 核心循环               | [`docs/设计/核心循环.md`](file:///f:/VSCode/stickworld/docs/设计/核心循环.md)                         |
+| 场景与战斗架构（P0 工程基线）   | [`docs/技术/架构/场景与战斗/场景与战斗架构.md`](file:///f:/VSCode/stickworld/docs/技术/架构/场景与战斗/场景与战斗架构.md)             |
+| 战略图架构              | [`docs/技术/架构/世界与战略图/战略图架构.md`](file:///f:/VSCode/stickworld/docs/技术/架构/世界与战略图/战略图架构.md)                 |
+| 战略图数据流             | [`docs/技术/架构/世界与战略图/世界地图数据流.md`](file:///f:/VSCode/stickworld/docs/技术/架构/世界与战略图/世界地图数据流.md)             |
+| 模块 API 契约（签名+前置后置） | [`docs/技术/架构/数据与契约/模块API契约.md`](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/模块API契约.md)             |
+| EventBus 信号完整清单    | [`docs/技术/架构/数据与契约/系统交互与EventBus.md`](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/系统交互与EventBus.md) |
+| Autoload 依赖图       | [`docs/技术/架构/数据与契约/自动加载依赖.md`](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/自动加载依赖.md)               |
+| 核心实体/状态机（完整版）      | [`docs/技术/架构/数据与契约/核心实体与状态机.md`](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/核心实体与状态机.md)           |
+| 建筑模块化设计            | [`docs/技术/架构/场景与战斗/建筑模块化设计.md`](file:///f:/VSCode/stickworld/docs/技术/架构/场景与战斗/建筑模块化设计.md)             |
+| 数据流与存储             | [`docs/技术/架构/数据与契约/数据流全景.md`](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/数据流全景.md)                 |
+| 存储架构               | [`docs/技术/架构/数据与契约/存储架构设计.md`](file:///f:/VSCode/stickworld/docs/技术/架构/数据与契约/存储架构设计.md)               |
+| 开发规范               | [`docs/技术/规范/开发指南.md`](file:///f:/VSCode/stickworld/docs/技术/规范/开发指南.md)                   |
+| 建筑系统教程             | [`docs/技术/教程/建筑系统教程.md`](file:///f:/VSCode/stickworld/docs/技术/教程/建筑系统教程.md)               |
+| 项目进度               | [`docs/项目/归档/项目进度-2026-09.md`](file:///f:/VSCode/stickworld/docs/项目/归档/项目进度-2026-09.md)                         |
+| GDD vs 实现差异        | [`docs/项目/审计/专项/GDD与实现差异分析.md`](file:///f:/VSCode/stickworld/docs/项目/审计/专项/GDD与实现差异分析.md)         |
+| 全项目审计快照           | [`docs/项目/归档/审计快照-2026-08-30.md`](file:///f:/VSCode/stickworld/docs/项目/归档/审计快照-2026-08-30.md) |
+| 贡献指南               | [`docs/CONTRIBUTING.md`](file:///f:/VSCode/stickworld/docs/CONTRIBUTING.md)               |
+| 文档总索引              | [`docs/README.md`](file:///f:/VSCode/stickworld/docs/README.md)                           |
 
 ***
 

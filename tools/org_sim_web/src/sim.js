@@ -10,7 +10,7 @@ export const TERRAIN = {
    原料窄口径（05-经济系统 §四）：基础原料三种——原木/矿物（暂只做铁）/农作物，全部地形直出；
    木材/木板/铁锭都是工序产物（加工品），多样性靠工序不靠原料。
    进食是可选增益、不设「食物」资源；铁水/毛坯/淬火件/净药材/车料是厂内物品，不可离厂（仓库页「厂内」标签可见） */
-export const RES = ["原木", "铁矿", "农作物", "茅草", "木材", "木板", "木梁", "木瓦", "门扇", "窗扇", "铁锭", "铁钉", "铁板", "绳索",
+export const RES = ["原木", "铁矿", "农作物", "茅草", "木材", "木炭", "木板", "木梁", "木瓦", "门扇", "窗扇", "铁锭", "铁钉", "铁板", "绳索",
                     "铁剑", "药水", "手推车"];
 export const RES_INFO = {
   "原木":   { cat: "basic", icon: "🌲", src: "伐木队采自树林——柱/椽/梁的毛料与锯解原料" },
@@ -18,6 +18,7 @@ export const RES_INFO = {
   "农作物": { cat: "basic", icon: "🌾", src: "耕地产出——入药与纤维（搓绳）原料；进食可选增益、无饥饿（机制后续）" },
   "茅草":   { cat: "mat", icon: "🌿", src: "收割副产（麦秆梳束成捆）——茅草顶铺苫料（正片 thatch 材质）" },
   "木材":   { cat: "mat", icon: "🪵", src: "锯木坊锯解原木所得（锯材通用料）" },
+  "木炭":   { cat: "mat", icon: "⚫", src: "炭窑焖烧木材所得（3柴1炭）——冶炼燃料：近纯碳无硫、兼还原剂（柴热值不足）" },
   "木板":   { cat: "mat", icon: "🟫", src: "锯木坊刨光木材所得——板墙/地板/门窗料" },
   "木梁":   { cat: "mat", icon: "🪓", src: "锯木坊制梁所得——梁柱构建筑的承重梁与椽" },
   "木瓦":   { cat: "mat", icon: "🧱", src: "锯木坊制瓦（木板开片）——屋面覆盖" },
@@ -76,6 +77,10 @@ export const BUILDINGS = {
       { item: "办公桌椅", cost: { "木材": 6 }, work: 6, w: 2, unlock: "解锁伐木队的探测/记录槽" },
       { item: "工具架",   cost: { "木板": 4 }, work: 6, w: 1, effect: "伐木速率+25%" },
       { item: "额外椅子", cost: { "木板": 2 }, work: 3, w: 1, effect: "木材信息联络更快" } ] },
+  "炭窑": { form: "棚", desc: "林边焖烧木炭——3柴1炭；炭易碎不宜远运，就地设窑", interior: [
+      { item: "窑膛",   cost: { "原木": 4, "茅草": 2 }, work: 6, w: 2, unlock: "烧炭工序（木材×3→木炭）" },
+      { item: "守窑棚", cost: { "原木": 2, "茅草": 2 }, work: 3, w: 1, effect: "烧炭工长班值守（焖烧数日不断人）" },
+      { item: "炭棚",   cost: { "木板": 3 }, work: 3, w: 1, effect: "贮炭防潮（机制后续）" } ] },
   "锯木坊": { form: "棚", floors: 1, desc: "锯解→制梁→制瓦→刨光→制门→制窗：原木出材，板出成品（开敞锯棚）", interior: [
       { item: "锯架",   cost: { "木材": 8 }, work: 8, w: 2, unlock: "锯解工序（原木→木材）" },
       { item: "制梁台", cost: { "木材": 6 }, work: 6, w: 2, unlock: "制梁工序（原木→木梁）" },
@@ -132,7 +137,8 @@ export const ORGS = {
       { fn: "锻造", n: 1, pos: "gain", role: "铁矿→铁剑" },
       { fn: "制药", n: 1, pos: "gain", role: "农作物→药水" },
       { fn: "木器", n: 1, pos: "gain", role: "木板+铁锭→手推车（载具）" },
-      { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭" } ] },
+      { fn: "冶炼", n: 1, pos: "gain", role: "铁矿→铁锭" },
+      { fn: "烧炭", n: 1, pos: "gain", role: "燃料线——放烧炭队（林边炭窑）" } ] },
   /* 工程队＝施工项目部（裁决52，按现实双层结构）：
      管理层＝大匠（掌墨师式：项目经理+总工+施工员+测量+设计一身——墨线即图纸）＋监工（材料/质检/账目）；
      劳务层＝木作班/泥瓦班入驻 木作/泥瓦 槽（每班：班组长带班+匠人+配属小工），小规模可直派匠人；
@@ -204,7 +210,8 @@ export const ORGS = {
   "药剂坊": { host: "制药", bldg: "药剂坊", slots: [
       { fn: "采药", n: 2, homog: true, pos: "must", terrain: "耕地", role: "采野生药草（慢于农垦的副线）" },
       { fn: "炮制", n: 1, pos: "semi", step: 0, role: "农作物炮制净药材", lead: true },
-      { fn: "熬制", n: 1, pos: "semi", step: 1, role: "净药材熬成药水" } ],
+      { fn: "熬制", n: 1, pos: "semi", step: 1, role: "净药材熬成药水" },
+      { fn: "研磨", n: 1, pos: "gain", role: "研磨配药（机制后续）" } ],
       steps: [
         { name: "炮制", equip: "切药刀", inCity: { "农作物": 1 }, wip: "净药材" },
         { name: "熬制", equip: "药炉", wipIn: "净药材", outCity: { "药水": 1 }, art: "制药" } ] },
@@ -242,10 +249,22 @@ export const ORGS = {
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览", lead: true },
       { fn: "采编", n: 4, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
       { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
+  /* 烧炭队（裁决53：林边独立设施——炭易碎不宜远运；守窑长班） */
+  "烧炭队": { host: "烧炭", bldg: "炭窑", slots: [
+      { fn: "窑头", n: 1, pos: "must", lead: true, role: "掌堆窑控气口——焖烧火候全凭手艺" },
+      { fn: "烧炭", n: 3, homog: true, pos: "must", step: 0, role: "码柴覆土封口控氧" },
+      { fn: "守窑", n: 1, pos: "gain", role: "昼夜看守防明火（长班值守）" } ],
+    steps: [ { name: "烧炭", equip: "窑膛", inCity: { "木材": 3 }, outCity: { "木炭": 1 } } ] },
+  /* 冶炼坊＝大规模冶炼场（裁决53，按史实炉前编制）：掌炉(炉长配料开炉)/上料/鼓风(轮班提炉温)/出铁(扒渣)/修炉 */
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊",
-      slots: [ { fn: "上料", n: 1, pos: "gain", role: "备矿配炭运至炉口——在编冶炼提速" },
-      { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭", lead: true } ],
-      steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 1, "木材": 1 }, outCity: { "铁锭": 1 }, art: "冶炼" } ] },
+    slots: [
+      { fn: "掌炉", n: 1, pos: "must", lead: true, role: "炉长——配料开炉看火候" },
+      { fn: "上料", n: 2, homog: true, pos: "must", role: "备矿配炭运至炉口——在编冶炼提速" },
+      { fn: "鼓风", n: 3, homog: true, pos: "must", role: "轮班拉风箱提炉温——在编冶炼提速（水力科技后可减员）" },
+      { fn: "出铁", n: 2, homog: true, pos: "must", role: "出铁扒渣——炉前重活" },
+      { fn: "修炉", n: 1, pos: "gain", role: "筑炉修炉匠（炉役间隙检修）" },
+      { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配炭入炉炼锭" } ],
+    steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 2, "木炭": 1 }, outCity: { "铁锭": 2 }, art: "冶炼" } ] },   // 一炉炭炼双份矿（块炼炉批次语义——燃料链史实配比下的可持衡产率）
   "常备军": { host: "军事", bldg: "兵营", slots: [
       { fn: "军事", n: 1, pos: "must", role: "在编即可动员", lead: true },
       { fn: "军需", n: 1, pos: "gain", role: "军械领用配发登记" },
@@ -352,7 +371,7 @@ export function reset(seed) {
   const fresh = {
     hours: 0, speed: 0, seq: { p: 0, o: 0 },
     people: [], orgs: {}, order: [],
-    res: { "原木": 30, "铁矿": 0, "农作物": 30, "茅草": 10, "木材": 20, "木板": 10, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0, "木梁": 0, "木椽": 0, "木瓦": 0, "门扇": 0, "窗扇": 0, "铁钉": 0, "铁板": 0, "绳索": 0 },
+    res: { "原木": 30, "铁矿": 0, "农作物": 30, "茅草": 10, "木材": 20, "木炭": 0, "木板": 10, "铁锭": 0, "铁剑": 0, "药水": 0, "手推车": 0, "木梁": 0, "木椽": 0, "木瓦": 0, "门扇": 0, "窗扇": 0, "铁钉": 0, "铁板": 0, "绳索": 0 },
     // 自举本金（工作量制口径）：首屋（民居·屋 原7板3）+锯木坊（开敞棚 原10板2）+锯架（木8）+床（木4）——
     // 板为一次性垫底，此后板/梁/椽/瓦/门窗全自产；低于此开局锁死（全城唯一木材产能是装了锯架的锯木坊）
     buf: {}, wip: {}, buildings: {}, buildOrders: [],
@@ -403,14 +422,15 @@ export function loadDemo() {
   inst("锯木坊", "锯架", "刨台");
   inst("锻造坊", "熔炉", "铁砧", "水槽", "磨石", "风箱");
   inst("冶炼坊", "冶炼炉");
-  for (let i = 0; i < 6; i++) inst("民居", "床铺");
+  inst("炭窑", "窑膛", "守窑棚", "炭棚");
+  for (let i = 0; i < 7; i++) inst("民居", "床铺");
   inst("训练场", "木人桩", "靶场");
   inst("兵营"); inst("办公楼", "档案柜"); inst("书院", "书架", "实验台");
   inst("药剂坊", "切药刀", "药炉");
   inst("木工房", "木工台", "组装架");
   addPersonRaw("你");
   addPersonRaw("动员官");
-  for (let i = 0; i < 46; i++) addPersonRaw("村民");   // 扩编 46：完全体满编不再干涸（情报/科研此前 0 人）——床位 6 屋×8=48 正好
+  for (let i = 0; i < 55; i++) addPersonRaw("村民");   // 55：含炭窑线/冶炼场炉前/燃料链增编（7 屋×8=56 床位）
   /* 复用 reset() 已建的根组织 o01（修复：曾另建 o02 致双根并存——情报局挂在 o02 名下，
      intelInterval 读 o01 → 完全体样板总览永久停更，僵尸聚落还会被升格逻辑二次改名） */
   const hall = S.orgs.o01;
@@ -447,7 +467,7 @@ export function loadDemo() {
   /* 满员运转（游标式分配：take(n) 依序领待业者，加减编制不再手工数格子） */
   const pool = vill(); let cur = 0;   // 快照池：曾误在收缩中的待业列表上推进游标，越取越跳、二十人后干涸
   const take = n => { const ids = pool.slice(cur, cur + n); cur += n; return ids; };
-  staff(lumber, "伐木队长", 1, take(1)); staff(lumber, "伐木", 2, take(2));
+  staff(lumber, "伐木队长", 1, take(1)); staff(lumber, "伐木", 3, take(3));
   staff(mining, "挖矿队长", 1, take(1)); staff(mining, "挖矿", 2, take(2));
   staff(farm, "耕作队长", 1, take(1)); staff(farm, "耕作", 2, take(2));
   staff(haul, "调度", 1, take(1)); staff(store, "收发", 1, take(1)); staff(haul, "搬运", 3, take(3));
@@ -459,10 +479,13 @@ export function loadDemo() {
   staff(eng, "小工", 1, take(1));   // 机动小工直属大匠
   staff(forge, "风箱", 1, take(1)); staff(forge, "熔炼", 1, take(1)); staff(forge, "锻打", 1, take(1));
   staff(forge, "淬火", 1, take(1)); staff(forge, "开刃", 1, take(1));
-  staff(sawmill, "锯解", 2, take(2));   // 两名锯工：样板实测原木堆积木材断供的瓶颈针（锯解1人转不过熔炼耗木）
+  staff(sawmill, "锯解", 3, take(3));   // 三名锯工：燃料链（炭窑3柴1炭）叠加后木材需求翻倍，2人转不过
   staff(pharmacy, "炮制", 1, take(1)); staff(pharmacy, "熬制", 1, take(1));
   staff(cartshop, "备料", 1, take(1));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
-  staff(smelter, "冶炼", 1, take(1));
+  staff(smelter, "掌炉", 1, take(1)); staff(smelter, "冶炼", 1, take(1));
+  staff(smelter, "上料", 1, take(1)); staff(smelter, "鼓风", 1, take(1)); staff(smelter, "出铁", 1, take(1));
+  const chark = addOrgRaw("烧炭队", 2, ""); place(works, "烧炭", chark);   // 燃料线（裁决53）
+  staff(chark, "窑头", 1, take(1)); staff(chark, "烧炭", 2, take(2));
   staff(hr, "人事", 1, take(1));
   staff(camp, "训练管理", 1, take(1)); staff(camp, "教官", 1, take(1));
   staff(intel, "汇总", 1, take(1)); staff(intel, "采编", 2, take(2));
@@ -474,6 +497,7 @@ export function loadDemo() {
   const engOrg = Object.values(S.orgs).find(x => x.template === "工程队");
   if (engOrg) engOrg.settings["自动扩建"] = "开";   // 样板展示自动化闭环：仓库近满自动排队新仓
   S.res["手推车"] += 2;
+  S.res["木炭"] += 20;   // 样板燃料垫底（炭窑随即自产）
   S.buildings["仓库"].push({ interior: {}, org: "" });
   S.citySat.push({ b: "仓库", inst: S.buildings["仓库"].length - 1 });
   /* 样板点名补艺：随机出生不保证末道手艺岗有人会，补齐让样板满转 */
@@ -1127,7 +1151,10 @@ export function advance(dt) {
       }
       // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
       if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
-      if (st.name === "冶炼" && (o.slots["上料"]?.persons.length || 0) > 0) want *= 1.2;   // 上料工备矿到炉口
+      if (st.name === "冶炼") {   // 炉前两岗各自提速（上料备料到炉口/鼓风提炉温）——物理独立可叠
+        if ((o.slots["上料"]?.persons.length || 0) > 0) want *= 1.2;
+        if ((o.slots["鼓风"]?.persons.length || 0) > 0) want *= 1.2;
+      }
       let produced = 0;
       if (st.inCity) {
         const can = Math.min(want, ...Object.entries(st.inCity).map(([r, n]) => S.res[r] / n));

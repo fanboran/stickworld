@@ -39,6 +39,14 @@ var population: int = 0
 ## headroom 推导；0 = 无头寸（旧档城市静止不成长）——WorldLedger 日推进消费）
 var pop_capacity: int = 0
 
+## 人口成长累积进度（M2 累积制：日增量小数攒满 1.0 进一——薄土村以年月计
+## 爬行而非永停；达容量清零——WorldLedger 日推进消费）
+var pop_progress: float = 0.0
+
+## 城市几何锚点（初始化器从 l3_city centroid 原样装载——轴序与多边形相反
+## 但全表一致，迁移压力流只取相对距离故不换序；ZERO = 未装载，不参与迁移）
+var anchor: Vector2 = Vector2.ZERO
+
 ## 账面财富存量（M2 账面 tick：繁荣度口径，日入趋 pop×10 饱和；
 ## 消耗端归 M3 战争损耗/占领掠夺）
 var wealth: int = 0

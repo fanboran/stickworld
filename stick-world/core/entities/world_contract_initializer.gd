@@ -143,11 +143,12 @@ static func build_initial_contract(run_seed: int) -> Dictionary:
 		if label <= 0:
 			push_warning("[WorldContractInitializer] city_owners 键非生成端格式，跳过: %s" % sid)
 			continue
-		var base_ps := float(scores.get(label, 0.0))
 		# 原址复种点（不在 l3_city tiles → scores 无此 label）只占地块不建城实体；
 		# 复种入场时由玩法层注册，避免空点被 level_from_score(0) 误判为村
 		if not scores.has(label):
 			continue
+		var m := scores[label] as Dictionary
+		var base_ps := float(m.get("ps", 0.0))
 		var c := CityState.new()
 		c.settlement_id = sid
 		c.tile_key = "city_%03d" % label
@@ -156,6 +157,7 @@ static func build_initial_contract(run_seed: int) -> Dictionary:
 		c.population = derive_population(base_ps, sid, run_seed, sid == spawn_id)
 		c.pop_capacity = derive_pop_capacity(c.population, sid, run_seed)
 		c.wealth = maxi(1, roundi(float(c.population) * WEALTH_SEED_PER_POP))
+		c.anchor = (scores[label] as Dictionary).get("centroid", Vector2.ZERO)
 		c.garrison = derive_garrison(c.level, c.population, sid, run_seed)
 		cities_out[sid] = c
 	return {"cities": cities_out, "factions": factions_out}
@@ -243,14 +245,26 @@ static func _read_political_data() -> Dictionary:
 	return parsed if parsed is Dictionary else {}
 
 
-## l3_city 的 label → population_score 表（bin 优先，见 _read_data_dict；
-## 缺该城条目回退 0.0 → 1 档带下沿，当前真源 1036 城全有该字段）
+## l3_city 的 label → {ps: population_score, centroid: Vector2} 表（bin 优先，
+## 见 _read_data_dict；缺该城条目回退 ps 0.0 → 1 档带下沿，当前真源 1036 城
+## 全有该字段。centroid 轴序与多边形相反但全表一致——迁移压力流只取相对距离，
+## 故原样装载不换序）
 static func _read_city_scores() -> Dictionary:
 	var data := _read_data_dict(L3_CITY_PATH)
 	var out: Dictionary = {}
 	for t in (data.get("tiles", []) as Array):
 		var td: Dictionary = t
-		out[int(td.get("label", 0))] = float(td.get("population_score", 0.0))
+		var centroid := Vector2.ZERO
+		var cv: Variant = td.get("centroid")
+		# bin 往返可能给 PackedFloat32Array、JSON 给 Array——两类都收
+		if typeof(cv) == TYPE_ARRAY or typeof(cv) == TYPE_PACKED_FLOAT32_ARRAY \
+				or typeof(cv) == TYPE_PACKED_FLOAT64_ARRAY:
+			if cv.size() >= 2:
+				centroid = Vector2(float(cv[0]), float(cv[1]))
+		out[int(td.get("label", 0))] = {
+			"ps": float(td.get("population_score", 0.0)),
+			"centroid": centroid,
+		}
 	return out
 
 

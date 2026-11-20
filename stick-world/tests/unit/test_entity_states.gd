@@ -242,7 +242,9 @@ func _test_city() -> void:
 	c.level = 3
 	c.population = 1200
 	c.pop_capacity = 3800
+	c.pop_progress = 0.37
 	c.wealth = 6400
+	c.anchor = Vector2(2270.4, 394.5)
 	c.garrison = {"spear_1": 40, "bow_1": 25}
 	c.sim_tier = ScriptCityState.SimTier.FOCUS
 	var d: Dictionary = ScriptSerializer.city_to_dict(c)
@@ -253,17 +255,21 @@ func _test_city() -> void:
 	_runner.assert_equal(c2.level, 3, "level 保真")
 	_runner.assert_equal(c2.population, 1200, "population 保真")
 	_runner.assert_equal(c2.pop_capacity, 3800, "pop_capacity 保真（M2 账面字段）")
+	_runner.assert_approx(c2.pop_progress, 0.37, 0.0001, "pop_progress 保真（累积制进度）")
 	_runner.assert_equal(c2.wealth, 6400, "wealth 保真（M2 账面字段）")
+	_runner.assert_true(c2.anchor.is_equal_approx(Vector2(2270.4, 394.5)), "anchor 保真（迁移几何锚点）")
 	_runner.assert_equal(c2.garrison, {"spear_1": 40, "bow_1": 25}, "garrison 保真")
 	_runner.assert_equal(c2.buildings, {}, "buildings M1 空容器保真")
 	_runner.assert_equal(c2.sim_tier, ScriptCityState.SimTier.FOCUS, "sim_tier 保真")
-	# 旧档缺 M2 字段：缺键回退 0（无头寸静止 / 零财富），不崩
+	# 旧档缺 M2 字段：缺键回退 0/ZERO（无头寸静止 / 零财富 / 不迁移），不崩
 	var legacy = ScriptSerializer.city_from_dict({
 		"settlement_id": "settlement_city_009",
 		"population": 300,
 	})
 	_runner.assert_equal(legacy.pop_capacity, 0, "旧档缺 pop_capacity 回退 0")
+	_runner.assert_equal(legacy.pop_progress, 0.0, "旧档缺 pop_progress 回退 0")
 	_runner.assert_equal(legacy.wealth, 0, "旧档缺 wealth 回退 0")
+	_runner.assert_equal(legacy.anchor, Vector2.ZERO, "旧档缺 anchor 回退 ZERO")
 	# int 字段类型还原（JSON 往返会把 int 变 float，from_dict 须逐字段还原）
 	_runner.assert_equal(typeof(c2.level), TYPE_INT, "level int 类型还原")
 	_runner.assert_equal(typeof(c2.population), TYPE_INT, "population int 类型还原")

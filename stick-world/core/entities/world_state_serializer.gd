@@ -297,7 +297,9 @@ static func city_to_dict(c: CityState) -> Dictionary:
 		"level": c.level,
 		"population": c.population,
 		"pop_capacity": c.pop_capacity,
+		"pop_progress": c.pop_progress,
 		"wealth": c.wealth,
+		"anchor": [c.anchor.x, c.anchor.y],
 		"garrison": c.garrison.duplicate(),
 		"buildings": c.buildings.duplicate(),
 		"sim_tier": c.sim_tier,
@@ -314,7 +316,12 @@ static func city_from_dict(d: Dictionary) -> CityState:
 	c.population = int(d.get("population", 0))
 	# M2 账面字段：旧档缺键回退 0（无头寸静止 / 零财富起步，不崩）
 	c.pop_capacity = int(d.get("pop_capacity", 0))
+	c.pop_progress = float(d.get("pop_progress", 0.0))
 	c.wealth = int(d.get("wealth", 0))
+	# 几何锚点 [x, y]（旧档缺键回退 ZERO = 不参与迁移压力流）
+	var a: Variant = d.get("anchor")
+	if a is Array and (a as Array).size() >= 2:
+		c.anchor = Vector2(float(a[0]), float(a[1]))
 	c.sim_tier = int(d.get("sim_tier", CityState.SimTier.LEDGER))
 	# 军队账面 {profile_id: int}：值为 int 计数须逐值还原（JSON 往返 int→float）
 	var g: Variant = d.get("garrison", {})

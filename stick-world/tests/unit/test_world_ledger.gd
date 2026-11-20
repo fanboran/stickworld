@@ -1,12 +1,13 @@
 extends Node
-## 单元测试：世界账本（世界模型整合 M2 迭代 1——离屏城账面日推进）。
+## 单元测试：世界账本（世界模型整合 M2——离屏城账面日推进）。
 ##
-## 覆盖：人口 logistic × 活力成长（兴旺村步进/薄土村停滞分化/容量收敛/单调不减）/
+## 覆盖：人口 logistic × 活力 × 累积制（兴旺村步进/薄土村极慢爬行/容量终达/单调）/
+## 迁移压力流（满城向最近低压力城 1 人/日、压力差带宽门槛、anchor 缺失兼容）/
 ## 档位自然跨越（人口过阈值升档，只升不降）/ 财富趋饱和自限 /
 ## 守军每日补员至目标（只增不减）/ FOCUS 城跳过（模拟分档）/
 ## cap=0 旧档兼容（静止）/ 零随机确定性（同构世界同轨迹）/
 ## 真源集成（193 政权 1036 城推进 365 日：账面变化可查 + 全域不变量，
-## = M2 迭代 1 验收门的测试化）/ 存档往返续算（推进→存→读→再推进等价）/
+## = M2 验收门的测试化）/ 存档往返续算（推进→存→读→再推进等价）/
 ## 日脉冲桥生命周期（审计回归：装配幂等/宿主释放自动断连不叠连）。
 ## 纯数据层测试：preload 脚本 new() 即用，不依赖 autoload 单例——唯一例外
 ## 是桥生命周期用例（需真实 EventBus autoload 的连接表，批跑环境恒在）。
@@ -33,6 +34,7 @@ func _ready() -> void:
 	_runner.add_test("world_ledger: 档位自然跨越（升档判定只升不降）", _test_level_progression)
 	_runner.add_test("world_ledger: 财富趋饱和自限", _test_wealth_saturation)
 	_runner.add_test("world_ledger: 守军每日补员至目标", _test_garrison_replenish)
+	_runner.add_test("world_ledger: 迁移压力流（人往低处流）", _test_migration_flow)
 	_runner.add_test("world_ledger: FOCUS 城跳过 + cap=0 旧档静止", _test_tier_and_legacy)
 	_runner.add_test("world_ledger: 零随机确定性（同构同轨迹）", _test_determinism)
 	_runner.add_test("world_ledger: 存档往返续算等价", _test_save_resume)
@@ -54,7 +56,7 @@ func _make_world(cities: Array) -> Node:
 	return ws
 
 
-func _make_city(sid: String, pop: int, cap: int, level: int = 1) -> CityState:
+func _make_city(sid: String, pop: int, cap: int, level: int = 1, anchor: Vector2 = Vector2.ZERO) -> CityState:
 	var c: CityState = ScriptCity.new()
 	c.settlement_id = sid
 	c.tile_key = "city_001"
@@ -62,6 +64,7 @@ func _make_city(sid: String, pop: int, cap: int, level: int = 1) -> CityState:
 	c.level = level
 	c.population = pop
 	c.pop_capacity = cap
+	c.anchor = anchor
 	c.garrison = {"stm_spear_001": 2}
 	return c
 
@@ -74,32 +77,30 @@ func _free_worlds(worlds: Array) -> void:
 # ─────────────────────────────── 用例 ───────────────────────────────
 
 func _test_population_growth() -> void:
-	# 兴旺村（headroom 2.4 → 活力 1.28）：62 / 容量 150，首日 +1
-	var village := _make_city("settlement_city_001", 62, 150, 1)
+	# 兴旺村（headroom 2.9 → 活力 1.71）：62 / 容量 180，首日增量 1.39 → 攒满即 +1
+	var village := _make_city("settlement_city_001", 62, 180, 1)
 	var ws := _make_world([village])
 	ScriptLedger.advance_day(ws)
-	_runner.assert_equal(village.population, 63, "兴旺村首日 +1（活力 × logistic）")
-	# 停滞村（headroom 1.29 → 活力 0.26）：取整后 0 增量——薄土村分化停滞（审计 F4）
+	_runner.assert_equal(village.population, 63, "兴旺村首日 +1（活力 × logistic × 累积制）")
+	# 薄土村（headroom 1.29 → 活力 0.26，日增量 ~0.07）：50 日爬行 +3 而非永停
+	# ——累积制根治取整断崖（审计复刻件：进度攒满进一）
 	var stagnant := _make_city("settlement_city_008", 62, 80, 1)
 	var ws3 := _make_world([stagnant])
 	for i in range(50):
 		ScriptLedger.advance_day(ws3)
-	_runner.assert_equal(stagnant.population, 62, "薄土村长跑停滞（无全局保底，兴衰分化）")
-	# 收敛：长跑后停滞——容量是渐近上限，停滞点由活力×取整涌现（村停在容量
-	# 五至七成处），单调不减、停滞后不再动
+	_runner.assert_gt(stagnant.population, 62, "薄土村极慢爬行（累积制，非永停）")
+	_runner.assert_true(stagnant.population <= 68, "薄土村爬行量级受活力压制（50 日 ≤ +6）")
+	# 收敛：长跑终达容量（渐近上限——尾部慢但不断），单调不减
 	var monotone := true
-	for i in range(600):
+	for i in range(3000):
 		var before := village.population
 		ScriptLedger.advance_day(ws)
 		if village.population < before:
 			monotone = false
 	_runner.assert_true(monotone, "人口单调不减")
-	_runner.assert_gt(village.population, 62, "兴旺村确实成长")
-	_runner.assert_true(village.population < 150, "停滞点在容量内（渐近上限不硬达）")
-	var stall := village.population
+	_runner.assert_equal(village.population, 180, "长跑终恰达容量（累积制无断崖）")
 	ScriptLedger.advance_day(ws)
-	ScriptLedger.advance_day(ws)
-	_runner.assert_equal(village.population, stall, "停滞后不再变动")
+	_runner.assert_equal(village.population, 180, "达容量后停滞")
 	# logistic × 活力速率可见：城 652 / 容量 3800（活力封顶 2.2），30 日快速增长
 	var city := _make_city("settlement_city_002", 652, 3800, 3)
 	var ws2 := _make_world([city])
@@ -126,19 +127,43 @@ func _test_level_progression() -> void:
 
 
 func _test_wealth_saturation() -> void:
-	# 人口先停到停滞点（活力×取整涌现），饱和线随之定档——财富应恰收敛到终态 pop×10
-	var c := _make_city("settlement_city_004", 200, 400, 2)
+	# 人口钉死在容量（pop==cap → 零成长）隔离观察财富：恰收敛 pop×10 后停
+	var c := _make_city("settlement_city_004", 200, 200, 2)
 	var ws := _make_world([c])
 	c.wealth = 0
 	for i in range(400):
 		ScriptLedger.advance_day(ws)
-	var final_pop := c.population
-	_runner.assert_true(final_pop > 200 and final_pop < 400, "人口停到停滞点（容量渐近）")
-	_runner.assert_equal(c.wealth, final_pop * 10, "财富收敛至终态 pop×10 饱和（饱和线随人口定档）")
+	_runner.assert_equal(c.population, 200, "pop==cap 无成长（测试前提自证）")
+	_runner.assert_equal(c.wealth, 2000, "财富收敛至 pop×10 饱和")
 	ScriptLedger.advance_day(ws)
 	ScriptLedger.advance_day(ws)
-	_runner.assert_equal(c.wealth, final_pop * 10, "饱和后不再增长（自限不通胀）")
+	_runner.assert_equal(c.wealth, 2000, "饱和后不再增长（自限不通胀）")
 	ws.free()
+
+
+func _test_migration_flow() -> void:
+	# 压力流：满城（压力 1.0 ≥ 0.98）向 anchor 最近的低压力城（≤0.6）迁 1 人/日
+	# （锚点避开 ZERO——(0,0) 是「未装载」哨兵，真实 centroid 永不为零）
+	var a := _make_city("settlement_city_010", 1000, 1000, 3, Vector2(1000, 1000))
+	var near := _make_city("settlement_city_011", 100, 1000, 1, Vector2(1050, 1000))
+	var far := _make_city("settlement_city_012", 100, 1000, 1, Vector2(1500, 1000))
+	var ws := _make_world([a, near, far])
+	ScriptLedger.advance_day(ws)
+	_runner.assert_equal(a.population, 999, "满城当日迁出 1 人（压力 ≥ 0.98 外流）")
+	_runner.assert_gt(near.population, far.population, "迁入 anchor 最近低压力城（近者多得）")
+	# 无低压力目的地（唯一邻居压力 0.99 > 0.6）：不迁移——压力差带宽即门槛
+	var b := _make_city("settlement_city_013", 1000, 1000, 3, Vector2(2000, 2000))
+	var full_nbr := _make_city("settlement_city_014", 990, 1000, 3, Vector2(2010, 2000))
+	var ws2 := _make_world([b, full_nbr])
+	ScriptLedger.advance_day(ws2)
+	_runner.assert_equal(b.population, 1000, "无低压力目的地不迁移（差不够大人不动）")
+	# anchor 未装载（ZERO，旧档）的城不参与迁移
+	var z := _make_city("settlement_city_015", 1000, 1000, 3)
+	var sink := _make_city("settlement_city_016", 100, 1000, 1, Vector2(2005, 2005))
+	var ws3 := _make_world([z, sink])
+	ScriptLedger.advance_day(ws3)
+	_runner.assert_equal(z.population, 1000, "anchor 未装载不外流（旧档兼容）")
+	_free_worlds([ws, ws2, ws3])
 
 
 func _test_garrison_replenish() -> void:

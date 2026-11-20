@@ -202,6 +202,7 @@ export const ORGS = {
       { name: "制钉", equip: "制钉模", inCity: { "铁锭": 1 }, outCity: { "铁钉": 4 }, art: "锻造" },
       { name: "轧板", equip: "轧辊", inCity: { "铁锭": 1 }, outCity: { "铁板": 1 }, art: "锻造" } ] },
   "药剂坊": { host: "制药", bldg: "药剂坊", slots: [
+      { fn: "采药", n: 2, homog: true, pos: "must", terrain: "耕地", role: "采野生药草（慢于农垦的副线）" },
       { fn: "炮制", n: 1, pos: "semi", step: 0, role: "农作物炮制净药材", lead: true },
       { fn: "熬制", n: 1, pos: "semi", step: 1, role: "净药材熬成药水" } ],
       steps: [
@@ -218,29 +219,38 @@ export const ORGS = {
   /* 职能槽下辖的专门组织（任意槽可下辖；信息/库管槽内的精细化示例，可继续递归） */
   "林务所": { host: "木材信息", slots: [
       { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看林中堆存与路况", lead: true },
+      { fn: "护林", n: 1, pos: "gain", role: "防火防盗巡护林场（机制后续）" },
       { fn: "记档", n: 1, pos: "gain", role: "汇总木材台账" } ] },
   "矿务所": { host: "矿石信息", slots: [
       { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看矿场堆存", lead: true },
+      { fn: "排水", n: 1, pos: "gain", role: "矿洞排水清淤——矿场堆容 +10/人" },
       { fn: "记档", n: 1, pos: "gain", role: "汇总矿石台账" } ] },
   "农务所": { host: "农情信息", slots: [
       { fn: "巡看", n: 2, homog: true, pos: "must", role: "巡看田场堆存", lead: true },
+      { fn: "积肥", n: 1, pos: "gain", role: "堆肥养地（机制后续）" },
       { fn: "记档", n: 1, pos: "gain", role: "汇总农情台账" } ] },
   "库务所": { host: "库管", slots: [
       { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账", lead: true },
-      { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
+      { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" },
+      { fn: "守仓", n: 1, pos: "gain", role: "夜巡防火防盗（机制后续）" } ] },
   "人事局": { host: "行政", bldg: "办公楼", slots: [
       { fn: "人事", n: 1, pos: "must", lead: true, req: { b: "办公楼", item: "档案柜" }, role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
+      { fn: "考绩", n: 1, pos: "gain", role: "编制考核与功过登记（机制后续）" },
+      { fn: "考绩", n: 1, pos: "gain", role: "编制考核与功过登记（机制后续）" },
       { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（自适应扩建与改编，01 §4.6）" } ] },
   "情报局": { host: "情报", slots: [
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览", lead: true },
       { fn: "采编", n: 4, homog: true, pos: "must", role: "到各信息岗采编一线情报" },
       { fn: "抄送", n: 1, pos: "gain", role: "把总览分发到各指令面板" } ] },
   "冶炼坊": { host: "冶炼", bldg: "冶炼坊",
-      slots: [ { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭", lead: true } ],
+      slots: [ { fn: "上料", n: 1, pos: "gain", role: "备矿配炭运至炉口——在编冶炼提速" },
+      { fn: "冶炼", n: 1, pos: "semi", step: 0, role: "铁矿配柴入炉炼锭", lead: true } ],
       steps: [ { name: "冶炼", equip: "冶炼炉", inCity: { "铁矿": 1, "木材": 1 }, outCity: { "铁锭": 1 }, art: "冶炼" } ] },
   "常备军": { host: "军事", bldg: "兵营", slots: [
       { fn: "军事", n: 1, pos: "must", role: "在编即可动员", lead: true },
       { fn: "军需", n: 1, pos: "gain", role: "军械领用配发登记" },
+      { fn: "哨卫", n: 2, homog: true, pos: "gain", role: "岗哨警备巡逻（机制随战斗域）" },
+      { fn: "哨卫", n: 2, homog: true, pos: "gain", role: "岗哨警备巡逻（机制随战斗域）" },
       { fn: "训练", n: 1, pos: "gain", role: "放训练营成建制施训" } ] },
   "训练营": { host: "训练", bldg: "训练场", slots: [
       { fn: "训练管理", n: 1, pos: "gain", role: "排训练计划", lead: true },
@@ -496,9 +506,12 @@ export const idle = () => S.people.filter(p => !p.org);
    采矿队·支护架坑木拓宽堆场（+20/人） */
 export const satWarehouses = () => (S.citySat || []).filter(e => e.b === "仓库").length;
 export function mineBufCap() {
-  let sup = 0;
-  for (const o of Object.values(S.orgs)) sup += o.slots["支护"]?.persons.length || 0;
-  return 40 + 80 * satWarehouses() + 20 * sup;
+  let sup = 0, drain = 0;
+  for (const o of Object.values(S.orgs)) {
+    sup += o.slots["支护"]?.persons.length || 0;
+    drain += o.slots["排水"]?.persons.length || 0;   // 矿务所·排水：清淤拓场
+  }
+  return 40 + 80 * satWarehouses() + 20 * sup + 10 * drain;
 }
 
 /* 城市布局：一整排，市政厅居中，向左/右两侧扩建；每型建筑占格宽（ CITY_W） */
@@ -989,6 +1002,7 @@ export function advance(dt) {
       const w = Math.max(0, slot.persons.length - away);
       if (!w) continue;
       let rate = K.gather;
+      if (d.fn === "采药") rate = 0.4;   // 药师副线采药草：慢于农垦正线
       if (d.terrain === "树林" && orgEquip(o, "工具架")) rate *= 1.25;
       if (d.terrain === "矿洞" && (o.slots["提升"]?.persons.length || 0) > 0) rate *= 1.25;   // 坑口吊运
       const amt = rate * attrMult(slot.persons, "str") * w * mult * dt;   // 力气影响采集
@@ -1113,6 +1127,7 @@ export function advance(dt) {
       }
       // 鼓风提炉温：风箱岗有人且所驻坊装了风箱——熔炼这道工序提速（物理因果，非抽象加成）
       if (st.name === "熔炼" && o.slots["风箱"]?.persons.length && orgEquip(o, "风箱")) want *= 1.2;
+      if (st.name === "冶炼" && (o.slots["上料"]?.persons.length || 0) > 0) want *= 1.2;   // 上料工备矿到炉口
       let produced = 0;
       if (st.inCity) {
         const can = Math.min(want, ...Object.entries(st.inCity).map(([r, n]) => S.res[r] / n));

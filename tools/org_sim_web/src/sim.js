@@ -229,7 +229,7 @@ export const ORGS = {
       { fn: "收发", n: 1, pos: "must", role: "出入库过秤记账", lead: true },
       { fn: "盘点", n: 1, pos: "gain", role: "清点库房核对账实" } ] },
   "人事局": { host: "行政", bldg: "办公楼", slots: [
-      { fn: "人事", n: 1, pos: "must", req: { b: "办公楼", item: "档案柜", lead: true }, role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
+      { fn: "人事", n: 1, pos: "must", lead: true, req: { b: "办公楼", item: "档案柜" }, role: "自动补员：待业者补进缺员的必须岗（在编越多补得越勤）" },
       { fn: "组织管理", n: 1, pos: "gain", role: "组织编制管理（自适应扩建与改编，01 §4.6）" } ] },
   "情报局": { host: "情报", slots: [
       { fn: "汇总", n: 1, pos: "must", role: "汇总各线呈递，生成一站式总览", lead: true },
@@ -247,7 +247,7 @@ export const ORGS = {
       { fn: "教官", n: 4, homog: true, pos: "must", req: { b: "训练场", item: "木人桩" }, role: "施训教官" },
       { fn: "器材管理", n: 1, pos: "gain", role: "维护训练器材" } ] },
   "科研院": { host: "教育", bldg: "书院", slots: [
-      { fn: "课题管理", n: 1, pos: "gain", req: { b: "书院", item: "书架", lead: true }, role: "选题与立项" },
+      { fn: "课题管理", n: 1, pos: "gain", lead: true, req: { b: "书院", item: "书架" }, role: "选题与立项" },
       { fn: "实验", n: 3, homog: true, pos: "must", req: { b: "书院", item: "实验台" }, role: "产出新技能，长在本人身上" },
       { fn: "文献记录", n: 1, pos: "gain", role: "汇总技能台账并呈递给你" } ] },
 };
@@ -400,7 +400,7 @@ export function loadDemo() {
   inst("木工房", "木工台", "组装架");
   addPersonRaw("你");
   addPersonRaw("动员官");
-  for (let i = 0; i < 36; i++) addPersonRaw("村民");
+  for (let i = 0; i < 46; i++) addPersonRaw("村民");   // 扩编 46：完全体满编不再干涸（情报/科研此前 0 人）——床位 6 屋×8=48 正好
   /* 复用 reset() 已建的根组织 o01（修复：曾另建 o02 致双根并存——情报局挂在 o02 名下，
      intelInterval 读 o01 → 完全体样板总览永久停更，僵尸聚落还会被升格逻辑二次改名） */
   const hall = S.orgs.o01;
@@ -450,10 +450,11 @@ export function loadDemo() {
   staff(forge, "风箱", 1, take(1)); staff(forge, "熔炼", 1, take(1)); staff(forge, "锻打", 1, take(1));
   staff(forge, "淬火", 1, take(1)); staff(forge, "开刃", 1, take(1));
   staff(sawmill, "锯解", 2, take(2));   // 两名锯工：样板实测原木堆积木材断供的瓶颈针（锯解1人转不过熔炼耗木）
-  staff(pharmacy, "炮制", 1, take(1));
+  staff(pharmacy, "炮制", 1, take(1)); staff(pharmacy, "熬制", 1, take(1));
   staff(cartshop, "备料", 1, take(1));   // 木器坊一人厂：备料在编，装配经移调语义照常开工（工时均摊）
   staff(smelter, "冶炼", 1, take(1));
   staff(hr, "人事", 1, take(1));
+  staff(camp, "训练管理", 1, take(1)); staff(camp, "教官", 1, take(1));
   staff(intel, "汇总", 1, take(1)); staff(intel, "采编", 2, take(2));
   staff(sci, "课题管理", 1, take(1)); staff(sci, "实验", 2, take(2)); staff(sci, "文献记录", 1, take(1));
   hall.name = "市政厅";
